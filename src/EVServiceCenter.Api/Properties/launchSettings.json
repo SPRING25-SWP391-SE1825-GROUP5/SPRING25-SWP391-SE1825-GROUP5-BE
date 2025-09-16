@@ -1,12 +1,16 @@
-{
-  "profiles": {
-    "EVServiceCenter.Api": {
-      "commandName": "Project",
-      "launchBrowser": true,
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      },
-      "applicationUrl": "https://localhost:58069;http://localhost:58070"
+    {
+        "profiles": {
+            "EVServiceCenter.Api": {
+                "commandName": "Project",
+                "dotnetRunMessages": true,
+                "launchBrowser": true,
+                "applicationUrl": "https://localhost:5001;http://localhost:5000",
+                "environmentVariables": {
+                    "ASPNETCORE_ENVIRONMENT": "Development"
+                },
+                "launchUrl": "swagger"
+            }
+        }
     }
-  }
-}
+
+

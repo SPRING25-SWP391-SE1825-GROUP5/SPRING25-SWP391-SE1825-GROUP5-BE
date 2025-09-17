@@ -1,15 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using EVServiceCenter.Domain.Entities;
+﻿using EVServiceCenter.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenter.Domain.Configurations;
 
 public partial class EVDbContext : DbContext
 {
-    public EVDbContext()
-    {
-    }
+
 
     public EVDbContext(DbContextOptions<EVDbContext> options)
         : base(options)

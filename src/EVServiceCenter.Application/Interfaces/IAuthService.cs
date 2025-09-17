@@ -13,6 +13,7 @@ namespace EVServiceCenter.Application.Interfaces
     public interface IAuthService
     {
        Task<string> RegisterAsync(AccountRequest request);
-        Task<LoginResponse> LoginAsync(LoginRequest request);
+        Task<string> LoginAsync(LoginRequest request);
+        Task<bool> VerifyOtpAsync(string email, string otp);
     }
 }

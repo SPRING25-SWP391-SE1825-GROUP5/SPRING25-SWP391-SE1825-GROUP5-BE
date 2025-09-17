@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.OpenApi.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using EVServiceCenter.Domain.Configurations;
@@ -11,9 +10,21 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Infrastructure.Repositories;
 using EVServiceCenter.Domain.IRepositories;
+using System.Text;
+using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.IO;
+using System;
+
+
 
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration
+    .SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddEnvironmentVariables();
 
 // Đăng ký DbContext 
 builder.Services.AddDbContext<EVDbContext>(options =>
@@ -24,11 +35,37 @@ builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+
 
 // Repository
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
 
+//JWT Configuration
+var jwt = builder.Configuration.GetSection("Jwt");
+var secret = jwt["Secret"];
+
+if (string.IsNullOrEmpty(secret))
+{
+    throw new InvalidOperationException("JWT Secret is missing in appsettings.json");
+}
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(opt =>
+    {
+        opt.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwt["Issuer"],
+            ValidAudience = jwt["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret))
+        };
+    });
 
 // Controllers
 builder.Services.AddControllers();
@@ -43,6 +80,8 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1"
     });
 });
+
+
 
 var app = builder.Build();
 

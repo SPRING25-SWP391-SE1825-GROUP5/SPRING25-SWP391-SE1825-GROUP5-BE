@@ -1,17 +1,17 @@
 ﻿using System;
-using System.Security.Principal;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
+using BCryptNet = BCrypt.Net.BCrypt;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Domain.Entities;
-using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.IRepositories;
-using BCrypt.Net;
-using EVServiceCenter.Application.Models.Responses;
-
-
-
+using EVServiceCenter.Domain.Interfaces;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -19,103 +19,155 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IAccountService _accountService;
         private readonly IAuthRepository _authRepository;
-        public AuthService(IAccountService accountService, IAuthRepository authRepository)
+        private readonly IAccountRepository _accountRepository;
+        private readonly IOtpCodeRepository _otpRepository;
+        private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
+
+        public AuthService(
+            IAccountService accountService,
+            IAuthRepository authRepository,
+            IAccountRepository accountRepository,
+            IOtpCodeRepository otpRepository,
+            IEmailService emailService,
+            IConfiguration configuration)
         {
             _accountService = accountService;
             _authRepository = authRepository;
+            _accountRepository = accountRepository;
+            _otpRepository = otpRepository;
+            _emailService = emailService;
+            _configuration = configuration;
         }
+
         public async Task<string> RegisterAsync(AccountRequest request)
         {
-            if (!IsValidEmail(request.Email))
-            {
-                throw new Exception("Invalid email format.");
-            }
+            if (string.IsNullOrWhiteSpace(request.Email))
+                throw new Exception("Email is required");
+            if (string.IsNullOrWhiteSpace(request.PasswordHash))
+                throw new Exception("Password is required");
 
-            // CHeck if the password is valid
-            if (!IsValidPassword(request.PasswordHash))
-            {
-                throw new Exception("Password must have at least 8 characters, including a special character, a number, an uppercase letter, and a lowercase letter.");
-            }
+            var existed = await _accountRepository.GetAccountByEmailAsync(request.Email);
+            if (existed != null) throw new Exception("Email already exists");
 
-            // Check if the phone number is valid
-            if (!IsValidPhoneNumber(request.PhoneNumber))
-            {
-                throw new Exception("Invalid phone number format. It should start with 0 or +84 and have 10 digits.");
-            }
+            var hashed = BCryptNet.HashPassword(request.PasswordHash);
 
-            var existedAccount = await _accountService.GetAccountByEmailAsync(request.Email);
-            if (existedAccount != null)
-                throw new Exception("Email already exists.");
-            var account = new User
+            var user = new User
             {
-                Username = request.UserName,
+                Email = request.Email.Trim(),
+                Username = string.IsNullOrWhiteSpace(request.UserName) ? request.Email.Trim() : request.UserName.Trim(),
+                PasswordHash = hashed,
                 FullName = request.FullName,
-                Email = request.Email,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.PasswordHash),
                 PhoneNumber = request.PhoneNumber,
-                Address = request.Address,
                 DateOfBirth = request.DateOfBirth,
-                Role = "Customer",
+                Address = request.Address,
+                Role = string.IsNullOrWhiteSpace(request.Role) ? "Member" : request.Role,
+                IsActive = true,
+                EmailVerified = false,
+                PhoneVerified = false,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             };
-            await _authRepository.RegisterAsync(account);
-            return "User registered successfully.";
 
-        }
+            await _accountRepository.CreateAccountAsync(user);
 
-        public async Task<LoginResponse> LoginAsync(LoginRequest request)
-        {
-            var user = await _accountService.GetAccountByEmailAsync(request.Email);
-            if (user == null)
-                throw new Exception("Invalid email or password.");
-
-            if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-                throw new Exception("Invalid email or password.");
-
-            return new LoginResponse
+            // Sinh OTP
+            var otp = new Random().Next(100000, 999999).ToString();
+            var otpEntity = new Otpcode
             {
-                UserName = user.Username,
-                FullName = user.FullName,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Address = user.Address,
-                DateOfBirth = user.DateOfBirth
+                UserId = user.UserId,
+                Otpcode1 = otp,
+                Otptype = "Register",
+                ContactInfo = user.Email,
+                ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+                IsUsed = false,
+                AttemptCount = 0,
+                CreatedAt = DateTime.UtcNow
             };
+            await _otpRepository.CreateOtpCodeAsync(otpEntity);
+
+            // Gửi mail
+            var subject = "Xác minh tài khoản";
+            var body = $@"
+                <p>Xin chào {user.FullName ?? user.Email},</p>
+                <p>Mã OTP xác minh tài khoản của bạn là: <b style=""font-size:18px"">{otp}</b></p>
+                <p>Mã có hiệu lực trong 5 phút.</p>";
+            await _emailService.SendEmailAsync(user.Email, subject, body);
+
+            return "Đăng ký thành công. Vui lòng kiểm tra email để xác minh OTP.";
         }
 
-
-
-
-        private bool IsValidEmail(string email)
+        public async Task<bool> VerifyOtpAsync(string email, string otp)
         {
-            if (string.IsNullOrWhiteSpace(email))
-                return false;
+            var user = await _accountRepository.GetAccountByEmailAsync(email);
+            if (user == null) throw new Exception("User not found");
 
-            // Check email format using regex
-            var emailRegex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$");
-            return emailRegex.IsMatch(email);
+            var lastOtp = await _otpRepository.GetLastOtpCodeAsync(user.UserId, "Register");
+            if (lastOtp == null) return false;
+
+            if (lastOtp.IsUsed || lastOtp.ExpiresAt < DateTime.UtcNow) return false;
+
+            if (lastOtp.Otpcode1 != otp)
+            {
+                lastOtp.AttemptCount++;
+                await _otpRepository.UpdateAsync(lastOtp);
+                return false;
+            }
+
+            lastOtp.IsUsed = true;
+            lastOtp.UsedAt = DateTime.UtcNow;
+            user.EmailVerified = true;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _otpRepository.UpdateAsync(lastOtp);
+            await _accountRepository.UpdateAccountAsync(user);
+
+            return true;
         }
 
-        // Check password is valid
-        private bool IsValidPassword(string password)
+        public async Task<string> LoginAsync(LoginRequest request)
         {
-            if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
-                return false;
+            var user = await _accountRepository.GetAccountByEmailAsync(request.Email);
+            if (user == null)
+                throw new Exception("Invalid email or password");
 
-            var passwordRegex = new Regex(@"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$");
-            return passwordRegex.IsMatch(password);
+            if (!BCryptNet.Verify(request.PasswordHash, user.PasswordHash))
+                throw new Exception("Invalid email or password");
+
+            if (!user.EmailVerified)
+                throw new Exception("Email not verified");
+
+            return GenerateJwt(user);
         }
 
-        private bool IsValidPhoneNumber(string phoneNumber)
+    
+        private string GenerateJwt(User user)
         {
-            if (string.IsNullOrWhiteSpace(phoneNumber))
-                return false;
+            var jwtSettings = _configuration.GetSection("Jwt");
+            var secretKey = jwtSettings["Secret"];
+            var issuer = jwtSettings["Issuer"];
+            var audience = jwtSettings["Audience"];
 
-            // Loại bỏ khoảng trắng
-            phoneNumber = phoneNumber.Replace(" ", "");
-            var phoneRegex = new Regex(@"^(?:\+84|0)(?:\d{9})$");
-            return phoneRegex.IsMatch(phoneNumber);
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var claims = new[]
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                new Claim(ClaimTypes.Role, user.Role ?? "Member"),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
+            var token = new JwtSecurityToken(
+                issuer,
+                audience,
+                claims,
+                expires: DateTime.UtcNow.AddHours(2),
+                signingCredentials: creds
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
-
-
     }
 }

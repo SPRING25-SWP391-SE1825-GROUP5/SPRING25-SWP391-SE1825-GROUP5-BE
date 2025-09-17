@@ -26,11 +26,13 @@ builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddEnvironmentVariables();
 
+
 // Đăng ký DbContext 
 builder.Services.AddDbContext<EVDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 // Đăng ký các dịch vụ
 builder.Services.AddControllers();
+builder.Services.AddMemoryCache();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuthService, AuthService>();

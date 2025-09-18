@@ -123,6 +123,14 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        [HttpPost("verify-otp")]
+        public async Task<IActionResult> VerifyOtp([FromQuery] string email, [FromQuery] string otp)
+        {
+            var ok = await _authService.VerifyOtpAsync(email, otp);
+            return ok ? Ok(new { message = "Xác minh thành công" })
+                      : BadRequest(new { message = "OTP không hợp lệ hoặc đã hết hạn" });
+        }
+
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {

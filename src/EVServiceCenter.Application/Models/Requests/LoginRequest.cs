@@ -17,5 +17,7 @@ namespace EVServiceCenter.Application.Models.Requests
         [Required(ErrorMessage = "Mật khẩu là bắt buộc")]
         [StringLength(100, MinimumLength = 1, ErrorMessage = "Mật khẩu không được để trống")]
         public string Password { get; set; }
+        
+        public string PasswordHash { get; set; }
     }
 }

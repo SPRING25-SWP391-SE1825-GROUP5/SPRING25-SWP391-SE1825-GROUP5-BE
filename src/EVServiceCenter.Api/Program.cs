@@ -48,6 +48,7 @@ builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IPartService, PartService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 
 // Repository
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
@@ -64,6 +65,7 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IPartRepository, PartRepository>();
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");

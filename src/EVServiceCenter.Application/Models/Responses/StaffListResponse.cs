@@ -2,9 +2,9 @@ using System.Collections.Generic;
 
 namespace EVServiceCenter.Application.Models.Responses
 {
-    public class TechnicianListResponse
+    public class StaffListResponse
     {
-        public List<TechnicianResponse> Technicians { get; set; } = new List<TechnicianResponse>();
+        public List<StaffResponse> Staff { get; set; } = new List<StaffResponse>();
         public int TotalCount { get; set; }
         public int PageNumber { get; set; }
         public int PageSize { get; set; }

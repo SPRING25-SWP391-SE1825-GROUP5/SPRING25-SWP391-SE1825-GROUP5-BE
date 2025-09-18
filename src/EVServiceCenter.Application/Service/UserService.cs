@@ -10,6 +10,7 @@ using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.IRepositories;
 using BCrypt.Net;
 using System.Text.RegularExpressions;
+using Microsoft.Data.SqlClient;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -18,12 +19,16 @@ namespace EVServiceCenter.Application.Service
         private readonly IAuthRepository _authRepository;
         private readonly ICustomerRepository _customerRepository;
         private readonly IAccountRepository _accountRepository;
+        private readonly IStaffRepository _staffRepository;
+        private readonly ITechnicianRepository _technicianRepository;
 
-        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository)
+        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository)
         {
             _authRepository = authRepository;
             _accountRepository = accountRepository;
             _customerRepository = customerRepository;
+            _staffRepository = staffRepository;
+            _technicianRepository = technicianRepository;
         }
 
         public async Task<UserListResponse> GetAllUsersAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string role = null)
@@ -121,7 +126,7 @@ namespace EVServiceCenter.Application.Service
                 // Save user
                 await _authRepository.RegisterAsync(user);
 
-                // Nếu role là CUSTOMER, tạo Customer record tương ứng
+                // Tạo record tương ứng dựa trên role
                 if (user.Role == "CUSTOMER")
                 {
                     var customer = new Customer
@@ -136,12 +141,68 @@ namespace EVServiceCenter.Application.Service
 
                     await _customerRepository.CreateCustomerAsync(customer);
                 }
+                else if (user.Role == "STAFF")
+                {
+                    var staff = new Staff
+                    {
+                        UserId = user.UserId,
+                        CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
+                        StaffCode = GenerateStaffCode(),
+                        Position = "STAFF", // Default position - có thể cần thay đổi tùy theo logic business
+                        HireDate = DateOnly.FromDateTime(DateTime.Today),
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _staffRepository.CreateStaffAsync(staff);
+                }
+                else if (user.Role == "TECHNICIAN")
+                {
+                    var technician = new Technician
+                    {
+                        UserId = user.UserId,
+                        CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
+                        TechnicianCode = GenerateTechnicianCode(),
+                        Specialization = "GENERAL", // Default specialization - có thể cần thay đổi tùy theo logic business
+                        ExperienceYears = 0, // Default experience - có thể cần thay đổi tùy theo logic business
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _technicianRepository.CreateTechnicianAsync(technician);
+                }
 
                 return MapToUserResponse(user);
             }
             catch (ArgumentException)
             {
                 throw; // Rethrow validation errors
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                // Parse specific database errors
+                var errorMessage = "Lỗi cơ sở dữ liệu";
+                
+                if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx)
+                {
+                    switch (sqlEx.Number)
+                    {
+                        case 2628: // String or binary data would be truncated
+                            errorMessage = "Dữ liệu quá dài cho một số trường. Vui lòng kiểm tra lại thông tin.";
+                            break;
+                        case 2627: // Violation of UNIQUE KEY constraint
+                            errorMessage = "Thông tin này đã tồn tại trong hệ thống.";
+                            break;
+                        case 547: // Foreign key constraint violation
+                            errorMessage = "Dữ liệu tham chiếu không hợp lệ.";
+                            break;
+                        default:
+                            errorMessage = $"Lỗi cơ sở dữ liệu: {sqlEx.Message}";
+                            break;
+                    }
+                }
+                
+                throw new ArgumentException(errorMessage);
             }
             catch (Exception ex)
             {
@@ -452,6 +513,20 @@ namespace EVServiceCenter.Application.Service
             var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
             var random = new Random().Next(100, 999);
             return $"CUS{timestamp}{random}";
+        }
+
+        private string GenerateStaffCode()
+        {
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmm");
+            var random = new Random().Next(10, 99);
+            return $"ST{timestamp}{random}";
+        }
+
+        private string GenerateTechnicianCode()
+        {
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmm");
+            var random = new Random().Next(10, 99);
+            return $"TC{timestamp}{random}";
         }
 
         private string NormalizePhoneNumber(string phoneNumber)

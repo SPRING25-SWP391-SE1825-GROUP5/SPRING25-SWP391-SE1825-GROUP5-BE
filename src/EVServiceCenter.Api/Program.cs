@@ -174,6 +174,13 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Cấu hình port cho Render
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    app.Urls.Add($"http://*:{port}");
+}
+
 // Swagger UI
 app.UseSwagger();
 app.UseSwaggerUI(c =>

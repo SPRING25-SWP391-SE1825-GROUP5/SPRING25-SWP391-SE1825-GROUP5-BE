@@ -25,7 +25,7 @@ namespace EVServiceCenter.Application.Service
             _secretKey = _config["JWT:SecretKey"] ?? "EV-Service-Center-Secret-Key-2024-Very-Long-String-For-Security";
             _issuer = _config["JWT:Issuer"] ?? "EVServiceCenter";
             _audience = _config["JWT:Audience"] ?? "EVServiceCenter";
-            _expirationMinutes = int.Parse(_config["JWT:ExpirationMinutes"] ?? "60");
+            _expirationMinutes = int.Parse(_config["JWT:ExpirationMinutes"] ?? "10080"); // Default 1 week (7 days * 24 hours * 60 minutes)
         }
 
         public string GenerateAccessToken(User user)

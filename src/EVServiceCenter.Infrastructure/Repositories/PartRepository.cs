@@ -1,0 +1,57 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
+
+namespace EVServiceCenter.Infrastructure.Repositories
+{
+    public class PartRepository : IPartRepository
+    {
+        private readonly EVDbContext _context;
+
+        public PartRepository(EVDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<List<Part>> GetAllPartsAsync()
+        {
+            return await _context.Parts
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<Part> GetPartByIdAsync(int partId)
+        {
+            return await _context.Parts
+                .FirstOrDefaultAsync(p => p.PartId == partId);
+        }
+
+        public async Task<Part> CreatePartAsync(Part part)
+        {
+            _context.Parts.Add(part);
+            await _context.SaveChangesAsync();
+            return part;
+        }
+
+        public async Task<bool> IsPartNumberUniqueAsync(string partNumber, int? excludePartId = null)
+        {
+            var query = _context.Parts.Where(p => p.PartNumber == partNumber);
+            
+            if (excludePartId.HasValue)
+            {
+                query = query.Where(p => p.PartId != excludePartId.Value);
+            }
+
+            return !await query.AnyAsync();
+        }
+
+        public async Task<bool> PartExistsAsync(int partId)
+        {
+            return await _context.Parts.AnyAsync(p => p.PartId == partId);
+        }
+    }
+}

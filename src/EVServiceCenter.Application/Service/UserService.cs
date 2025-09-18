@@ -16,12 +16,14 @@ namespace EVServiceCenter.Application.Service
     public class UserService : IUserService
     {
         private readonly IAuthRepository _authRepository;
+        private readonly ICustomerRepository _customerRepository;
         private readonly IAccountRepository _accountRepository;
 
-        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository)
+        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository)
         {
             _authRepository = authRepository;
             _accountRepository = accountRepository;
+            _customerRepository = customerRepository;
         }
 
         public async Task<UserListResponse> GetAllUsersAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string role = null)
@@ -118,6 +120,22 @@ namespace EVServiceCenter.Application.Service
 
                 // Save user
                 await _authRepository.RegisterAsync(user);
+
+                // Nếu role là CUSTOMER, tạo Customer record tương ứng
+                if (user.Role == "CUSTOMER")
+                {
+                    var customer = new Customer
+                    {
+                        UserId = user.UserId,
+                        CustomerCode = GenerateCustomerCode(),
+                        NormalizedPhone = NormalizePhoneNumber(request.PhoneNumber),
+                        IsGuest = false, // Đây là customer được admin tạo, không phải guest
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+
+                    await _customerRepository.CreateCustomerAsync(customer);
+                }
 
                 return MapToUserResponse(user);
             }
@@ -427,6 +445,30 @@ namespace EVServiceCenter.Application.Service
                 FailedLoginAttempts = user.FailedLoginAttempts,
                 LockoutUntil = user.LockoutUntil
             };
+        }
+
+        private string GenerateCustomerCode()
+        {
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+            var random = new Random().Next(100, 999);
+            return $"CUS{timestamp}{random}";
+        }
+
+        private string NormalizePhoneNumber(string phoneNumber)
+        {
+            // Loại bỏ tất cả ký tự không phải số
+            var normalized = Regex.Replace(phoneNumber, @"[^\d]", "");
+            
+            // Nếu bắt đầu bằng 0, giữ nguyên
+            if (normalized.StartsWith("0"))
+                return normalized;
+            
+            // Nếu bắt đầu bằng 84, thay thế bằng 0
+            if (normalized.StartsWith("84"))
+                return "0" + normalized.Substring(2);
+            
+            // Nếu không có prefix, thêm 0
+            return "0" + normalized;
         }
     }
 }

@@ -38,6 +38,13 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Users.FindAsync(userId);
         }
 
+        public async Task<List<User>> GetAllUsersAsync()
+        {
+            return await _context.Users
+                .OrderByDescending(u => u.CreatedAt)
+                .ToListAsync();
+        }
+
         public async Task UpdateEmailVerifiedStatusAsync(int userId, bool isVerified)
         {
             var user = await _context.Users.FindAsync(userId);

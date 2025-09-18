@@ -19,23 +19,43 @@ namespace EVServiceCenter.Application.Service
         {
             _configuration = configuration;
             
-            var cloudName = _configuration["Cloudinary:CloudName"];
-            var apiKey = _configuration["Cloudinary:ApiKey"];
-            var apiSecret = _configuration["Cloudinary:ApiSecret"];
-
-            if (string.IsNullOrEmpty(cloudName) || string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(apiSecret))
+            try
             {
-                throw new InvalidOperationException("Cloudinary configuration is missing. Please check appsettings.json");
-            }
+                var cloudName = _configuration["Cloudinary:CloudName"];
+                var apiKey = _configuration["Cloudinary:ApiKey"];
+                var apiSecret = _configuration["Cloudinary:ApiSecret"];
 
-            var account = new Account(cloudName, apiKey, apiSecret);
-            _cloudinary = new Cloudinary(account);
+                // Debug logging
+                Console.WriteLine($"DEBUG - Cloudinary Config:");
+                Console.WriteLine($"CloudName: '{cloudName}'");
+                Console.WriteLine($"ApiKey: '{apiKey}'");
+                Console.WriteLine($"ApiSecret: '{apiSecret}'");
+
+                if (string.IsNullOrEmpty(cloudName) || string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(apiSecret))
+                {
+                    Console.WriteLine("WARNING: Cloudinary configuration is missing. Upload avatar feature will be disabled.");
+                    _cloudinary = null; // Set to null instead of throwing exception
+                    return;
+                }
+
+                var account = new Account(cloudName, apiKey, apiSecret);
+                _cloudinary = new Cloudinary(account);
+                Console.WriteLine("Cloudinary service initialized successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WARNING: Failed to initialize Cloudinary service: {ex.Message}");
+                _cloudinary = null; // Set to null instead of throwing exception
+            }
         }
 
         public async Task<string> UploadImageAsync(IFormFile file, string folder = "avatars")
         {
             try
             {
+                if (_cloudinary == null)
+                    throw new InvalidOperationException("Cloudinary service is not configured. Please check appsettings.json");
+
                 // Validate file
                 if (file == null || file.Length == 0)
                     throw new ArgumentException("File không được để trống");
@@ -97,6 +117,9 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
+                if (_cloudinary == null)
+                    return false;
+
                 if (string.IsNullOrEmpty(publicId))
                     return false;
 
@@ -119,6 +142,9 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
+                if (_cloudinary == null)
+                    return Task.FromResult(string.Empty);
+
                 if (string.IsNullOrEmpty(publicId))
                     return Task.FromResult(string.Empty);
 

@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System;
 
 namespace EVServiceCenter.Application.Models.Responses
 {
-    public class LoginResponse
+    public class UserProfileResponse
     {
         public int UserId { get; set; }
         public string Email { get; set; }
@@ -15,9 +11,11 @@ namespace EVServiceCenter.Application.Models.Responses
         public DateOnly? DateOfBirth { get; set; }
         public string Address { get; set; }
         public string Gender { get; set; }
-        public string Role { get; set; }
         public string AvatarUrl { get; set; }
+        public string Role { get; set; }
         public bool IsActive { get; set; }
         public bool EmailVerified { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 }

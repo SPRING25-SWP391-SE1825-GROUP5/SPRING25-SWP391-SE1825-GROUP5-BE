@@ -11,5 +11,9 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task RegisterAsync(User account);
         Task<User> LoginAsync(string email, string password);
+        Task<User> GetUserByIdAsync(int userId);
+        Task UpdateEmailVerifiedStatusAsync(int userId, bool isVerified);
+        Task UpdateUserActiveStatusAsync(int userId, bool isActive);
+        Task UpdateUserAsync(User user);
     }
 }

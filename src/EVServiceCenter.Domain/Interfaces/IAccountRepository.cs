@@ -10,8 +10,8 @@ namespace EVServiceCenter.Domain.IRepositories
 {
     public interface IAccountRepository
     {
-        Task<User?> GetAccountByPhoneNumberAsync(string email);
-        Task<User?> GetAccountByEmailAsync(string phoneNumber);
+        Task<User?> GetAccountByPhoneNumberAsync(string phoneNumber);
+        Task<User?> GetAccountByEmailAsync(string email);
         Task<User> CreateAccountAsync(User account);
         Task UpdateAccountAsync(User user);
     }

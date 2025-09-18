@@ -29,9 +29,43 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<User> LoginAsync(string email, string password)
         {
             var user = await _context.Users
-                .Include(u => u.Role)
                 .FirstOrDefaultAsync(u => u.Email == email);
             return user!;
+        }
+
+        public async Task<User> GetUserByIdAsync(int userId)
+        {
+            return await _context.Users.FindAsync(userId);
+        }
+
+        public async Task UpdateEmailVerifiedStatusAsync(int userId, bool isVerified)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.EmailVerified = isVerified;
+                user.UpdatedAt = DateTime.UtcNow;
+                _context.Users.Update(user);
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task UpdateUserActiveStatusAsync(int userId, bool isActive)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.IsActive = isActive;
+                user.UpdatedAt = DateTime.UtcNow;
+                _context.Users.Update(user);
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task UpdateUserAsync(User user)
+        {
+            _context.Users.Update(user);
+            await _context.SaveChangesAsync();
         }
     }
 }

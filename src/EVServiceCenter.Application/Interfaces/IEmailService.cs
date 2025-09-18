@@ -9,5 +9,8 @@ namespace EVServiceCenter.Application.Interfaces
     public interface IEmailService
     {
         Task SendEmailAsync(string to, string subject, string body);
+        Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode);
+        Task SendWelcomeEmailAsync(string toEmail, string fullName);
+        Task SendResetPasswordEmailAsync(string toEmail, string fullName, string otpCode);
     }
 }

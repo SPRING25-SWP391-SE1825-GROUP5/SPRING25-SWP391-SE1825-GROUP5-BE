@@ -12,7 +12,16 @@ namespace EVServiceCenter.Application.Interfaces
 {
     public interface IAuthService
     {
-       Task<string> RegisterAsync(AccountRequest request);
-        Task<LoginResponse> LoginAsync(LoginRequest request);
+        Task<string> RegisterAsync(AccountRequest request);
+        Task<LoginTokenResponse> LoginAsync(LoginRequest request);
+        Task<string> VerifyEmailAsync(int userId, string otpCode);
+        Task<string> ResendVerificationEmailAsync(string email);
+        Task<string> RequestResetPasswordAsync(string email);
+        Task<string> ConfirmResetPasswordAsync(ConfirmResetPasswordRequest request);
+        Task<string> LogoutAsync(int userId);
+        Task<UserProfileResponse> GetUserProfileAsync(int userId);
+        Task<string> UpdateUserProfileAsync(int userId, UpdateProfileRequest request);
+        Task<string> UpdateUserAvatarAsync(int userId, string avatarUrl);
+        Task<string> ChangePasswordAsync(int userId, ChangePasswordRequest request);
     }
 }

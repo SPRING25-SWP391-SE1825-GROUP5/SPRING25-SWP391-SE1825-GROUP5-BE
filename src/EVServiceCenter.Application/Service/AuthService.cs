@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Principal;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
@@ -19,67 +22,583 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IAccountService _accountService;
         private readonly IAuthRepository _authRepository;
-        public AuthService(IAccountService accountService, IAuthRepository authRepository)
+        private readonly IEmailService _emailService;
+        private readonly IOtpService _otpService;
+        private readonly IJwtService _jwtService;
+        
+        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService)
         {
             _accountService = accountService;
             _authRepository = authRepository;
+            _emailService = emailService;
+            _otpService = otpService;
+            _jwtService = jwtService;
         }
         public async Task<string> RegisterAsync(AccountRequest request)
         {
-            if (!IsValidEmail(request.Email))
+            // Validation chi tiết từng trường
+            await ValidateRegistrationRequestAsync(request);
+
+            try
             {
-                throw new Exception("Invalid email format.");
+                // Tạo user entity
+                var user = new User
+                {
+                    Email = request.Email.ToLower().Trim(),
+                    FullName = request.FullName.Trim(),
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.PasswordHash),
+                    PhoneNumber = request.PhoneNumber.Trim(),
+                    Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : null,
+                    DateOfBirth = request.DateOfBirth,
+                    Gender = request.Gender,
+                    AvatarUrl = !string.IsNullOrWhiteSpace(request.AvatarUrl) ? request.AvatarUrl.Trim() : null,
+                    Role = "Customer", // Luôn là Customer cho đăng ký công khai
+                    IsActive = false, // Tài khoản chưa active cho đến khi verify email
+                    EmailVerified = false,
+                    FailedLoginAttempts = 0,
+                    LockoutUntil = null,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                    // Lưu user vào database
+                    await _authRepository.RegisterAsync(user);
+
+                    // Tạo và gửi mã OTP xác thực email
+                    try
+                    {
+                        var otpCode = await _otpService.CreateOtpAsync(user.UserId, user.Email, "EMAIL_VERIFICATION");
+                        await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
+                        
+                        return "Đăng ký tài khoản thành công! Vui lòng kiểm tra email để nhận mã xác thực và hoàn tất kích hoạt tài khoản.";
+                    }
+                    catch (Exception emailEx)
+                    {
+                        // Nếu gửi OTP thất bại, vẫn coi đăng ký thành công nhưng yêu cầu user thử lại
+                        Console.WriteLine($"OTP email sending failed: {emailEx.Message}");
+                        return "Đăng ký tài khoản thành công! Tuy nhiên có lỗi khi gửi email xác thực. Vui lòng thử yêu cầu gửi lại mã xác thực.";
+                    }
             }
-
-            // CHeck if the password is valid
-            if (!IsValidPassword(request.PasswordHash))
+            catch (Exception ex)
             {
-                throw new Exception("Password must have at least 8 characters, including a special character, a number, an uppercase letter, and a lowercase letter.");
+                throw new Exception($"Lỗi trong quá trình đăng ký: {ex.Message}");
             }
-
-            // Check if the phone number is valid
-            if (!IsValidPhoneNumber(request.PhoneNumber))
-            {
-                throw new Exception("Invalid phone number format. It should start with 0 or +84 and have 10 digits.");
-            }
-
-            var existedAccount = await _accountService.GetAccountByEmailAsync(request.Email);
-            if (existedAccount != null)
-                throw new Exception("Email already exists.");
-            var account = new User
-            {
-                Username = request.UserName,
-                FullName = request.FullName,
-                Email = request.Email,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.PasswordHash),
-                PhoneNumber = request.PhoneNumber,
-                Address = request.Address,
-                DateOfBirth = request.DateOfBirth,
-                Role = "Customer",
-            };
-            await _authRepository.RegisterAsync(account);
-            return "User registered successfully.";
-
         }
 
-        public async Task<LoginResponse> LoginAsync(LoginRequest request)
+        private async Task ValidateRegistrationRequestAsync(AccountRequest request)
         {
+            var errors = new List<string>();
+
+                // Kiểm tra email format
+            if (!IsValidEmail(request.Email))
+            {
+                    errors.Add("Email phải có đuôi @gmail.com");
+            }
+
+            // Kiểm tra password strength
+            if (!IsValidPassword(request.PasswordHash))
+            {
+                errors.Add("Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.");
+            }
+
+            // Kiểm tra password confirm
+            if (request.PasswordHash != request.ConfirmPassword)
+            {
+                errors.Add("Mật khẩu xác nhận không khớp.");
+            }
+
+            // Kiểm tra phone number format
+            if (!IsValidPhoneNumber(request.PhoneNumber))
+            {
+                errors.Add("Số điện thoại phải bắt đầu bằng số 0 và có đúng 10 chữ số.");
+            }
+
+            // Kiểm tra tuổi tối thiểu
+            if (!IsValidAge(request.DateOfBirth))
+            {
+                errors.Add("Phải đủ 16 tuổi trở lên để đăng ký tài khoản.");
+            }
+
+                // Kiểm tra giới tính hợp lệ
+                if (!IsValidGender(request.Gender))
+                {
+                    errors.Add("Giới tính phải là MALE hoặc FEMALE.");
+                }
+
+            // Kiểm tra email đã tồn tại
+            var existingUserByEmail = await _accountService.GetAccountByEmailAsync(request.Email);
+            if (existingUserByEmail != null)
+            {
+                errors.Add("Email này đã được sử dụng. Vui lòng sử dụng email khác.");
+            }
+
+            // Kiểm tra số điện thoại đã tồn tại
+            var existingUserByPhone = await _accountService.GetAccountByPhoneNumberAsync(request.PhoneNumber);
+            if (existingUserByPhone != null)
+            {
+                errors.Add("Số điện thoại này đã được sử dụng. Vui lòng sử dụng số điện thoại khác.");
+            }
+
+
+            // Throw exception với tất cả lỗi nếu có
+            if (errors.Any())
+            {
+                throw new ArgumentException(string.Join(" ", errors));
+            }
+        }
+
+        private bool IsValidAge(DateOnly dateOfBirth)
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var age = CalculateAge(dateOfBirth, today);
+            return age >= 16;
+        }
+
+        private int CalculateAge(DateOnly birthDate, DateOnly today)
+        {
+            var age = today.Year - birthDate.Year;
+            if (birthDate.Month > today.Month || 
+                (birthDate.Month == today.Month && birthDate.Day > today.Day))
+            {
+                age--;
+            }
+            return age;
+        }
+
+        private bool IsValidGender(string gender)
+        {
+            if (string.IsNullOrWhiteSpace(gender))
+                return false;
+
+            var validGenders = new[] { "MALE", "FEMALE" };
+            return validGenders.Contains(gender, StringComparer.Ordinal);
+        }
+
+
+        public async Task<LoginTokenResponse> LoginAsync(LoginRequest request)
+        {
+            // Validate email format
+            if (!IsValidEmail(request.Email))
+                throw new ArgumentException("Email phải có đuôi @gmail.com");
+
             var user = await _accountService.GetAccountByEmailAsync(request.Email);
             if (user == null)
-                throw new Exception("Invalid email or password.");
+                throw new ArgumentException("Email hoặc mật khẩu không đúng");
 
-            if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-                throw new Exception("Invalid email or password.");
-
-            return new LoginResponse
+            // Kiểm tra tài khoản có bị lockout không
+            if (user.LockoutUntil.HasValue && user.LockoutUntil.Value > DateTime.UtcNow)
             {
-                UserName = user.Username,
+                var remainingMinutes = (int)(user.LockoutUntil.Value - DateTime.UtcNow).TotalMinutes;
+                throw new ArgumentException($"Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau {remainingMinutes} phút.");
+            }
+
+            // Kiểm tra email đã được verify chưa
+            if (!user.EmailVerified)
+                throw new ArgumentException("Tài khoản chưa được xác thực email. Vui lòng kiểm tra email và xác thực tài khoản trước khi đăng nhập.");
+
+            // Kiểm tra tài khoản có active không
+            if (!user.IsActive)
+                throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên");
+
+            // Verify password
+            if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            {
+                // Tăng số lần đăng nhập sai
+                user.FailedLoginAttempts++;
+                
+                // Nếu đã sai 5 lần, khóa tài khoản 30 phút
+                if (user.FailedLoginAttempts >= 5)
+                {
+                    user.LockoutUntil = DateTime.UtcNow.AddMinutes(30);
+                    user.UpdatedAt = DateTime.UtcNow;
+                    await _authRepository.UpdateUserAsync(user);
+                    throw new ArgumentException("Đăng nhập sai quá 5 lần. Tài khoản đã bị khóa trong 30 phút.");
+                }
+                else
+                {
+                    user.UpdatedAt = DateTime.UtcNow;
+                    await _authRepository.UpdateUserAsync(user);
+                    var remainingAttempts = 5 - user.FailedLoginAttempts;
+                    throw new ArgumentException($"Email hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
+                }
+            }
+
+            // Đăng nhập thành công - reset failed attempts
+            user.FailedLoginAttempts = 0;
+            user.LockoutUntil = null;
+
+            // Generate JWT tokens
+            var accessToken = _jwtService.GenerateAccessToken(user);
+            var refreshToken = _jwtService.GenerateRefreshToken();
+            var expiresAt = _jwtService.GetTokenExpiration();
+            var expiresIn = _jwtService.GetTokenExpirationInSeconds();
+
+            // Update refresh token in database
+            user.RefreshToken = Encoding.UTF8.GetBytes(refreshToken);
+            user.UpdatedAt = DateTime.UtcNow;
+            await _authRepository.UpdateUserAsync(user);
+
+            return new LoginTokenResponse
+            {
+                AccessToken = accessToken,
+                TokenType = "Bearer",
+                ExpiresIn = expiresIn,
+                ExpiresAt = expiresAt,
+                RefreshToken = refreshToken,
+                UserId = user.UserId,
                 FullName = user.FullName,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Address = user.Address,
-                DateOfBirth = user.DateOfBirth
+                Role = user.Role,
+                EmailVerified = user.EmailVerified
             };
+        }
+
+        public async Task<string> VerifyEmailAsync(int userId, string otpCode)
+        {
+            try
+            {
+                // Kiểm tra user có tồn tại không
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                    throw new ArgumentException("Người dùng không tồn tại.");
+
+                if (user.EmailVerified)
+                    return "Email đã được xác thực trước đó.";
+
+                // Xác thực OTP
+                var isValidOtp = await _otpService.VerifyOtpAsync(userId, otpCode, "EMAIL_VERIFICATION");
+                if (!isValidOtp)
+                {
+                    // Tăng số lần thử sai
+                    await _otpService.IncrementAttemptCountAsync(userId, otpCode, "EMAIL_VERIFICATION");
+                    throw new ArgumentException("Mã xác thực không đúng hoặc đã hết hạn. Vui lòng thử lại hoặc yêu cầu mã mới.");
+                }
+
+                // Cập nhật trạng thái email verified và active tài khoản
+                await _authRepository.UpdateEmailVerifiedStatusAsync(userId, true);
+                await _authRepository.UpdateUserActiveStatusAsync(userId, true);
+
+                // Gửi email chào mừng
+                try
+                {
+                    await _emailService.SendWelcomeEmailAsync(user.Email, user.FullName);
+                }
+                catch (Exception emailEx)
+                {
+                    Console.WriteLine($"Welcome email sending failed: {emailEx.Message}");
+                    // Không throw exception vì xác thực đã thành công
+                }
+
+                return "Xác thực email thành công! Chào mừng bạn đến với EV Service Center.";
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình xác thực email: {ex.Message}");
+            }
+        }
+
+        public async Task<string> ResendVerificationEmailAsync(string email)
+        {
+            try
+            {
+                var user = await _accountService.GetAccountByEmailAsync(email);
+                if (user == null)
+                    throw new ArgumentException("Email không tồn tại trong hệ thống.");
+
+                if (user.EmailVerified)
+                    return "Email đã được xác thực. Không cần gửi lại mã.";
+
+                // Kiểm tra có thể tạo OTP mới không (chống spam)
+                var canCreateNew = await _otpService.CanCreateNewOtpAsync(user.UserId, "EMAIL_VERIFICATION");
+                if (!canCreateNew)
+                    throw new ArgumentException("Vui lòng chờ 2 phút trước khi yêu cầu mã xác thực mới.");
+
+                // Tạo và gửi OTP mới
+                var otpCode = await _otpService.CreateOtpAsync(user.UserId, user.Email, "EMAIL_VERIFICATION");
+                await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
+
+                return "Mã xác thực mới đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập mã trong vòng 15 phút.";
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình gửi lại mã xác thực: {ex.Message}");
+            }
+        }
+
+        public async Task<string> RequestResetPasswordAsync(string email)
+        {
+            try
+            {
+                // Validate email format
+                if (!IsValidEmail(email))
+                    throw new ArgumentException("Email phải có đuôi @gmail.com");
+
+                // Kiểm tra user có tồn tại không
+                var user = await _accountService.GetAccountByEmailAsync(email);
+                if (user == null)
+                    throw new ArgumentException("Email không tồn tại trong hệ thống.");
+
+                if (!user.IsActive)
+                    throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
+
+                // Kiểm tra có thể tạo OTP mới không (chống spam)
+                var canCreateNew = await _otpService.CanCreateNewOtpAsync(user.UserId, "PASSWORD_RESET");
+                if (!canCreateNew)
+                    throw new ArgumentException("Vui lòng chờ 2 phút trước khi yêu cầu mã đặt lại mật khẩu mới.");
+
+                // Tạo và gửi OTP reset password
+                var otpCode = await _otpService.CreateOtpAsync(user.UserId, user.Email, "PASSWORD_RESET");
+                await _emailService.SendResetPasswordEmailAsync(user.Email, user.FullName, otpCode);
+
+                return "Mã xác thực đặt lại mật khẩu đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập mã trong vòng 15 phút.";
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình yêu cầu đặt lại mật khẩu: {ex.Message}");
+            }
+        }
+
+        public async Task<string> ConfirmResetPasswordAsync(ConfirmResetPasswordRequest request)
+        {
+            try
+            {
+                // Validate email format
+                if (!IsValidEmail(request.Email))
+                    throw new ArgumentException("Email phải có đuôi @gmail.com");
+
+                // Validate password strength
+                if (!IsValidPassword(request.NewPassword))
+                    throw new ArgumentException("Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.");
+
+                // Validate password confirm
+                if (request.NewPassword != request.ConfirmPassword)
+                    throw new ArgumentException("Mật khẩu xác nhận không khớp.");
+
+                // Kiểm tra user có tồn tại không
+                var user = await _accountService.GetAccountByEmailAsync(request.Email);
+                if (user == null)
+                    throw new ArgumentException("Email không tồn tại trong hệ thống.");
+
+                if (!user.IsActive)
+                    throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
+
+                // Xác thực OTP
+                var isValidOtp = await _otpService.VerifyOtpAsync(user.UserId, request.OtpCode, "PASSWORD_RESET");
+                if (!isValidOtp)
+                {
+                    // Tăng số lần thử sai
+                    await _otpService.IncrementAttemptCountAsync(user.UserId, request.OtpCode, "PASSWORD_RESET");
+                    throw new ArgumentException("Mã xác thực không đúng hoặc đã hết hạn. Vui lòng thử lại hoặc yêu cầu mã mới.");
+                }
+
+                // Cập nhật mật khẩu mới
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+                user.UpdatedAt = DateTime.UtcNow;
+                user.FailedLoginAttempts = 0; // Reset failed attempts
+                user.LockoutUntil = null; // Remove lockout
+                await _authRepository.UpdateUserAsync(user);
+
+                return "Đặt lại mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.";
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình đặt lại mật khẩu: {ex.Message}");
+            }
+        }
+
+        public async Task<string> LogoutAsync(int userId)
+        {
+            try
+            {
+                // Kiểm tra user có tồn tại không
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                    throw new ArgumentException("Người dùng không tồn tại.");
+
+                // Xóa refresh token
+                user.RefreshToken = null;
+                user.UpdatedAt = DateTime.UtcNow;
+                await _authRepository.UpdateUserAsync(user);
+
+                return "Đăng xuất thành công.";
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình đăng xuất: {ex.Message}");
+            }
+        }
+
+        public async Task<UserProfileResponse> GetUserProfileAsync(int userId)
+        {
+            try
+            {
+                // Kiểm tra user có tồn tại không
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                    throw new ArgumentException("Người dùng không tồn tại.");
+
+                return new UserProfileResponse
+                {
+                    UserId = user.UserId,
+                    Email = user.Email,
+                    FullName = user.FullName,
+                    PhoneNumber = user.PhoneNumber,
+                    DateOfBirth = user.DateOfBirth,
+                    Address = user.Address,
+                    Gender = user.Gender,
+                    AvatarUrl = user.AvatarUrl,
+                    Role = user.Role,
+                    IsActive = user.IsActive,
+                    EmailVerified = user.EmailVerified,
+                    CreatedAt = user.CreatedAt,
+                    UpdatedAt = user.UpdatedAt
+                };
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình lấy thông tin profile: {ex.Message}");
+            }
+        }
+
+        public async Task<string> UpdateUserProfileAsync(int userId, UpdateProfileRequest request)
+        {
+            try
+            {
+                // Validate age
+                if (!IsValidAge(request.DateOfBirth))
+                    throw new ArgumentException("Phải đủ 16 tuổi trở lên.");
+
+                // Validate gender
+                if (!IsValidGender(request.Gender))
+                    throw new ArgumentException("Giới tính phải là MALE hoặc FEMALE.");
+
+                // Kiểm tra user có tồn tại không
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                    throw new ArgumentException("Người dùng không tồn tại.");
+
+                if (!user.IsActive)
+                    throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
+
+                // Cập nhật thông tin (KHÔNG cho phép đổi email, phone và avatar)
+                user.FullName = request.FullName.Trim();
+                user.DateOfBirth = request.DateOfBirth;
+                user.Gender = request.Gender;
+                user.Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : null;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                await _authRepository.UpdateUserAsync(user);
+
+                return "Cập nhật thông tin cá nhân thành công!";
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình cập nhật profile: {ex.Message}");
+            }
+        }
+
+        public async Task<string> UpdateUserAvatarAsync(int userId, string avatarUrl)
+        {
+            try
+            {
+                // Kiểm tra user có tồn tại không
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                    throw new ArgumentException("Người dùng không tồn tại.");
+
+                if (!user.IsActive)
+                    throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
+
+                // Cập nhật avatar URL
+                user.AvatarUrl = avatarUrl;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                await _authRepository.UpdateUserAsync(user);
+
+                return "Cập nhật avatar thành công!";
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình cập nhật avatar: {ex.Message}");
+            }
+        }
+
+        public async Task<string> ChangePasswordAsync(int userId, ChangePasswordRequest request)
+        {
+            try
+            {
+                // Validate password strength
+                if (!IsValidPassword(request.NewPassword))
+                    throw new ArgumentException("Mật khẩu mới phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.");
+
+                // Validate password confirm
+                if (request.NewPassword != request.ConfirmNewPassword)
+                    throw new ArgumentException("Xác nhận mật khẩu mới không khớp.");
+
+                // Kiểm tra user có tồn tại không
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                    throw new ArgumentException("Người dùng không tồn tại.");
+
+                if (!user.IsActive)
+                    throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
+
+                // Verify current password
+                if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
+                    throw new ArgumentException("Mật khẩu hiện tại không đúng.");
+
+                // Kiểm tra mật khẩu mới khác mật khẩu cũ
+                if (BCrypt.Net.BCrypt.Verify(request.NewPassword, user.PasswordHash))
+                    throw new ArgumentException("Mật khẩu mới phải khác mật khẩu hiện tại.");
+
+                // Cập nhật mật khẩu mới
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+                user.UpdatedAt = DateTime.UtcNow;
+                user.FailedLoginAttempts = 0; // Reset failed attempts
+                user.LockoutUntil = null; // Remove lockout
+                await _authRepository.UpdateUserAsync(user);
+
+                return "Đổi mật khẩu thành công! Vui lòng đăng nhập lại với mật khẩu mới.";
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình đổi mật khẩu: {ex.Message}");
+            }
         }
 
 
@@ -90,9 +609,9 @@ namespace EVServiceCenter.Application.Service
             if (string.IsNullOrWhiteSpace(email))
                 return false;
 
-            // Check email format using regex
-            var emailRegex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$");
-            return emailRegex.IsMatch(email);
+            // Chỉ chấp nhận email có đuôi @gmail.com
+            var gmailRegex = new Regex(@"^[a-zA-Z0-9._%+-]+@gmail\.com$");
+            return gmailRegex.IsMatch(email);
         }
 
         // Check password is valid
@@ -116,6 +635,10 @@ namespace EVServiceCenter.Application.Service
             return phoneRegex.IsMatch(phoneNumber);
         }
 
-
+        private bool IsValidUrl(string url)
+        {
+            return Uri.TryCreate(url, UriKind.Absolute, out Uri uriResult) 
+                && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
+        }
     }
 }

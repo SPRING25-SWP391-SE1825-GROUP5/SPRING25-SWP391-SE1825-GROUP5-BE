@@ -486,7 +486,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// Upload avatar cho user hiện tại
         /// </summary>
         [HttpPost("upload-avatar")]
-        [Authorize]
+        [Authorize(Policy = "AuthenticatedUser")]
         public async Task<IActionResult> UploadAvatar(IFormFile file)
         {
             try

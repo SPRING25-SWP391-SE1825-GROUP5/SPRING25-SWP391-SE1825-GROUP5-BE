@@ -1,0 +1,55 @@
+# Git Commands for Docker & CI/CD Setup
+
+## 1. Add all changes:
+git add .
+
+## 2. Commit with detailed message:
+git commit -m "feat(ci-cd): add Docker support and Render deployment configuration
+
+- Add Dockerfile for ASP.NET Core 8.0 with multi-stage build
+- Configure port binding for Render deployment (PORT environment variable)
+- Add render.yaml for auto-provisioning on Render
+- Optimize Docker build with layer caching for csproj files
+- Set up production environment configuration
+
+Docker Configuration:
+- Base image: mcr.microsoft.com/dotnet/aspnet:8.0
+- Build image: mcr.microsoft.com/dotnet/sdk:8.0
+- Multi-stage build for optimized image size
+- Expose port 8080 for Render compatibility
+- Environment variable PORT support
+
+Render Configuration:
+- Root Directory: src/EVServiceCenter.Api
+- Dockerfile Path: Dockerfile
+- Free tier deployment
+- Oregon region
+- All environment variables pre-configured
+
+Files Added:
+- src/EVServiceCenter.Api/Dockerfile
+- render.yaml
+- Updated Program.cs for PORT environment variable
+
+Breaking Changes: None
+Dependencies: No new dependencies added"
+
+## 3. Push to remote repository:
+git push origin main
+
+## 4. Alternative short commit message:
+git commit -m "feat(ci-cd): add Dockerfile and Render deployment config"
+
+## 5. If you want to commit in parts:
+
+# First commit - Dockerfile:
+git add src/EVServiceCenter.Api/Dockerfile
+git commit -m "feat(docker): add Dockerfile for ASP.NET Core 8.0 with multi-stage build"
+
+# Second commit - Program.cs update:
+git add src/EVServiceCenter.Api/Program.cs
+git commit -m "feat(deploy): add PORT environment variable support for Render"
+
+# Third commit - Render config:
+git add render.yaml
+git commit -m "feat(render): add render.yaml for auto-provisioning deployment"

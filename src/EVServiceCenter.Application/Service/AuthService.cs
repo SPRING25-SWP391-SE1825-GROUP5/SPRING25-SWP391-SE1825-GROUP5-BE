@@ -56,7 +56,7 @@ namespace EVServiceCenter.Application.Service
                     DateOfBirth = request.DateOfBirth,
                     Gender = request.Gender,
                     AvatarUrl = !string.IsNullOrWhiteSpace(request.AvatarUrl) ? request.AvatarUrl.Trim() : null,
-                    Role = "Customer", // Luôn là Customer cho đăng ký công khai
+                    Role = "CUSTOMER", // Luôn là CUSTOMER cho đăng ký công khai
                     IsActive = false, // Tài khoản chưa active cho đến khi verify email
                     EmailVerified = false,
                     FailedLoginAttempts = 0,

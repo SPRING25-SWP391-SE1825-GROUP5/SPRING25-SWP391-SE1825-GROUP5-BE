@@ -28,8 +28,9 @@ namespace EVServiceCenter.Application.Service
         private readonly IOtpService _otpService;
         private readonly IJwtService _jwtService;
         private readonly IConfiguration _configuration;
+        private readonly ICustomerRepository _customerRepository;
         
-        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration)
+        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository)
         {
             _accountService = accountService;
             _authRepository = authRepository;
@@ -37,6 +38,7 @@ namespace EVServiceCenter.Application.Service
             _otpService = otpService;
             _jwtService = jwtService;
             _configuration = configuration;
+            _customerRepository = customerRepository;
         }
         public async Task<string> RegisterAsync(AccountRequest request)
         {
@@ -67,6 +69,19 @@ namespace EVServiceCenter.Application.Service
 
                     // Lưu user vào database
                     await _authRepository.RegisterAsync(user);
+
+                    // Tạo Customer record tương ứng
+                    var customer = new Customer
+                    {
+                        UserId = user.UserId,
+                        CustomerCode = GenerateCustomerCode(),
+                        NormalizedPhone = NormalizePhoneNumber(request.PhoneNumber),
+                        IsGuest = false, // Đây là customer đã đăng ký, không phải guest
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+
+                    await _customerRepository.CreateCustomerAsync(customer);
 
                     // Tạo và gửi mã OTP xác thực email
                     try
@@ -766,6 +781,30 @@ namespace EVServiceCenter.Application.Service
             {
                 throw new Exception($"Lỗi trong quá trình đăng nhập Google: {ex.Message}");
             }
+        }
+
+        private string GenerateCustomerCode()
+        {
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+            var random = new Random().Next(100, 999);
+            return $"CUS{timestamp}{random}";
+        }
+
+        private string NormalizePhoneNumber(string phoneNumber)
+        {
+            // Loại bỏ tất cả ký tự không phải số
+            var normalized = Regex.Replace(phoneNumber, @"[^\d]", "");
+            
+            // Nếu bắt đầu bằng 0, giữ nguyên
+            if (normalized.StartsWith("0"))
+                return normalized;
+            
+            // Nếu bắt đầu bằng 84, thay thế bằng 0
+            if (normalized.StartsWith("84"))
+                return "0" + normalized.Substring(2);
+            
+            // Nếu không có prefix, thêm 0
+            return "0" + normalized;
         }
     }
 }

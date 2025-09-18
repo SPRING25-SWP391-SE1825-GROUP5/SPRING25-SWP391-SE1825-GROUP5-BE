@@ -10,6 +10,7 @@ using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.IRepositories;
 using BCrypt.Net;
 using System.Text.RegularExpressions;
+using Microsoft.Data.SqlClient;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -176,6 +177,32 @@ namespace EVServiceCenter.Application.Service
             catch (ArgumentException)
             {
                 throw; // Rethrow validation errors
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                // Parse specific database errors
+                var errorMessage = "Lỗi cơ sở dữ liệu";
+                
+                if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx)
+                {
+                    switch (sqlEx.Number)
+                    {
+                        case 2628: // String or binary data would be truncated
+                            errorMessage = "Dữ liệu quá dài cho một số trường. Vui lòng kiểm tra lại thông tin.";
+                            break;
+                        case 2627: // Violation of UNIQUE KEY constraint
+                            errorMessage = "Thông tin này đã tồn tại trong hệ thống.";
+                            break;
+                        case 547: // Foreign key constraint violation
+                            errorMessage = "Dữ liệu tham chiếu không hợp lệ.";
+                            break;
+                        default:
+                            errorMessage = $"Lỗi cơ sở dữ liệu: {sqlEx.Message}";
+                            break;
+                    }
+                }
+                
+                throw new ArgumentException(errorMessage);
             }
             catch (Exception ex)
             {
@@ -490,16 +517,16 @@ namespace EVServiceCenter.Application.Service
 
         private string GenerateStaffCode()
         {
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-            var random = new Random().Next(100, 999);
-            return $"STAFF{timestamp}{random}";
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmm");
+            var random = new Random().Next(10, 99);
+            return $"ST{timestamp}{random}";
         }
 
         private string GenerateTechnicianCode()
         {
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-            var random = new Random().Next(100, 999);
-            return $"TECH{timestamp}{random}";
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmm");
+            var random = new Random().Next(10, 99);
+            return $"TC{timestamp}{random}";
         }
 
         private string NormalizePhoneNumber(string phoneNumber)

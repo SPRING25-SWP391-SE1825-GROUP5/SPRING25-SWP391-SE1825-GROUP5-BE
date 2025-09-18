@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
@@ -9,8 +8,13 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<List<Technician>> GetAllTechniciansAsync();
         Task<Technician> GetTechnicianByIdAsync(int technicianId);
-        Task<List<TechnicianTimeSlot>> GetTechnicianAvailabilityAsync(int technicianId, DateOnly date);
-        Task UpdateTechnicianAvailabilityAsync(List<TechnicianTimeSlot> timeSlots);
-        Task<TechnicianTimeSlot> GetTechnicianTimeSlotAsync(int technicianId, DateOnly date, int slotId);
+        Task<Technician> GetTechnicianByUserIdAsync(int userId);
+        Task<List<Technician>> GetTechniciansByCenterIdAsync(int centerId);
+        Task<Technician> CreateTechnicianAsync(Technician technician);
+        Task UpdateTechnicianAsync(Technician technician);
+        Task DeleteTechnicianAsync(int technicianId);
+        Task<bool> TechnicianExistsAsync(int technicianId);
+        Task<bool> IsTechnicianCodeUniqueAsync(string technicianCode, int? excludeTechnicianId = null);
+        Task<bool> IsUserAlreadyTechnicianAsync(int userId);
     }
 }

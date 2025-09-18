@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -35,45 +34,67 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(t => t.TechnicianId == technicianId);
         }
 
-        public async Task<List<TechnicianTimeSlot>> GetTechnicianAvailabilityAsync(int technicianId, DateOnly date)
+        public async Task<Technician> GetTechnicianByUserIdAsync(int userId)
         {
-            return await _context.TechnicianTimeSlots
-                .Include(tts => tts.Slot)
-                .Where(tts => tts.TechnicianId == technicianId && tts.WorkDate == date)
-                .OrderBy(tts => tts.Slot.SlotTime)
+            return await _context.Technicians
+                .Include(t => t.User)
+                .Include(t => t.Center)
+                .FirstOrDefaultAsync(t => t.UserId == userId);
+        }
+
+        public async Task<List<Technician>> GetTechniciansByCenterIdAsync(int centerId)
+        {
+            return await _context.Technicians
+                .Include(t => t.User)
+                .Include(t => t.Center)
+                .Where(t => t.CenterId == centerId)
+                .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
         }
 
-        public async Task UpdateTechnicianAvailabilityAsync(List<TechnicianTimeSlot> timeSlots)
+        public async Task<Technician> CreateTechnicianAsync(Technician technician)
         {
-            foreach (var timeSlot in timeSlots)
-            {
-                var existing = await _context.TechnicianTimeSlots
-                    .FirstOrDefaultAsync(tts => tts.TechnicianId == timeSlot.TechnicianId 
-                                            && tts.WorkDate == timeSlot.WorkDate 
-                                            && tts.SlotId == timeSlot.SlotId);
+            _context.Technicians.Add(technician);
+            await _context.SaveChangesAsync();
+            return technician;
+        }
 
-                if (existing != null)
-                {
-                    existing.IsAvailable = timeSlot.IsAvailable;
-                    existing.Notes = timeSlot.Notes;
-                    _context.TechnicianTimeSlots.Update(existing);
-                }
-                else
-                {
-                    _context.TechnicianTimeSlots.Add(timeSlot);
-                }
-            }
-
+        public async Task UpdateTechnicianAsync(Technician technician)
+        {
+            _context.Technicians.Update(technician);
             await _context.SaveChangesAsync();
         }
 
-        public async Task<TechnicianTimeSlot> GetTechnicianTimeSlotAsync(int technicianId, DateOnly date, int slotId)
+        public async Task DeleteTechnicianAsync(int technicianId)
         {
-            return await _context.TechnicianTimeSlots
-                .FirstOrDefaultAsync(tts => tts.TechnicianId == technicianId 
-                                        && tts.WorkDate == date 
-                                        && tts.SlotId == slotId);
+            var technician = await _context.Technicians.FindAsync(technicianId);
+            if (technician != null)
+            {
+                _context.Technicians.Remove(technician);
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task<bool> TechnicianExistsAsync(int technicianId)
+        {
+            return await _context.Technicians.AnyAsync(t => t.TechnicianId == technicianId);
+        }
+
+        public async Task<bool> IsTechnicianCodeUniqueAsync(string technicianCode, int? excludeTechnicianId = null)
+        {
+            var query = _context.Technicians.Where(t => t.TechnicianCode == technicianCode);
+            
+            if (excludeTechnicianId.HasValue)
+            {
+                query = query.Where(t => t.TechnicianId != excludeTechnicianId.Value);
+            }
+
+            return !await query.AnyAsync();
+        }
+
+        public async Task<bool> IsUserAlreadyTechnicianAsync(int userId)
+        {
+            return await _context.Technicians.AnyAsync(t => t.UserId == userId);
         }
     }
 }

@@ -1,0 +1,11 @@
+using System.Threading.Tasks;
+using EVServiceCenter.Application.Models.Responses;
+
+namespace EVServiceCenter.Application.Interfaces
+{
+    public interface IServiceService
+    {
+        Task<ServiceListResponse> GetAllServicesAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? categoryId = null);
+        Task<ServiceResponse> GetServiceByIdAsync(int serviceId);
+    }
+}

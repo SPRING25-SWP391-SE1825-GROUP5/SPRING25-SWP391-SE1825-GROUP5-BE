@@ -12,6 +12,8 @@ using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.IRepositories;
 using BCrypt.Net;
 using EVServiceCenter.Application.Models.Responses;
+using Google.Apis.Auth;
+using Microsoft.Extensions.Configuration;
 
 
 
@@ -25,14 +27,16 @@ namespace EVServiceCenter.Application.Service
         private readonly IEmailService _emailService;
         private readonly IOtpService _otpService;
         private readonly IJwtService _jwtService;
+        private readonly IConfiguration _configuration;
         
-        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService)
+        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration)
         {
             _accountService = accountService;
             _authRepository = authRepository;
             _emailService = emailService;
             _otpService = otpService;
             _jwtService = jwtService;
+            _configuration = configuration;
         }
         public async Task<string> RegisterAsync(AccountRequest request)
         {
@@ -639,6 +643,129 @@ namespace EVServiceCenter.Application.Service
         {
             return Uri.TryCreate(url, UriKind.Absolute, out Uri uriResult) 
                 && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
+        }
+
+        public async Task<LoginTokenResponse> LoginWithGoogleAsync(GoogleLoginRequest request)
+        {
+            try
+            {
+                // Validate input
+                if (string.IsNullOrWhiteSpace(request.Token))
+                    throw new ArgumentException("Google token là bắt buộc");
+
+                // Get Google ClientId from configuration
+                var clientId = _configuration["Google:ClientId"];
+                if (string.IsNullOrEmpty(clientId))
+                    throw new InvalidOperationException("Chưa cấu hình Google:ClientId");
+
+                // Validate Google ID token
+                GoogleJsonWebSignature.Payload payload;
+                try
+                {
+                    var settings = new GoogleJsonWebSignature.ValidationSettings
+                    {
+                        Audience = new[] { clientId }
+                    };
+                    payload = await GoogleJsonWebSignature.ValidateAsync(request.Token, settings);
+                }
+                catch (Exception ex)
+                {
+                    throw new ArgumentException($"Token Google không hợp lệ: {ex.Message}");
+                }
+
+                if (payload == null || string.IsNullOrEmpty(payload.Email))
+                    throw new ArgumentException("Không đọc được thông tin email từ Google");
+
+                // Check if email is Gmail (as per our system requirement)
+                if (!payload.Email.EndsWith("@gmail.com"))
+                    throw new ArgumentException("Chỉ hỗ trợ đăng nhập bằng tài khoản Gmail");
+
+                // Find or create user
+                var email = payload.Email.ToLowerInvariant();
+                var user = await _accountService.GetAccountByEmailAsync(email);
+                
+                if (user == null)
+                {
+                    // Create new user with Google login
+                    var randomPassword = Guid.NewGuid().ToString("N").Substring(0, 10) + "Aa1!";
+                    var passwordHash = BCrypt.Net.BCrypt.HashPassword(randomPassword);
+
+                    user = new User
+                    {
+                        Email = email,
+                        PasswordHash = passwordHash,
+                        FullName = string.IsNullOrWhiteSpace(payload.Name) ? email.Split('@')[0] : payload.Name,
+                        PhoneNumber = "0000000000", // Default phone for Google users
+                        DateOfBirth = DateOnly.FromDateTime(DateTime.Today.AddYears(-18)), // Default age
+                        Gender = "MALE", // Default gender
+                        Address = null,
+                        AvatarUrl = payload.Picture,
+                        Role = "Customer",
+                        IsActive = true,
+                        EmailVerified = payload.EmailVerified,
+                        FailedLoginAttempts = 0,
+                        LockoutUntil = null,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+
+                    await _authRepository.RegisterAsync(user);
+                }
+                else
+                {
+                    // Update existing user if needed
+                    if (!user.EmailVerified)
+                    {
+                        user.EmailVerified = true;
+                        user.UpdatedAt = DateTime.UtcNow;
+                        await _authRepository.UpdateUserAsync(user);
+                    }
+
+                    // Update avatar if Google has a newer one
+                    if (!string.IsNullOrEmpty(payload.Picture) && user.AvatarUrl != payload.Picture)
+                    {
+                        user.AvatarUrl = payload.Picture;
+                        user.UpdatedAt = DateTime.UtcNow;
+                        await _authRepository.UpdateUserAsync(user);
+                    }
+                }
+
+                // Check if account is active
+                if (!user.IsActive)
+                    throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên");
+
+                // Generate JWT tokens
+                var accessToken = _jwtService.GenerateAccessToken(user);
+                var refreshToken = _jwtService.GenerateRefreshToken();
+                var expiresAt = _jwtService.GetTokenExpiration();
+                var expiresIn = _jwtService.GetTokenExpirationInSeconds();
+
+                // Update refresh token in database
+                user.RefreshToken = Encoding.UTF8.GetBytes(refreshToken);
+                user.UpdatedAt = DateTime.UtcNow;
+                await _authRepository.UpdateUserAsync(user);
+
+                return new LoginTokenResponse
+                {
+                    AccessToken = accessToken,
+                    TokenType = "Bearer",
+                    ExpiresIn = expiresIn,
+                    ExpiresAt = expiresAt,
+                    RefreshToken = refreshToken,
+                    UserId = user.UserId,
+                    FullName = user.FullName,
+                    Role = user.Role,
+                    EmailVerified = user.EmailVerified
+                };
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi trong quá trình đăng nhập Google: {ex.Message}");
+            }
         }
     }
 }

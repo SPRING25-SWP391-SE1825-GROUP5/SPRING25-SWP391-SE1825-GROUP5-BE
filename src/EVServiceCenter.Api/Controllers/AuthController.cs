@@ -17,10 +17,12 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly ICloudinaryService _cloudinaryService;
 
-        public AuthController(IAuthService authService)
+        public AuthController(IAuthService authService, ICloudinaryService cloudinaryService)
         {
             _authService = authService;
+            _cloudinaryService = cloudinaryService;
         }
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] AccountRequest request)
@@ -496,69 +498,70 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return Unauthorized(new { success = false, message = "Token không hợp lệ hoặc đã hết hạn." });
                 }
 
-                // Validate file
-                if (file == null || file.Length == 0)
-                    return BadRequest(new { success = false, message = "Vui lòng chọn file ảnh." });
-
-                // Validate file type - chỉ hỗ trợ JPG và PNG
-                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
-                var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
-                if (!allowedExtensions.Contains(fileExtension))
-                {
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Định dạng file không được hỗ trợ. Vui lòng chọn file ảnh có định dạng JPG hoặc PNG.",
-                        supportedFormats = new[] { "JPG", "PNG" },
-                        currentFormat = fileExtension.ToUpper(),
-                        suggestion = "Hãy chuyển đổi file sang định dạng JPG hoặc PNG và thử lại."
-                    });
-                }
-
-                // Validate file size (max 4MB)
-                if (file.Length > 4 * 1024 * 1024)
-                {
-                    var fileSizeMB = Math.Round(file.Length / (1024.0 * 1024.0), 2);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = $"Kích thước file quá lớn. File hiện tại: {fileSizeMB}MB, tối đa cho phép: 4MB.",
-                        currentSize = $"{fileSizeMB}MB",
-                        maxSize = "4MB",
-                        suggestion = "Vui lòng nén ảnh hoặc chọn ảnh có kích thước nhỏ hơn 4MB."
-                    });
-                }
-
-                // Tạo tên file unique
-                var fileName = $"{userId}_{DateTime.UtcNow:yyyyMMddHHmmss}{fileExtension}";
-                var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "avatars");
-                
-                // Tạo thư mục nếu chưa tồn tại
-                if (!Directory.Exists(uploadsPath))
-                    Directory.CreateDirectory(uploadsPath);
-
-                var filePath = Path.Combine(uploadsPath, fileName);
-
-                // Lưu file
-                using (var stream = new FileStream(filePath, FileMode.Create))
-                {
-                    await file.CopyToAsync(stream);
-                }
-
-                // Tạo URL để truy cập file
-                var avatarUrl = $"/uploads/avatars/{fileName}";
+                // Upload ảnh lên Cloudinary
+                var avatarUrl = await _cloudinaryService.UploadImageAsync(file, "ev-service/avatars");
 
                 // Cập nhật avatar URL trong database
-                // Cập nhật avatar URL trực tiếp vào database
                 await _authService.UpdateUserAvatarAsync(userId, avatarUrl);
 
                 return Ok(new { 
                     success = true, 
                     message = "Upload avatar thành công!",
-                    data = new { avatarUrl = avatarUrl }
+                    data = new { 
+                        avatarUrl = avatarUrl,
+                        cloudinaryUrl = avatarUrl,
+                        optimized = "Ảnh đã được tối ưu hóa tự động bởi Cloudinary"
+                    }
                 });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = "Lỗi validation", errors = new[] { ex.Message } });
+                return BadRequest(new { 
+                    success = false, 
+                    message = ex.Message,
+                    suggestion = "Vui lòng kiểm tra định dạng và kích thước file ảnh."
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống khi upload ảnh: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Đăng nhập bằng Google
+        /// </summary>
+        /// <param name="request">Google login request với token</param>
+        /// <returns>JWT token và thông tin user</returns>
+        [HttpPost("login-google")]
+        public async Task<IActionResult> LoginWithGoogle([FromBody] GoogleLoginRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = errors });
+                }
+
+                var result = await _authService.LoginWithGoogleAsync(request);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Đăng nhập với Google thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {

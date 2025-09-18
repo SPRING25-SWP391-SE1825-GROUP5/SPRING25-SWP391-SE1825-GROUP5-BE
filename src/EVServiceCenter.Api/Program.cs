@@ -32,6 +32,7 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 
 // Repository
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();

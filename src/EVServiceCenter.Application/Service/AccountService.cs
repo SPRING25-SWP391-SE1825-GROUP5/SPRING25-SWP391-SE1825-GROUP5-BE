@@ -24,12 +24,12 @@ namespace EVServiceCenter.Application.Service
             _configuration = configuration;
         }
 
-        public async Task<User?> GetAccountByEmailAsync(string email)
+        public async Task<User> GetAccountByEmailAsync(string email)
         {
             return await _accountRepository.GetAccountByEmailAsync(email);
         }
 
-        public async Task<User?> GetAccountByPhoneNumberAsync(string phoneNumber)
+        public async Task<User> GetAccountByPhoneNumberAsync(string phoneNumber)
         {
             return await _accountRepository.GetAccountByPhoneNumberAsync(phoneNumber);
         }

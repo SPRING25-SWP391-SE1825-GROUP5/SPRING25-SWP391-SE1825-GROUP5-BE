@@ -15,16 +15,16 @@ namespace EVServiceCenter.Infrastructure.Repositories
             _context = context;
         }
 
-        public async Task<User> GetAccountByPhoneNumberAsync(string phoneNumber)
+        public async Task<User?> GetAccountByPhoneNumberAsync(string phoneNumber)
         {
             var account = await _context.Users.FirstOrDefaultAsync(a => a.PhoneNumber == phoneNumber);
-            return account!;
+            return account;
         }
 
-        public async Task<User> GetAccountByEmailAsync(string email)
+        public async Task<User?> GetAccountByEmailAsync(string email)
         {
             var account = await _context.Users.FirstOrDefaultAsync(a => a.Email == email);
-            return account!;
+            return account;
         }
         public async Task<User> CreateAccountAsync(User account)
         {

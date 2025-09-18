@@ -7,8 +7,6 @@ public partial class User
 {
     public int UserId { get; set; }
 
-    public string Username { get; set; }
-
     public string Email { get; set; }
 
     public string PasswordHash { get; set; }
@@ -31,13 +29,15 @@ public partial class User
 
     public bool EmailVerified { get; set; }
 
-    public bool PhoneVerified { get; set; }
-
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
 
     public byte[] RefreshToken { get; set; }
+
+    public int FailedLoginAttempts { get; set; }
+
+    public DateTime? LockoutUntil { get; set; }
 
     public  Customer Customer { get; set; }
 

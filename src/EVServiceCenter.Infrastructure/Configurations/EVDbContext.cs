@@ -1096,8 +1096,6 @@ public partial class EVDbContext : DbContext
 
             entity.ToTable("Users", "dbo");
 
-            entity.HasIndex(e => e.Username, "UQ__Users__536C85E4541CE335").IsUnique();
-
             entity.HasIndex(e => e.Email, "UQ__Users__A9D105349C971121").IsUnique();
 
             entity.Property(e => e.UserId).HasColumnName("UserID");
@@ -1124,9 +1122,8 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasPrecision(0)
                 .HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.Username)
-                .IsRequired()
-                .HasMaxLength(50);
+            entity.Property(e => e.FailedLoginAttempts).HasDefaultValue(0);
+            entity.Property(e => e.LockoutUntil);
         });
 
         modelBuilder.Entity<UserPromotion>(entity =>

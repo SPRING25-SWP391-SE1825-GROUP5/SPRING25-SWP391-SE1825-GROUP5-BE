@@ -10,6 +10,5 @@ namespace EVServiceCenter.Application.Interfaces
         Task<VehicleResponse> GetVehicleByIdAsync(int vehicleId);
         Task<VehicleResponse> CreateVehicleAsync(CreateVehicleRequest request);
         Task<VehicleResponse> UpdateVehicleAsync(int vehicleId, UpdateVehicleRequest request);
-        Task<bool> DeleteVehicleAsync(int vehicleId);
     }
 }

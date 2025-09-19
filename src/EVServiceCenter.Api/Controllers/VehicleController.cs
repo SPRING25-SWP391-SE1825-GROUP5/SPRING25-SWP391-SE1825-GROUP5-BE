@@ -179,47 +179,5 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Xóa xe
-        /// </summary>
-        /// <param name="id">ID xe</param>
-        /// <returns>Kết quả xóa</returns>
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteVehicle(int id)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID xe không hợp lệ" });
-
-                var result = await _vehicleService.DeleteVehicleAsync(id);
-                
-                if (result)
-                {
-                    return Ok(new { 
-                        success = true, 
-                        message = "Xóa xe thành công" 
-                    });
-                }
-                else
-                {
-                    return StatusCode(500, new { 
-                        success = false, 
-                        message = "Không thể xóa xe" 
-                    });
-                }
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
     }
 }

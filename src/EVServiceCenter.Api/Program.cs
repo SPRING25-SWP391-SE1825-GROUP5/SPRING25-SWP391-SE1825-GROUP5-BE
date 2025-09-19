@@ -17,6 +17,7 @@ using System.Text;
 using System;
 using System.Threading.Tasks;
 using EVServiceCenter.Api.Extensions;
+using EVServiceCenter.Api.Middleware;
 using Microsoft.AspNetCore.Http;
 using Microsoft.OpenApi.Models;
 using System.IO;
@@ -226,6 +227,9 @@ app.UseHttpsRedirection();
 
 // Static Files để serve uploaded files
 app.UseStaticFiles();
+
+// Global Exception Handling
+app.UseExceptionHandler("/error");
 
 // Authentication & Authorization middleware
 app.UseAuthentication();

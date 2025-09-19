@@ -188,26 +188,6 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<bool> DeleteVehicleAsync(int vehicleId)
-        {
-            try
-            {
-                // Validate vehicle exists
-                if (!await _vehicleRepository.VehicleExistsAsync(vehicleId))
-                    throw new ArgumentException("Xe không tồn tại.");
-
-                await _vehicleRepository.DeleteVehicleAsync(vehicleId);
-                return true;
-            }
-            catch (ArgumentException)
-            {
-                throw; // Rethrow validation errors
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Lỗi khi xóa xe: {ex.Message}");
-            }
-        }
 
         private VehicleResponse MapToVehicleResponse(Vehicle vehicle)
         {

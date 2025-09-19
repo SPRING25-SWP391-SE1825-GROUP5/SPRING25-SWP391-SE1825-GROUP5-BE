@@ -7,6 +7,7 @@ namespace EVServiceCenter.Application.Models.Requests
     public class UpdateVehicleRequest
     {
         [Required(ErrorMessage = "ID model xe là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "ID model xe phải là số nguyên dương")]
         public int ModelId { get; set; }
 
         // Thông tin model xe (nếu cập nhật)
@@ -22,11 +23,11 @@ namespace EVServiceCenter.Application.Models.Requests
         public int? ModelYear { get; set; }
 
         [Required(ErrorMessage = "Dung lượng pin là bắt buộc")]
-        [Range(0, 1000, ErrorMessage = "Dung lượng pin phải từ 0 đến 1000 kWh")]
+        [Range(0, 1000, ErrorMessage = "Dung lượng pin phải là số từ 0 đến 1000 kWh")]
         public decimal BatteryCapacity { get; set; }
 
         [Required(ErrorMessage = "Tầm hoạt động là bắt buộc")]
-        [Range(0, 1000, ErrorMessage = "Tầm hoạt động phải từ 0 đến 1000 km")]
+        [Range(0, 1000, ErrorMessage = "Tầm hoạt động phải là số từ 0 đến 1000 km")]
         public int Range { get; set; }
 
         [Required(ErrorMessage = "VIN là bắt buộc")]
@@ -42,7 +43,7 @@ namespace EVServiceCenter.Application.Models.Requests
         public string Color { get; set; }
 
         [Required(ErrorMessage = "Số km hiện tại là bắt buộc")]
-        [Range(0, int.MaxValue, ErrorMessage = "Số km hiện tại phải lớn hơn hoặc bằng 0")]
+        [Range(0, int.MaxValue, ErrorMessage = "Số km hiện tại phải là số nguyên lớn hơn hoặc bằng 0")]
         public int CurrentMileage { get; set; }
 
         public DateOnly? LastServiceDate { get; set; }

@@ -31,5 +31,14 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(s => s.Category)
                 .FirstOrDefaultAsync(s => s.ServiceId == serviceId);
         }
+
+        public async Task<List<Service>> GetActiveServicesAsync()
+        {
+            return await _context.Services
+                .Include(s => s.Category)
+                .Where(s => s.IsActive == true && s.Category.IsActive == true)
+                .OrderByDescending(s => s.CreatedAt)
+                .ToListAsync();
+        }
     }
 }

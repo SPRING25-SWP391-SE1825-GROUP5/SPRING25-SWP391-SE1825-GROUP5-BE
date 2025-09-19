@@ -81,6 +81,49 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<ServiceListResponse> GetActiveServicesAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? categoryId = null)
+        {
+            try
+            {
+                var services = await _serviceRepository.GetActiveServicesAsync();
+
+                // Filtering
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    services = services.Where(s =>
+                        s.ServiceName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        s.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        s.RequiredSkills.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                    ).ToList();
+                }
+
+                if (categoryId.HasValue)
+                {
+                    services = services.Where(s => s.CategoryId == categoryId.Value).ToList();
+                }
+
+                // Pagination
+                var totalCount = services.Count;
+                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+                var paginatedServices = services.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+
+                var serviceResponses = paginatedServices.Select(s => MapToServiceResponse(s)).ToList();
+
+                return new ServiceListResponse
+                {
+                    Services = serviceResponses,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    TotalPages = totalPages,
+                    TotalCount = totalCount
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy danh sách dịch vụ đang hoạt động: {ex.Message}");
+            }
+        }
+
         private ServiceResponse MapToServiceResponse(Domain.Entities.Service service)
         {
             return new ServiceResponse

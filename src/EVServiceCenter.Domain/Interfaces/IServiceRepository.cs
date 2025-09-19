@@ -8,5 +8,6 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<List<Service>> GetAllServicesAsync();
         Task<Service> GetServiceByIdAsync(int serviceId);
+        Task<List<Service>> GetActiveServicesAsync();
     }
 }

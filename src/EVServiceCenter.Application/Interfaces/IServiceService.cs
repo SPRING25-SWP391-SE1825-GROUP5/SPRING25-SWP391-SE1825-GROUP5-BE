@@ -7,5 +7,6 @@ namespace EVServiceCenter.Application.Interfaces
     {
         Task<ServiceListResponse> GetAllServicesAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? categoryId = null);
         Task<ServiceResponse> GetServiceByIdAsync(int serviceId);
+        Task<ServiceListResponse> GetActiveServicesAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? categoryId = null);
     }
 }

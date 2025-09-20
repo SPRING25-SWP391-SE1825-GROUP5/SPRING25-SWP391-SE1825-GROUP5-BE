@@ -21,12 +21,12 @@ namespace EVServiceCenter.Application.Models.Requests
         public string Email { get; set; }
 
         [Required(ErrorMessage = "Mật khẩu là bắt buộc")]
-        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$", 
+        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$",
             ErrorMessage = "Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt")]
-        public string PasswordHash { get; set; }
+        public string Password { get; set; }
 
         [Required(ErrorMessage = "Xác nhận mật khẩu là bắt buộc")]
-        [Compare("PasswordHash", ErrorMessage = "Xác nhận mật khẩu không khớp")]
+        [Compare("Password", ErrorMessage = "Xác nhận mật khẩu không khớp")]
         public string ConfirmPassword { get; set; }
 
         [Required(ErrorMessage = "Số điện thoại là bắt buộc")]

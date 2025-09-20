@@ -1,4 +1,10 @@
-﻿// Entry point of the API
+﻿// ============================================================================
+// EVServiceCenter API - Entry Point
+// ============================================================================
+// Main configuration file for the EVServiceCenter API application
+// This file contains all service registrations, middleware configurations,
+// and application startup logic
+// ============================================================================
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -23,28 +29,47 @@ using Microsoft.OpenApi.Models;
 using System.IO;
 
 
+// ============================================================================
+// APPLICATION BUILDER CONFIGURATION
+// ============================================================================
 var builder = WebApplication.CreateBuilder(args);
+
 builder.Configuration
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddEnvironmentVariables();
 
+// ============================================================================
+// DATABASE CONFIGURATION
+// ============================================================================
 
-// Đăng ký DbContext 
 builder.Services.AddDbContext<EVDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-// Đăng ký các dịch vụ
+
+// ============================================================================
+// CORE SERVICES REGISTRATION
+// ============================================================================
 builder.Services.AddControllers();
 builder.Services.AddMemoryCache();
-
 builder.Services.AddHttpContextAccessor();
+
+
+// ============================================================================
+// APPLICATION SERVICES REGISTRATION
+// ============================================================================
+
+// Authentication & Authorization Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IOtpService, OtpService>();
+
+// Communication Services
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
+
+// Business Services
 builder.Services.AddScoped<ICenterService, CenterService>();
 builder.Services.AddScoped<IServiceCategoryService, ServiceCategoryService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
@@ -58,10 +83,18 @@ builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 
-// Repository
+
+// ============================================================================
+// REPOSITORY REGISTRATION
+// ============================================================================
+
+// Authentication & User Repositories
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IOtpRepository, OtpRepository>();
+builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
+
+// Business Logic Repositories
 builder.Services.AddScoped<ICenterRepository, CenterRepository>();
 builder.Services.AddScoped<IServiceCategoryRepository, ServiceCategoryRepository>();
 builder.Services.AddScoped<IServiceRepository, ServiceRepository>();
@@ -100,8 +133,8 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
         ClockSkew = TimeSpan.Zero // Không cho phép sai lệch thời gian
     };
-    
-    // Custom error handling
+
+    // Custom JWT error handling events
     options.Events = new JwtBearerEvents
     {
         OnAuthenticationFailed = context =>
@@ -117,7 +150,7 @@ builder.Services.AddAuthentication(options =>
             context.HandleResponse();
             context.Response.StatusCode = 401;
             context.Response.ContentType = "application/json";
-            
+
             var response = new
             {
                 success = false,
@@ -125,19 +158,19 @@ builder.Services.AddAuthentication(options =>
                 error = "TOKEN_EXPIRED",
                 timestamp = DateTime.UtcNow
             };
-            
+
             var jsonResponse = System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions
             {
                 PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
             });
-            
+
             return context.Response.WriteAsync(jsonResponse);
         },
         OnForbidden = context =>
         {
             context.Response.StatusCode = 403;
             context.Response.ContentType = "application/json";
-            
+
             var response = new
             {
                 success = false,
@@ -145,18 +178,22 @@ builder.Services.AddAuthentication(options =>
                 error = "FORBIDDEN",
                 timestamp = DateTime.UtcNow
             };
-            
+
             var jsonResponse = System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions
             {
                 PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
             });
-            
+
             return context.Response.WriteAsync(jsonResponse);
         }
     };
 });
 
-// Authorization với Policies
+
+// ============================================================================
+// AUTHORIZATION POLICIES
+// ============================================================================
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("ADMIN"));
@@ -165,9 +202,14 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });
 
-// CORS Configuration
+
+// ============================================================================
+// CORS CONFIGURATION
+// ============================================================================
+
 builder.Services.AddCors(options =>
 {
+    // Default policy - Allow all origins (Development)
     options.AddDefaultPolicy(policy =>
     {
         policy.AllowAnyOrigin()
@@ -175,6 +217,7 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 
+    // Allow all policy (Alternative)
     options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
@@ -196,19 +239,26 @@ builder.Services.AddCors(options =>
     });
 });
 
+
+// ============================================================================
+// API CONTROLLERS & SWAGGER CONFIGURATION
+// ============================================================================
+
 // Controllers
 builder.Services.AddControllers();
 
-// Swagger
+
+// Swagger Configuration
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "EVServiceCenter API",
-        Version = "v1"
+        Version = "v1",
+        Description = "EV Service Center Management API - Comprehensive solution for electric vehicle service management"
     });
-    
+
     // Thêm JWT Authentication vào Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -219,7 +269,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT"
     });
-    
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement()
     {
         {
@@ -236,38 +286,60 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+
+// ============================================================================
+// APPLICATION BUILD & CONFIGURATION
+// ============================================================================
 var app = builder.Build();
 
-// Cấu hình port cho Render
+// ============================================================================
+// PORT CONFIGURATION (Production/Deployment)
+// ============================================================================
 var port = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrWhiteSpace(port))
 {
     app.Urls.Add($"http://*:{port}");
 }
 
-// Swagger UI
+// ============================================================================
+// MIDDLEWARE PIPELINE CONFIGURATION
+// ============================================================================
+// Note: Order of middleware is important!
+
+// Swagger UI - API Documentation
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "EVServiceCenter API V1");
     c.RoutePrefix = "swagger";
+    c.DocumentTitle = "EVServiceCenter API Documentation";
 });
 
 // Enable CORS - Must be before UseHttpsRedirection()
-app.UseCors(); // Use default policy
+app.UseCors(); // Uses default policy (AllowAnyOrigin)
 
+// HTTPS Redirection
 app.UseHttpsRedirection();
 
-// Static Files để serve uploaded files
+
+
+// Static Files - For serving uploaded files, images, etc.
 app.UseStaticFiles();
 
 // Global Exception Handling
 app.UseExceptionHandler("/error");
 
-// Authentication & Authorization middleware
+
+// Authentication - Must come before Authorization
 app.UseAuthentication();
-app.UseAuthenticationErrorHandling(); // Custom error handling
+app.UseAuthenticationErrorHandling(); // Custom JWT error handling
 app.UseAuthorization();
 
+// Map API Controllers
 app.MapControllers();
+
+
+// ============================================================================
+// APPLICATION STARTUP
+// ============================================================================
 app.Run();

@@ -165,6 +165,37 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });
 
+// CORS Configuration
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+
+    // Hoặc cấu hình cụ thể cho production
+    options.AddPolicy("AllowSpecificOrigins", policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:3000",    // React dev server
+                "http://localhost:5173",    // Vite dev server
+                "https://your-frontend-domain.com" // Production domain
+              )
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
+
 // Controllers
 builder.Services.AddControllers();
 
@@ -222,6 +253,8 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
+// Enable CORS - Must be before UseHttpsRedirection()
+app.UseCors(); // Use default policy
 
 app.UseHttpsRedirection();
 

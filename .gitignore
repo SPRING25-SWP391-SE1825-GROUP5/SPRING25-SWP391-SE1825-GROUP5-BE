@@ -9,7 +9,11 @@
 *.user
 *.userosscache
 *.sln.docstates
-
+# Project specific files
+api-worker-windows.exe
+.vscode
+tmp
+src.sln
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

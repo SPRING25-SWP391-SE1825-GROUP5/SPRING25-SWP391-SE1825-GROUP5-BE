@@ -17,7 +17,7 @@ namespace EVServiceCenter.Application.Models.Requests
         public string Brand { get; set; }
 
         [Required(ErrorMessage = "Đơn giá là bắt buộc")]
-        [Range(0.01, double.MaxValue, ErrorMessage = "Đơn giá phải lớn hơn 0")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Đơn giá phải là số lớn hơn 0")]
         public decimal UnitPrice { get; set; }
 
         [Required(ErrorMessage = "Đơn vị là bắt buộc")]

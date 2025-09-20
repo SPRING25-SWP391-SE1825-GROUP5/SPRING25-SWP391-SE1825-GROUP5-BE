@@ -59,6 +59,44 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Lấy danh sách các dịch vụ đang hoạt động (Services.IsActive = 1 AND ServiceCategories.IsActive = 1)
+        /// </summary>
+        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
+        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
+        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
+        /// <param name="categoryId">Lọc theo danh mục dịch vụ</param>
+        /// <returns>Danh sách dịch vụ đang hoạt động</returns>
+        [HttpGet("active")]
+        public async Task<IActionResult> GetActiveServices(
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string searchTerm = null,
+            [FromQuery] int? categoryId = null)
+        {
+            try
+            {
+                // Validate pagination parameters
+                if (pageNumber < 1) pageNumber = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+                var result = await _serviceService.GetActiveServicesAsync(pageNumber, pageSize, searchTerm, categoryId);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy danh sách dịch vụ đang hoạt động thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
         /// Lấy thông tin dịch vụ theo ID
         /// </summary>
         /// <param name="id">ID dịch vụ</param>

@@ -7,12 +7,15 @@ namespace EVServiceCenter.Application.Models.Requests
     public class CreateBookingRequest
     {
         [Required(ErrorMessage = "ID khách hàng là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "ID khách hàng phải là số nguyên dương")]
         public int CustomerId { get; set; }
 
         [Required(ErrorMessage = "ID phương tiện là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "ID phương tiện phải là số nguyên dương")]
         public int VehicleId { get; set; }
 
         [Required(ErrorMessage = "ID trung tâm là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "ID trung tâm phải là số nguyên dương")]
         public int CenterId { get; set; }
 
         [Required(ErrorMessage = "Ngày đặt lịch là bắt buộc")]
@@ -20,9 +23,11 @@ namespace EVServiceCenter.Application.Models.Requests
         public DateOnly BookingDate { get; set; }
 
         [Required(ErrorMessage = "ID slot bắt đầu là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "ID slot bắt đầu phải là số nguyên dương")]
         public int StartSlotId { get; set; }
 
         [Required(ErrorMessage = "ID slot kết thúc là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "ID slot kết thúc phải là số nguyên dương")]
         public int EndSlotId { get; set; }
 
         [StringLength(500, ErrorMessage = "Yêu cầu đặc biệt không được vượt quá 500 ký tự")]

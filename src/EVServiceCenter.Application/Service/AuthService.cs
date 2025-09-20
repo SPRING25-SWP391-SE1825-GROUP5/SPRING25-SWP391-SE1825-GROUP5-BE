@@ -5,19 +5,20 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
+using BCryptNet = BCrypt.Net.BCrypt;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Domain.Entities;
-using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.IRepositories;
 using BCrypt.Net;
 using EVServiceCenter.Application.Models.Responses;
 using Google.Apis.Auth;
-using Microsoft.Extensions.Configuration;
-
-
-
-
+using EVServiceCenter.Domain.Interfaces;
+using Microsoft.Extensions.Caching.Memory;
 namespace EVServiceCenter.Application.Service
 {
     public class AuthService : IAuthService
@@ -29,8 +30,15 @@ namespace EVServiceCenter.Application.Service
         private readonly IJwtService _jwtService;
         private readonly IConfiguration _configuration;
         private readonly ICustomerRepository _customerRepository;
+        private readonly IAccountRepository _accountRepository;
+        private readonly IOtpCodeRepository _otpRepository;
+        private readonly IMemoryCache _cache;
         
-        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository)
+        // cấu hình lock
+        private const int MAX_FAILED_ATTEMPTS = 5;   // số lần nhập sai tối đa
+        private static readonly TimeSpan LOCK_DURATION = TimeSpan.FromMinutes(10); // thời gian khóa
+        
+        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache)
         {
             _accountService = accountService;
             _authRepository = authRepository;
@@ -39,7 +47,13 @@ namespace EVServiceCenter.Application.Service
             _jwtService = jwtService;
             _configuration = configuration;
             _customerRepository = customerRepository;
+            _accountRepository = accountRepository;
+            _otpRepository = otpRepository;
+            _cache = cache;
         }
+        private static string FailKey(string email) => $"login:fail:{email.ToLower()}";
+        private static string LockKey(string email) => $"login:lock:{email.ToLower()}";
+
         public async Task<string> RegisterAsync(AccountRequest request)
         {
             // Validation chi tiết từng trường
@@ -52,14 +66,14 @@ namespace EVServiceCenter.Application.Service
                 {
                     Email = request.Email.ToLower().Trim(),
                     FullName = request.FullName.Trim(),
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.PasswordHash),
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                     PhoneNumber = request.PhoneNumber.Trim(),
                     Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : null,
                     DateOfBirth = request.DateOfBirth,
                     Gender = request.Gender,
                     AvatarUrl = !string.IsNullOrWhiteSpace(request.AvatarUrl) ? request.AvatarUrl.Trim() : null,
                     Role = "CUSTOMER", // Luôn là CUSTOMER cho đăng ký công khai
-                    IsActive = false, // Tài khoản chưa active cho đến khi verify email
+                    IsActive = true, // Tài khoản mặc định là active
                     EmailVerified = false,
                     FailedLoginAttempts = 0,
                     LockoutUntil = null,
@@ -67,36 +81,36 @@ namespace EVServiceCenter.Application.Service
                     UpdatedAt = DateTime.UtcNow
                 };
 
-                    // Lưu user vào database
-                    await _authRepository.RegisterAsync(user);
+                // Lưu user vào database
+                await _authRepository.RegisterAsync(user);
 
-                    // Tạo Customer record tương ứng
-                    var customer = new Customer
-                    {
-                        UserId = user.UserId,
-                        CustomerCode = GenerateCustomerCode(),
-                        NormalizedPhone = NormalizePhoneNumber(request.PhoneNumber),
-                        IsGuest = false, // Đây là customer đã đăng ký, không phải guest
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
+                // Tạo Customer record tương ứng
+                var customer = new Customer
+                {
+                    UserId = user.UserId,
+                    CustomerCode = GenerateCustomerCode(),
+                    NormalizedPhone = NormalizePhoneNumber(request.PhoneNumber),
+                    IsGuest = false, // Đây là customer đã đăng ký, không phải guest
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
 
-                    await _customerRepository.CreateCustomerAsync(customer);
+                await _customerRepository.CreateCustomerAsync(customer);
 
-                    // Tạo và gửi mã OTP xác thực email
-                    try
-                    {
-                        var otpCode = await _otpService.CreateOtpAsync(user.UserId, user.Email, "EMAIL_VERIFICATION");
-                        await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
-                        
-                        return "Đăng ký tài khoản thành công! Vui lòng kiểm tra email để nhận mã xác thực và hoàn tất kích hoạt tài khoản.";
-                    }
-                    catch (Exception emailEx)
-                    {
-                        // Nếu gửi OTP thất bại, vẫn coi đăng ký thành công nhưng yêu cầu user thử lại
-                        Console.WriteLine($"OTP email sending failed: {emailEx.Message}");
-                        return "Đăng ký tài khoản thành công! Tuy nhiên có lỗi khi gửi email xác thực. Vui lòng thử yêu cầu gửi lại mã xác thực.";
-                    }
+                // Tạo và gửi mã OTP xác thực email
+                try
+                {
+                    var otpCode = await _otpService.CreateOtpAsync(user.UserId, user.Email, "EMAIL_VERIFICATION");
+                    await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
+                    
+                    return "Đăng ký tài khoản thành công! Vui lòng kiểm tra email để nhận mã xác thực và hoàn tất kích hoạt tài khoản.";
+                }
+                catch (Exception emailEx)
+                {
+                    // Nếu gửi OTP thất bại, vẫn coi đăng ký thành công nhưng yêu cầu user thử lại
+                    Console.WriteLine($"OTP email sending failed: {emailEx.Message}");
+                    return "Đăng ký tài khoản thành công! Tuy nhiên có lỗi khi gửi email xác thực. Vui lòng thử yêu cầu gửi lại mã xác thực.";
+                }
             }
             catch (Exception ex)
             {
@@ -108,20 +122,20 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-                // Kiểm tra email format
+            // Kiểm tra email format
             if (!IsValidEmail(request.Email))
             {
-                    errors.Add("Email phải có đuôi @gmail.com");
+                errors.Add("Email phải có đuôi @gmail.com");
             }
 
             // Kiểm tra password strength
-            if (!IsValidPassword(request.PasswordHash))
+            if (!IsValidPassword(request.Password))
             {
                 errors.Add("Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.");
             }
 
             // Kiểm tra password confirm
-            if (request.PasswordHash != request.ConfirmPassword)
+            if (request.Password != request.ConfirmPassword)
             {
                 errors.Add("Mật khẩu xác nhận không khớp.");
             }
@@ -138,11 +152,11 @@ namespace EVServiceCenter.Application.Service
                 errors.Add("Phải đủ 16 tuổi trở lên để đăng ký tài khoản.");
             }
 
-                // Kiểm tra giới tính hợp lệ
-                if (!IsValidGender(request.Gender))
-                {
-                    errors.Add("Giới tính phải là MALE hoặc FEMALE.");
-                }
+            // Kiểm tra giới tính hợp lệ
+            if (!IsValidGender(request.Gender))
+            {
+                errors.Add("Giới tính phải là MALE hoặc FEMALE.");
+            }
 
             // Kiểm tra email đã tồn tại
             var existingUserByEmail = await _accountService.GetAccountByEmailAsync(request.Email);
@@ -157,7 +171,6 @@ namespace EVServiceCenter.Application.Service
             {
                 errors.Add("Số điện thoại này đã được sử dụng. Vui lòng sử dụng số điện thoại khác.");
             }
-
 
             // Throw exception với tất cả lỗi nếu có
             if (errors.Any())
@@ -193,16 +206,26 @@ namespace EVServiceCenter.Application.Service
             return validGenders.Contains(gender, StringComparer.Ordinal);
         }
 
-
         public async Task<LoginTokenResponse> LoginAsync(LoginRequest request)
         {
-            // Validate email format
-            if (!IsValidEmail(request.Email))
-                throw new ArgumentException("Email phải có đuôi @gmail.com");
+            User user = null;
 
-            var user = await _accountService.GetAccountByEmailAsync(request.Email);
+            // Kiểm tra xem input là email hay phone number
+            if (IsValidEmail(request.EmailOrPhone))
+            {
+                user = await _accountService.GetAccountByEmailAsync(request.EmailOrPhone);
+            }
+            else if (IsValidPhoneNumber(request.EmailOrPhone))
+            {
+                user = await _accountService.GetAccountByPhoneNumberAsync(request.EmailOrPhone);
+            }
+            else
+            {
+                throw new ArgumentException("Vui lòng nhập email (@gmail.com) hoặc số điện thoại hợp lệ");
+            }
+
             if (user == null)
-                throw new ArgumentException("Email hoặc mật khẩu không đúng");
+                throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng");
 
             // Kiểm tra tài khoản có bị lockout không
             if (user.LockoutUntil.HasValue && user.LockoutUntil.Value > DateTime.UtcNow)
@@ -211,9 +234,12 @@ namespace EVServiceCenter.Application.Service
                 throw new ArgumentException($"Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau {remainingMinutes} phút.");
             }
 
-            // Kiểm tra email đã được verify chưa
+            // Note: Email verification is optional - users can login without verification
+            // Just log for tracking purposes
             if (!user.EmailVerified)
-                throw new ArgumentException("Tài khoản chưa được xác thực email. Vui lòng kiểm tra email và xác thực tài khoản trước khi đăng nhập.");
+            {
+                Console.WriteLine($"User {user.Email} logged in without email verification");
+            }
 
             // Kiểm tra tài khoản có active không
             if (!user.IsActive)
@@ -238,7 +264,7 @@ namespace EVServiceCenter.Application.Service
                     user.UpdatedAt = DateTime.UtcNow;
                     await _authRepository.UpdateUserAsync(user);
                     var remainingAttempts = 5 - user.FailedLoginAttempts;
-                    throw new ArgumentException($"Email hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
+                    throw new ArgumentException($"Email/số điện thoại hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
                 }
             }
 
@@ -622,36 +648,56 @@ namespace EVServiceCenter.Application.Service
 
 
 
-
-        private bool IsValidEmail(string email)
+        public async Task<bool> VerifyOtpAsync(string email, string otp)
         {
-            if (string.IsNullOrWhiteSpace(email))
-                return false;
+            var user = await _accountRepository.GetAccountByEmailAsync(email);
+            if (user == null) throw new Exception("Người dùng không tồn tại.");
 
-            // Chỉ chấp nhận email có đuôi @gmail.com
-            var gmailRegex = new Regex(@"^[a-zA-Z0-9._%+-]+@gmail\.com$");
-            return gmailRegex.IsMatch(email);
+            var lastOtp = await _otpRepository.GetLastOtpCodeAsync(user.UserId, "Register");
+            if (lastOtp == null) throw new Exception("Không tìm thấy mã OTP.");
+
+            if (lastOtp.IsUsed || lastOtp.ExpiresAt < DateTime.UtcNow)
+                throw new Exception("Mã OTP đã hết hạn hoặc đã được sử dụng.");
+
+            if (lastOtp.Otpcode1 != otp)
+            {
+                lastOtp.AttemptCount++;
+                await _otpRepository.UpdateAsync(lastOtp);
+                throw new Exception("Mã OTP không chính xác.");
+            }
+
+            lastOtp.IsUsed = true;
+            lastOtp.UsedAt = DateTime.UtcNow;
+
+            user.EmailVerified = true;
+            // IsActive đã được set = true từ lúc đăng ký, không cần set lại
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _otpRepository.UpdateAsync(lastOtp);
+            await _accountRepository.UpdateAccountAsync(user);
+
+            return true;
         }
 
-        // Check password is valid
-        private bool IsValidPassword(string password)
+
+        private void RegisterFailedAttempt(string email)
         {
-            if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
-                return false;
+            var key = FailKey(email);
+            int current = 0;
+            if (_cache.TryGetValue<int>(key, out var fails))
+            {
+                current = fails;
+            }
+            current++;
 
-            var passwordRegex = new Regex(@"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$");
-            return passwordRegex.IsMatch(password);
-        }
+            // Lưu lại số lần fail, set TTL nhẹ (ví dụ 30 phút) để không giữ mãi
+            _cache.Set(key, current, TimeSpan.FromMinutes(30));
 
-        private bool IsValidPhoneNumber(string phoneNumber)
-        {
-            if (string.IsNullOrWhiteSpace(phoneNumber))
-                return false;
-
-            // Loại bỏ khoảng trắng
-            phoneNumber = phoneNumber.Replace(" ", "");
-            var phoneRegex = new Regex(@"^(?:\+84|0)(?:\d{9})$");
-            return phoneRegex.IsMatch(phoneNumber);
+            if (current >= MAX_FAILED_ATTEMPTS)
+            {
+                // Đặt khóa
+                _cache.Set(LockKey(email), DateTime.UtcNow.Add(LOCK_DURATION), LOCK_DURATION);
+            }
         }
 
         private bool IsValidUrl(string url)
@@ -805,6 +851,56 @@ namespace EVServiceCenter.Application.Service
             
             // Nếu không có prefix, thêm 0
             return "0" + normalized;
+        }
+
+        private string GenerateJwt(User user)
+        {
+            var jwtSettings = _configuration.GetSection("Jwt");
+            var secretKey = jwtSettings["Secret"];
+            var issuer = jwtSettings["Issuer"];
+            var audience = jwtSettings["Audience"];
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var claims = new[]
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                new Claim(ClaimTypes.Role, user.Role ?? "Member"),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
+            var token = new JwtSecurityToken(
+                issuer,
+                audience,
+                claims,
+                expires: DateTime.UtcNow.AddHours(2),
+                signingCredentials: creds
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        private bool IsValidEmail(string email)
+        {
+            // Chỉ chấp nhận email có đuôi @gmail.com
+            var gmailRegex = new Regex(@"^[a-zA-Z0-9._%+-]+@gmail\.com$");
+            return gmailRegex.IsMatch(email);
+        }
+
+        private bool IsValidPassword(string password)
+        {
+            // Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt
+            var passwordRegex = new Regex(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$");
+            return passwordRegex.IsMatch(password);
+        }
+
+        private bool IsValidPhoneNumber(string phoneNumber)
+        {
+            // Số điện thoại phải bắt đầu bằng 0 và có đúng 10 số
+            var phoneRegex = new Regex(@"^0\d{9}$");
+            return phoneRegex.IsMatch(phoneNumber);
         }
     }
 }

@@ -1,0 +1,5 @@
+﻿POST /api/auth/register – Đăng ký tài khoản (gửi OTP về email)
+
+POST /api/auth/verify-otp – Xác minh OTP (kích hoạt tài khoản)
+
+POST /api/auth/login – Đăng nhập, trả về JWT token

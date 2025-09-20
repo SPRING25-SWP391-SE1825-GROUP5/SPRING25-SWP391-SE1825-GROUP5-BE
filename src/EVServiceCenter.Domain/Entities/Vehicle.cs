@@ -21,8 +21,6 @@ public partial class Vehicle
 
     public DateOnly? LastServiceDate { get; set; }
 
-    public DateOnly? NextServiceDue { get; set; }
-
     public DateTime CreatedAt { get; set; }
 
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();

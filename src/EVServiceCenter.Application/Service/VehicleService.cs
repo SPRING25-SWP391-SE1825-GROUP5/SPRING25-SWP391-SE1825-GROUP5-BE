@@ -103,7 +103,6 @@ namespace EVServiceCenter.Application.Service
                     Color = request.Color.Trim(),
                     CurrentMileage = request.CurrentMileage,
                     LastServiceDate = request.LastServiceDate,
-                    NextServiceDue = request.NextServiceDue,
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -115,6 +114,39 @@ namespace EVServiceCenter.Application.Service
             catch (ArgumentException)
             {
                 throw; // Rethrow validation errors
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                // Parse specific database errors
+                var errorMessage = "Lỗi cơ sở dữ liệu";
+                
+                if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx)
+                {
+                    switch (sqlEx.Number)
+                    {
+                        case 547: // Foreign key constraint violation
+                            if (sqlEx.Message.Contains("FK_Vehicles_Models"))
+                                errorMessage = "Model xe không tồn tại. Vui lòng chọn model hợp lệ.";
+                            else if (sqlEx.Message.Contains("FK_Vehicles_Customers"))
+                                errorMessage = "Khách hàng không tồn tại. Vui lòng chọn khách hàng hợp lệ.";
+                            else
+                                errorMessage = "Dữ liệu tham chiếu không hợp lệ.";
+                            break;
+                        case 2627: // Unique constraint violation
+                            if (sqlEx.Message.Contains("VIN"))
+                                errorMessage = "VIN này đã tồn tại. Vui lòng chọn VIN khác.";
+                            else if (sqlEx.Message.Contains("LicensePlate"))
+                                errorMessage = "Biển số xe này đã tồn tại. Vui lòng chọn biển số khác.";
+                            else
+                                errorMessage = "Thông tin này đã tồn tại trong hệ thống.";
+                            break;
+                        default:
+                            errorMessage = $"Lỗi cơ sở dữ liệu: {sqlEx.Message}";
+                            break;
+                    }
+                }
+                
+                throw new ArgumentException(errorMessage);
             }
             catch (Exception ex)
             {
@@ -141,7 +173,6 @@ namespace EVServiceCenter.Application.Service
                 vehicle.Color = request.Color.Trim();
                 vehicle.CurrentMileage = request.CurrentMileage;
                 vehicle.LastServiceDate = request.LastServiceDate;
-                vehicle.NextServiceDue = request.NextServiceDue;
 
                 await _vehicleRepository.UpdateVehicleAsync(vehicle);
 
@@ -157,26 +188,6 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<bool> DeleteVehicleAsync(int vehicleId)
-        {
-            try
-            {
-                // Validate vehicle exists
-                if (!await _vehicleRepository.VehicleExistsAsync(vehicleId))
-                    throw new ArgumentException("Xe không tồn tại.");
-
-                await _vehicleRepository.DeleteVehicleAsync(vehicleId);
-                return true;
-            }
-            catch (ArgumentException)
-            {
-                throw; // Rethrow validation errors
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Lỗi khi xóa xe: {ex.Message}");
-            }
-        }
 
         private VehicleResponse MapToVehicleResponse(Vehicle vehicle)
         {
@@ -190,7 +201,6 @@ namespace EVServiceCenter.Application.Service
                 Color = vehicle.Color,
                 CurrentMileage = vehicle.CurrentMileage,
                 LastServiceDate = vehicle.LastServiceDate,
-                NextServiceDue = vehicle.NextServiceDue,
                 CreatedAt = vehicle.CreatedAt,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
                 CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? vehicle.Customer?.NormalizedPhone,
@@ -211,6 +221,12 @@ namespace EVServiceCenter.Application.Service
             if (customer == null)
             {
                 errors.Add("Khách hàng không tồn tại.");
+            }
+
+            // Validate model exists (basic validation - ModelId should be > 0)
+            if (request.ModelId <= 0)
+            {
+                errors.Add("Model xe không hợp lệ. Vui lòng chọn model hợp lệ.");
             }
 
             // Check for duplicate VIN

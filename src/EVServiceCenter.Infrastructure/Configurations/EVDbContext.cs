@@ -78,6 +78,8 @@ public partial class EVDbContext : DbContext
 
     public  DbSet<Technician> Technicians { get; set; }
 
+    public  DbSet<WeeklySchedule> WeeklySchedules { get; set; }
+
     public  DbSet<TechnicianTimeSlot> TechnicianTimeSlots { get; set; }
 
     public  DbSet<TimeSlot> TimeSlots { get; set; }

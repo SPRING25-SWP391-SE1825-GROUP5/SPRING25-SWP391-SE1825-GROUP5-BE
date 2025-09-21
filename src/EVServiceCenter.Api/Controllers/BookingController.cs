@@ -79,6 +79,172 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Lấy danh sách thời gian khả dụng dựa trên WeeklySchedule và technician timeslots
+        /// </summary>
+        /// <param name="centerId">ID trung tâm</param>
+        /// <param name="date">Ngày (YYYY-MM-DD)</param>
+        /// <param name="technicianId">ID kỹ thuật viên (optional)</param>
+        /// <param name="serviceIds">Danh sách ID dịch vụ (comma-separated, optional)</param>
+        /// <returns>Danh sách thời gian khả dụng</returns>
+        [HttpGet("available-times")]
+        public async Task<IActionResult> GetAvailableTimes(
+            [FromQuery] int centerId,
+            [FromQuery] string date,
+            [FromQuery] int? technicianId = null,
+            [FromQuery] string serviceIds = null)
+        {
+            try
+            {
+                if (centerId <= 0)
+                    return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
+
+                if (!DateOnly.TryParse(date, out var bookingDate))
+                    return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
+
+                // Validate date is not in the past
+                if (bookingDate < DateOnly.FromDateTime(DateTime.Today))
+                    return BadRequest(new { success = false, message = "Không thể đặt lịch cho ngày trong quá khứ" });
+
+                // Parse service IDs if provided
+                var serviceIdList = new List<int>();
+                if (!string.IsNullOrWhiteSpace(serviceIds))
+                {
+                    var serviceIdStrings = serviceIds.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var serviceIdString in serviceIdStrings)
+                    {
+                        if (int.TryParse(serviceIdString.Trim(), out var serviceId))
+                        {
+                            serviceIdList.Add(serviceId);
+                        }
+                    }
+                }
+
+                var availableTimes = await _bookingService.GetAvailableTimesAsync(centerId, bookingDate, technicianId, serviceIdList);
+
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy danh sách thời gian khả dụng thành công",
+                    data = availableTimes
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Tạm giữ time slot để tránh conflict khi đặt lịch
+        /// </summary>
+        /// <param name="technicianId">ID kỹ thuật viên</param>
+        /// <param name="date">Ngày (YYYY-MM-DD)</param>
+        /// <param name="slotId">ID slot</param>
+        /// <param name="bookingId">ID booking (optional)</param>
+        /// <returns>Kết quả tạm giữ</returns>
+        [HttpPost("reserve-slot")]
+        public async Task<IActionResult> ReserveTimeSlot(
+            [FromQuery] int technicianId,
+            [FromQuery] string date,
+            [FromQuery] int slotId,
+            [FromQuery] int? bookingId = null)
+        {
+            try
+            {
+                if (technicianId <= 0)
+                    return BadRequest(new { success = false, message = "ID kỹ thuật viên không hợp lệ" });
+
+                if (slotId <= 0)
+                    return BadRequest(new { success = false, message = "ID slot không hợp lệ" });
+
+                if (!DateOnly.TryParse(date, out var bookingDate))
+                    return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
+
+                var result = await _bookingService.ReserveTimeSlotAsync(technicianId, bookingDate, slotId, bookingId);
+
+                if (result)
+                {
+                    return Ok(new { 
+                        success = true, 
+                        message = "Tạm giữ time slot thành công",
+                        data = new { technicianId, date = bookingDate, slotId, bookingId }
+                    });
+                }
+                else
+                {
+                    return BadRequest(new { 
+                        success = false, 
+                        message = "Không thể tạm giữ time slot. Slot có thể đã được đặt hoặc không khả dụng." 
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Giải phóng time slot đã tạm giữ
+        /// </summary>
+        /// <param name="technicianId">ID kỹ thuật viên</param>
+        /// <param name="date">Ngày (YYYY-MM-DD)</param>
+        /// <param name="slotId">ID slot</param>
+        /// <returns>Kết quả giải phóng</returns>
+        [HttpPost("release-slot")]
+        public async Task<IActionResult> ReleaseTimeSlot(
+            [FromQuery] int technicianId,
+            [FromQuery] string date,
+            [FromQuery] int slotId)
+        {
+            try
+            {
+                if (technicianId <= 0)
+                    return BadRequest(new { success = false, message = "ID kỹ thuật viên không hợp lệ" });
+
+                if (slotId <= 0)
+                    return BadRequest(new { success = false, message = "ID slot không hợp lệ" });
+
+                if (!DateOnly.TryParse(date, out var bookingDate))
+                    return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
+
+                var result = await _bookingService.ReleaseTimeSlotAsync(technicianId, bookingDate, slotId);
+
+                if (result)
+                {
+                    return Ok(new { 
+                        success = true, 
+                        message = "Giải phóng time slot thành công",
+                        data = new { technicianId, date = bookingDate, slotId }
+                    });
+                }
+                else
+                {
+                    return BadRequest(new { 
+                        success = false, 
+                        message = "Không thể giải phóng time slot." 
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
         /// Tạo đặt lịch mới
         /// </summary>
         /// <param name="request">Thông tin đặt lịch</param>

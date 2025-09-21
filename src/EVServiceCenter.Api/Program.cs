@@ -1,4 +1,10 @@
-﻿// Entry point of the API
+﻿// ============================================================================
+// EVServiceCenter API - Entry Point
+// ============================================================================
+// Main configuration file for the EVServiceCenter API application
+// This file contains all service registrations, middleware configurations,
+// and application startup logic
+// ============================================================================
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -23,28 +29,48 @@ using Microsoft.OpenApi.Models;
 using System.IO;
 
 
+// ============================================================================
+// APPLICATION BUILDER CONFIGURATION
+// ============================================================================
 var builder = WebApplication.CreateBuilder(args);
+
 builder.Configuration
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddEnvironmentVariables();
 
+// ============================================================================
+// DATABASE CONFIGURATION
+// ============================================================================
 
-// Đăng ký DbContext 
+
 builder.Services.AddDbContext<EVDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-// Đăng ký các dịch vụ
+
+// ============================================================================
+// CORE SERVICES REGISTRATION
+// ============================================================================
 builder.Services.AddControllers();
 builder.Services.AddMemoryCache();
-
 builder.Services.AddHttpContextAccessor();
+
+
+// ============================================================================
+// APPLICATION SERVICES REGISTRATION
+// ============================================================================
+
+// Authentication & Authorization Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IOtpService, OtpService>();
+
+// Communication Services
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
+
+// Business Services
 builder.Services.AddScoped<ICenterService, CenterService>();
 builder.Services.AddScoped<IServiceCategoryService, ServiceCategoryService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
@@ -57,11 +83,19 @@ builder.Services.AddScoped<IPartService, PartService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
+builder.Services.AddScoped<IWeeklyTimeSlotService, WeeklyTimeSlotService>();
 
-// Repository
+// ============================================================================
+// REPOSITORY REGISTRATION
+// ============================================================================
+
+// Authentication & User Repositories
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IOtpRepository, OtpRepository>();
+builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
+
+// Business Logic Repositories
 builder.Services.AddScoped<ICenterRepository, CenterRepository>();
 builder.Services.AddScoped<IServiceCategoryRepository, ServiceCategoryRepository>();
 builder.Services.AddScoped<IServiceRepository, ServiceRepository>();
@@ -75,6 +109,8 @@ builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
+builder.Services.AddScoped<IWeeklyScheduleRepository, WeeklyScheduleRepository>();
+builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");
@@ -165,6 +201,37 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });
 
+// CORS Configuration
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+
+    // Hoặc cấu hình cụ thể cho production
+    options.AddPolicy("AllowSpecificOrigins", policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:3000",    // React dev server
+                "http://localhost:5173",    // Vite dev server
+                "https://your-frontend-domain.com" // Production domain
+              )
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
+
 // Controllers
 builder.Services.AddControllers();
 
@@ -222,6 +289,8 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
+// Enable CORS - Must be before UseHttpsRedirection()
+app.UseCors(); // Use default policy
 
 app.UseHttpsRedirection();
 

@@ -19,6 +19,8 @@ namespace EVServiceCenter.Application.Service
         private readonly ITechnicianRepository _technicianRepository;
         private readonly ICustomerRepository _customerRepository;
         private readonly IVehicleRepository _vehicleRepository;
+        private readonly IWeeklyScheduleRepository _weeklyScheduleRepository;
+        private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
 
         public BookingService(
             IBookingRepository bookingRepository,
@@ -27,7 +29,9 @@ namespace EVServiceCenter.Application.Service
             ITimeSlotRepository timeSlotRepository,
             ITechnicianRepository technicianRepository,
             ICustomerRepository customerRepository,
-            IVehicleRepository vehicleRepository)
+            IVehicleRepository vehicleRepository,
+            IWeeklyScheduleRepository weeklyScheduleRepository,
+            ITechnicianTimeSlotRepository technicianTimeSlotRepository)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -36,6 +40,8 @@ namespace EVServiceCenter.Application.Service
             _technicianRepository = technicianRepository;
             _customerRepository = customerRepository;
             _vehicleRepository = vehicleRepository;
+            _weeklyScheduleRepository = weeklyScheduleRepository;
+            _technicianTimeSlotRepository = technicianTimeSlotRepository;
         }
 
         public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int> serviceIds = null)
@@ -110,6 +116,210 @@ namespace EVServiceCenter.Application.Service
             catch (Exception ex)
             {
                 throw new Exception($"Lỗi khi lấy thông tin khả dụng: {ex.Message}");
+            }
+        }
+
+        public async Task<AvailableTimesResponse> GetAvailableTimesAsync(int centerId, DateOnly date, int? technicianId = null, List<int> serviceIds = null)
+        {
+            try
+            {
+                // Validate center exists and is active
+                var center = await _centerRepository.GetCenterByIdAsync(centerId);
+                if (center == null)
+                    throw new ArgumentException("Trung tâm không tồn tại.");
+                if (!center.IsActive)
+                    throw new ArgumentException("Trung tâm hiện tại không hoạt động.");
+
+                // Validate services are active if provided
+                if (serviceIds != null && serviceIds.Any())
+                {
+                    var services = await _serviceRepository.GetAllServicesAsync();
+                    var invalidServices = serviceIds.Where(id => 
+                        !services.Any(s => s.ServiceId == id && s.IsActive)).ToList();
+                    if (invalidServices.Any())
+                        throw new ArgumentException($"Các dịch vụ sau không tồn tại hoặc không hoạt động: {string.Join(", ", invalidServices)}");
+                }
+
+                // Get day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+                var dayOfWeek = (byte)date.DayOfWeek;
+
+                // Get weekly schedules for the center and day
+                var weeklySchedules = await _weeklyScheduleRepository.GetWeeklySchedulesByLocationAndDayAsync(centerId, dayOfWeek);
+                var activeSchedules = weeklySchedules.Where(ws => 
+                    ws.IsActive && 
+                    ws.IsOpen && 
+                    ws.EffectiveFrom <= date && 
+                    (ws.EffectiveTo == null || ws.EffectiveTo >= date)).ToList();
+
+                if (!activeSchedules.Any())
+                    throw new ArgumentException("Không có lịch hoạt động cho ngày này.");
+
+                // Filter by technician if specified
+                if (technicianId.HasValue)
+                {
+                    var technicianSchedules = activeSchedules.Where(ws => 
+                        ws.TechnicianId == technicianId.Value).ToList();
+                    if (!technicianSchedules.Any())
+                        throw new ArgumentException("Kỹ thuật viên không có lịch hoạt động cho ngày này.");
+                    activeSchedules = technicianSchedules;
+                }
+
+                // Get technicians for the center
+                var allTechnicians = await _technicianRepository.GetAllTechniciansAsync();
+                var centerTechnicians = allTechnicians.Where(t => 
+                    t.CenterId == centerId && t.IsActive).ToList();
+
+                // Get existing bookings and technician time slots for the date
+                var existingBookings = await _bookingRepository.GetAllBookingsAsync();
+                var bookingsForDate = existingBookings
+                    .Where(b => b.CenterId == centerId && b.BookingDate == date && 
+                               b.Status != "CANCELLED")
+                    .ToList();
+
+                // Get technician time slots for the date
+                var technicianTimeSlots = new List<TechnicianTimeSlot>();
+                foreach (var tech in centerTechnicians)
+                {
+                    var techSlots = await GetTechnicianTimeSlotsForDate(tech.TechnicianId, date);
+                    technicianTimeSlots.AddRange(techSlots);
+                }
+
+                // Generate available time slots based on weekly schedule
+                var availableTimeSlots = new List<AvailableTimeSlot>();
+                var currentTime = DateTime.Now;
+
+                foreach (var schedule in activeSchedules)
+                {
+                    if (!schedule.StartTime.HasValue || !schedule.EndTime.HasValue)
+                        continue;
+
+                    var startTime = schedule.StartTime.Value;
+                    var endTime = schedule.EndTime.Value;
+                    var stepMinutes = schedule.StepMinutes;
+
+                    // Generate time slots based on schedule
+                    var currentSlotTime = startTime;
+                    while (currentSlotTime < endTime)
+                    {
+                        // Check if current time is within break period
+                        bool isBreakTime = schedule.BreakStart.HasValue && schedule.BreakEnd.HasValue &&
+                                         currentSlotTime >= schedule.BreakStart.Value && 
+                                         currentSlotTime < schedule.BreakEnd.Value;
+
+                        if (!isBreakTime)
+                        {
+                            var technician = centerTechnicians.FirstOrDefault(t => t.TechnicianId == schedule.TechnicianId);
+                            var technicianName = technician?.User?.FullName ?? "N/A";
+
+                            // Get slot ID for current time
+                            var slotId = await GetSlotIdByTime(currentSlotTime);
+
+                            // Check if slot is available
+                            var isBooked = bookingsForDate.Any(b => 
+                                b.BookingTimeSlots.Any(bts => 
+                                    bts.SlotId == slotId && 
+                                    bts.TechnicianId == schedule.TechnicianId));
+
+                            // Check technician time slot availability
+                            var techTimeSlot = technicianTimeSlots.FirstOrDefault(tts => 
+                                tts.TechnicianId == schedule.TechnicianId && 
+                                tts.WorkDate == date && 
+                                tts.SlotId == slotId);
+
+                            var isRealtimeAvailable = !isBooked && 
+                                (techTimeSlot == null || (techTimeSlot.IsAvailable && !techTimeSlot.IsBooked));
+
+                            availableTimeSlots.Add(new AvailableTimeSlot
+                            {
+                                SlotId = slotId,
+                                SlotTime = currentSlotTime,
+                                SlotLabel = $"{currentSlotTime:HH:mm}",
+                                IsAvailable = !isBooked,
+                                IsRealtimeAvailable = isRealtimeAvailable,
+                                TechnicianId = schedule.TechnicianId,
+                                TechnicianName = technicianName,
+                                Status = isBooked ? "BOOKED" : (isRealtimeAvailable ? "AVAILABLE" : "UNAVAILABLE"),
+                                LastUpdated = currentTime
+                            });
+                        }
+
+                        currentSlotTime = currentSlotTime.AddMinutes(stepMinutes);
+                    }
+                }
+
+                // Get available services
+                var allServices = await _serviceRepository.GetAllServicesAsync();
+                var availableServices = allServices.Where(s => s.IsActive).ToList();
+                if (serviceIds != null && serviceIds.Any())
+                {
+                    availableServices = availableServices.Where(s => serviceIds.Contains(s.ServiceId)).ToList();
+                }
+
+                var response = new AvailableTimesResponse
+                {
+                    CenterId = centerId,
+                    CenterName = center.CenterName,
+                    Date = date,
+                    TechnicianId = technicianId,
+                    TechnicianName = technicianId.HasValue ? 
+                        centerTechnicians.FirstOrDefault(t => t.TechnicianId == technicianId.Value)?.User?.FullName ?? "N/A" : null,
+                    AvailableTimeSlots = availableTimeSlots.OrderBy(ts => ts.SlotTime).ToList(),
+                    AvailableServices = availableServices.Select(s => new ServiceInfo
+                    {
+                        ServiceId = s.ServiceId,
+                        ServiceName = s.ServiceName,
+                        Description = s.Description,
+                        EstimatedDuration = s.EstimatedDuration,
+                        RequiredSlots = s.RequiredSlots,
+                        BasePrice = s.BasePrice,
+                        IsActive = s.IsActive
+                    }).ToList()
+                };
+
+                return response;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy thông tin khả dụng: {ex.Message}");
+            }
+        }
+
+        public async Task<bool> ReserveTimeSlotAsync(int technicianId, DateOnly date, int slotId, int? bookingId = null)
+        {
+            try
+            {
+                // Validate technician exists and is active
+                var technician = await _technicianRepository.GetTechnicianByIdAsync(technicianId);
+                if (technician == null || !technician.IsActive)
+                    return false;
+
+                // Check if slot is currently available
+                var isAvailable = await _technicianTimeSlotRepository.IsSlotAvailableAsync(technicianId, date, slotId);
+                if (!isAvailable)
+                    return false;
+
+                // Reserve the slot
+                return await _technicianTimeSlotRepository.ReserveSlotAsync(technicianId, date, slotId, bookingId);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public async Task<bool> ReleaseTimeSlotAsync(int technicianId, DateOnly date, int slotId)
+        {
+            try
+            {
+                return await _technicianTimeSlotRepository.ReleaseSlotAsync(technicianId, date, slotId);
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 
@@ -507,6 +717,28 @@ namespace EVServiceCenter.Application.Service
         private int CalculateTotalSlots(int startSlotId, int endSlotId)
         {
             return endSlotId - startSlotId + 1;
+        }
+
+        private async Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsForDate(int technicianId, DateOnly date)
+        {
+            return await _technicianTimeSlotRepository.GetTechnicianTimeSlotsByTechnicianAndDateAsync(technicianId, date);
+        }
+
+        private async Task<int> GetSlotIdByTime(TimeOnly time)
+        {
+            // Get all time slots and find the one that matches the time
+            var timeSlots = await _timeSlotRepository.GetAllTimeSlotsAsync();
+            var matchingSlot = timeSlots.FirstOrDefault(ts => ts.SlotTime == time);
+            
+            if (matchingSlot != null)
+                return matchingSlot.SlotId;
+            
+            // If no exact match, find the closest slot
+            var closestSlot = timeSlots
+                .OrderBy(ts => Math.Abs((ts.SlotTime - time).Ticks))
+                .FirstOrDefault();
+            
+            return closestSlot?.SlotId ?? 1; // Default to slot 1 if no slots found
         }
     }
 }

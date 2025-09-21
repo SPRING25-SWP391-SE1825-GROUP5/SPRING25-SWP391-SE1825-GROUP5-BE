@@ -154,10 +154,17 @@ namespace EVServiceCenter.WebAPI.Controllers
             {
                 var result = await _authService.LoginAsync(request);
                 
+                var message = "Đăng nhập thành công";
+                if (!result.EmailVerified)
+                {
+                    message += ". Khuyến nghị: Hãy xác thực email để bảo mật tài khoản tốt hơn.";
+                }
+
+
                 return Ok(new 
                 { 
                     success = true,
-                    message = "Đăng nhập thành công",
+                    message = message,
                     data = result
                 });
             }

@@ -129,7 +129,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        private async Task<StaffListResponse> ProcessStaffListAsync(List<Staff> allStaff, int pageNumber, int pageSize, string searchTerm, string position, bool? isActive)
+        private Task<StaffListResponse> ProcessStaffListAsync(List<Staff> allStaff, int pageNumber, int pageSize, string searchTerm, string position, bool? isActive)
         {
             // Apply filters
             var filteredStaff = allStaff.AsQueryable();
@@ -180,14 +180,14 @@ namespace EVServiceCenter.Application.Service
                 CreatedAt = s.CreatedAt
             }).ToList();
 
-            return new StaffListResponse
+            return Task.FromResult(new StaffListResponse
             {
                 Staff = staffResponses,
                 TotalCount = totalCount,
                 PageNumber = pageNumber,
                 PageSize = pageSize,
                 TotalPages = totalPages
-            };
+            });
         }
 
         public async Task<StaffResponse> UpdateStaffAsync(int staffId, UpdateStaffRequest request)

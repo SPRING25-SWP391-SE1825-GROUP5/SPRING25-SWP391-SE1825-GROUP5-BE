@@ -207,15 +207,55 @@ builder.Services.AddAuthorization(options =>
 // CORS CONFIGURATION
 // ============================================================================
 
-// Thêm CORS policy cụ thể thay vì AllowAnyOrigin
+// Thêm CORS policy cụ thể cho ASP.NET Core
 builder.Services.AddCors(options =>
 {
+    // Default policy - Allow all origins (chỉ dành cho Development)
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("https://localhost:3000", "http://localhost:3000") // Frontend URL
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+
+    // Policy cho phép tất cả (Alternative cho Development)
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+
+    // Cấu hình cụ thể cho Production (Recommended)
+    options.AddPolicy("AllowSpecificOrigins", policy =>
+    {
+        policy.WithOrigins(
+                  "http://localhost:3000",    // React dev server
+                  "http://localhost:5173",    // Vite dev server
+                  "https://localhost:3000",   // HTTPS localhost
+                  "https://your-frontend-domain.com" // Production domain
+              )
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials(); // Quan trọng cho JWT
+              .AllowCredentials(); // Quan trọng cho JWT/Authentication
+    });
+
+    // Policy chỉ cho localhost (Development với credentials)
+    options.AddPolicy("AllowLocalhost", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+
+    // Policy bảo mật cao cho Production
+    options.AddPolicy("ProductionPolicy", policy =>
+    {
+        policy.WithOrigins("https://your-production-domain.com")
+              .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+              .WithHeaders("Content-Type", "Authorization", "X-Requested-With")
+              .AllowCredentials();
     });
 });
 

@@ -207,35 +207,15 @@ builder.Services.AddAuthorization(options =>
 // CORS CONFIGURATION
 // ============================================================================
 
+// Thêm CORS policy cụ thể thay vì AllowAnyOrigin
 builder.Services.AddCors(options =>
 {
-    // Default policy - Allow all origins (Development)
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-
-    // Allow all policy (Alternative)
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-
-    // Hoặc cấu hình cụ thể cho production
-    options.AddPolicy("AllowSpecificOrigins", policy =>
-    {
-        policy.WithOrigins(
-                "http://localhost:3000",    // React dev server
-                "http://localhost:5173",    // Vite dev server
-                "https://your-frontend-domain.com" // Production domain
-              )
+        policy.WithOrigins("https://localhost:3000", "http://localhost:3000") // Frontend URL
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials();
+              .AllowCredentials(); // Quan trọng cho JWT
     });
 });
 
@@ -315,20 +295,17 @@ app.UseSwaggerUI(c =>
     c.DocumentTitle = "EVServiceCenter API Documentation";
 });
 
-// Enable CORS - Must be before UseHttpsRedirection()
-app.UseCors(); // Uses default policy (AllowAnyOrigin)
-
-// HTTPS Redirection
+// HTTPS Redirection - PHẢI ĐẶT TRƯỚC CORS
 app.UseHttpsRedirection();
 
+// CORS - Đặt sau UseHttpsRedirection, trước Authentication
+app.UseCors(); // Uses default policy (AllowAnyOrigin)
 
-
-// Static Files - For serving uploaded files, images, etc.
+// Static Files
 app.UseStaticFiles();
 
 // Global Exception Handling
 app.UseExceptionHandler("/error");
-
 
 // Authentication - Must come before Authorization
 app.UseAuthentication();
@@ -338,8 +315,4 @@ app.UseAuthorization();
 // Map API Controllers
 app.MapControllers();
 
-
-// ============================================================================
-// APPLICATION STARTUP
-// ============================================================================
 app.Run();

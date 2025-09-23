@@ -162,7 +162,6 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 return Ok(new
                 {
-
                     success = true,
                     message = message,
                     data = result

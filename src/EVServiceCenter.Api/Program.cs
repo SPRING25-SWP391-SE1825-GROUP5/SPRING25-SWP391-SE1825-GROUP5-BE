@@ -45,7 +45,6 @@ builder.Configuration
 // DATABASE CONFIGURATION
 // ============================================================================
 
-
 builder.Services.AddDbContext<EVDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -57,6 +56,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<PaymentService>();
 builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
+
 
 
 // ============================================================================
@@ -215,13 +215,16 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });
 
+
 // ============================================================================
 // CORS CONFIGURATION
 // ============================================================================
 
+
+// Thêm CORS policy cụ thể cho ASP.NET Core
 builder.Services.AddCors(options =>
 {
-    // Default policy - Allow all origins (Development)
+    // Default policy - Allow all origins (chỉ dành cho Development)
     options.AddDefaultPolicy(policy =>
     {
         policy.AllowAnyOrigin()
@@ -229,7 +232,9 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 
-    // Allow all policy (Alternative)
+
+    // Policy cho phép tất cả (Alternative cho Development)
+
     options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
@@ -237,20 +242,44 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 
-    // Hoặc cấu hình cụ thể cho production
+    // Cấu hình cụ thể cho Production (Recommended)
     options.AddPolicy("AllowSpecificOrigins", policy =>
     {
         policy.WithOrigins(
-                "http://localhost:3000",    // React dev server
-                "http://localhost:5173",    // Vite dev server
-                "https://your-frontend-domain.com" // Production domain
+                  "http://localhost:3000",    // React dev server
+                  "http://localhost:5173",    // Vite dev server
+                  "https://localhost:3000",   // HTTPS localhost
+                  "https://your-frontend-domain.com" // Production domain
               )
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials(); // Quan trọng cho JWT/Authentication
+    });
+
+    // Policy chỉ cho localhost (Development với credentials)
+    options.AddPolicy("AllowLocalhost", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
     });
+
+    // Policy bảo mật cao cho Production
+    options.AddPolicy("ProductionPolicy", policy =>
+    {
+        policy.WithOrigins("https://your-production-domain.com")
+              .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+              .WithHeaders("Content-Type", "Authorization", "X-Requested-With")
+              .AllowCredentials();
+    });
 });
 
+
+
+// ============================================================================
+// API CONTROLLERS & SWAGGER CONFIGURATION
+// ============================================================================
 
 // Controllers
 builder.Services.AddControllers();
@@ -323,19 +352,15 @@ app.UseSwaggerUI(c =>
     c.DocumentTitle = "EVServiceCenter API Documentation";
 });
 
-// Enable CORS - Must be before UseHttpsRedirection()
-app.UseCors(); // Use default policy
-
-
-// HTTPS Redirection
+// HTTPS Redirection - PHẢI ĐẶT TRƯỚC CORS
 app.UseHttpsRedirection();
 
+// CORS - Đặt sau UseHttpsRedirection, trước Authentication
+app.UseCors(); // Uses default policy (AllowAnyOrigin)
 
+// Static Files
 
-// Static Files - For serving uploaded files, images, etc.
 app.UseStaticFiles();
-
-
 
 // Authentication - Must come before Authorization
 app.UseAuthentication();
@@ -346,7 +371,9 @@ app.UseAuthorization();
 app.MapControllers();
 
 
+
 // ============================================================================
 // APPLICATION STARTUP
 // ============================================================================
+
 app.Run();

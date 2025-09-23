@@ -66,14 +66,14 @@ namespace EVServiceCenter.Application.Service
                 {
                     Email = request.Email.ToLower().Trim(),
                     FullName = request.FullName.Trim(),
-                   PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                     PhoneNumber = request.PhoneNumber.Trim(),
                     Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : null,
                     DateOfBirth = request.DateOfBirth,
                     Gender = request.Gender,
                     AvatarUrl = !string.IsNullOrWhiteSpace(request.AvatarUrl) ? request.AvatarUrl.Trim() : null,
                     Role = "CUSTOMER", // Luôn là CUSTOMER cho đăng ký công khai
-                     IsActive = true, // Tài khoản mặc định là active
+                    IsActive = true, // Tài khoản mặc định là active
                     EmailVerified = false,
                     FailedLoginAttempts = 0,
                     LockoutUntil = null,
@@ -208,7 +208,7 @@ namespace EVServiceCenter.Application.Service
 
         public async Task<LoginTokenResponse> LoginAsync(LoginRequest request)
         {
-              User user = null;
+            User user = null;
 
             // Kiểm tra xem input là email hay phone number
             if (IsValidEmail(request.EmailOrPhone))
@@ -225,7 +225,7 @@ namespace EVServiceCenter.Application.Service
             }
 
             if (user == null)
-                 throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng");
+                throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng");
 
             // Kiểm tra tài khoản có bị lockout không
             if (user.LockoutUntil.HasValue && user.LockoutUntil.Value > DateTime.UtcNow)
@@ -234,9 +234,10 @@ namespace EVServiceCenter.Application.Service
                 throw new ArgumentException($"Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau {remainingMinutes} phút.");
             }
 
-            // Kiểm tra email đã được verify chưa
+            // Note: Email verification is optional - users can login without verification
+            // Just log for tracking purposes
             if (!user.EmailVerified)
-                {
+            {
                 Console.WriteLine($"User {user.Email} logged in without email verification");
             }
             // Kiểm tra tài khoản có active không
@@ -290,7 +291,7 @@ namespace EVServiceCenter.Application.Service
                 RefreshToken = refreshToken,
                 UserId = user.UserId,
                 FullName = user.FullName,
-                Role = user.Role,
+                Role = user.Role ?? "CUSTOMER",
                 EmailVerified = user.EmailVerified
             };
         }
@@ -509,7 +510,7 @@ namespace EVServiceCenter.Application.Service
                     Address = user.Address,
                     Gender = user.Gender,
                     AvatarUrl = user.AvatarUrl,
-                    Role = user.Role,
+                    Role = user.Role ?? "CUSTOMER",
                     IsActive = user.IsActive,
                     EmailVerified = user.EmailVerified,
                     CreatedAt = user.CreatedAt,
@@ -816,7 +817,7 @@ namespace EVServiceCenter.Application.Service
                     RefreshToken = refreshToken,
                     UserId = user.UserId,
                     FullName = user.FullName,
-                    Role = user.Role,
+                    Role = user.Role ?? "CUSTOMER",
                     EmailVerified = user.EmailVerified
                 };
             }

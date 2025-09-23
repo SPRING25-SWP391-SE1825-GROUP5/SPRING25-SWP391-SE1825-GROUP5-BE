@@ -19,7 +19,7 @@ namespace EVServiceCenter.Application.Service
         private readonly ITechnicianRepository _technicianRepository;
         private readonly ICustomerRepository _customerRepository;
         private readonly IVehicleRepository _vehicleRepository;
-        private readonly IWeeklyScheduleRepository _weeklyScheduleRepository;
+        private readonly ICenterScheduleRepository _centerScheduleRepository;
         private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
 
         public BookingService(
@@ -30,7 +30,7 @@ namespace EVServiceCenter.Application.Service
             ITechnicianRepository technicianRepository,
             ICustomerRepository customerRepository,
             IVehicleRepository vehicleRepository,
-            IWeeklyScheduleRepository weeklyScheduleRepository,
+            ICenterScheduleRepository centerScheduleRepository,
             ITechnicianTimeSlotRepository technicianTimeSlotRepository)
         {
             _bookingRepository = bookingRepository;
@@ -40,7 +40,7 @@ namespace EVServiceCenter.Application.Service
             _technicianRepository = technicianRepository;
             _customerRepository = customerRepository;
             _vehicleRepository = vehicleRepository;
-            _weeklyScheduleRepository = weeklyScheduleRepository;
+            _centerScheduleRepository = centerScheduleRepository;
             _technicianTimeSlotRepository = technicianTimeSlotRepository;
         }
 
@@ -144,25 +144,16 @@ namespace EVServiceCenter.Application.Service
                 var dayOfWeek = (byte)date.DayOfWeek;
 
                 // Get weekly schedules for the center and day
-                var weeklySchedules = await _weeklyScheduleRepository.GetWeeklySchedulesByLocationAndDayAsync(centerId, dayOfWeek);
+                var weeklySchedules = await _centerScheduleRepository.GetCenterSchedulesByCenterAndDayAsync(centerId, dayOfWeek);
                 var activeSchedules = weeklySchedules.Where(ws => 
                     ws.IsActive && 
-                    ws.IsOpen && 
                     ws.EffectiveFrom <= date && 
                     (ws.EffectiveTo == null || ws.EffectiveTo >= date)).ToList();
 
                 if (!activeSchedules.Any())
                     throw new ArgumentException("Không có lịch hoạt động cho ngày này.");
 
-                // Filter by technician if specified
-                if (technicianId.HasValue)
-                {
-                    var technicianSchedules = activeSchedules.Where(ws => 
-                        ws.TechnicianId == technicianId.Value).ToList();
-                    if (!technicianSchedules.Any())
-                        throw new ArgumentException("Kỹ thuật viên không có lịch hoạt động cho ngày này.");
-                    activeSchedules = technicianSchedules;
-                }
+                // Note: CenterSchedule doesn't have TechnicianId, so we'll filter technicians later
 
                 // Get technicians for the center
                 var allTechnicians = await _technicianRepository.GetAllTechniciansAsync();
@@ -184,45 +175,40 @@ namespace EVServiceCenter.Application.Service
                     technicianTimeSlots.AddRange(techSlots);
                 }
 
-                // Generate available time slots based on weekly schedule
+                // Generate available time slots based on center schedule
                 var availableTimeSlots = new List<AvailableTimeSlot>();
                 var currentTime = DateTime.Now;
 
                 foreach (var schedule in activeSchedules)
                 {
-                    if (!schedule.StartTime.HasValue || !schedule.EndTime.HasValue)
-                        continue;
-
-                    var startTime = schedule.StartTime.Value;
-                    var endTime = schedule.EndTime.Value;
-                    var stepMinutes = schedule.StepMinutes;
+                    var startTime = schedule.StartTime;
+                    var endTime = schedule.EndTime;
+                    var stepMinutes = 30; // fixed slot length
 
                     // Generate time slots based on schedule
                     var currentSlotTime = startTime;
                     while (currentSlotTime < endTime)
                     {
-                        // Check if current time is within break period
-                        bool isBreakTime = schedule.BreakStart.HasValue && schedule.BreakEnd.HasValue &&
-                                         currentSlotTime >= schedule.BreakStart.Value && 
-                                         currentSlotTime < schedule.BreakEnd.Value;
-
-                        if (!isBreakTime)
+                        // For each time slot, check all available technicians
+                        foreach (var technician in centerTechnicians)
                         {
-                            var technician = centerTechnicians.FirstOrDefault(t => t.TechnicianId == schedule.TechnicianId);
-                            var technicianName = technician?.User?.FullName ?? "N/A";
+                            // Filter by technician if specified
+                            if (technicianId.HasValue && technician.TechnicianId != technicianId.Value)
+                                continue;
+
+                            var technicianName = technician.User?.FullName ?? "N/A";
 
                             // Get slot ID for current time
                             var slotId = await GetSlotIdByTime(currentSlotTime);
 
                             // Check if slot is available
                             var isBooked = bookingsForDate.Any(b => 
-                                b.BookingTimeSlots.Any(bts => 
-                                    bts.SlotId == slotId && 
-                                    bts.TechnicianId == schedule.TechnicianId));
+                                (b.BookingTimeSlots.Any(bts => bts.SlotId == slotId && bts.TechnicianId == technician.TechnicianId))
+                                || b.SlotId == slotId);
 
                             // Check technician time slot availability
                             var techTimeSlot = technicianTimeSlots.FirstOrDefault(tts => 
-                                tts.TechnicianId == schedule.TechnicianId && 
+                                tts.TechnicianId == technician.TechnicianId && 
                                 tts.WorkDate == date && 
                                 tts.SlotId == slotId);
 
@@ -236,7 +222,7 @@ namespace EVServiceCenter.Application.Service
                                 SlotLabel = $"{currentSlotTime:HH:mm}",
                                 IsAvailable = !isBooked,
                                 IsRealtimeAvailable = isRealtimeAvailable,
-                                TechnicianId = schedule.TechnicianId,
+                                TechnicianId = technician.TechnicianId,
                                 TechnicianName = technicianName,
                                 Status = isBooked ? "BOOKED" : (isRealtimeAvailable ? "AVAILABLE" : "UNAVAILABLE"),
                                 LastUpdated = currentTime
@@ -269,8 +255,6 @@ namespace EVServiceCenter.Application.Service
                         ServiceId = s.ServiceId,
                         ServiceName = s.ServiceName,
                         Description = s.Description,
-                        EstimatedDuration = s.EstimatedDuration,
-                        RequiredSlots = s.RequiredSlots,
                         BasePrice = s.BasePrice,
                         IsActive = s.IsActive
                     }).ToList()
@@ -336,8 +320,7 @@ namespace EVServiceCenter.Application.Service
                 // Calculate total estimated cost
                 var totalEstimatedCost = await CalculateTotalEstimatedCostAsync(request.Services);
 
-                // Calculate total slots
-                var totalSlots = CalculateTotalSlots(request.StartSlotId, request.EndSlotId);
+                // Single-slot model: no total slots calculation
 
                 // Create booking entity
                 var booking = new Booking
@@ -347,12 +330,10 @@ namespace EVServiceCenter.Application.Service
                     VehicleId = request.VehicleId,
                     CenterId = request.CenterId,
                     BookingDate = request.BookingDate,
-                    StartSlotId = request.StartSlotId,
-                    EndSlotId = request.EndSlotId,
+                    SlotId = request.SlotId,
                     Status = "PENDING",
                     TotalEstimatedCost = totalEstimatedCost,
                     SpecialRequests = request.SpecialRequests?.Trim(),
-                    TotalSlots = totalSlots,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -528,8 +509,7 @@ namespace EVServiceCenter.Application.Service
                     {
                         BookingId = bookingId,
                         SlotId = timeSlotRequest.SlotId,
-                        TechnicianId = timeSlotRequest.TechnicianId,
-                        SlotOrder = timeSlotRequest.SlotOrder
+                        TechnicianId = timeSlotRequest.TechnicianId
                     });
                 }
 
@@ -571,16 +551,14 @@ namespace EVServiceCenter.Application.Service
                 CenterId = booking.CenterId,
                 CenterName = booking.Center?.CenterName ?? "N/A",
                 BookingDate = booking.BookingDate,
-                StartSlotId = booking.StartSlotId,
-                StartSlotTime = booking.StartSlot?.SlotTime.ToString() ?? "N/A",
-                EndSlotId = booking.EndSlotId,
-                EndSlotTime = booking.EndSlot?.SlotTime.ToString() ?? "N/A",
+                SlotId = booking.SlotId,
+                SlotTime = booking.Slot?.SlotTime.ToString() ?? "N/A",
                 Status = booking.Status,
                 TotalEstimatedCost = booking.TotalEstimatedCost,
                 SpecialRequests = booking.SpecialRequests,
                 CreatedAt = booking.CreatedAt,
                 UpdatedAt = booking.UpdatedAt,
-                TotalSlots = booking.TotalSlots,
+                // Single-slot model
                 Services = booking.BookingServices?.Select(bs => new BookingServiceResponse
                 {
                     ServiceId = bs.ServiceId,
@@ -595,8 +573,7 @@ namespace EVServiceCenter.Application.Service
                     SlotTime = bts.Slot?.SlotTime.ToString() ?? "N/A",
                     SlotLabel = bts.Slot?.SlotLabel ?? "N/A",
                     TechnicianId = bts.TechnicianId,
-                    TechnicianName = bts.Technician?.User?.FullName ?? "N/A",
-                    SlotOrder = bts.SlotOrder
+                    TechnicianName = bts.Technician?.User?.FullName ?? "N/A"
                 }).ToList() ?? new List<BookingTimeSlotResponse>()
             };
         }
@@ -610,10 +587,16 @@ namespace EVServiceCenter.Application.Service
             if (customer == null)
                 errors.Add("Khách hàng không tồn tại.");
 
-            // Validate vehicle exists
+            // Validate vehicle exists and belongs to customer
             var vehicle = await _vehicleRepository.GetVehicleByIdAsync(request.VehicleId);
             if (vehicle == null)
+            {
                 errors.Add("Phương tiện không tồn tại.");
+            }
+            else if (vehicle.CustomerId != request.CustomerId)
+            {
+                errors.Add($"Phương tiện ID {request.VehicleId} không thuộc khách hàng ID {request.CustomerId}.");
+            }
 
             // Validate center exists
             var center = await _centerRepository.GetCenterByIdAsync(request.CenterId);
@@ -624,9 +607,9 @@ namespace EVServiceCenter.Application.Service
             if (request.BookingDate < DateOnly.FromDateTime(DateTime.Today))
                 errors.Add("Ngày đặt lịch không được là ngày trong quá khứ.");
 
-            // Validate slot range
-            if (request.EndSlotId <= request.StartSlotId)
-                errors.Add("Slot kết thúc phải sau slot bắt đầu.");
+            // Validate slot id
+            if (request.SlotId <= 0)
+                errors.Add("SlotId không hợp lệ.");
 
             // Validate services
             if (request.Services == null || !request.Services.Any())

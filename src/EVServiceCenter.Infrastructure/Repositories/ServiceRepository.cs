@@ -40,5 +40,24 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .OrderByDescending(s => s.CreatedAt)
                 .ToListAsync();
         }
+
+        public async Task<Service> CreateServiceAsync(Service service)
+        {
+            _context.Services.Add(service);
+            await _context.SaveChangesAsync();
+            return service;
+        }
+
+        public async Task UpdateServiceAsync(Service service)
+        {
+            _context.Services.Update(service);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<ServiceCategory> GetCategoryByIdAsync(int categoryId)
+        {
+            return await _context.ServiceCategories
+                .FirstOrDefaultAsync(c => c.CategoryId == categoryId);
+        }
     }
 }

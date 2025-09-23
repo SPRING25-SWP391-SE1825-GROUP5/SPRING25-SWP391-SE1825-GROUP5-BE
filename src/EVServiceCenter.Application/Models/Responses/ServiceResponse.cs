@@ -9,8 +9,6 @@ namespace EVServiceCenter.Application.Models.Responses
         public required string CategoryName { get; set; }
         public required string ServiceName { get; set; }
         public required string Description { get; set; }
-        public int EstimatedDuration { get; set; }
-        public int RequiredSlots { get; set; }
         public decimal BasePrice { get; set; }
         public required string RequiredSkills { get; set; }
         public bool IsActive { get; set; }

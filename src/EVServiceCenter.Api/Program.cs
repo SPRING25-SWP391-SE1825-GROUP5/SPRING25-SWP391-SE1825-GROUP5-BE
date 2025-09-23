@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
 using EVServiceCenter.Domain.Configurations;
 using EVServiceCenter.Application.Service;
+using EVServiceCenter.Api.HostedServices;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Infrastructure.Repositories;
@@ -27,6 +28,7 @@ using EVServiceCenter.Api.Middleware;
 using Microsoft.AspNetCore.Http;
 using Microsoft.OpenApi.Models;
 using System.IO;
+using EVServiceCenter.Application.Configurations;
 
 
 // ============================================================================
@@ -53,6 +55,8 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 builder.Services.AddControllers();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient<PaymentService>();
+builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
 
 
 // ============================================================================
@@ -82,8 +86,10 @@ builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IPartService, PartService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+// Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
-builder.Services.AddScoped<IWeeklyTimeSlotService, WeeklyTimeSlotService>();
+builder.Services.AddScoped<ICenterScheduleService, CenterScheduleService>();
+
 
 // ============================================================================
 // REPOSITORY REGISTRATION
@@ -107,10 +113,14 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IPartRepository, PartRepository>();
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
+builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
-builder.Services.AddScoped<IWeeklyScheduleRepository, WeeklyScheduleRepository>();
+builder.Services.AddScoped<ICenterScheduleRepository, CenterScheduleRepository>();
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
+builder.Services.AddHostedService<BookingPendingCancellationService>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");
@@ -136,8 +146,8 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
         ClockSkew = TimeSpan.Zero // Không cho phép sai lệch thời gian
     };
-    
-    // Custom error handling
+
+    // Custom JWT error handling events
     options.Events = new JwtBearerEvents
     {
         OnAuthenticationFailed = context =>
@@ -153,7 +163,7 @@ builder.Services.AddAuthentication(options =>
             context.HandleResponse();
             context.Response.StatusCode = 401;
             context.Response.ContentType = "application/json";
-            
+
             var response = new
             {
                 success = false,
@@ -161,19 +171,19 @@ builder.Services.AddAuthentication(options =>
                 error = "TOKEN_EXPIRED",
                 timestamp = DateTime.UtcNow
             };
-            
+
             var jsonResponse = System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions
             {
                 PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
             });
-            
+
             return context.Response.WriteAsync(jsonResponse);
         },
         OnForbidden = context =>
         {
             context.Response.StatusCode = 403;
             context.Response.ContentType = "application/json";
-            
+
             var response = new
             {
                 success = false,
@@ -181,18 +191,22 @@ builder.Services.AddAuthentication(options =>
                 error = "FORBIDDEN",
                 timestamp = DateTime.UtcNow
             };
-            
+
             var jsonResponse = System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions
             {
                 PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
             });
-            
+
             return context.Response.WriteAsync(jsonResponse);
         }
     };
 });
 
-// Authorization với Policies
+
+// ============================================================================
+// AUTHORIZATION POLICIES
+// ============================================================================
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("ADMIN"));
@@ -201,9 +215,13 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });
 
-// CORS Configuration
+// ============================================================================
+// CORS CONFIGURATION
+// ============================================================================
+
 builder.Services.AddCors(options =>
 {
+    // Default policy - Allow all origins (Development)
     options.AddDefaultPolicy(policy =>
     {
         policy.AllowAnyOrigin()
@@ -211,6 +229,7 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 
+    // Allow all policy (Alternative)
     options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
@@ -232,19 +251,22 @@ builder.Services.AddCors(options =>
     });
 });
 
+
 // Controllers
 builder.Services.AddControllers();
 
-// Swagger
+
+// Swagger Configuration
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "EVServiceCenter API",
-        Version = "v1"
+        Version = "v1",
+        Description = "EV Service Center Management API - Comprehensive solution for electric vehicle service management"
     });
-    
+
     // Thêm JWT Authentication vào Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -255,7 +277,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT"
     });
-    
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement()
     {
         {
@@ -272,38 +294,59 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+
+// ============================================================================
+// APPLICATION BUILD & CONFIGURATION
+// ============================================================================
 var app = builder.Build();
 
-// Cấu hình port cho Render
+// ============================================================================
+// PORT CONFIGURATION (Production/Deployment)
+// ============================================================================
 var port = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrWhiteSpace(port))
 {
     app.Urls.Add($"http://*:{port}");
 }
 
-// Swagger UI
+// ============================================================================
+// MIDDLEWARE PIPELINE CONFIGURATION
+// ============================================================================
+// Note: Order of middleware is important!
+
+// Swagger UI - API Documentation
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "EVServiceCenter API V1");
     c.RoutePrefix = "swagger";
+    c.DocumentTitle = "EVServiceCenter API Documentation";
 });
 
 // Enable CORS - Must be before UseHttpsRedirection()
 app.UseCors(); // Use default policy
 
+
+// HTTPS Redirection
 app.UseHttpsRedirection();
 
-// Static Files để serve uploaded files
+
+
+// Static Files - For serving uploaded files, images, etc.
 app.UseStaticFiles();
 
-// Global Exception Handling
-app.UseExceptionHandler("/error");
 
-// Authentication & Authorization middleware
+
+// Authentication - Must come before Authorization
 app.UseAuthentication();
-app.UseAuthenticationErrorHandling(); // Custom error handling
+app.UseAuthenticationErrorHandling(); // Custom JWT error handling
 app.UseAuthorization();
 
+// Map API Controllers
 app.MapControllers();
+
+
+// ============================================================================
+// APPLICATION STARTUP
+// ============================================================================
 app.Run();

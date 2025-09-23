@@ -160,9 +160,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message += ". Khuyến nghị: Hãy xác thực email để bảo mật tài khoản tốt hơn.";
                 }
 
+                return Ok(new
+                {
 
-                return Ok(new 
-                { 
                     success = true,
                     message = message,
                     data = result

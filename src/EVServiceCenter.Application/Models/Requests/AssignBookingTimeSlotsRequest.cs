@@ -17,9 +17,5 @@ namespace EVServiceCenter.Application.Models.Requests
 
         [Required(ErrorMessage = "ID kỹ thuật viên là bắt buộc")]
         public int TechnicianId { get; set; }
-
-        [Required(ErrorMessage = "Thứ tự slot là bắt buộc")]
-        [Range(1, int.MaxValue, ErrorMessage = "Thứ tự slot phải lớn hơn 0")]
-        public int SlotOrder { get; set; }
     }
 }

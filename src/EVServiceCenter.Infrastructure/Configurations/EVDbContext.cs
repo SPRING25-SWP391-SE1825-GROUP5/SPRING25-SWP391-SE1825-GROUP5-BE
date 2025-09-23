@@ -78,7 +78,7 @@ public partial class EVDbContext : DbContext
 
     public  DbSet<Technician> Technicians { get; set; }
 
-    public  DbSet<WeeklySchedule> WeeklySchedules { get; set; }
+    public  DbSet<CenterSchedule> CenterSchedules { get; set; }
 
     public  DbSet<TechnicianTimeSlot> TechnicianTimeSlots { get; set; }
 
@@ -129,15 +129,14 @@ public partial class EVDbContext : DbContext
                 .HasPrecision(0)
                 .HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
-            entity.Property(e => e.EndSlotId).HasColumnName("EndSlotID");
+            entity.Property(e => e.SlotId).HasColumnName("SlotID");
             entity.Property(e => e.SpecialRequests).HasMaxLength(500);
-            entity.Property(e => e.StartSlotId).HasColumnName("StartSlotID");
             entity.Property(e => e.Status)
                 .IsRequired()
                 .HasMaxLength(20)
                 .HasDefaultValue("PENDING");
             entity.Property(e => e.TotalEstimatedCost).HasColumnType("decimal(12, 2)");
-            entity.Property(e => e.TotalSlots).HasComputedColumnSql("(([EndSlotID]-[StartSlotID])+(1))", true);
+            // TotalSlots removed in single-slot model
             entity.Property(e => e.UpdatedAt)
                 .HasPrecision(0)
                 .HasDefaultValueSql("(sysdatetime())");
@@ -153,15 +152,10 @@ public partial class EVDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Book_Customers");
 
-            entity.HasOne(d => d.EndSlot).WithMany(p => p.BookingEndSlots)
-                .HasForeignKey(d => d.EndSlotId)
+            entity.HasOne(d => d.Slot).WithMany()
+                .HasForeignKey(d => d.SlotId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Book_EndSlot");
-
-            entity.HasOne(d => d.StartSlot).WithMany(p => p.BookingStartSlots)
-                .HasForeignKey(d => d.StartSlotId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Book_StartSlot");
+                .HasConstraintName("FK_Book_Slot");
 
             entity.HasOne(d => d.Vehicle).WithMany(p => p.Bookings)
                 .HasForeignKey(d => d.VehicleId)

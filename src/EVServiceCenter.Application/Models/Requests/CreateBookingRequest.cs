@@ -22,13 +22,9 @@ namespace EVServiceCenter.Application.Models.Requests
         [DataType(DataType.Date, ErrorMessage = "Ngày đặt lịch không đúng định dạng YYYY-MM-DD")]
         public DateOnly BookingDate { get; set; }
 
-        [Required(ErrorMessage = "ID slot bắt đầu là bắt buộc")]
-        [Range(1, int.MaxValue, ErrorMessage = "ID slot bắt đầu phải là số nguyên dương")]
-        public int StartSlotId { get; set; }
-
-        [Required(ErrorMessage = "ID slot kết thúc là bắt buộc")]
-        [Range(1, int.MaxValue, ErrorMessage = "ID slot kết thúc phải là số nguyên dương")]
-        public int EndSlotId { get; set; }
+        [Required(ErrorMessage = "ID slot là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "ID slot phải là số nguyên dương")]
+        public int SlotId { get; set; }
 
         [StringLength(500, ErrorMessage = "Yêu cầu đặc biệt không được vượt quá 500 ký tự")]
         public string SpecialRequests { get; set; }

@@ -1,12 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.AspNetCore.Authorization;
+ 
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -17,9 +18,9 @@ namespace EVServiceCenter.WebAPI.Controllers
     {
         private readonly IBookingService _bookingService;
 
-        public BookingController(IBookingService bookingService)
+    public BookingController(IBookingService bookingService)
         {
-            _bookingService = bookingService;
+        _bookingService = bookingService;
         }
 
         /// <summary>
@@ -320,6 +321,68 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Tự động gán kỹ thuật viên cho booking 1 slot (khi user không chọn)
+        /// </summary>
+        [HttpPost("{id}/auto-assign-technician")]
+        public async Task<IActionResult> AutoAssignTechnician(int id)
+        {
+            try
+            {
+                var booking = await _bookingService.GetBookingByIdAsync(id);
+                if (booking == null)
+                    return NotFound(new { success = false, message = "Đặt lịch không tồn tại." });
+
+                var available = await _bookingService.GetAvailableTimesAsync(booking.CenterId, booking.BookingDate, null, null);
+                var pick = available.AvailableTimeSlots
+                    .FirstOrDefault(t => t.SlotId == booking.SlotId && t.IsRealtimeAvailable);
+
+                if (pick == null || pick.TechnicianId == null)
+                    return BadRequest(new { success = false, message = "Không có kỹ thuật viên khả dụng cho slot đã chọn." });
+
+                var assignReq = new AssignBookingTimeSlotsRequest
+                {
+                    TimeSlots = new List<BookingTimeSlotRequest>
+                    {
+                        new BookingTimeSlotRequest { SlotId = booking.SlotId, TechnicianId = pick.TechnicianId.Value }
+                    }
+                };
+
+                var updated = await _bookingService.AssignBookingTimeSlotsAsync(id, assignReq);
+                return Ok(new { success = true, message = "Gán kỹ thuật viên thành công", data = updated });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Hủy đặt lịch (giải phóng slot, cập nhật trạng thái)
+        /// </summary>
+        [HttpPatch("{id}/cancel")]
+        public async Task<IActionResult> CancelBooking(int id)
+        {
+            try
+            {
+                var req = new UpdateBookingStatusRequest { Status = "CANCELLED" };
+                var updated = await _bookingService.UpdateBookingStatusAsync(id, req);
+                return Ok(new { success = true, message = "Hủy đặt lịch thành công", data = updated });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Cập nhật trạng thái đặt lịch (Staff/Admin only)
         /// </summary>
         /// <param name="id">ID đặt lịch</param>
@@ -456,5 +519,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
+
+        // Payment API đã được gỡ bỏ theo yêu cầu
     }
 }
+

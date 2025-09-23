@@ -11,8 +11,6 @@ public partial class BookingTimeSlot
 
     public int TechnicianId { get; set; }
 
-    public int SlotOrder { get; set; }
-
     public virtual Booking Booking { get; set; }
 
     public virtual TimeSlot Slot { get; set; }

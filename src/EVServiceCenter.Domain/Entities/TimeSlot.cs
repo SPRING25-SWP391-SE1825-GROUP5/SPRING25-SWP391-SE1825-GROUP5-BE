@@ -9,13 +9,9 @@ public partial class TimeSlot
 
     public TimeOnly SlotTime { get; set; }
 
-    public string SlotLabel { get; set; }
+    public string? SlotLabel { get; set; }
 
     public bool IsActive { get; set; }
-
-    public virtual ICollection<Booking> BookingEndSlots { get; set; } = new List<Booking>();
-
-    public virtual ICollection<Booking> BookingStartSlots { get; set; } = new List<Booking>();
 
     public virtual ICollection<BookingTimeSlot> BookingTimeSlots { get; set; } = new List<BookingTimeSlot>();
 

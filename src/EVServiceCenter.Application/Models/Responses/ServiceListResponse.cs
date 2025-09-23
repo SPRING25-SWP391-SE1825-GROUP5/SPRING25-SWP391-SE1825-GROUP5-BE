@@ -4,7 +4,7 @@ namespace EVServiceCenter.Application.Models.Responses
 {
     public class ServiceListResponse
     {
-        public List<ServiceResponse> Services { get; set; }
+        public required List<ServiceResponse> Services { get; set; }
         public int PageNumber { get; set; }
         public int PageSize { get; set; }
         public int TotalPages { get; set; }

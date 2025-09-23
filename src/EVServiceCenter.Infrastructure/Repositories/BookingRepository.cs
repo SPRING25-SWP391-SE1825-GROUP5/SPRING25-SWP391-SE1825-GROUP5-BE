@@ -5,6 +5,7 @@ using EVServiceCenter.Domain.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using System;
 
 namespace EVServiceCenter.Infrastructure.Repositories
 {
@@ -19,22 +20,31 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<List<Booking>> GetAllBookingsAsync()
         {
-            return await _context.Bookings
-                .Include(b => b.Customer)
-                .Include(b => b.Customer.User)
-                .Include(b => b.Vehicle)
-                .Include(b => b.Center)
-                .Include(b => b.StartSlot)
-                .Include(b => b.EndSlot)
-                .Include(b => b.BookingServices)
-                .ThenInclude(bs => bs.Service)
-                .Include(b => b.BookingTimeSlots)
-                .ThenInclude(bts => bts.Slot)
-                .Include(b => b.BookingTimeSlots)
-                .ThenInclude(bts => bts.Technician)
-                .ThenInclude(t => t.User)
-                .OrderByDescending(b => b.CreatedAt)
-                .ToListAsync();
+            try
+            {
+                return await _context.Bookings
+                    .Include(b => b.Customer)
+                    .Include(b => b.Customer.User)
+                    .Include(b => b.Vehicle)
+                    .Include(b => b.Center)
+                    .Include(b => b.Slot)
+                    .Include(b => b.BookingServices)
+                    .ThenInclude(bs => bs.Service)
+                    .Include(b => b.BookingTimeSlots)
+                    .ThenInclude(bts => bts.Slot)
+                    .Include(b => b.BookingTimeSlots)
+                    .ThenInclude(bts => bts.Technician)
+                    .ThenInclude(t => t.User)
+                    .OrderByDescending(b => b.CreatedAt)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                // Log the detailed error for debugging
+                Console.WriteLine($"Error in GetAllBookingsAsync: {ex.Message}");
+                Console.WriteLine($"Inner Exception: {ex.InnerException?.Message}");
+                throw;
+            }
         }
 
         public async Task<Booking> GetBookingByIdAsync(int bookingId)
@@ -44,8 +54,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Customer.User)
                 .Include(b => b.Vehicle)
                 .Include(b => b.Center)
-                .Include(b => b.StartSlot)
-                .Include(b => b.EndSlot)
+                .Include(b => b.Slot)
                 .Include(b => b.BookingServices)
                 .ThenInclude(bs => bs.Service)
                 .Include(b => b.BookingTimeSlots)
@@ -63,8 +72,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Customer.User)
                 .Include(b => b.Vehicle)
                 .Include(b => b.Center)
-                .Include(b => b.StartSlot)
-                .Include(b => b.EndSlot)
+                .Include(b => b.Slot)
                 .Include(b => b.BookingServices)
                 .ThenInclude(bs => bs.Service)
                 .Include(b => b.BookingTimeSlots)
@@ -120,7 +128,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(bts => bts.Technician)
                 .ThenInclude(t => t.User)
                 .Where(bts => bts.BookingId == bookingId)
-                .OrderBy(bts => bts.SlotOrder)
+                // SlotOrder removed; default order by SlotId
+                .OrderBy(bts => bts.SlotId)
                 .ToListAsync();
         }
 

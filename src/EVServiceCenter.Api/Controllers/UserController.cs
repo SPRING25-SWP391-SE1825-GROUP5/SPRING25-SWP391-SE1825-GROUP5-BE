@@ -16,10 +16,16 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class UserController : ControllerBase
     {
         private readonly IUserService _userService;
+        private readonly IAccountService _accountService;
+        private readonly IAuthService _authService;
+        private readonly IEmailService _emailService;
 
-        public UserController(IUserService userService)
+        public UserController(IUserService userService, IAccountService accountService, IAuthService authService, IEmailService emailService)
         {
             _userService = userService;
+            _accountService = accountService;
+            _authService = authService;
+            _emailService = emailService;
         }
 
         /// <summary>
@@ -59,6 +65,61 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Tìm user theo email hoặc phone (Admin-only) - easy name: find-by-email-or-phone
+        /// </summary>
+        [HttpGet("find-by-email-or-phone")]
+        public async Task<IActionResult> FindByEmailOrPhone([FromQuery] string email = null, [FromQuery] string phone = null)
+        {
+            try
+            {
+                var hasEmail = !string.IsNullOrWhiteSpace(email);
+                var hasPhone = !string.IsNullOrWhiteSpace(phone);
+
+                if (!hasEmail && !hasPhone)
+                    return BadRequest(new { success = false, message = "Vui lòng truyền đúng 1 trường: email hoặc phone" });
+                if (hasEmail && hasPhone)
+                    return BadRequest(new { success = false, message = "Chỉ được truyền 1 trường: email hoặc phone, không được đồng thời cả hai" });
+
+                Domain.Entities.User user = null;
+                if (hasEmail)
+                {
+                    var trimmed = email.Trim();
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[a-zA-Z0-9._%+-]+@gmail\.com$"))
+                        return BadRequest(new { success = false, message = "Email không hợp lệ (yêu cầu @gmail.com)" });
+                    user = await _accountService.GetAccountByEmailAsync(trimmed);
+                }
+                else
+                {
+                    var trimmed = phone.Trim();
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^0\d{9}$"))
+                        return BadRequest(new { success = false, message = "Số điện thoại không hợp lệ (bắt đầu bằng 0 và đủ 10 số)" });
+                    user = await _accountService.GetAccountByPhoneNumberAsync(trimmed);
+                }
+
+                if (user == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy user" });
+
+                var resp = new
+                {
+                    userId = user.UserId,
+                    fullName = user.FullName,
+                    email = user.Email,
+                    phoneNumber = user.PhoneNumber,
+                    role = user.Role,
+                    isActive = user.IsActive
+                };
+
+                return Ok(new { success = true, data = resp });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        // Removed create-account endpoint per request
 
         /// <summary>
         /// Lấy thông tin người dùng theo ID (chỉ ADMIN)

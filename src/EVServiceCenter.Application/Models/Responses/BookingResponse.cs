@@ -14,16 +14,14 @@ namespace EVServiceCenter.Application.Models.Responses
         public int CenterId { get; set; }
         public string CenterName { get; set; }
         public DateOnly BookingDate { get; set; }
-        public int StartSlotId { get; set; }
-        public string StartSlotTime { get; set; }
-        public int EndSlotId { get; set; }
-        public string EndSlotTime { get; set; }
+        public int SlotId { get; set; }
+        public string SlotTime { get; set; }
         public string Status { get; set; }
         public decimal? TotalEstimatedCost { get; set; }
         public string SpecialRequests { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-        public int? TotalSlots { get; set; }
+        // Single-slot model: TotalSlots not used
         public List<BookingServiceResponse> Services { get; set; } = new List<BookingServiceResponse>();
         public List<BookingTimeSlotResponse> TimeSlots { get; set; } = new List<BookingTimeSlotResponse>();
     }
@@ -44,6 +42,5 @@ namespace EVServiceCenter.Application.Models.Responses
         public string SlotLabel { get; set; }
         public int TechnicianId { get; set; }
         public string TechnicianName { get; set; }
-        public int SlotOrder { get; set; }
     }
 }

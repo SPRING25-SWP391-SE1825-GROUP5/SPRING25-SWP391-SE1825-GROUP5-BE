@@ -212,7 +212,7 @@ namespace EVServiceCenter.Application.Service
             };
         }
 
-        private async Task ValidateCreateCenterRequestAsync(CreateCenterRequest request)
+        private Task ValidateCreateCenterRequestAsync(CreateCenterRequest request)
         {
             var errors = new List<string>();
 
@@ -224,9 +224,11 @@ namespace EVServiceCenter.Application.Service
 
             if (errors.Any()) 
                 throw new ArgumentException(string.Join(" ", errors));
+            
+            return Task.CompletedTask;
         }
 
-        private async Task ValidateUpdateCenterRequestAsync(UpdateCenterRequest request)
+        private Task ValidateUpdateCenterRequestAsync(UpdateCenterRequest request)
         {
             var errors = new List<string>();
 
@@ -238,6 +240,8 @@ namespace EVServiceCenter.Application.Service
 
             if (errors.Any()) 
                 throw new ArgumentException(string.Join(" ", errors));
+            
+            return Task.CompletedTask;
         }
 
         private bool IsValidPhoneNumber(string phoneNumber)

@@ -17,21 +17,18 @@ public partial class Booking
 
     public DateOnly BookingDate { get; set; }
 
-    public int StartSlotId { get; set; }
-
-    public int EndSlotId { get; set; }
+    // Single-slot booking: store one SlotId
+    public int SlotId { get; set; }
 
     public string Status { get; set; }
 
     public decimal? TotalEstimatedCost { get; set; }
 
-    public string SpecialRequests { get; set; }
+    public string? SpecialRequests { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
-
-    public int? TotalSlots { get; set; }
 
     public 
         ICollection<BookingService> BookingServices { get; set; } = new List<BookingService>();
@@ -42,9 +39,7 @@ public partial class Booking
 
     public  Customer Customer { get; set; }
 
-    public  TimeSlot EndSlot { get; set; }
-
-    public  TimeSlot StartSlot { get; set; }
+    public  TimeSlot Slot { get; set; }
 
     public  Vehicle Vehicle { get; set; }
 

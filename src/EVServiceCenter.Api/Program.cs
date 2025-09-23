@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
 using EVServiceCenter.Domain.Configurations;
 using EVServiceCenter.Application.Service;
+using EVServiceCenter.Api.HostedServices;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Infrastructure.Repositories;
@@ -27,6 +28,7 @@ using EVServiceCenter.Api.Middleware;
 using Microsoft.AspNetCore.Http;
 using Microsoft.OpenApi.Models;
 using System.IO;
+using EVServiceCenter.Application.Configurations;
 
 
 // ============================================================================
@@ -52,6 +54,9 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 builder.Services.AddControllers();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient<PaymentService>();
+builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
+
 
 
 // ============================================================================
@@ -81,7 +86,9 @@ builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IPartService, PartService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+// Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
+builder.Services.AddScoped<ICenterScheduleService, CenterScheduleService>();
 
 
 // ============================================================================
@@ -106,8 +113,14 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IPartRepository, PartRepository>();
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
+builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
+builder.Services.AddScoped<ICenterScheduleRepository, CenterScheduleRepository>();
+builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
+builder.Services.AddHostedService<BookingPendingCancellationService>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");
@@ -207,6 +220,7 @@ builder.Services.AddAuthorization(options =>
 // CORS CONFIGURATION
 // ============================================================================
 
+
 // Thêm CORS policy cụ thể cho ASP.NET Core
 builder.Services.AddCors(options =>
 {
@@ -218,7 +232,9 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 
+
     // Policy cho phép tất cả (Alternative cho Development)
+
     options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
@@ -258,6 +274,7 @@ builder.Services.AddCors(options =>
               .AllowCredentials();
     });
 });
+
 
 
 // ============================================================================
@@ -342,10 +359,8 @@ app.UseHttpsRedirection();
 app.UseCors(); // Uses default policy (AllowAnyOrigin)
 
 // Static Files
-app.UseStaticFiles();
 
-// Global Exception Handling
-app.UseExceptionHandler("/error");
+app.UseStaticFiles();
 
 // Authentication - Must come before Authorization
 app.UseAuthentication();
@@ -354,5 +369,11 @@ app.UseAuthorization();
 
 // Map API Controllers
 app.MapControllers();
+
+
+
+// ============================================================================
+// APPLICATION STARTUP
+// ============================================================================
 
 app.Run();

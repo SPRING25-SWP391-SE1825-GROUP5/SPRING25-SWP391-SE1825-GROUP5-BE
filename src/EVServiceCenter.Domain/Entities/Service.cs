@@ -13,10 +13,6 @@ public partial class Service
 
     public string Description { get; set; }
 
-    public int EstimatedDuration { get; set; }
-
-    public int RequiredSlots { get; set; }
-
     public decimal BasePrice { get; set; }
 
     public string RequiredSkills { get; set; }

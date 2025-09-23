@@ -240,7 +240,6 @@ namespace EVServiceCenter.Application.Service
             {
                 Console.WriteLine($"User {user.Email} logged in without email verification");
             }
-
             // Kiểm tra tài khoản có active không
             if (!user.IsActive)
                 throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên");
@@ -292,7 +291,7 @@ namespace EVServiceCenter.Application.Service
                 RefreshToken = refreshToken,
                 UserId = user.UserId,
                 FullName = user.FullName,
-                Role = user.Role,
+                Role = user.Role ?? "CUSTOMER",
                 EmailVerified = user.EmailVerified
             };
         }
@@ -511,7 +510,7 @@ namespace EVServiceCenter.Application.Service
                     Address = user.Address,
                     Gender = user.Gender,
                     AvatarUrl = user.AvatarUrl,
-                    Role = user.Role,
+                    Role = user.Role ?? "CUSTOMER",
                     IsActive = user.IsActive,
                     EmailVerified = user.EmailVerified,
                     CreatedAt = user.CreatedAt,
@@ -552,7 +551,7 @@ namespace EVServiceCenter.Application.Service
                 user.FullName = request.FullName.Trim();
                 user.DateOfBirth = request.DateOfBirth;
                 user.Gender = request.Gender;
-                user.Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : null;
+                user.Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : string.Empty;
                 user.UpdatedAt = DateTime.UtcNow;
 
                 await _authRepository.UpdateUserAsync(user);
@@ -700,9 +699,12 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        private bool IsValidUrl(string url)
+        private bool IsValidUrl(string? url)
         {
-            return Uri.TryCreate(url, UriKind.Absolute, out Uri uriResult) 
+            if (string.IsNullOrWhiteSpace(url))
+                return false;
+                
+            return Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult) 
                 && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
         }
 
@@ -760,7 +762,7 @@ namespace EVServiceCenter.Application.Service
                         DateOfBirth = DateOnly.FromDateTime(DateTime.Today.AddYears(-18)), // Default age
                         Gender = "MALE", // Default gender
                         Address = null,
-                        AvatarUrl = payload.Picture,
+                        AvatarUrl = payload.Picture ?? string.Empty,
                         Role = "Customer",
                         IsActive = true,
                         EmailVerified = payload.EmailVerified,
@@ -815,7 +817,7 @@ namespace EVServiceCenter.Application.Service
                     RefreshToken = refreshToken,
                     UserId = user.UserId,
                     FullName = user.FullName,
-                    Role = user.Role,
+                    Role = user.Role ?? "CUSTOMER",
                     EmailVerified = user.EmailVerified
                 };
             }
@@ -860,7 +862,7 @@ namespace EVServiceCenter.Application.Service
             var issuer = jwtSettings["Issuer"];
             var audience = jwtSettings["Audience"];
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? string.Empty));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var claims = new[]

@@ -21,11 +21,7 @@ public partial class Technician
 
     public DateTime CreatedAt { get; set; }
 
-    public virtual ICollection<BookingTimeSlot> BookingTimeSlots { get; set; } = new List<BookingTimeSlot>();
-
     public virtual ServiceCenter Center { get; set; }
-
-    public virtual ICollection<LeaveRequest> LeaveRequests { get; set; } = new List<LeaveRequest>();
 
     public virtual ICollection<TechnicianTimeSlot> TechnicianTimeSlots { get; set; } = new List<TechnicianTimeSlot>();
 

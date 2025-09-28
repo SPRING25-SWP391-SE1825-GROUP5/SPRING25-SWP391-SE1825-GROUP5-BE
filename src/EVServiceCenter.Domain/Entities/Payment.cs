@@ -28,6 +28,4 @@ public partial class Payment
     public DateTime? PaidAt { get; set; }
 
     public virtual Invoice Invoice { get; set; }
-
-    public virtual ICollection<InvoicePayment> InvoicePayments { get; set; } = new List<InvoicePayment>();
 }

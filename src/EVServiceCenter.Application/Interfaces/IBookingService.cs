@@ -16,6 +16,5 @@ namespace EVServiceCenter.Application.Interfaces
         Task<BookingResponse> GetBookingByIdAsync(int bookingId);
         Task<BookingResponse> UpdateBookingStatusAsync(int bookingId, UpdateBookingStatusRequest request);
         Task<BookingResponse> AssignBookingServicesAsync(int bookingId, AssignBookingServicesRequest request);
-        Task<BookingResponse> AssignBookingTimeSlotsAsync(int bookingId, AssignBookingTimeSlotsRequest request);
     }
 }

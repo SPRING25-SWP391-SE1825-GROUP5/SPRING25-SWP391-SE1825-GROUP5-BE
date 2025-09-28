@@ -23,7 +23,6 @@ namespace EVServiceCenter.Application.Models.Responses
         public DateTime UpdatedAt { get; set; }
         // Single-slot model: TotalSlots not used
         public List<BookingServiceResponse> Services { get; set; } = new List<BookingServiceResponse>();
-        public List<BookingTimeSlotResponse> TimeSlots { get; set; } = new List<BookingTimeSlotResponse>();
     }
 
     public class BookingServiceResponse
@@ -33,14 +32,5 @@ namespace EVServiceCenter.Application.Models.Responses
         public int Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal TotalPrice { get; set; }
-    }
-
-    public class BookingTimeSlotResponse
-    {
-        public int SlotId { get; set; }
-        public string SlotTime { get; set; }
-        public string SlotLabel { get; set; }
-        public int TechnicianId { get; set; }
-        public string TechnicianName { get; set; }
     }
 }

@@ -103,15 +103,13 @@ namespace EVServiceCenter.Application.Service
                 {
                     // var existingAvailability = availability.FirstOrDefault(a => a.SlotId == slot.SlotId);
                     
-                    return new TechnicianTimeSlotAvailability
+                    return new TimeSlotAvailability
                     {
                         SlotId = slot.SlotId,
                         SlotTime = slot.SlotTime.ToString(),
                         SlotLabel = slot.SlotLabel,
                         IsAvailable = true, // existingAvailability?.IsAvailable ?? false,
-                        IsBooked = false, // existingAvailability?.IsBooked ?? false,
-                        BookingId = null, // existingAvailability?.BookingId,
-                        Notes = null // existingAvailability?.Notes
+                        AvailableTechnicians = new List<TechnicianAvailability>()
                     };
                 }).ToList();
 
@@ -120,8 +118,8 @@ namespace EVServiceCenter.Application.Service
                     TechnicianId = technician.TechnicianId,
                     TechnicianName = technician.User.FullName,
                     TechnicianCode = technician.TechnicianCode,
-                    Date = date,
-                    TimeSlots = timeSlotAvailability
+                    Date = date.ToDateTime(TimeOnly.MinValue),
+                    AvailableSlots = timeSlotAvailability
                 };
             }
             catch (ArgumentException)
@@ -157,10 +155,9 @@ namespace EVServiceCenter.Application.Service
                 var technicianTimeSlots = request.TimeSlots.Select(ts => new TechnicianTimeSlot
                 {
                     TechnicianId = technicianId,
-                    WorkDate = request.WorkDate,
+                    WorkDate = request.WorkDate.ToDateTime(TimeOnly.MinValue),
                     SlotId = ts.SlotId,
                     IsAvailable = ts.IsAvailable,
-                    IsBooked = false, // Reset booking status when updating availability
                     BookingId = null,
                     Notes = ts.Notes,
                     CreatedAt = DateTime.UtcNow

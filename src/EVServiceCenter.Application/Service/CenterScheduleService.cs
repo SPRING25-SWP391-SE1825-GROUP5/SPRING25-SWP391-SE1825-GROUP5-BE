@@ -40,11 +40,6 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException("Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc");
                 }
 
-                // Validate capacity
-                if (request.CapacityLeft > request.CapacityTotal)
-                {
-                    throw new ArgumentException("Capacity còn lại không được lớn hơn tổng capacity");
-                }
 
                 // Check for overlapping schedules
                 var existingSchedules = await _centerScheduleRepository.GetCenterSchedulesByCenterAndDayAsync(
@@ -67,10 +62,6 @@ namespace EVServiceCenter.Application.Service
                     DayOfWeek = request.DayOfWeek,
                     StartTime = request.StartTime,
                     EndTime = request.EndTime,
-                    EffectiveFrom = request.EffectiveFrom,
-                    EffectiveTo = request.EffectiveTo,
-                    CapacityTotal = request.CapacityTotal,
-                    CapacityLeft = request.CapacityLeft,
                     IsActive = request.IsActive
                 };
 
@@ -85,6 +76,224 @@ namespace EVServiceCenter.Application.Service
             {
                 throw new Exception($"Lỗi khi tạo center schedule: {ex.Message}");
             }
+        }
+
+        public async Task<CreateWeeklyCenterScheduleResponse> CreateWeeklyCenterScheduleAsync(CreateWeeklyCenterScheduleRequest request)
+        {
+            try
+            {
+                // Validate center exists
+                var center = await _centerRepository.GetCenterByIdAsync(request.CenterId);
+                if (center == null)
+                {
+                    throw new ArgumentException($"Không tìm thấy center với ID: {request.CenterId}");
+                }
+
+                // Validate time range
+                if (request.StartTime >= request.EndTime)
+                {
+                    throw new ArgumentException("Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc");
+                }
+
+
+                var createdSchedules = new List<CenterScheduleResponse>();
+                var errors = new List<string>();
+
+                // Tạo lịch cho từ thứ 2 (1) đến thứ 7 (6)
+                for (byte dayOfWeek = 1; dayOfWeek <= 6; dayOfWeek++)
+                {
+                    try
+                    {
+                        // Check for existing schedules for this day
+                        var existingSchedules = await _centerScheduleRepository.GetCenterSchedulesByCenterAndDayAsync(
+                            request.CenterId, dayOfWeek);
+
+                        var overlappingSchedule = existingSchedules.FirstOrDefault(s =>
+                            s.IsActive &&
+                            ((s.StartTime <= request.StartTime && s.EndTime > request.StartTime) ||
+                             (s.StartTime < request.EndTime && s.EndTime >= request.EndTime) ||
+                             (s.StartTime >= request.StartTime && s.EndTime <= request.EndTime)));
+
+                        if (overlappingSchedule != null)
+                        {
+                            var dayName = GetDayName(dayOfWeek);
+                            errors.Add($"Thứ {dayName}: Đã tồn tại lịch trình trùng thời gian: {overlappingSchedule.StartTime} - {overlappingSchedule.EndTime}");
+                            continue;
+                        }
+
+                        var centerSchedule = new CenterSchedule
+                        {
+                            CenterId = request.CenterId,
+                            DayOfWeek = dayOfWeek,
+                            StartTime = request.StartTime,
+                            EndTime = request.EndTime,
+                            IsActive = request.IsActive
+                        };
+
+                        var createdSchedule = await _centerScheduleRepository.CreateCenterScheduleAsync(centerSchedule);
+                        createdSchedules.Add(MapToCenterScheduleResponse(createdSchedule, center));
+                    }
+                    catch (Exception ex)
+                    {
+                        var dayName = GetDayName(dayOfWeek);
+                        errors.Add($"Thứ {dayName}: {ex.Message}");
+                    }
+                }
+
+                var response = new CreateWeeklyCenterScheduleResponse
+                {
+                    Success = createdSchedules.Count > 0,
+                    Message = createdSchedules.Count == 6 ? "Tạo lịch cả tuần thành công" : 
+                              createdSchedules.Count > 0 ? $"Tạo thành công {createdSchedules.Count}/6 ngày trong tuần" :
+                              "Không thể tạo lịch cho ngày nào",
+                    CreatedSchedules = createdSchedules,
+                    TotalCreated = createdSchedules.Count
+                };
+
+                if (errors.Any())
+                {
+                    response.Message += $". Lỗi: {string.Join("; ", errors)}";
+                }
+
+                return response;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi tạo lịch cả tuần: {ex.Message}");
+            }
+        }
+
+        public async Task<CreateAllCentersScheduleResponse> CreateAllCentersScheduleAsync(CreateAllCentersScheduleRequest request)
+        {
+            try
+            {
+                // Validate time range
+                if (request.StartTime >= request.EndTime)
+                {
+                    throw new ArgumentException("Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc");
+                }
+
+                // Lấy tất cả trung tâm đang hoạt động
+                var allCenters = await _centerRepository.GetAllCentersAsync();
+                var activeCenters = allCenters.Where(c => c.IsActive).ToList();
+
+                if (!activeCenters.Any())
+                {
+                    throw new ArgumentException("Không có trung tâm nào đang hoạt động");
+                }
+
+                var response = new CreateAllCentersScheduleResponse
+                {
+                    TotalCenters = activeCenters.Count,
+                    CenterSchedules = new List<CenterScheduleSummary>(),
+                    Errors = new List<string>()
+                };
+
+                var totalSchedulesCreated = 0;
+
+                // Tạo lịch cho từng trung tâm
+                foreach (var center in activeCenters)
+                {
+                    try
+                    {
+                        var centerSummary = new CenterScheduleSummary
+                        {
+                            CenterId = center.CenterId,
+                            CenterName = center.CenterName,
+                            SchedulesCreated = 0,
+                            DayNames = new List<string>()
+                        };
+
+                        // Tạo lịch cho từ thứ 2 (1) đến thứ 7 (6)
+                        for (byte dayOfWeek = 1; dayOfWeek <= 6; dayOfWeek++)
+                        {
+                            try
+                            {
+                                // Check for existing schedules for this center and day
+                                var existingSchedules = await _centerScheduleRepository.GetCenterSchedulesByCenterAndDayAsync(
+                                    center.CenterId, dayOfWeek);
+
+                                var overlappingSchedule = existingSchedules.FirstOrDefault(s =>
+                                    s.IsActive &&
+                                    ((s.StartTime <= request.StartTime && s.EndTime > request.StartTime) ||
+                                     (s.StartTime < request.EndTime && s.EndTime >= request.EndTime) ||
+                                     (s.StartTime >= request.StartTime && s.EndTime <= request.EndTime)));
+
+                                if (overlappingSchedule != null)
+                                {
+                                    var dayName = GetDayName(dayOfWeek);
+                                    response.Errors.Add($"Trung tâm {center.CenterName} - Thứ {dayName}: Đã tồn tại lịch trình trùng thời gian");
+                                    continue;
+                                }
+
+                                var centerSchedule = new CenterSchedule
+                                {
+                                    CenterId = center.CenterId,
+                                    DayOfWeek = dayOfWeek,
+                                    StartTime = request.StartTime,
+                                    EndTime = request.EndTime,
+                                    IsActive = request.IsActive
+                                };
+
+                                await _centerScheduleRepository.CreateCenterScheduleAsync(centerSchedule);
+                                centerSummary.SchedulesCreated++;
+                                centerSummary.DayNames.Add(GetDayName(dayOfWeek));
+                                totalSchedulesCreated++;
+                            }
+                            catch (Exception ex)
+                            {
+                                var dayName = GetDayName(dayOfWeek);
+                                response.Errors.Add($"Trung tâm {center.CenterName} - Thứ {dayName}: {ex.Message}");
+                            }
+                        }
+
+                        response.CenterSchedules.Add(centerSummary);
+                    }
+                    catch (Exception ex)
+                    {
+                        response.Errors.Add($"Trung tâm {center.CenterName}: {ex.Message}");
+                    }
+                }
+
+                response.Success = totalSchedulesCreated > 0;
+                response.TotalSchedulesCreated = totalSchedulesCreated;
+                response.Message = totalSchedulesCreated == (activeCenters.Count * 6) ? 
+                    $"Tạo lịch thành công cho tất cả {activeCenters.Count} trung tâm" :
+                    $"Tạo thành công {totalSchedulesCreated} lịch cho {activeCenters.Count} trung tâm";
+
+                if (response.Errors.Any())
+                {
+                    response.Message += $". Có {response.Errors.Count} lỗi xảy ra";
+                }
+
+                return response;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi tạo lịch cho tất cả trung tâm: {ex.Message}");
+            }
+        }
+
+        private string GetDayName(byte dayOfWeek)
+        {
+            return dayOfWeek switch
+            {
+                1 => "Hai",
+                2 => "Ba", 
+                3 => "Tư",
+                4 => "Năm",
+                5 => "Sáu",
+                6 => "Bảy",
+                _ => "Không xác định"
+            };
         }
 
         public async Task<List<CenterScheduleResponse>> GetCenterSchedulesByCenterAsync(int centerId, byte? dayOfWeek = null)
@@ -190,21 +399,12 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException("Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc");
                 }
 
-                // Validate capacity
-                if (request.CapacityLeft > request.CapacityTotal)
-                {
-                    throw new ArgumentException("Capacity còn lại không được lớn hơn tổng capacity");
-                }
 
                 // Update properties
                 existingSchedule.CenterId = request.CenterId;
                 existingSchedule.DayOfWeek = request.DayOfWeek;
                 existingSchedule.StartTime = request.StartTime;
                 existingSchedule.EndTime = request.EndTime;
-                existingSchedule.EffectiveFrom = request.EffectiveFrom;
-                existingSchedule.EffectiveTo = request.EffectiveTo;
-                existingSchedule.CapacityTotal = request.CapacityTotal;
-                existingSchedule.CapacityLeft = request.CapacityLeft;
                 existingSchedule.IsActive = request.IsActive;
 
                 var updatedSchedule = await _centerScheduleRepository.UpdateCenterScheduleAsync(existingSchedule);
@@ -232,34 +432,6 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<bool> UpdateCapacityLeftAsync(int centerScheduleId, int capacityUsed)
-        {
-            try
-            {
-                var schedule = await _centerScheduleRepository.GetCenterScheduleByIdAsync(centerScheduleId);
-                if (schedule == null)
-                {
-                    throw new ArgumentException($"Không tìm thấy center schedule với ID: {centerScheduleId}");
-                }
-
-                if (schedule.CapacityLeft < capacityUsed)
-                {
-                    throw new ArgumentException("Không đủ capacity còn lại");
-                }
-
-                schedule.CapacityLeft -= capacityUsed;
-                await _centerScheduleRepository.UpdateCenterScheduleAsync(schedule);
-                return true;
-            }
-            catch (ArgumentException)
-            {
-                throw; // Rethrow validation errors
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Lỗi khi cập nhật capacity: {ex.Message}");
-            }
-        }
 
         private CenterScheduleResponse MapToCenterScheduleResponse(CenterSchedule schedule, ServiceCenter? center)
         {
@@ -273,10 +445,6 @@ namespace EVServiceCenter.Application.Service
                 StartTime = schedule.StartTime,
                 EndTime = schedule.EndTime,
                 // SlotLength removed
-                EffectiveFrom = schedule.EffectiveFrom,
-                EffectiveTo = schedule.EffectiveTo,
-                CapacityTotal = schedule.CapacityTotal,
-                CapacityLeft = schedule.CapacityLeft,
                 IsActive = schedule.IsActive,
                 CreatedAt = DateTime.UtcNow
             };
@@ -295,6 +463,87 @@ namespace EVServiceCenter.Application.Service
                 6 => "Thứ Bảy",
                 _ => "Không xác định"
             };
+        }
+
+        public async Task<DeactivateScheduleResponse> DeactivateScheduleAsync(DeactivateScheduleRequest request)
+        {
+            var response = new DeactivateScheduleResponse();
+
+            try
+            {
+                // Validate center exists
+                var center = await _centerRepository.GetCenterByIdAsync(request.CenterId);
+                if (center == null)
+                {
+                    response.Success = false;
+                    response.Message = "Không tìm thấy trung tâm với ID đã cho";
+                    return response;
+                }
+
+                // Validate day range
+                if (request.StartDayOfWeek > request.EndDayOfWeek)
+                {
+                    response.Success = false;
+                    response.Message = "Thứ bắt đầu không thể lớn hơn thứ kết thúc";
+                    return response;
+                }
+
+                // Get all schedules matching the criteria for the day range
+                var allSchedules = new List<CenterSchedule>();
+                var updatedSchedules = new List<CenterScheduleResponse>();
+                var updatedDays = new List<string>();
+
+                for (byte dayOfWeek = request.StartDayOfWeek; dayOfWeek <= request.EndDayOfWeek; dayOfWeek++)
+                {
+                    var schedules = await _centerScheduleRepository.GetSchedulesByCenterDayAndTimeAsync(
+                        request.CenterId, 
+                        dayOfWeek, 
+                        request.StartTime, 
+                        request.EndTime);
+                    
+                    allSchedules.AddRange(schedules);
+                    
+                    if (schedules.Any())
+                    {
+                        updatedDays.Add(GetDayOfWeekName(dayOfWeek));
+                    }
+                }
+
+                if (!allSchedules.Any())
+                {
+                    response.Success = false;
+                    response.Message = "Không tìm thấy lịch trình phù hợp với tiêu chí đã cho";
+                    return response;
+                }
+
+                // Update status for all matching schedules
+                var scheduleIds = allSchedules.Select(s => s.CenterScheduleId).ToList();
+                await _centerScheduleRepository.UpdateScheduleStatusAsync(scheduleIds, request.IsActive);
+
+                // Get updated schedules for response
+                foreach (var schedule in allSchedules)
+                {
+                    schedule.IsActive = request.IsActive;
+                    updatedSchedules.Add(MapToCenterScheduleResponse(schedule, center));
+                }
+
+                response.Success = true;
+                response.Message = request.IsActive ? 
+                    $"Đã kích hoạt lại {updatedSchedules.Count} lịch trình thành công cho các ngày: {string.Join(", ", updatedDays)}" : 
+                    $"Đã vô hiệu hóa {updatedSchedules.Count} lịch trình thành công cho các ngày: {string.Join(", ", updatedDays)}";
+                response.TotalSchedulesUpdated = updatedSchedules.Count;
+                response.UpdatedSchedules = updatedSchedules;
+                response.UpdatedDays = updatedDays;
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                response.Success = false;
+                response.Message = "Có lỗi xảy ra khi cập nhật trạng thái lịch trình";
+                response.Errors.Add(ex.Message);
+                return response;
+            }
         }
     }
 }

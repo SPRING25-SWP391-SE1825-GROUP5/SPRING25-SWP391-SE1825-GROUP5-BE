@@ -44,4 +44,6 @@ public partial class WorkOrder
     public virtual ICollection<WorkOrderChargeProposal> WorkOrderChargeProposals { get; set; } = new List<WorkOrderChargeProposal>();
 
     public virtual ICollection<WorkOrderPart> WorkOrderParts { get; set; } = new List<WorkOrderPart>();
+
+    public virtual ICollection<ServiceCreditUsage> ServiceCreditUsages { get; set; } = new List<ServiceCreditUsage>();
 }

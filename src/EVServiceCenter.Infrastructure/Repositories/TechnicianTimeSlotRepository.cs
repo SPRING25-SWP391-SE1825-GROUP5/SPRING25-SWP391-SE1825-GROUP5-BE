@@ -2,187 +2,159 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
+using EVServiceCenter.Domain.Configurations;
 using Microsoft.EntityFrameworkCore;
 
-namespace EVServiceCenter.Infrastructure.Repositories
+namespace EVServiceCenter.Infrastructure.Repositories;
+
+public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
 {
-    public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
+    private readonly EVDbContext _context;
+
+    public TechnicianTimeSlotRepository(EVDbContext context)
     {
-        private readonly EVDbContext _context;
+        _context = context;
+    }
 
-        public TechnicianTimeSlotRepository(EVDbContext context)
-        {
-            _context = context;
-        }
+    public async Task<TechnicianTimeSlot?> GetByIdAsync(int id)
+    {
+        return await _context.TechnicianTimeSlots
+            .Include(t => t.Technician)
+            .Include(t => t.Slot)
+            .Include(t => t.Booking)
+            .FirstOrDefaultAsync(t => t.TechnicianSlotId == id);
+    }
 
-        public async Task<List<TechnicianTimeSlot>> GetAllTechnicianTimeSlotsAsync()
-        {
-            return await _context.TechnicianTimeSlots
-                .Include(tts => tts.Technician)
-                .Include(tts => tts.Slot)
-                .OrderBy(tts => tts.WorkDate)
-                .ThenBy(tts => tts.Slot.SlotTime)
-                .ToListAsync();
-        }
+    public async Task<List<TechnicianTimeSlot>> GetByTechnicianIdAsync(int technicianId)
+    {
+        return await _context.TechnicianTimeSlots
+            .Include(t => t.Technician)
+            .Include(t => t.Slot)
+            .Include(t => t.Booking)
+            .Where(t => t.TechnicianId == technicianId)
+            .OrderBy(t => t.WorkDate)
+            .ThenBy(t => t.Slot.SlotTime)
+            .ToListAsync();
+    }
 
-        public async Task<TechnicianTimeSlot> GetTechnicianTimeSlotByIdAsync(int technicianSlotId)
-        {
-            return await _context.TechnicianTimeSlots
-                .Include(tts => tts.Technician)
-                .Include(tts => tts.Slot)
-                .FirstOrDefaultAsync(tts => tts.TechnicianSlotId == technicianSlotId);
-        }
+    public async Task<List<TechnicianTimeSlot>> GetByDateAsync(DateTime date)
+    {
+        return await _context.TechnicianTimeSlots
+            .Include(t => t.Technician)
+            .Include(t => t.Slot)
+            .Include(t => t.Booking)
+            .Where(t => t.WorkDate.Date == date.Date)
+            .OrderBy(t => t.Slot.SlotTime)
+            .ToListAsync();
+    }
 
-        public async Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsByTechnicianAsync(int technicianId)
-        {
-            return await _context.TechnicianTimeSlots
-                .Include(tts => tts.Technician)
-                .Include(tts => tts.Slot)
-                .Where(tts => tts.TechnicianId == technicianId)
-                .OrderBy(tts => tts.WorkDate)
-                .ThenBy(tts => tts.Slot.SlotTime)
-                .ToListAsync();
-        }
+    public async Task<List<TechnicianTimeSlot>> GetByTechnicianAndDateRangeAsync(int technicianId, DateTime startDate, DateTime endDate)
+    {
+        return await _context.TechnicianTimeSlots
+            .Include(t => t.Technician)
+            .Include(t => t.Slot)
+            .Include(t => t.Booking)
+            .Where(t => t.TechnicianId == technicianId && 
+                       t.WorkDate >= startDate.Date && 
+                       t.WorkDate <= endDate.Date)
+            .OrderBy(t => t.WorkDate)
+            .ThenBy(t => t.Slot.SlotTime)
+            .ToListAsync();
+    }
 
-        public async Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsByDateAsync(DateOnly date)
-        {
-            return await _context.TechnicianTimeSlots
-                .Include(tts => tts.Technician)
-                .Include(tts => tts.Slot)
-                .Where(tts => tts.WorkDate == date)
-                .OrderBy(tts => tts.Slot.SlotTime)
-                .ToListAsync();
-        }
+    public async Task<TechnicianTimeSlot> CreateAsync(TechnicianTimeSlot technicianTimeSlot)
+    {
+        _context.TechnicianTimeSlots.Add(technicianTimeSlot);
+        await _context.SaveChangesAsync();
+        return technicianTimeSlot;
+    }
 
-        public async Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsByTechnicianAndDateAsync(int technicianId, DateOnly date)
-        {
-            return await _context.TechnicianTimeSlots
-                .Include(tts => tts.Technician)
-                .Include(tts => tts.Slot)
-                .Where(tts => tts.TechnicianId == technicianId && tts.WorkDate == date)
-                .OrderBy(tts => tts.Slot.SlotTime)
-                .ToListAsync();
-        }
+    public async Task<TechnicianTimeSlot> UpdateAsync(TechnicianTimeSlot technicianTimeSlot)
+    {
+        _context.TechnicianTimeSlots.Update(technicianTimeSlot);
+        await _context.SaveChangesAsync();
+        return technicianTimeSlot;
+    }
 
-        public async Task<List<TechnicianTimeSlot>> GetAvailableTechnicianTimeSlotsAsync(int technicianId, DateOnly date)
-        {
-            return await _context.TechnicianTimeSlots
-                .Include(tts => tts.Technician)
-                .Include(tts => tts.Slot)
-                .Where(tts => tts.TechnicianId == technicianId && 
-                            tts.WorkDate == date && 
-                            tts.IsAvailable && 
-                            !tts.IsBooked)
-                .OrderBy(tts => tts.Slot.SlotTime)
-                .ToListAsync();
-        }
+    public async Task<bool> DeleteAsync(int id)
+    {
+        var technicianTimeSlot = await _context.TechnicianTimeSlots.FindAsync(id);
+        if (technicianTimeSlot == null)
+            return false;
 
-        public async Task<TechnicianTimeSlot> CreateTechnicianTimeSlotAsync(TechnicianTimeSlot technicianTimeSlot)
-        {
-            _context.TechnicianTimeSlots.Add(technicianTimeSlot);
-            await _context.SaveChangesAsync();
-            return technicianTimeSlot;
-        }
+        _context.TechnicianTimeSlots.Remove(technicianTimeSlot);
+        await _context.SaveChangesAsync();
+        return true;
+    }
 
-        public async Task<TechnicianTimeSlot> UpdateTechnicianTimeSlotAsync(TechnicianTimeSlot technicianTimeSlot)
-        {
-            _context.TechnicianTimeSlots.Update(technicianTimeSlot);
-            await _context.SaveChangesAsync();
-            return technicianTimeSlot;
-        }
+    public async Task<bool> ExistsAsync(int id)
+    {
+        return await _context.TechnicianTimeSlots.AnyAsync(t => t.TechnicianSlotId == id);
+    }
 
-        public async Task<bool> DeleteTechnicianTimeSlotAsync(int technicianSlotId)
-        {
-            var technicianTimeSlot = await _context.TechnicianTimeSlots
-                .FirstOrDefaultAsync(tts => tts.TechnicianSlotId == technicianSlotId);
-            
-            if (technicianTimeSlot == null)
-                return false;
+    public async Task<List<TechnicianTimeSlot>> GetAvailableSlotsAsync(DateTime date, int slotId)
+    {
+        return await _context.TechnicianTimeSlots
+            .Include(t => t.Technician)
+            .Include(t => t.Slot)
+            .Where(t => t.WorkDate.Date == date.Date && 
+                       t.SlotId == slotId && 
+                       t.IsAvailable)
+            .ToListAsync();
+    }
 
-            _context.TechnicianTimeSlots.Remove(technicianTimeSlot);
-            await _context.SaveChangesAsync();
-            return true;
-        }
+    public async Task<bool> IsSlotAvailableAsync(int technicianId, DateTime date, int slotId)
+    {
+        return await _context.TechnicianTimeSlots
+            .AnyAsync(t => t.TechnicianId == technicianId && 
+                          t.WorkDate.Date == date.Date && 
+                          t.SlotId == slotId && 
+                          t.IsAvailable);
+    }
 
-        public async Task<bool> ExistsAsync(int technicianSlotId)
-        {
-            return await _context.TechnicianTimeSlots
-                .AnyAsync(tts => tts.TechnicianSlotId == technicianSlotId);
-        }
+    public async Task<bool> ReserveSlotAsync(int technicianId, DateTime date, int slotId, int bookingId)
+    {
+        var timeSlot = await _context.TechnicianTimeSlots
+            .FirstOrDefaultAsync(t => t.TechnicianId == technicianId &&
+                                     t.WorkDate.Date == date.Date &&
+                                     t.SlotId == slotId &&
+                                     t.IsAvailable);
+        
+        if (timeSlot == null)
+            return false;
 
-        public async Task<bool> IsSlotAvailableAsync(int technicianId, DateOnly date, int slotId)
-        {
-            var technicianTimeSlot = await _context.TechnicianTimeSlots
-                .FirstOrDefaultAsync(tts => tts.TechnicianId == technicianId && 
-                                          tts.WorkDate == date && 
-                                          tts.SlotId == slotId);
+        timeSlot.IsAvailable = false;
+        timeSlot.BookingId = bookingId;
+        await _context.SaveChangesAsync();
+        return true;
+    }
 
-            // If no record exists, slot is available by default
-            if (technicianTimeSlot == null)
-                return true;
+    public async Task<bool> ReleaseSlotAsync(int technicianId, DateTime date, int slotId)
+    {
+        var timeSlot = await _context.TechnicianTimeSlots
+            .FirstOrDefaultAsync(t => t.TechnicianId == technicianId &&
+                                     t.WorkDate.Date == date.Date &&
+                                     t.SlotId == slotId &&
+                                     !t.IsAvailable);
+        
+        if (timeSlot == null)
+            return false;
 
-            // Slot is available if it's marked as available and not booked
-            return technicianTimeSlot.IsAvailable && !technicianTimeSlot.IsBooked;
-        }
+        timeSlot.IsAvailable = true;
+        timeSlot.BookingId = null;
+        await _context.SaveChangesAsync();
+        return true;
+    }
 
-        public async Task<bool> ReserveSlotAsync(int technicianId, DateOnly date, int slotId, int? bookingId = null)
-        {
-            var technicianTimeSlot = await _context.TechnicianTimeSlots
-                .FirstOrDefaultAsync(tts => tts.TechnicianId == technicianId && 
-                                          tts.WorkDate == date && 
-                                          tts.SlotId == slotId);
-
-            if (technicianTimeSlot == null)
-            {
-                // Create new record
-                technicianTimeSlot = new TechnicianTimeSlot
-                {
-                    TechnicianId = technicianId,
-                    WorkDate = date,
-                    SlotId = slotId,
-                    IsAvailable = false,
-                    IsBooked = true,
-                    BookingId = bookingId,
-                    CreatedAt = System.DateTime.UtcNow
-                };
-                _context.TechnicianTimeSlots.Add(technicianTimeSlot);
-            }
-            else
-            {
-                // Update existing record
-                if (technicianTimeSlot.IsBooked)
-                    return false; // Already booked
-
-                technicianTimeSlot.IsAvailable = false;
-                technicianTimeSlot.IsBooked = true;
-                technicianTimeSlot.BookingId = bookingId;
-                _context.TechnicianTimeSlots.Update(technicianTimeSlot);
-            }
-
-            await _context.SaveChangesAsync();
-            return true;
-        }
-
-        public async Task<bool> ReleaseSlotAsync(int technicianId, DateOnly date, int slotId)
-        {
-            var technicianTimeSlot = await _context.TechnicianTimeSlots
-                .FirstOrDefaultAsync(tts => tts.TechnicianId == technicianId && 
-                                          tts.WorkDate == date && 
-                                          tts.SlotId == slotId);
-
-            if (technicianTimeSlot == null)
-                return false;
-
-            technicianTimeSlot.IsAvailable = true;
-            technicianTimeSlot.IsBooked = false;
-            technicianTimeSlot.BookingId = null;
-            _context.TechnicianTimeSlots.Update(technicianTimeSlot);
-
-            await _context.SaveChangesAsync();
-            return true;
-        }
+    public async Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsByTechnicianAndDateAsync(int technicianId, DateTime date)
+    {
+        return await _context.TechnicianTimeSlots
+            .Where(t => t.TechnicianId == technicianId &&
+                       t.WorkDate.Date == date.Date)
+            .Include(t => t.Slot)
+            .Include(t => t.Technician)
+            .ToListAsync();
     }
 }

@@ -29,17 +29,19 @@ public partial class Invoice
 
     public string InvoiceType { get; set; }
 
+    public int? BookingId { get; set; }
+
     public int? ParentInvoiceId { get; set; }
 
     public virtual Customer Customer { get; set; }
 
     public virtual ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
 
-    public virtual ICollection<InvoicePayment> InvoicePayments { get; set; } = new List<InvoicePayment>();
-
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
     public virtual ICollection<UserPromotion> UserPromotions { get; set; } = new List<UserPromotion>();
 
     public virtual WorkOrder WorkOrder { get; set; }
+
+    public virtual Booking Booking { get; set; }
 }

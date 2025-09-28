@@ -41,8 +41,6 @@ public partial class User
 
     public  Customer Customer { get; set; }
 
-    public  ICollection<LeaveRequest> LeaveRequests { get; set; } = new List<LeaveRequest>();
-
     public  ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 
     public  ICollection<Otpcode> Otpcodes { get; set; } = new List<Otpcode>();
@@ -50,4 +48,7 @@ public partial class User
     public  ICollection<Staff> Staff { get; set; } = new List<Staff>();
 
     public  ICollection<Technician> Technicians { get; set; } = new List<Technician>();
+
+    // E-commerce navigation properties
+    public virtual ICollection<OrderStatusHistory> OrderStatusHistories { get; set; } = new List<OrderStatusHistory>();
 }

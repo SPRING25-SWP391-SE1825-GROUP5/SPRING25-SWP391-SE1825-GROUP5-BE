@@ -20,7 +20,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<List<Service>> GetAllServicesAsync()
         {
             return await _context.Services
-                .Include(s => s.Category)
                 .OrderByDescending(s => s.CreatedAt)
                 .ToListAsync();
         }
@@ -28,15 +27,13 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<Service> GetServiceByIdAsync(int serviceId)
         {
             return await _context.Services
-                .Include(s => s.Category)
                 .FirstOrDefaultAsync(s => s.ServiceId == serviceId);
         }
 
         public async Task<List<Service>> GetActiveServicesAsync()
         {
             return await _context.Services
-                .Include(s => s.Category)
-                .Where(s => s.IsActive == true && s.Category.IsActive == true)
+                .Where(s => s.IsActive == true)
                 .OrderByDescending(s => s.CreatedAt)
                 .ToListAsync();
         }
@@ -54,10 +51,5 @@ namespace EVServiceCenter.Infrastructure.Repositories
             await _context.SaveChangesAsync();
         }
 
-        public async Task<ServiceCategory> GetCategoryByIdAsync(int categoryId)
-        {
-            return await _context.ServiceCategories
-                .FirstOrDefaultAsync(c => c.CategoryId == categoryId);
-        }
     }
 }

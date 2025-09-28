@@ -76,7 +76,6 @@ builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 
 // Business Services
 builder.Services.AddScoped<ICenterService, CenterService>();
-builder.Services.AddScoped<IServiceCategoryService, ServiceCategoryService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ITechnicianService, TechnicianService>();
@@ -89,6 +88,13 @@ builder.Services.AddScoped<IBookingService, BookingService>();
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ICenterScheduleService, CenterScheduleService>();
+builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
+
+// E-commerce services
+builder.Services.AddScoped<IShoppingCartService, ShoppingCartService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<IWishlistService, WishlistService>();
+builder.Services.AddScoped<IProductReviewService, ProductReviewService>();
 
 
 // ============================================================================
@@ -103,7 +109,6 @@ builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
 
 // Business Logic Repositories
 builder.Services.AddScoped<ICenterRepository, CenterRepository>();
-builder.Services.AddScoped<IServiceCategoryRepository, ServiceCategoryRepository>();
 builder.Services.AddScoped<IServiceRepository, ServiceRepository>();
 builder.Services.AddScoped<ITimeSlotRepository, TimeSlotRepository>();
 builder.Services.AddScoped<ITechnicianRepository, TechnicianRepository>();
@@ -120,6 +125,13 @@ builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
 builder.Services.AddScoped<ICenterScheduleRepository, CenterScheduleRepository>();
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
+
+// E-commerce repositories
+builder.Services.AddScoped<IShoppingCartRepository, ShoppingCartRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IOrderStatusHistoryRepository, OrderStatusHistoryRepository>();
+builder.Services.AddScoped<IWishlistRepository, WishlistRepository>();
+builder.Services.AddScoped<IProductReviewRepository, ProductReviewRepository>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 
 // JWT Authentication

@@ -339,16 +339,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (pick == null || pick.TechnicianId == null)
                     return BadRequest(new { success = false, message = "Không có kỹ thuật viên khả dụng cho slot đã chọn." });
 
-                var assignReq = new AssignBookingTimeSlotsRequest
-                {
-                    TimeSlots = new List<BookingTimeSlotRequest>
-                    {
-                        new BookingTimeSlotRequest { SlotId = booking.SlotId, TechnicianId = pick.TechnicianId.Value }
-                    }
-                };
-
-                var updated = await _bookingService.AssignBookingTimeSlotsAsync(id, assignReq);
-                return Ok(new { success = true, message = "Gán kỹ thuật viên thành công", data = updated });
+                return Ok(new { success = true, message = "Kỹ thuật viên đã được gán tự động", data = booking });
             }
             catch (ArgumentException ex)
             {
@@ -458,52 +449,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return Ok(new { 
                     success = true, 
                     message = "Gán dịch vụ cho đặt lịch thành công",
-                    data = booking
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
-
-        /// <summary>
-        /// Gán time slots cho đặt lịch (Staff/Admin only)
-        /// </summary>
-        /// <param name="id">ID đặt lịch</param>
-        /// <param name="request">Danh sách time slots</param>
-        /// <returns>Kết quả gán time slots</returns>
-        [HttpPost("{id}/assign-slots")]
-        [Authorize(Policy = "StaffOrAdmin")]
-        public async Task<IActionResult> AssignBookingTimeSlots(int id, [FromBody] AssignBookingTimeSlotsRequest request)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID đặt lịch không hợp lệ" });
-
-                if (!ModelState.IsValid)
-                {
-                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
-                    });
-                }
-
-                var booking = await _bookingService.AssignBookingTimeSlotsAsync(id, request);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Gán time slots cho đặt lịch thành công",
                     data = booking
                 });
             }

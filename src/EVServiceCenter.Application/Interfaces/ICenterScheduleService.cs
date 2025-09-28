@@ -16,6 +16,20 @@ namespace EVServiceCenter.Application.Interfaces
         Task<CenterScheduleResponse> CreateCenterScheduleAsync(CreateCenterScheduleRequest request);
 
         /// <summary>
+        /// Tạo lịch làm việc cho cả tuần (từ thứ 2 đến thứ 7)
+        /// </summary>
+        /// <param name="request">Thông tin tạo lịch cả tuần</param>
+        /// <returns>Kết quả tạo lịch cả tuần</returns>
+        Task<CreateWeeklyCenterScheduleResponse> CreateWeeklyCenterScheduleAsync(CreateWeeklyCenterScheduleRequest request);
+
+        /// <summary>
+        /// Tạo lịch làm việc cho tất cả trung tâm trong 1 tuần (từ thứ 2 đến thứ 7)
+        /// </summary>
+        /// <param name="request">Thông tin tạo lịch cho tất cả trung tâm</param>
+        /// <returns>Kết quả tạo lịch cho tất cả trung tâm</returns>
+        Task<CreateAllCentersScheduleResponse> CreateAllCentersScheduleAsync(CreateAllCentersScheduleRequest request);
+
+        /// <summary>
         /// Lấy danh sách center schedules theo center
         /// </summary>
         /// <param name="centerId">ID của center</param>
@@ -62,11 +76,11 @@ namespace EVServiceCenter.Application.Interfaces
         Task<bool> DeleteCenterScheduleAsync(int centerScheduleId);
 
         /// <summary>
-        /// Cập nhật capacity left khi có booking
+        /// Deactivate hoặc Reactivate schedule theo khoảng thời gian
         /// </summary>
-        /// <param name="centerScheduleId">ID của center schedule</param>
-        /// <param name="capacityUsed">Số lượng capacity đã sử dụng</param>
-        /// <returns>Kết quả cập nhật</returns>
-        Task<bool> UpdateCapacityLeftAsync(int centerScheduleId, int capacityUsed);
+        /// <param name="request">Thông tin deactivate/reactivate</param>
+        /// <returns>Kết quả deactivate/reactivate</returns>
+        Task<DeactivateScheduleResponse> DeactivateScheduleAsync(DeactivateScheduleRequest request);
+
     }
 }

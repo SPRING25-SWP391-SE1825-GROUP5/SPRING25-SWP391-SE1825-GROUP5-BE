@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 
 namespace EVServiceCenter.Domain.Entities;
 
@@ -17,7 +16,7 @@ public partial class WorkOrderChargeProposalItem
 
     public decimal UnitPrice { get; set; }
 
-    public virtual Part Part { get; set; }
-
     public virtual WorkOrderChargeProposal Proposal { get; set; }
+
+    public virtual Part Part { get; set; }
 }

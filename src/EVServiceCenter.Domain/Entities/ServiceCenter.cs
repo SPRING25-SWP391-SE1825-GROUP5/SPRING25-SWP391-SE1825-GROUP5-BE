@@ -25,11 +25,10 @@ public partial class ServiceCenter
 
     public virtual ICollection<Inventory> Inventories { get; set; } = new List<Inventory>();
 
-    public virtual ICollection<SalesOrder> SalesOrders { get; set; } = new List<SalesOrder>();
-
     public virtual ICollection<Staff> Staff { get; set; } = new List<Staff>();
 
     public virtual ICollection<Technician> Technicians { get; set; } = new List<Technician>();
 
-    public virtual ICollection<Warehouse> Warehouses { get; set; } = new List<Warehouse>();
+    public virtual ICollection<CenterSchedule> CenterSchedules { get; set; } = new List<CenterSchedule>();
+
 }

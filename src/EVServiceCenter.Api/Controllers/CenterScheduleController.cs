@@ -23,13 +23,13 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Tạo center schedule mới
+        /// Tạo lịch làm việc cho tất cả trung tâm trong 1 tuần (từ thứ 2 đến thứ 7)
         /// </summary>
-        /// <param name="request">Thông tin tạo center schedule</param>
-        /// <returns>Kết quả tạo center schedule</returns>
+        /// <param name="request">Thông tin tạo lịch cho tất cả trung tâm</param>
+        /// <returns>Kết quả tạo lịch cho tất cả trung tâm</returns>
         [HttpPost]
         [Authorize(Policy = "StaffOrAdmin")]
-        public async Task<IActionResult> CreateCenterSchedule([FromBody] CreateCenterScheduleRequest request)
+        public async Task<IActionResult> CreateAllCentersSchedule([FromBody] CreateAllCentersScheduleRequest request)
         {
             try
             {
@@ -43,11 +43,53 @@ namespace EVServiceCenter.WebAPI.Controllers
                     });
                 }
 
-                var result = await _centerScheduleService.CreateCenterScheduleAsync(request);
+                var result = await _centerScheduleService.CreateAllCentersScheduleAsync(request);
                 
-                return CreatedAtAction(nameof(GetCenterScheduleById), new { centerScheduleId = result.CenterScheduleId }, new { 
-                    success = true, 
-                    message = "Tạo center schedule thành công",
+                return Ok(new { 
+                    success = result.Success, 
+                    message = result.Message,
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Tạo lịch làm việc cho cả tuần (từ thứ 2 đến thứ 7)
+        /// </summary>
+        /// <param name="request">Thông tin tạo lịch cả tuần</param>
+        /// <returns>Kết quả tạo lịch cả tuần</returns>
+        [HttpPost("weekly")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> CreateWeeklyCenterSchedule([FromBody] CreateWeeklyCenterScheduleRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new { 
+                        success = false, 
+                        message = "Dữ liệu không hợp lệ", 
+                        errors = errors 
+                    });
+                }
+
+                var result = await _centerScheduleService.CreateWeeklyCenterScheduleAsync(request);
+                
+                return Ok(new { 
+                    success = result.Success, 
+                    message = result.Message,
                     data = result
                 });
             }
@@ -304,33 +346,50 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Cập nhật capacity left khi có booking
+        /// Deactivate hoặc Reactivate schedule theo khoảng thời gian
         /// </summary>
-        /// <param name="centerScheduleId">ID của center schedule</param>
-        /// <param name="capacityUsed">Số lượng capacity đã sử dụng</param>
-        /// <returns>Kết quả cập nhật</returns>
-        [HttpPatch("{centerScheduleId}/capacity")]
-        [Authorize(Policy = "StaffOrAdmin")]
-        public async Task<IActionResult> UpdateCapacityLeft(int centerScheduleId, [FromBody] int capacityUsed)
+        /// <param name="request">Thông tin deactivate/reactivate</param>
+        /// <returns>Kết quả deactivate/reactivate</returns>
+        [HttpPatch("deactivate")]
+        public async Task<IActionResult> DeactivateSchedule([FromBody] DeactivateScheduleRequest request)
         {
             try
             {
-                if (centerScheduleId <= 0)
-                    return BadRequest(new { success = false, message = "CenterScheduleId phải lớn hơn 0" });
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .Select(e => e.ErrorMessage)
+                        .ToList();
+                    return BadRequest(new { 
+                        success = false, 
+                        message = "Dữ liệu không hợp lệ", 
+                        errors = errors 
+                    });
+                }
 
-                if (capacityUsed <= 0)
-                    return BadRequest(new { success = false, message = "CapacityUsed phải lớn hơn 0" });
-
-                var result = await _centerScheduleService.UpdateCapacityLeftAsync(centerScheduleId, capacityUsed);
+                var result = await _centerScheduleService.DeactivateScheduleAsync(request);
                 
-                return Ok(new { 
-                    success = true, 
-                    message = "Cập nhật capacity thành công"
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
+                if (result.Success)
+                {
+                    return Ok(new
+                    {
+                        success = true,
+                        message = result.Message,
+                        totalUpdated = result.TotalSchedulesUpdated,
+                        updatedDays = result.UpdatedDays,
+                        updatedSchedules = result.UpdatedSchedules
+                    });
+                }
+                else
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = result.Message,
+                        errors = result.Errors
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -340,5 +399,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
+
     }
 }

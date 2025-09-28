@@ -37,7 +37,7 @@ namespace EVServiceCenter.Application.Service
 
                 if (categoryId.HasValue)
                 {
-                    services = services.Where(s => s.CategoryId == categoryId.Value).ToList();
+                    // Category filtering removed - no longer supported
                 }
 
                 // Pagination
@@ -100,7 +100,7 @@ namespace EVServiceCenter.Application.Service
 
                 if (categoryId.HasValue)
                 {
-                    services = services.Where(s => s.CategoryId == categoryId.Value).ToList();
+                    // Category filtering removed - no longer supported
                 }
 
                 // Pagination
@@ -129,17 +129,11 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate category exists
-                var category = await _serviceRepository.GetCategoryByIdAsync(request.CategoryId);
-                if (category == null)
-                    throw new ArgumentException("Danh mục dịch vụ không tồn tại.");
-
                 // Create new service entity
                 var service = new Domain.Entities.Service
                 {
                     ServiceName = request.ServiceName.Trim(),
                     Description = !string.IsNullOrWhiteSpace(request.Description) ? request.Description.Trim() : null,
-                    CategoryId = request.CategoryId,
                     BasePrice = request.Price,
                     RequiredSkills = !string.IsNullOrWhiteSpace(request.Notes) ? request.Notes.Trim() : null,
                     IsActive = request.IsActive,
@@ -170,15 +164,9 @@ namespace EVServiceCenter.Application.Service
                 if (existingService == null)
                     throw new ArgumentException("Dịch vụ không tồn tại.");
 
-                // Validate category exists
-                var category = await _serviceRepository.GetCategoryByIdAsync(request.CategoryId);
-                if (category == null)
-                    throw new ArgumentException("Danh mục dịch vụ không tồn tại.");
-
                 // Update service properties
                 existingService.ServiceName = request.ServiceName.Trim();
                 existingService.Description = !string.IsNullOrWhiteSpace(request.Description) ? request.Description.Trim() : null;
-                existingService.CategoryId = request.CategoryId;
                 existingService.BasePrice = request.Price;
                 existingService.RequiredSkills = !string.IsNullOrWhiteSpace(request.Notes) ? request.Notes.Trim() : null;
                 existingService.IsActive = request.IsActive;
@@ -203,8 +191,6 @@ namespace EVServiceCenter.Application.Service
             return new ServiceResponse
             {
                 ServiceId = service.ServiceId,
-                CategoryId = service.CategoryId,
-                CategoryName = service.Category?.CategoryName,
                 ServiceName = service.ServiceName,
                 Description = service.Description,
                 BasePrice = service.BasePrice,

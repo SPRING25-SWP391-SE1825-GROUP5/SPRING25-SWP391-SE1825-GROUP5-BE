@@ -30,18 +30,27 @@ public partial class Booking
 
     public DateTime UpdatedAt { get; set; }
 
-    public 
-        ICollection<BookingService> BookingServices { get; set; } = new List<BookingService>();
+    public int? CenterScheduleId { get; set; }
 
-    public  ICollection<BookingTimeSlot> BookingTimeSlots { get; set; } = new List<BookingTimeSlot>();
+    public int? TechnicianId { get; set; }
 
-    public  ServiceCenter Center { get; set; }
+    public virtual ICollection<BookingService> BookingServices { get; set; } = new List<BookingService>();
 
-    public  Customer Customer { get; set; }
+    public virtual ServiceCenter Center { get; set; }
 
-    public  TimeSlot Slot { get; set; }
+    public virtual Customer Customer { get; set; }
 
-    public  Vehicle Vehicle { get; set; }
+    public virtual TimeSlot Slot { get; set; }
 
-    public  ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
+    public virtual Vehicle Vehicle { get; set; }
+
+    public virtual CenterSchedule CenterSchedule { get; set; }
+
+    public virtual Technician Technician { get; set; }
+
+    public virtual ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
+
+    public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
+
+    public virtual ICollection<ServiceCreditUsage> ServiceCreditUsages { get; set; } = new List<ServiceCreditUsage>();
 }

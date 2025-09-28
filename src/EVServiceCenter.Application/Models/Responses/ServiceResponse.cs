@@ -5,8 +5,6 @@ namespace EVServiceCenter.Application.Models.Responses
     public class ServiceResponse
     {
         public int ServiceId { get; set; }
-        public int CategoryId { get; set; }
-        public required string CategoryName { get; set; }
         public required string ServiceName { get; set; }
         public required string Description { get; set; }
         public decimal BasePrice { get; set; }

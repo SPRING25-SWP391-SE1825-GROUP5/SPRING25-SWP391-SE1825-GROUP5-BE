@@ -14,10 +14,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<bool> BookingExistsAsync(int bookingId);
         Task<bool> IsBookingCodeUniqueAsync(string bookingCode, int? excludeBookingId = null);
         Task<List<BookingService>> GetBookingServicesAsync(int bookingId);
-        Task<List<BookingTimeSlot>> GetBookingTimeSlotsAsync(int bookingId);
         Task AddBookingServicesAsync(List<BookingService> bookingServices);
-        Task AddBookingTimeSlotsAsync(List<BookingTimeSlot> bookingTimeSlots);
         Task RemoveBookingServicesAsync(int bookingId);
-        Task RemoveBookingTimeSlotsAsync(int bookingId);
     }
 }

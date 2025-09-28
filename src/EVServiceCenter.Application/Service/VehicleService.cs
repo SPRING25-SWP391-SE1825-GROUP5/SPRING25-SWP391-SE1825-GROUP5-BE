@@ -38,9 +38,7 @@ namespace EVServiceCenter.Application.Service
                     vehicles = vehicles.Where(v =>
                         v.Vin.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                         v.LicensePlate.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        v.Color.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        v.Model.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        v.Model.ModelName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        v.Color.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
                     ).ToList();
                 }
 
@@ -97,7 +95,6 @@ namespace EVServiceCenter.Application.Service
                 var vehicle = new Vehicle
                 {
                     CustomerId = request.CustomerId,
-                    ModelId = request.ModelId,
                     Vin = request.Vin.Trim().ToUpper(),
                     LicensePlate = request.LicensePlate.Trim().ToUpper(),
                     Color = request.Color.Trim(),
@@ -167,7 +164,6 @@ namespace EVServiceCenter.Application.Service
                 await ValidateUpdateVehicleRequestAsync(request, vehicleId);
 
                 // Update vehicle
-                vehicle.ModelId = request.ModelId;
                 vehicle.Vin = request.Vin.Trim().ToUpper();
                 vehicle.LicensePlate = request.LicensePlate.Trim().ToUpper();
                 vehicle.Color = request.Color.Trim();
@@ -195,7 +191,6 @@ namespace EVServiceCenter.Application.Service
             {
                 VehicleId = vehicle.VehicleId,
                 CustomerId = vehicle.CustomerId,
-                ModelId = vehicle.ModelId,
                 Vin = vehicle.Vin,
                 LicensePlate = vehicle.LicensePlate,
                 Color = vehicle.Color,
@@ -203,12 +198,7 @@ namespace EVServiceCenter.Application.Service
                 LastServiceDate = vehicle.LastServiceDate,
                 CreatedAt = vehicle.CreatedAt,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
-                CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? vehicle.Customer?.NormalizedPhone,
-                ModelBrand = vehicle.Model?.Brand,
-                ModelName = vehicle.Model?.ModelName,
-                ModelYear = vehicle.Model?.Year ?? 0,
-                BatteryCapacity = vehicle.Model?.BatteryCapacity,
-                Range = vehicle.Model?.Range
+                CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? vehicle.Customer?.NormalizedPhone
             };
         }
 
@@ -221,12 +211,6 @@ namespace EVServiceCenter.Application.Service
             if (customer == null)
             {
                 errors.Add("Khách hàng không tồn tại.");
-            }
-
-            // Validate model exists (basic validation - ModelId should be > 0)
-            if (request.ModelId <= 0)
-            {
-                errors.Add("Model xe không hợp lệ. Vui lòng chọn model hợp lệ.");
             }
 
             // Check for duplicate VIN

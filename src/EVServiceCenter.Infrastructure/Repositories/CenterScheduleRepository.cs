@@ -69,8 +69,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _context.CenterSchedules
                 .Include(cs => cs.Center)
-                .Where(cs => cs.EffectiveFrom <= toDate && 
-                           (cs.EffectiveTo == null || cs.EffectiveTo >= fromDate))
                 .OrderBy(cs => cs.CenterId)
                 .ThenBy(cs => cs.DayOfWeek)
                 .ThenBy(cs => cs.StartTime)
@@ -84,7 +82,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Where(cs => cs.CenterId == centerId && 
                            cs.DayOfWeek == dayOfWeek &&
                            cs.IsActive &&
-                           cs.CapacityLeft > 0 &&
                            cs.StartTime <= startTime &&
                            cs.EndTime >= endTime)
                 .OrderBy(cs => cs.StartTime)
@@ -122,6 +119,32 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _context.CenterSchedules
                 .AnyAsync(cs => cs.CenterScheduleId == centerScheduleId);
+        }
+
+        public async Task<List<CenterSchedule>> GetSchedulesByCenterDayAndTimeAsync(int centerId, byte dayOfWeek, TimeOnly startTime, TimeOnly endTime)
+        {
+            return await _context.CenterSchedules
+                .Include(cs => cs.Center)
+                .Where(cs => cs.CenterId == centerId && 
+                           cs.DayOfWeek == dayOfWeek &&
+                           cs.StartTime == startTime && 
+                           cs.EndTime == endTime)
+                .ToListAsync();
+        }
+
+        public async Task<bool> UpdateScheduleStatusAsync(List<int> scheduleIds, bool isActive)
+        {
+            var schedules = await _context.CenterSchedules
+                .Where(cs => scheduleIds.Contains(cs.CenterScheduleId))
+                .ToListAsync();
+
+            foreach (var schedule in schedules)
+            {
+                schedule.IsActive = isActive;
+            }
+
+            await _context.SaveChangesAsync();
+            return true;
         }
     }
 }

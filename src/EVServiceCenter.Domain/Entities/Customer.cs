@@ -23,11 +23,20 @@ public partial class Customer
 
     public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 
-    public virtual ICollection<SalesOrder> SalesOrders { get; set; } = new List<SalesOrder>();
-
     public virtual User User { get; set; }
 
     public virtual ICollection<UserPromotion> UserPromotions { get; set; } = new List<UserPromotion>();
 
     public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
+
+    public virtual ICollection<ServiceCredit> ServiceCredits { get; set; } = new List<ServiceCredit>();
+
+    // E-commerce navigation properties
+    public virtual ICollection<ShoppingCart> ShoppingCarts { get; set; } = new List<ShoppingCart>();
+
+    public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
+
+    public virtual ICollection<Wishlist> Wishlists { get; set; } = new List<Wishlist>();
+
+    public virtual ICollection<ProductReview> ProductReviews { get; set; } = new List<ProductReview>();
 }

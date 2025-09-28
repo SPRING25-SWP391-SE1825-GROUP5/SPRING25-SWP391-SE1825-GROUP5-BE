@@ -3,22 +3,21 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
 
-namespace EVServiceCenter.Domain.Interfaces
+namespace EVServiceCenter.Domain.Interfaces;
+
+public interface ITechnicianTimeSlotRepository
 {
-    public interface ITechnicianTimeSlotRepository
-    {
-        Task<List<TechnicianTimeSlot>> GetAllTechnicianTimeSlotsAsync();
-        Task<TechnicianTimeSlot> GetTechnicianTimeSlotByIdAsync(int technicianSlotId);
-        Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsByTechnicianAsync(int technicianId);
-        Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsByDateAsync(DateOnly date);
-        Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsByTechnicianAndDateAsync(int technicianId, DateOnly date);
-        Task<List<TechnicianTimeSlot>> GetAvailableTechnicianTimeSlotsAsync(int technicianId, DateOnly date);
-        Task<TechnicianTimeSlot> CreateTechnicianTimeSlotAsync(TechnicianTimeSlot technicianTimeSlot);
-        Task<TechnicianTimeSlot> UpdateTechnicianTimeSlotAsync(TechnicianTimeSlot technicianTimeSlot);
-        Task<bool> DeleteTechnicianTimeSlotAsync(int technicianSlotId);
-        Task<bool> ExistsAsync(int technicianSlotId);
-        Task<bool> IsSlotAvailableAsync(int technicianId, DateOnly date, int slotId);
-        Task<bool> ReserveSlotAsync(int technicianId, DateOnly date, int slotId, int? bookingId = null);
-        Task<bool> ReleaseSlotAsync(int technicianId, DateOnly date, int slotId);
-    }
+    Task<TechnicianTimeSlot?> GetByIdAsync(int id);
+    Task<List<TechnicianTimeSlot>> GetByTechnicianIdAsync(int technicianId);
+    Task<List<TechnicianTimeSlot>> GetByDateAsync(DateTime date);
+    Task<List<TechnicianTimeSlot>> GetByTechnicianAndDateRangeAsync(int technicianId, DateTime startDate, DateTime endDate);
+    Task<TechnicianTimeSlot> CreateAsync(TechnicianTimeSlot technicianTimeSlot);
+    Task<TechnicianTimeSlot> UpdateAsync(TechnicianTimeSlot technicianTimeSlot);
+    Task<bool> DeleteAsync(int id);
+    Task<bool> ExistsAsync(int id);
+    Task<List<TechnicianTimeSlot>> GetAvailableSlotsAsync(DateTime date, int slotId);
+        Task<bool> IsSlotAvailableAsync(int technicianId, DateTime date, int slotId);
+        Task<bool> ReserveSlotAsync(int technicianId, DateTime date, int slotId, int bookingId);
+        Task<bool> ReleaseSlotAsync(int technicianId, DateTime date, int slotId);
+        Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsByTechnicianAndDateAsync(int technicianId, DateTime date);
 }

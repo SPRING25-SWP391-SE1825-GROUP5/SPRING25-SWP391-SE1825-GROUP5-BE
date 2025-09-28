@@ -7,8 +7,6 @@ public partial class Service
 {
     public int ServiceId { get; set; }
 
-    public int CategoryId { get; set; }
-
     public string ServiceName { get; set; }
 
     public string Description { get; set; }
@@ -23,7 +21,5 @@ public partial class Service
 
     public virtual ICollection<BookingService> BookingServices { get; set; } = new List<BookingService>();
 
-    public virtual ServiceCategory Category { get; set; }
-
-    public virtual ICollection<ServicePackageItem> ServicePackageItems { get; set; } = new List<ServicePackageItem>();
+    public virtual ICollection<ServiceCredit> ServiceCredits { get; set; } = new List<ServiceCredit>();
 }

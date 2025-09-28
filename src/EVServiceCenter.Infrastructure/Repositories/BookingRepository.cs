@@ -30,11 +30,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     .Include(b => b.Slot)
                     .Include(b => b.BookingServices)
                     .ThenInclude(bs => bs.Service)
-                    .Include(b => b.BookingTimeSlots)
-                    .ThenInclude(bts => bts.Slot)
-                    .Include(b => b.BookingTimeSlots)
-                    .ThenInclude(bts => bts.Technician)
-                    .ThenInclude(t => t.User)
                     .OrderByDescending(b => b.CreatedAt)
                     .ToListAsync();
             }
@@ -57,11 +52,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Slot)
                 .Include(b => b.BookingServices)
                 .ThenInclude(bs => bs.Service)
-                .Include(b => b.BookingTimeSlots)
-                .ThenInclude(bts => bts.Slot)
-                .Include(b => b.BookingTimeSlots)
-                .ThenInclude(bts => bts.Technician)
-                .ThenInclude(t => t.User)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
         }
 
@@ -75,11 +65,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Slot)
                 .Include(b => b.BookingServices)
                 .ThenInclude(bs => bs.Service)
-                .Include(b => b.BookingTimeSlots)
-                .ThenInclude(bts => bts.Slot)
-                .Include(b => b.BookingTimeSlots)
-                .ThenInclude(bts => bts.Technician)
-                .ThenInclude(t => t.User)
                 .FirstOrDefaultAsync(b => b.BookingCode == bookingCode);
         }
 
@@ -121,27 +106,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<List<BookingTimeSlot>> GetBookingTimeSlotsAsync(int bookingId)
-        {
-            return await _context.BookingTimeSlots
-                .Include(bts => bts.Slot)
-                .Include(bts => bts.Technician)
-                .ThenInclude(t => t.User)
-                .Where(bts => bts.BookingId == bookingId)
-                // SlotOrder removed; default order by SlotId
-                .OrderBy(bts => bts.SlotId)
-                .ToListAsync();
-        }
-
         public async Task AddBookingServicesAsync(List<BookingService> bookingServices)
         {
             _context.BookingServices.AddRange(bookingServices);
-            await _context.SaveChangesAsync();
-        }
-
-        public async Task AddBookingTimeSlotsAsync(List<BookingTimeSlot> bookingTimeSlots)
-        {
-            _context.BookingTimeSlots.AddRange(bookingTimeSlots);
             await _context.SaveChangesAsync();
         }
 
@@ -154,19 +121,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
             if (bookingServices.Any())
             {
                 _context.BookingServices.RemoveRange(bookingServices);
-                await _context.SaveChangesAsync();
-            }
-        }
-
-        public async Task RemoveBookingTimeSlotsAsync(int bookingId)
-        {
-            var bookingTimeSlots = await _context.BookingTimeSlots
-                .Where(bts => bts.BookingId == bookingId)
-                .ToListAsync();
-            
-            if (bookingTimeSlots.Any())
-            {
-                _context.BookingTimeSlots.RemoveRange(bookingTimeSlots);
                 await _context.SaveChangesAsync();
             }
         }

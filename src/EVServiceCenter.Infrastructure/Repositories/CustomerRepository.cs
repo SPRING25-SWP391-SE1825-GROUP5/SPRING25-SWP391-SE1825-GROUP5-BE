@@ -33,6 +33,25 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(c => c.CustomerId == customerId);
         }
 
+        public async Task<Customer> GetGuestByEmailOrPhoneAsync(string email, string normalizedPhone)
+        {
+            var query = _context.Customers
+                .Include(c => c.User)
+                .Include(c => c.Vehicles)
+                .Where(c => c.IsGuest);
+
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                query = query.Where(c => c.Email == email);
+            }
+            if (!string.IsNullOrWhiteSpace(normalizedPhone))
+            {
+                query = query.Where(c => c.NormalizedPhone == normalizedPhone);
+            }
+
+            return await query.FirstOrDefaultAsync();
+        }
+
         public async Task<Customer> CreateCustomerAsync(Customer customer)
         {
             _context.Customers.Add(customer);

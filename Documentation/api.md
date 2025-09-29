@@ -163,75 +163,115 @@ Authorization: Bearer <your-jwt-token>
 }
 ```
 
+### 1.14 Đặt mật khẩu lần đầu bằng token (guest)
+- Endpoint: `POST /api/auth/set-password?token=<one-time-token>`
+- Mục đích: Khách đặt mật khẩu lần đầu từ liên kết trong email sau khi thanh toán thành công
+- Authorization: Không cần
+- Request Body:
+```json
+{
+  "newPassword": "NewPassword123!"
+}
+```
+Lưu ý: Token có hạn sử dụng (ví dụ 24h) và chỉ dùng một lần.
+
 ---
 
 ## 2. Booking APIs (`/api/booking`)
 
-### 2.1 Lấy thông tin khả dụng
-- **Endpoint**: `GET /api/booking/availability`
-- **Mục đích**: Kiểm tra lịch trống của trung tâm theo ngày và dịch vụ
-- **Authorization**: Required (AuthenticatedUser)
-- **Query Parameters**: 
-  - `centerId`: ID trung tâm
-  - `date`: Ngày (YYYY-MM-DD)
-  - `serviceIds`: Danh sách ID dịch vụ (comma-separated)
+### 2.1 Lấy thông tin khả dụng theo ngày và dịch vụ
+- Endpoint: `GET /api/booking/availability`
+- Authorization: Required (AuthenticatedUser)
+- Query: `centerId`, `date` (YYYY-MM-DD), `serviceIds` (comma-separated)
 
-### 2.2 Tạo đặt lịch mới
-- **Endpoint**: `POST /api/booking`
-- **Mục đích**: Tạo đặt lịch dịch vụ mới
-- **Authorization**: Required (AuthenticatedUser)
-- **Request Body**:
+### 2.2 Lấy danh sách thời gian khả dụng (real-time)
+- Endpoint: `GET /api/booking/available-times`
+- Authorization: Required (AuthenticatedUser)
+- Query: `centerId`, `date` (YYYY-MM-DD), `technicianId` (optional), `serviceIds` (optional)
+
+### 2.3 Tạm giữ/giải phóng time slot
+- Endpoint: `POST /api/booking/reserve-slot`
+- Endpoint: `POST /api/booking/release-slot`
+- Authorization: Required (AuthenticatedUser)
+- Query (reserve): `technicianId`, `date` (YYYY-MM-DD), `slotId`, `bookingId` (optional)
+
+### 2.4 Tạo đặt lịch mới
+- Endpoint: `POST /api/booking`
+- Authorization: Required (AuthenticatedUser)
+- Request Body (mô hình 1 dịch vụ/1 slot):
 ```json
 {
   "customerId": 1,
-  "centerId": 1,
-  "preferredDate": "2024-01-15",
-  "preferredTimeSlots": [1, 2, 3],
-  "services": [1, 2],
-  "notes": "Ghi chú đặc biệt"
+  "vehicleId": 10,
+  "centerId": 2,
+  "bookingDate": "2025-10-05",
+  "slotId": 3,
+  "serviceId": 7,
+  "technicianId": null,
+  "specialRequests": "Rung nhẹ bánh trước"
 }
 ```
 
-### 2.3 Lấy thông tin đặt lịch
-- **Endpoint**: `GET /api/booking/{id}`
-- **Mục đích**: Lấy thông tin chi tiết đặt lịch
-- **Authorization**: Required (AuthenticatedUser)
+### 2.5 Lấy thông tin đặt lịch theo ID
+- Endpoint: `GET /api/booking/{id}`
+- Authorization: Required (AuthenticatedUser)
 
-### 2.4 Cập nhật trạng thái đặt lịch
-- **Endpoint**: `PUT /api/booking/{id}/status`
-- **Mục đích**: Cập nhật trạng thái đặt lịch (Staff/Admin only)
-- **Authorization**: Required (StaffOrAdmin)
-- **Request Body**:
-```json
-{
-  "status": "CONFIRMED",
-  "notes": "Đã xác nhận lịch hẹn"
-}
-```
+### 2.6 Hủy đặt lịch
+- Endpoint: `PATCH /api/booking/{id}/cancel`
+- Authorization: Required (AuthenticatedUser)
 
-### 2.5 Gán dịch vụ cho đặt lịch
-- **Endpoint**: `POST /api/booking/{id}/services`
-- **Mục đích**: Gán danh sách dịch vụ cho đặt lịch (Staff/Admin only)
-- **Authorization**: Required (StaffOrAdmin)
-- **Request Body**:
-```json
-{
-  "serviceIds": [1, 2, 3]
-}
-```
+### 2.7 Cập nhật trạng thái đặt lịch (Staff/Admin)
+- Endpoint: `PUT /api/booking/{id}/status`
+- Authorization: Required (StaffOrAdmin)
+- Body: `{ "status": "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" }`
 
-### 2.6 Gán time slots cho đặt lịch
-- **Endpoint**: `POST /api/booking/{id}/assign-slots`
-- **Mục đích**: Gán time slots cho đặt lịch (Staff/Admin only)
-- **Authorization**: Required (StaffOrAdmin)
-- **Request Body**:
-```json
-{
-  "timeSlotIds": [1, 2, 3]
-}
-```
+### 2.8 Gán kỹ thuật viên tự động cho booking (1 slot)
+- Endpoint: `POST /api/booking/{id}/auto-assign-technician`
+- Authorization: Required (AuthenticatedUser)
 
 ---
+
+## 2b. Guest Booking APIs (`/api/guest/bookings`)
+
+### 2b.1 Tạo đặt lịch dành cho khách (không cần đăng nhập)
+- Endpoint: `POST /api/guest/bookings`
+- Mục đích: Cho phép khách lẻ đặt lịch mà không cần tài khoản. Hệ thống tạo/tìm `Customer(IsGuest=1)`, tạo/ghép `Vehicle`, tạo `Booking` trạng thái PENDING và trả về đường dẫn thanh toán (PayOS `checkoutUrl`).
+- Authorization: Không cần
+- Request Body:
+```json
+{
+  "email": "guest@gmail.com",
+  "phoneNumber": "0123456789",
+  "fullName": "Nguyen Van A",
+  "licensePlate": "29A-12345",
+  "vin": "VINOPTIONAL",
+  "color": "Red",
+  "currentMileage": 12000,
+  "purchaseDate": "2023-06-15",
+  "centerId": 1,
+  "bookingDate": "2025-10-05",
+  "slotId": 3,
+  "serviceId": 7,
+  "technicianId": null,
+  "specialRequests": "Rung nhẹ bánh trước"
+}
+```
+- Success Response:
+```json
+{
+  "success": true,
+  "message": "Tạo đặt lịch thành công. Vui lòng thanh toán để xác nhận.",
+  "data": {
+    "bookingId": 123,
+    "bookingCode": "BK202510051234",
+    "checkoutUrl": "https://payos.vn/checkout?..."
+  }
+}
+```
+
+Ghi chú:
+- Hệ thống kiểm tra lịch hoạt động của trung tâm, slot hợp lệ, và tự gán kỹ thuật viên nếu không chọn.
+- Sau khi thanh toán thành công, hệ thống sẽ tự động tạo tài khoản `User` (role CUSTOMER) nếu chưa có, liên kết với `Customer`, tạo hóa đơn/thanh toán và gửi email hóa đơn + email đặt mật khẩu/tài khoản.
 
 ## 3. Center APIs (`/api/center`)
 
@@ -306,6 +346,20 @@ Authorization: Bearer <your-jwt-token>
 
 ---
 
+## 3b. Center Schedule APIs (`/api/centerschedule`)
+
+- POST `/api/centerschedule` (Staff/Admin): Tạo lịch cho tất cả trung tâm theo khoảng tuần.
+- POST `/api/centerschedule/weekly` (Staff/Admin): Tạo lịch cả tuần cho 1 trung tâm.
+- GET `/api/centerschedule/by-center/{centerId}`: Danh sách schedules theo center (lọc `dayOfWeek` optional).
+- GET `/api/centerschedule/active`: Danh sách schedules đang hoạt động.
+- GET `/api/centerschedule/{centerScheduleId}`: Lấy chi tiết schedule.
+- GET `/api/centerschedule/available`: Tìm schedules khả dụng theo `centerId`, `dayOfWeek`, `startTime`, `endTime`.
+- PUT `/api/centerschedule/{centerScheduleId}` (Staff/Admin): Cập nhật schedule.
+- DELETE `/api/centerschedule/{centerScheduleId}` (Staff/Admin): Xóa schedule.
+- PATCH `/api/centerschedule/deactivate`: Vô hiệu hóa/kích hoạt lại nhiều schedule theo khoảng.
+
+---
+
 ## 5. Inventory APIs (`/api/inventory`)
 
 ### 5.1 Lấy danh sách tồn kho
@@ -330,6 +384,37 @@ Authorization: Bearer <your-jwt-token>
 - **Authorization**: Required (AdminOnly)
 
 ---
+
+## 15. Payment APIs (`/api/payment`)
+
+### 15.1 Tạo link thanh toán cho Booking
+- Endpoint: `POST /api/payment/booking/{bookingId}/link`
+- Mục đích: Tạo link PayOS cho một `Booking` (dùng cho cả guest và user đã đăng nhập)
+- Authorization: Required (tuỳ sản phẩm; có thể mở khi dùng nội bộ FE)
+- Response:
+```json
+{
+  "checkoutUrl": "https://payos.vn/checkout?..."
+}
+```
+
+### 15.2 Kết quả thanh toán (returnUrl)
+- Endpoint: `GET /payment/result?orderCode=...&status=...&code=...&desc=...`
+- Mục đích: PayOS redirect người dùng về hệ thống sau khi thanh toán. API xác nhận trạng thái qua PayOS và cập nhật hệ thống (Booking, WorkOrder, Invoice, Payment), đồng thời gửi email hóa đơn.
+- Authorization: Không cần (PayOS gọi từ trình duyệt người dùng)
+- Response: HTML hiển thị kết quả nhanh.
+
+### 15.3 Kiểm tra/cập nhật trạng thái thanh toán theo orderCode
+- Endpoint: `GET /api/payment/status/{orderCode}`
+- Mục đích: Gọi thủ công để xác nhận/đồng bộ trạng thái thanh toán với PayOS nếu cần
+- Authorization: Staff/Admin hoặc nội bộ
+- Response:
+```json
+{
+  "orderCode": "123456",
+  "updated": true
+}
+```
 
 ## 6. Part APIs (`/api/part`)
 
@@ -650,6 +735,39 @@ Authorization: Bearer <your-jwt-token>
 ```
 
 ---
+
+## 12b. Technician Time Slot APIs (`/api/techniciantimeslot`)
+
+- GET `/api/techniciantimeslot`: Danh sách tất cả technician time slots.
+- GET `/api/techniciantimeslot/{id}`: Lấy 1 time slot của technician.
+- GET `/api/techniciantimeslot/technician/{technicianId}`: Danh sách time slots theo technician.
+- GET `/api/techniciantimeslot/center/{centerId}`: Danh sách time slots theo trung tâm.
+- GET `/api/techniciantimeslot/technician/{technicianId}/center/{centerId}`: Time slots theo technician và center.
+- GET `/api/techniciantimeslot/day/{dayOfWeek}`: Time slots theo ngày trong tuần (1-6 tương ứng Thứ 2-Thứ 7).
+- POST `/api/techniciantimeslot`: Tạo 1 time slot cho technician.
+- POST `/api/techniciantimeslot/weekly`: Tạo lịch tuần cho 1 technician.
+- POST `/api/techniciantimeslot/all-technicians`: Tạo lịch 1 ngày cho tất cả technician trong center.
+- POST `/api/techniciantimeslot/all-technicians-weekly`: Tạo lịch tuần cho tất cả technician.
+- PUT `/api/techniciantimeslot/{id}`: Cập nhật 1 time slot.
+- DELETE `/api/techniciantimeslot/{id}`: Xóa 1 time slot.
+
+Ghi chú: Một số API có thể yêu cầu quyền Staff/Admin tùy cấu hình thực tế.
+
+---
+
+## 16. Work Order APIs (`/api/workorder`)
+
+- GET `/api/workorder/by-booking/{bookingId}` (Staff/Admin): Lấy work order của 1 booking.
+- POST `/api/workorder` (Staff/Admin): Tạo work order cho booking.
+- POST `/api/workorder/{id}/start` (Technician/Admin): Đổi trạng thái sang IN_PROGRESS.
+- POST `/api/workorder/{id}/complete` (Technician/Admin): Đổi trạng thái sang COMPLETED.
+- POST `/api/workorder/{id}/notes` (Technician/Admin): Thêm ghi chú (văn bản, kèm đường dẫn ảnh nếu có).
+
+## 17. Work Order Charges APIs (`/api/workorders/{workOrderId}/charges`)
+
+- GET `/api/workorders/{workOrderId}/charges`: Tính tổng chi phí phát sinh từ `WorkOrderParts` (subtotal) và liệt kê items.
+- POST `/api/workorders/{workOrderId}/charges/link`: Tạo link PayOS cho phát sinh.
+- POST `/api/workorders/{workOrderId}/charges/confirm?orderCode=...`: Xác nhận thanh toán phát sinh, tạo `Invoice(DETAIL)` + `Payment` và gửi email hóa đơn (kèm PDF).
 
 ## 13. User APIs (`/api/user`)
 

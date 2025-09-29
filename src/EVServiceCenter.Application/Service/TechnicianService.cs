@@ -14,11 +14,49 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly ITechnicianRepository _technicianRepository;
         private readonly ITimeSlotRepository _timeSlotRepository;
+        private readonly IBookingRepository _bookingRepository;
 
-        public TechnicianService(ITechnicianRepository technicianRepository, ITimeSlotRepository timeSlotRepository)
+        public TechnicianService(ITechnicianRepository technicianRepository, ITimeSlotRepository timeSlotRepository, IBookingRepository bookingRepository)
         {
             _technicianRepository = technicianRepository;
             _timeSlotRepository = timeSlotRepository;
+            _bookingRepository = bookingRepository;
+        }
+        public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date)
+        {
+            var result = new TechnicianBookingsResponse
+            {
+                TechnicianId = technicianId,
+                Date = date,
+                Bookings = new List<TechnicianBookingItem>()
+            };
+
+            var bookings = await _bookingRepository.GetByTechnicianAndDateAsync(technicianId, date);
+            foreach (var b in bookings)
+            {
+                var wo = b.WorkOrders?.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+                result.Bookings.Add(new TechnicianBookingItem
+                {
+                    BookingId = b.BookingId,
+                    BookingCode = b.BookingCode,
+                    Status = b.Status,
+                    ServiceId = b.ServiceId,
+                    ServiceName = b.Service?.ServiceName ?? "N/A",
+                    CenterId = b.CenterId,
+                    CenterName = b.Center?.CenterName ?? "N/A",
+                    SlotId = b.SlotId,
+                    SlotTime = b.Slot?.SlotTime.ToString() ?? "N/A",
+                    CustomerName = b.Customer?.User?.FullName ?? "N/A",
+                    CustomerPhone = b.Customer?.User?.PhoneNumber,
+                    VehiclePlate = b.Vehicle?.LicensePlate,
+                    WorkOrderId = wo?.WorkOrderId,
+                    WorkOrderStatus = wo?.Status,
+                    WorkStartTime = wo?.StartTime,
+                    WorkEndTime = wo?.EndTime
+                });
+            }
+
+            return result;
         }
 
         public async Task<TechnicianListResponse> GetAllTechniciansAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? centerId = null)

@@ -16,6 +16,10 @@ namespace EVServiceCenter.Application.Models.Responses
         public DateOnly BookingDate { get; set; }
         public int SlotId { get; set; }
         public string SlotTime { get; set; }
+        public DateOnly? CenterScheduleDate { get; set; }
+        public byte? CenterScheduleDayOfWeek { get; set; }
+        public int? CenterScheduleId { get; set; }
+        public int? TechnicianId { get; set; }
         public string Status { get; set; }
         public decimal? TotalEstimatedCost { get; set; }
         public string SpecialRequests { get; set; }

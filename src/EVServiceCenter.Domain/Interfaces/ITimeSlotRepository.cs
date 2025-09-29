@@ -8,6 +8,7 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<List<TimeSlot>> GetAllTimeSlotsAsync();
         Task<List<TimeSlot>> GetActiveTimeSlotsAsync();
+        Task<TimeSlot> GetByIdAsync(int slotId);
         Task<TimeSlot> CreateTimeSlotAsync(TimeSlot timeSlot);
     }
 }

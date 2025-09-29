@@ -28,5 +28,7 @@ namespace EVServiceCenter.Application.Models.Requests
         public int CurrentMileage { get; set; }
 
         public DateOnly? LastServiceDate { get; set; }
+
+        public DateOnly? PurchaseDate { get; set; }
     }
 }

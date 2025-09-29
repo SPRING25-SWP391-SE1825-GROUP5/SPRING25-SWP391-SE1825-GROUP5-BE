@@ -13,6 +13,8 @@ public partial class Customer
 
     public string NormalizedPhone { get; set; }
 
+    public string Email { get; set; }
+
     public bool IsGuest { get; set; }
 
     public DateTime CreatedAt { get; set; }

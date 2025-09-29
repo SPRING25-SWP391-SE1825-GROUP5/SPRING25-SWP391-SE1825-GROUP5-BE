@@ -832,6 +832,47 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        // Token-based first-time password set (for guest -> user conversion)
+        public async Task<string> SetPasswordWithTokenAsync(string token, string newPassword)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(token))
+                    throw new ArgumentException("Token không hợp lệ");
+                if (!IsValidPassword(newPassword))
+                    throw new ArgumentException("Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.");
+
+                // Decode simple GUID token from cache/OTP repo (reuse PASSWORD_RESET channel)
+                // Expect token format: email-guid or just guid mapped to userId in OTP table
+                var otp = await _otpRepository.GetByRawTokenAsync(token);
+                if (otp == null || otp.ExpiresAt < DateTime.UtcNow || otp.IsUsed)
+                    throw new ArgumentException("Token không hợp lệ hoặc đã hết hạn");
+
+                var user = await _authRepository.GetUserByIdAsync(otp.UserId);
+                if (user == null)
+                    throw new ArgumentException("Người dùng không tồn tại");
+
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+                user.UpdatedAt = DateTime.UtcNow;
+                user.EmailVerified = true; // consider verified after setting password via email link
+                await _authRepository.UpdateUserAsync(user);
+
+                otp.IsUsed = true;
+                otp.UsedAt = DateTime.UtcNow;
+                await _otpRepository.UpdateAsync(otp);
+
+                return "Đặt mật khẩu thành công. Bạn có thể đăng nhập ngay.";
+            }
+            catch (ArgumentException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi đặt mật khẩu: {ex.Message}");
+            }
+        }
+
         private string GenerateCustomerCode()
         {
             var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");

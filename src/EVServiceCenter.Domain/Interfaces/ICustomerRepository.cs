@@ -8,6 +8,7 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<Customer> GetCustomerByUserIdAsync(int userId);
         Task<Customer> GetCustomerByIdAsync(int customerId);
+        Task<Customer> GetGuestByEmailOrPhoneAsync(string email, string normalizedPhone);
         Task<Customer> CreateCustomerAsync(Customer customer);
         Task UpdateCustomerAsync(Customer customer);
         Task<bool> IsCustomerCodeUniqueAsync(string customerCode, int? excludeCustomerId = null);

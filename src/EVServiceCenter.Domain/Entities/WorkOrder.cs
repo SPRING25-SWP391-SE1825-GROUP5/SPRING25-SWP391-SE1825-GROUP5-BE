@@ -25,9 +25,9 @@ public partial class WorkOrder
 
     public int? FinalMileage { get; set; }
 
-    public string CustomerComplaints { get; set; }
+    public string? CustomerComplaints { get; set; }
 
-    public string WorkPerformed { get; set; }
+    public string? WorkPerformed { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

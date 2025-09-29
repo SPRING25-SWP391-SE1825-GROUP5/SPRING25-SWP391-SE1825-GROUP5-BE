@@ -419,52 +419,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Gán dịch vụ cho đặt lịch (Staff/Admin only)
-        /// </summary>
-        /// <param name="id">ID đặt lịch</param>
-        /// <param name="request">Danh sách dịch vụ</param>
-        /// <returns>Kết quả gán dịch vụ</returns>
-        [HttpPost("{id}/services")]
-        [Authorize(Policy = "StaffOrAdmin")]
-        public async Task<IActionResult> AssignBookingServices(int id, [FromBody] AssignBookingServicesRequest request)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID đặt lịch không hợp lệ" });
-
-                if (!ModelState.IsValid)
-                {
-                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
-                    });
-                }
-
-                var booking = await _bookingService.AssignBookingServicesAsync(id, request);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Gán dịch vụ cho đặt lịch thành công",
-                    data = booking
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
-
+        // Endpoint đã loại bỏ trong mô hình 1 booking = 1 service
+        
         // Payment API đã được gỡ bỏ theo yêu cầu
     }
 }

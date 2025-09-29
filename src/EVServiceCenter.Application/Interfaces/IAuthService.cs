@@ -25,5 +25,6 @@ namespace EVServiceCenter.Application.Interfaces
         Task<string> ChangePasswordAsync(int userId, ChangePasswordRequest request);
         Task<LoginTokenResponse> LoginWithGoogleAsync(GoogleLoginRequest request);
         Task<bool> VerifyOtpAsync(string email, string otp);
+        Task<string> SetPasswordWithTokenAsync(string token, string newPassword);
     }
 }

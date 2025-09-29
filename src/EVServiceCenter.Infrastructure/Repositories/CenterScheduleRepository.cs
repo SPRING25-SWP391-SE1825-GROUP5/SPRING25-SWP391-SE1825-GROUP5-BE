@@ -88,6 +88,20 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<List<CenterSchedule>> GetSchedulesForDateAsync(int centerId, DateOnly date, byte targetDow)
+        {
+            return await _context.CenterSchedules
+                .Include(cs => cs.Center)
+                .Where(cs => cs.CenterId == centerId
+                    && cs.IsActive
+                    && (
+                        (cs.ScheduleDate == null && cs.DayOfWeek == targetDow)
+                        || (cs.ScheduleDate != null && cs.ScheduleDate == date)
+                    ))
+                .OrderBy(cs => cs.StartTime)
+                .ToListAsync();
+        }
+
         public async Task<CenterSchedule> CreateCenterScheduleAsync(CenterSchedule centerSchedule)
         {
             _context.CenterSchedules.Add(centerSchedule);

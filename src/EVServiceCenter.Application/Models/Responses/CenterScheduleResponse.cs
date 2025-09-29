@@ -11,6 +11,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public string DayOfWeekName { get; set; }
         public TimeOnly StartTime { get; set; }
         public TimeOnly EndTime { get; set; }
+        public DateOnly? ScheduleDate { get; set; }
         // SlotLength removed; system assumes 30-minute slots
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }

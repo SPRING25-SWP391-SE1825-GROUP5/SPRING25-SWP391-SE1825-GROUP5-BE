@@ -167,8 +167,8 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.BookingId).HasColumnName("BookingID");
             entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
             entity.Property(e => e.Quantity).HasDefaultValue(1);
-            entity.Property(e => e.TotalPrice).HasColumnType("decimal(10, 2)");
-            entity.Property(e => e.UnitPrice).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.TotalPrice).HasColumnType("decimal(12, 2)");
+            entity.Property(e => e.UnitPrice).HasColumnType("decimal(12, 2)");
 
             entity.HasOne(d => d.Booking).WithMany(p => p.BookingServices)
                 .HasForeignKey(d => d.BookingId)
@@ -185,11 +185,12 @@ public partial class EVDbContext : DbContext
         {
             entity.HasKey(e => e.CenterScheduleId).HasName("PK__CenterSc__D7B6B8F4E9A32E1C");
 
-            entity.ToTable("CenterSchedules", "dbo");
+            entity.ToTable("CenterSchedule", "dbo");
 
             entity.Property(e => e.CenterScheduleId).HasColumnName("CenterScheduleID");
             entity.Property(e => e.CenterId).HasColumnName("CenterID");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.ScheduleDate).HasColumnType("date");
             entity.Property(e => e.StartTime).HasConversion(
                 v => v.ToTimeSpan(),
                 v => TimeOnly.FromTimeSpan(v));
@@ -278,7 +279,7 @@ public partial class EVDbContext : DbContext
 
             entity.HasIndex(e => e.NormalizedBillingPhone, "IX_Invoices_NormPhone");
 
-            entity.HasIndex(e => e.ParentInvoiceId, "IX_Invoices_Parent");
+            // entity.HasIndex(e => e.ParentInvoiceId, "IX_Invoices_Parent"); // Column không tồn tại trong database
 
             entity.HasIndex(e => e.Status, "IX_Invoices_Status");
 
@@ -306,7 +307,7 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.NormalizedBillingPhone)
                 .HasMaxLength(20)
                 .HasComputedColumnSql("(left(replace(replace(replace(replace(isnull([BillingPhone],N''),N' ',N''),N'-',N''),N'(',N''),N')',N''),(20)))", true);
-            entity.Property(e => e.ParentInvoiceId).HasColumnName("ParentInvoiceID");
+            // entity.Property(e => e.ParentInvoiceId).HasColumnName("ParentInvoiceID"); // Column không tồn tại trong database
             entity.Property(e => e.Status)
                 .IsRequired()
                 .HasMaxLength(20)
@@ -594,7 +595,7 @@ public partial class EVDbContext : DbContext
             entity.ToTable("Services", "dbo");
 
             entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
-            entity.Property(e => e.BasePrice).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.BasePrice).HasColumnType("decimal(12, 2)");
             entity.Property(e => e.CreatedAt)
                 .HasPrecision(0)
                 .HasDefaultValueSql("(sysdatetime())");

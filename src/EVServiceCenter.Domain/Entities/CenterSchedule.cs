@@ -14,6 +14,8 @@ public partial class CenterSchedule
 
     public TimeOnly EndTime { get; set; }
 
+    public DateOnly? ScheduleDate { get; set; }
+
     public bool IsActive { get; set; }
 
     public virtual ServiceCenter Center { get; set; }

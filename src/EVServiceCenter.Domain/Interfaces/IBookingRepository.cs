@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
 
@@ -13,8 +14,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task UpdateBookingAsync(Booking booking);
         Task<bool> BookingExistsAsync(int bookingId);
         Task<bool> IsBookingCodeUniqueAsync(string bookingCode, int? excludeBookingId = null);
-        Task<List<BookingService>> GetBookingServicesAsync(int bookingId);
-        Task AddBookingServicesAsync(List<BookingService> bookingServices);
-        Task RemoveBookingServicesAsync(int bookingId);
+        Task<List<Booking>> GetByTechnicianAndDateAsync(int technicianId, DateOnly date);
+        // BookingServices removed in single-service model
     }
 }

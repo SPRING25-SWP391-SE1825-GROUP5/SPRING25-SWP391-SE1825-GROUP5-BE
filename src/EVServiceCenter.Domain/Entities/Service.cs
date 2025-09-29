@@ -19,7 +19,7 @@ public partial class Service
 
     public DateTime CreatedAt { get; set; }
 
-    public virtual ICollection<BookingService> BookingServices { get; set; } = new List<BookingService>();
+    // Removed BookingServices collection in single-service model
 
     public virtual ICollection<ServiceCredit> ServiceCredits { get; set; } = new List<ServiceCredit>();
 }

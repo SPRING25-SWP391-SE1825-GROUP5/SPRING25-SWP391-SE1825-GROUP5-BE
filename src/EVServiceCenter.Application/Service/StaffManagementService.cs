@@ -271,30 +271,49 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate request
-                await ValidateAddTechnicianRequestAsync(request);
-
-                // Generate technician code if not provided
-                var technicianCode = string.IsNullOrWhiteSpace(request.TechnicianCode) 
-                    ? GenerateTechnicianCode() 
-                    : request.TechnicianCode;
-
-                // Create technician entity
-                var technician = new Technician
+                // Hai chế độ: nếu có TechnicianId -> cập nhật center cho technician hiện hữu; ngược lại -> tạo mới từ UserId
+                if (request.TechnicianId.HasValue && request.TechnicianId.Value > 0)
                 {
-                    UserId = request.UserId,
-                    CenterId = request.CenterId,
-                    TechnicianCode = technicianCode,
-                    Specialization = request.Specialization,
-                    ExperienceYears = request.ExperienceYears,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                };
+                    var existing = await _technicianRepository.GetTechnicianByIdAsync(request.TechnicianId.Value);
+                    if (existing == null)
+                        throw new ArgumentException("Kỹ thuật viên không tồn tại.");
 
-                // Save technician
-                var createdTechnician = await _technicianRepository.CreateTechnicianAsync(technician);
+                    // Cập nhật center và các thuộc tính tùy chọn
+                    existing.CenterId = request.CenterId;
+                    if (!string.IsNullOrWhiteSpace(request.TechnicianCode)) existing.TechnicianCode = request.TechnicianCode;
+                    if (!string.IsNullOrWhiteSpace(request.Specialization)) existing.Specialization = request.Specialization;
+                    existing.ExperienceYears = request.ExperienceYears;
 
-                return await MapToTechnicianResponseAsync(createdTechnician.TechnicianId);
+                    await _technicianRepository.UpdateTechnicianAsync(existing);
+                    return await MapToTechnicianResponseAsync(existing.TechnicianId);
+                }
+                else
+                {
+                    // Validate request tạo mới
+                    await ValidateAddTechnicianRequestAsync(request);
+
+                    // Generate technician code if not provided
+                    var technicianCode = string.IsNullOrWhiteSpace(request.TechnicianCode) 
+                        ? GenerateTechnicianCode() 
+                        : request.TechnicianCode;
+
+                    // Create technician entity
+                    var technician = new Technician
+                    {
+                        UserId = request.UserId!.Value,
+                        CenterId = request.CenterId,
+                        TechnicianCode = technicianCode,
+                        Specialization = request.Specialization,
+                        ExperienceYears = request.ExperienceYears,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    // Save technician
+                    var createdTechnician = await _technicianRepository.CreateTechnicianAsync(technician);
+
+                    return await MapToTechnicianResponseAsync(createdTechnician.TechnicianId);
+                }
             }
             catch (ArgumentException)
             {
@@ -554,23 +573,29 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Validate user exists
-            var user = await _userRepository.GetUserByIdAsync(request.UserId);
-            if (user == null)
-                errors.Add("Người dùng không tồn tại.");
+            // Validate user exists (chỉ khi tạo mới)
+            if (!request.TechnicianId.HasValue)
+            {
+                var user = await _userRepository.GetUserByIdAsync(request.UserId ?? 0);
+                if (user == null)
+                    errors.Add("Người dùng không tồn tại.");
+            }
 
             // Validate center exists
             var center = await _centerRepository.GetCenterByIdAsync(request.CenterId);
             if (center == null)
                 errors.Add("Trung tâm không tồn tại.");
 
-            // Validate user is not already staff
-            if (await IsUserAlreadyStaffAsync(request.UserId))
-                errors.Add("Người dùng đã là nhân viên của trung tâm khác.");
+            if (!request.TechnicianId.HasValue)
+            {
+                // Validate user is not already staff
+                if (await IsUserAlreadyStaffAsync(request.UserId ?? 0))
+                    errors.Add("Người dùng đã là nhân viên của trung tâm khác.");
 
-            // Validate user is not already technician
-            if (await IsUserAlreadyTechnicianAsync(request.UserId))
-                errors.Add("Người dùng đã là kỹ thuật viên của trung tâm khác.");
+                // Validate user is not already technician
+                if (await IsUserAlreadyTechnicianAsync(request.UserId ?? 0))
+                    errors.Add("Người dùng đã là kỹ thuật viên của trung tâm khác.");
+            }
 
             // Validate technician code uniqueness
             if (!string.IsNullOrWhiteSpace(request.TechnicianCode))

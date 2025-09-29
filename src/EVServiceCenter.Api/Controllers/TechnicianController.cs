@@ -62,6 +62,22 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Danh sách booking theo ngày của kỹ thuật viên (kèm WorkOrder)
+        /// </summary>
+        [HttpGet("{technicianId}/bookings")]
+        [Authorize(Policy = "TechnicianOrAdmin")]
+        public async Task<IActionResult> GetBookingsByDate(int technicianId, [FromQuery] string date)
+        {
+            if (technicianId <= 0)
+                return BadRequest(new { success = false, message = "TechnicianId không hợp lệ" });
+            if (!DateOnly.TryParse(date, out var d))
+                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
+
+            var data = await _technicianService.GetBookingsByDateAsync(technicianId, d);
+            return Ok(new { success = true, message = "Lấy danh sách booking theo ngày thành công", data });
+        }
+
+        /// <summary>
         /// Lấy thông tin kỹ thuật viên theo ID
         /// </summary>
         /// <param name="id">ID kỹ thuật viên</param>

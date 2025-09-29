@@ -11,7 +11,7 @@ public partial class MaintenanceChecklist
 
     public DateTime CreatedAt { get; set; }
 
-    public string Notes { get; set; }
+    public string? Notes { get; set; }
 
     public virtual ICollection<MaintenanceChecklistResult> MaintenanceChecklistResults { get; set; } = new List<MaintenanceChecklistResult>();
 

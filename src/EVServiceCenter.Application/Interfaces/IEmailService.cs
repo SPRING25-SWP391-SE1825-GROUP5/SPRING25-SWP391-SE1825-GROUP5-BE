@@ -12,5 +12,6 @@ namespace EVServiceCenter.Application.Interfaces
         Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode);
         Task SendWelcomeEmailAsync(string toEmail, string fullName);
         Task SendResetPasswordEmailAsync(string toEmail, string fullName, string otpCode);
+        Task SendEmailWithAttachmentAsync(string to, string subject, string body, string attachmentName, byte[] attachmentContent, string contentType = "application/pdf");
     }
 }

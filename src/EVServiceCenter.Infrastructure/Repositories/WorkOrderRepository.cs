@@ -3,6 +3,7 @@ using EVServiceCenter.Domain.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace EVServiceCenter.Infrastructure.Repositories
 {
@@ -13,7 +14,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<WorkOrder?> GetByBookingIdAsync(int bookingId)
         {
-            return await _db.WorkOrders.FirstOrDefaultAsync(w => w.BookingId == bookingId);
+            return await _db.WorkOrders
+                .Where(w => w.BookingId == bookingId)
+                .OrderByDescending(w => w.CreatedAt)
+                .Include(w => w.Technician).ThenInclude(t => t.User)
+                .Include(w => w.Booking)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<WorkOrder> CreateAsync(WorkOrder workOrder)
@@ -21,6 +27,19 @@ namespace EVServiceCenter.Infrastructure.Repositories
             _db.WorkOrders.Add(workOrder);
             await _db.SaveChangesAsync();
             return workOrder;
+        }
+
+        public async Task<WorkOrder?> GetByIdAsync(int id)
+        {
+            return await _db.WorkOrders
+                .Include(w => w.WorkOrderParts).ThenInclude(p => p.Part)
+                .FirstOrDefaultAsync(w => w.WorkOrderId == id);
+        }
+
+        public async Task UpdateAsync(WorkOrder workOrder)
+        {
+            _db.WorkOrders.Update(workOrder);
+            await _db.SaveChangesAsync();
         }
     }
 }

@@ -28,8 +28,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     .Include(b => b.Vehicle)
                     .Include(b => b.Center)
                     .Include(b => b.Slot)
-                    .Include(b => b.BookingServices)
-                    .ThenInclude(bs => bs.Service)
+                    .Include(b => b.Service)
                     .OrderByDescending(b => b.CreatedAt)
                     .ToListAsync();
             }
@@ -50,8 +49,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Vehicle)
                 .Include(b => b.Center)
                 .Include(b => b.Slot)
-                .Include(b => b.BookingServices)
-                .ThenInclude(bs => bs.Service)
+                .Include(b => b.Service)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
         }
 
@@ -63,8 +61,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Vehicle)
                 .Include(b => b.Center)
                 .Include(b => b.Slot)
-                .Include(b => b.BookingServices)
-                .ThenInclude(bs => bs.Service)
+                .Include(b => b.Service)
                 .FirstOrDefaultAsync(b => b.BookingCode == bookingCode);
         }
 
@@ -98,31 +95,20 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return !await query.AnyAsync();
         }
 
-        public async Task<List<BookingService>> GetBookingServicesAsync(int bookingId)
+        public async Task<List<Booking>> GetByTechnicianAndDateAsync(int technicianId, DateOnly date)
         {
-            return await _context.BookingServices
-                .Include(bs => bs.Service)
-                .Where(bs => bs.BookingId == bookingId)
+            return await _context.Bookings
+                .Include(b => b.Customer).ThenInclude(c => c.User)
+                .Include(b => b.Vehicle)
+                .Include(b => b.Center)
+                .Include(b => b.Slot)
+                .Include(b => b.Service)
+                .Include(b => b.WorkOrders)
+                .Where(b => b.TechnicianId == technicianId && b.BookingDate == date)
+                .OrderBy(b => b.Slot.SlotTime)
                 .ToListAsync();
         }
 
-        public async Task AddBookingServicesAsync(List<BookingService> bookingServices)
-        {
-            _context.BookingServices.AddRange(bookingServices);
-            await _context.SaveChangesAsync();
-        }
-
-        public async Task RemoveBookingServicesAsync(int bookingId)
-        {
-            var bookingServices = await _context.BookingServices
-                .Where(bs => bs.BookingId == bookingId)
-                .ToListAsync();
-            
-            if (bookingServices.Any())
-            {
-                _context.BookingServices.RemoveRange(bookingServices);
-                await _context.SaveChangesAsync();
-            }
-        }
+        // BookingServices removed in single-service model
     }
 }

@@ -21,6 +21,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IVehicleRepository _vehicleRepository;
         private readonly ICenterScheduleRepository _centerScheduleRepository;
         private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
+        private readonly IMaintenancePolicyRepository _maintenancePolicyRepository;
 
         public BookingService(
             IBookingRepository bookingRepository,
@@ -31,7 +32,8 @@ namespace EVServiceCenter.Application.Service
             ICustomerRepository customerRepository,
             IVehicleRepository vehicleRepository,
             ICenterScheduleRepository centerScheduleRepository,
-            ITechnicianTimeSlotRepository technicianTimeSlotRepository)
+            ITechnicianTimeSlotRepository technicianTimeSlotRepository,
+            IMaintenancePolicyRepository maintenancePolicyRepository)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -42,6 +44,7 @@ namespace EVServiceCenter.Application.Service
             _vehicleRepository = vehicleRepository;
             _centerScheduleRepository = centerScheduleRepository;
             _technicianTimeSlotRepository = technicianTimeSlotRepository;
+            _maintenancePolicyRepository = maintenancePolicyRepository;
         }
 
         public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int> serviceIds = null)
@@ -311,10 +314,41 @@ namespace EVServiceCenter.Application.Service
                 // Generate booking code
                 var bookingCode = GenerateBookingCode();
 
-                // Calculate total estimated cost
-                var totalEstimatedCost = await CalculateTotalEstimatedCostAsync(request.Services);
+                // Calculate total estimated cost theo service duy nhất
+                var service = await _serviceRepository.GetServiceByIdAsync(request.ServiceId);
+                if (service == null || !service.IsActive)
+                    throw new ArgumentException("Dịch vụ không tồn tại hoặc không hoạt động.");
+                var totalEstimatedCost = service.BasePrice;
 
                 // Single-slot model: no total slots calculation
+
+                // Determine technician: use provided if valid else auto-assign from center
+                int? selectedTechnicianId = null;
+                if (request.TechnicianId.HasValue)
+                {
+                    var tech = await _technicianRepository.GetTechnicianByIdAsync(request.TechnicianId.Value);
+                    if (tech == null || !tech.IsActive || tech.CenterId != request.CenterId)
+                    {
+                        throw new ArgumentException("Technician không hợp lệ cho trung tâm đã chọn.");
+                    }
+                    // Optional: check availability
+                    var available = await _technicianTimeSlotRepository.IsSlotAvailableAsync(tech.TechnicianId, request.BookingDate.ToDateTime(TimeOnly.MinValue), request.SlotId);
+                    if (!available)
+                        throw new ArgumentException("Kỹ thuật viên đã bận ở khung giờ này.");
+                    selectedTechnicianId = tech.TechnicianId;
+                }
+                else
+                {
+                    var techniciansInCenter = await _technicianRepository.GetTechniciansByCenterIdAsync(request.CenterId) ?? new List<Technician>();
+                    var activeTechs = techniciansInCenter.Where(t => t.IsActive).ToList();
+                    foreach (var tech in activeTechs)
+                    {
+                        var available = await _technicianTimeSlotRepository.IsSlotAvailableAsync(tech.TechnicianId, request.BookingDate.ToDateTime(TimeOnly.MinValue), request.SlotId);
+                        if (available) { selectedTechnicianId = tech.TechnicianId; break; }
+                    }
+                    if (!selectedTechnicianId.HasValue)
+                        throw new ArgumentException("Không có kỹ thuật viên khả dụng cho khung giờ này.");
+                }
 
                 // Create booking entity
                 var booking = new Booking
@@ -327,37 +361,44 @@ namespace EVServiceCenter.Application.Service
                     SlotId = request.SlotId,
                     Status = "PENDING",
                     TotalEstimatedCost = totalEstimatedCost,
+                    ServiceId = request.ServiceId,
                     SpecialRequests = request.SpecialRequests?.Trim(),
                     CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
+                    UpdatedAt = DateTime.UtcNow,
+                    TechnicianId = selectedTechnicianId
                 };
+
+                // Determine matched CenterSchedule to persist its ID
+                try
+                {
+                    var dotnetDowSel = (int)request.BookingDate.DayOfWeek;
+                    var targetDowSel = (byte)(dotnetDowSel == 0 ? 7 : dotnetDowSel);
+                    var schedulesSel = await _centerScheduleRepository.GetSchedulesForDateAsync(request.CenterId, request.BookingDate, targetDowSel);
+                    if (schedulesSel != null && schedulesSel.Any())
+                    {
+                        var slot = await _timeSlotRepository.GetByIdAsync(request.SlotId);
+                        var matched = slot != null ? schedulesSel.FirstOrDefault(sc => slot.SlotTime >= sc.StartTime && slot.SlotTime < sc.EndTime) : null;
+                        if (matched != null) booking.CenterScheduleId = matched.CenterScheduleId;
+                    }
+                }
+                catch { }
 
                 // Save booking
                 var createdBooking = await _bookingRepository.CreateBookingAsync(booking);
                 Console.WriteLine($"[DEBUG] Booking {createdBooking.BookingId} created with status: {createdBooking.Status}");
 
-                // Add booking services
-                var bookingServices = new List<Domain.Entities.BookingService>();
-                foreach (var serviceRequest in request.Services)
+                // Reserve selected technician slot
+                try
                 {
-                    var service = await _serviceRepository.GetServiceByIdAsync(serviceRequest.ServiceId);
-                    if (service != null)
-                    {
-                        bookingServices.Add(new Domain.Entities.BookingService
-                        {
-                            BookingId = createdBooking.BookingId,
-                            ServiceId = serviceRequest.ServiceId,
-                            Quantity = serviceRequest.Quantity,
-                            UnitPrice = service.BasePrice,
-                            TotalPrice = service.BasePrice * serviceRequest.Quantity
-                        });
-                    }
+                    var reserved = await _technicianTimeSlotRepository.ReserveSlotAsync(selectedTechnicianId!.Value, request.BookingDate.ToDateTime(TimeOnly.MinValue), request.SlotId, createdBooking.BookingId);
+                    Console.WriteLine($"[DEBUG] Reserve slot: {(reserved ? "OK" : "FAILED")}, tech={selectedTechnicianId}, slot={request.SlotId}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[WARN] Reserve slot failed: {ex.Message}");
                 }
 
-                if (bookingServices.Any())
-                {
-                    await _bookingRepository.AddBookingServicesAsync(bookingServices);
-                }
+                // Không còn thêm vào BookingServices trong mô hình 1 dịch vụ
 
                 // Sử dụng booking vừa tạo thay vì query lại từ database để tránh race condition
                 var response = await MapToBookingResponseAsync(createdBooking);
@@ -424,65 +465,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<BookingResponse> AssignBookingServicesAsync(int bookingId, AssignBookingServicesRequest request)
-        {
-            try
-            {
-                // Validate booking exists
-                var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
-                if (booking == null)
-                    throw new ArgumentException("Đặt lịch không tồn tại.");
-
-                // Validate services
-                await ValidateBookingServicesAsync(request.Services);
-
-                // Remove existing booking services
-                await _bookingRepository.RemoveBookingServicesAsync(bookingId);
-
-                // Add new booking services
-                var bookingServices = new List<Domain.Entities.BookingService>();
-                decimal totalCost = 0;
-
-                foreach (var serviceRequest in request.Services)
-                {
-                    var service = await _serviceRepository.GetServiceByIdAsync(serviceRequest.ServiceId);
-                    if (service != null)
-                    {
-                        var totalPrice = service.BasePrice * serviceRequest.Quantity;
-                        totalCost += totalPrice;
-
-                        bookingServices.Add(new Domain.Entities.BookingService
-                        {
-                            BookingId = bookingId,
-                            ServiceId = serviceRequest.ServiceId,
-                            Quantity = serviceRequest.Quantity,
-                            UnitPrice = service.BasePrice,
-                            TotalPrice = totalPrice
-                        });
-                    }
-                }
-
-                if (bookingServices.Any())
-                {
-                    await _bookingRepository.AddBookingServicesAsync(bookingServices);
-                }
-
-                // Update booking total cost
-                booking.TotalEstimatedCost = totalCost;
-                booking.UpdatedAt = DateTime.UtcNow;
-                await _bookingRepository.UpdateBookingAsync(booking);
-
-                return await MapToBookingResponseAsync(bookingId);
-            }
-            catch (ArgumentException)
-            {
-                throw; // Rethrow validation errors
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Lỗi khi gán dịch vụ cho đặt lịch: {ex.Message}");
-            }
-        }
+        // AssignBookingServicesAsync: đã loại bỏ trong mô hình 1 service
 
         private async Task<BookingResponse> MapToBookingResponseAsync(int bookingId)
         {
@@ -501,6 +484,27 @@ namespace EVServiceCenter.Application.Service
                 booking = await _bookingRepository.GetBookingByIdAsync(booking.BookingId);
             }
 
+            // Determine matched schedule for display
+            DateOnly? scheduleDate = null;
+            byte? scheduleDow = null;
+            try
+            {
+                var dotnetDow = (int)booking.BookingDate.DayOfWeek;
+                var targetDow = (byte)(dotnetDow == 0 ? 7 : dotnetDow);
+                var schedules = await _centerScheduleRepository.GetSchedulesForDateAsync(booking.CenterId, booking.BookingDate, targetDow);
+                if (schedules != null && schedules.Any())
+                {
+                    var slotTime = booking.Slot?.SlotTime;
+                    var matched = schedules.FirstOrDefault(sc => slotTime.HasValue && slotTime.Value >= sc.StartTime && slotTime.Value < sc.EndTime);
+                    if (matched != null)
+                    {
+                        scheduleDate = matched.ScheduleDate;
+                        scheduleDow = matched.DayOfWeek;
+                    }
+                }
+            }
+            catch { }
+
             return new BookingResponse
             {
                 BookingId = booking.BookingId,
@@ -514,20 +518,27 @@ namespace EVServiceCenter.Application.Service
                 BookingDate = booking.BookingDate,
                 SlotId = booking.SlotId,
                 SlotTime = booking.Slot?.SlotTime.ToString() ?? "N/A",
+                CenterScheduleDate = scheduleDate,
+                CenterScheduleDayOfWeek = scheduleDow,
+                CenterScheduleId = booking.CenterScheduleId,
+                TechnicianId = booking.TechnicianId,
                 Status = booking.Status,
                 TotalEstimatedCost = booking.TotalEstimatedCost,
                 SpecialRequests = booking.SpecialRequests,
                 CreatedAt = booking.CreatedAt,
                 UpdatedAt = booking.UpdatedAt,
                 // Single-slot model
-                Services = booking.BookingServices?.Select(bs => new BookingServiceResponse
+                Services = new List<BookingServiceResponse>
                 {
-                    ServiceId = bs.ServiceId,
-                    ServiceName = bs.Service?.ServiceName ?? "N/A",
-                    Quantity = bs.Quantity,
-                    UnitPrice = bs.UnitPrice,
-                    TotalPrice = bs.TotalPrice
-                }).ToList() ?? new List<BookingServiceResponse>()
+                    new BookingServiceResponse
+                    {
+                        ServiceId = booking.ServiceId,
+                        ServiceName = booking.Service?.ServiceName ?? "N/A",
+                        Quantity = 1,
+                        UnitPrice = booking.TotalEstimatedCost ?? 0m,
+                        TotalPrice = booking.TotalEstimatedCost ?? 0m
+                    }
+                }
             };
         }
 
@@ -555,6 +566,8 @@ namespace EVServiceCenter.Application.Service
             var center = await _centerRepository.GetCenterByIdAsync(request.CenterId);
             if (center == null)
                 errors.Add("Trung tâm không tồn tại.");
+            else if (!center.IsActive)
+                errors.Add("Trung tâm hiện tại không hoạt động.");
 
             // Validate date is not in the past
             if (request.BookingDate < DateOnly.FromDateTime(DateTime.Today))
@@ -564,9 +577,65 @@ namespace EVServiceCenter.Application.Service
             if (request.SlotId <= 0)
                 errors.Add("SlotId không hợp lệ.");
 
-            // Validate services
-            if (request.Services == null || !request.Services.Any())
-                errors.Add("Phải có ít nhất 1 dịch vụ.");
+            // Validate date-slot must fall into active CenterSchedule for that date
+            if (errors.Count == 0) // only if earlier validations passed
+            {
+                // Map DayOfWeek: Monday=1..Sunday=7
+                var dotnetDow = (int)request.BookingDate.DayOfWeek;
+                var targetDow = (byte)(dotnetDow == 0 ? 7 : dotnetDow);
+
+                var schedules = await _centerScheduleRepository.GetSchedulesForDateAsync(request.CenterId, request.BookingDate, targetDow);
+                if (schedules == null || !schedules.Any())
+                {
+                    errors.Add("Trung tâm không có lịch hoạt động cho ngày đã chọn.");
+                }
+                else
+                {
+                    var slot = await _timeSlotRepository.GetByIdAsync(request.SlotId);
+                    if (slot == null)
+                    {
+                        errors.Add("SlotId không tồn tại.");
+                    }
+                    else
+                    {
+                        // chosen slot time must be within any schedule range
+                        var slotTime = slot.SlotTime;
+                        var inAnySchedule = schedules.Any(sc => slotTime >= sc.StartTime && slotTime < sc.EndTime && sc.IsActive);
+                        if (!inAnySchedule)
+                        {
+                            errors.Add("Khung giờ đã chọn không nằm trong lịch hoạt động của trung tâm cho ngày này.");
+                        }
+                    }
+                }
+            }
+
+                // Validate service duy nhất
+                if (request.ServiceId <= 0)
+                    errors.Add("ServiceId không hợp lệ.");
+                else if (vehicle != null)
+            {
+                // Validate against maintenance policies: require either mileage >= IntervalKm OR months >= IntervalMonths
+                var purchaseMonths = vehicle.PurchaseDate.HasValue ? ((DateOnly.FromDateTime(DateTime.UtcNow).Year - vehicle.PurchaseDate.Value.Year) * 12 + (DateOnly.FromDateTime(DateTime.UtcNow).Month - vehicle.PurchaseDate.Value.Month)) : (int?)null;
+
+                var svcId = request.ServiceId;
+                {
+                    var policies = await _maintenancePolicyRepository.GetActiveByServiceIdAsync(svcId);
+                    if (policies != null && policies.Any())
+                    {
+                        // Choose the strictest minimal requirement (min thresholds)
+                        var minKm = policies.Min(p => p.IntervalKm);
+                        var minMonths = policies.Min(p => p.IntervalMonths);
+
+                        var mileageOk = vehicle.CurrentMileage >= minKm;
+                        var monthsOk = purchaseMonths.HasValue && purchaseMonths.Value >= minMonths;
+
+                        if (!mileageOk && !monthsOk)
+                        {
+                            errors.Add($"Xe chưa đạt điều kiện cho dịch vụ {svcId}: yêu cầu tối thiểu {minKm} km hoặc {minMonths} tháng.");
+                        }
+                    }
+                }
+            }
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
@@ -621,7 +690,7 @@ namespace EVServiceCenter.Application.Service
                 var service = await _serviceRepository.GetServiceByIdAsync(serviceRequest.ServiceId);
                 if (service != null)
                 {
-                    totalCost += service.BasePrice * serviceRequest.Quantity;
+                    totalCost += service.BasePrice; // mỗi dịch vụ 1 lần
                 }
             }
 

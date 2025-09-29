@@ -7,6 +7,8 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<WorkOrder?> GetByBookingIdAsync(int bookingId);
         Task<WorkOrder> CreateAsync(WorkOrder workOrder);
+        Task<WorkOrder?> GetByIdAsync(int id);
+        Task UpdateAsync(WorkOrder workOrder);
     }
 }
 

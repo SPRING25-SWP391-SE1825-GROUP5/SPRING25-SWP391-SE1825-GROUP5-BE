@@ -12,5 +12,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<Otpcode?> GetLastOtpCodeAsync(int userId, string type);
         Task<Otpcode> CreateOtpCodeAsync(Otpcode otp);
         Task UpdateAsync(Otpcode otp);
+        Task<Otpcode?> GetByRawTokenAsync(string token);
     }
 }

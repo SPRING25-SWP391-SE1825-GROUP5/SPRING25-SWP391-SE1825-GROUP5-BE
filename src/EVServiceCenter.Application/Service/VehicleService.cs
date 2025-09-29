@@ -100,6 +100,7 @@ namespace EVServiceCenter.Application.Service
                     Color = request.Color.Trim(),
                     CurrentMileage = request.CurrentMileage,
                     LastServiceDate = request.LastServiceDate,
+                    PurchaseDate = request.PurchaseDate,
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -164,11 +165,11 @@ namespace EVServiceCenter.Application.Service
                 await ValidateUpdateVehicleRequestAsync(request, vehicleId);
 
                 // Update vehicle
-                vehicle.Vin = request.Vin.Trim().ToUpper();
                 vehicle.LicensePlate = request.LicensePlate.Trim().ToUpper();
                 vehicle.Color = request.Color.Trim();
                 vehicle.CurrentMileage = request.CurrentMileage;
                 vehicle.LastServiceDate = request.LastServiceDate;
+                vehicle.PurchaseDate = request.PurchaseDate;
 
                 await _vehicleRepository.UpdateVehicleAsync(vehicle);
 
@@ -196,6 +197,7 @@ namespace EVServiceCenter.Application.Service
                 Color = vehicle.Color,
                 CurrentMileage = vehicle.CurrentMileage,
                 LastServiceDate = vehicle.LastServiceDate,
+                PurchaseDate = vehicle.PurchaseDate,
                 CreatedAt = vehicle.CreatedAt,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
                 CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? vehicle.Customer?.NormalizedPhone
@@ -232,12 +234,6 @@ namespace EVServiceCenter.Application.Service
         private async Task ValidateUpdateVehicleRequestAsync(UpdateVehicleRequest request, int vehicleId)
         {
             var errors = new List<string>();
-
-            // Check for duplicate VIN
-            if (!await _vehicleRepository.IsVinUniqueAsync(request.Vin.Trim().ToUpper(), vehicleId))
-            {
-                errors.Add("VIN này đã tồn tại. Vui lòng chọn VIN khác.");
-            }
 
             // Check for duplicate license plate
             if (!await _vehicleRepository.IsLicensePlateUniqueAsync(request.LicensePlate.Trim().ToUpper(), vehicleId))

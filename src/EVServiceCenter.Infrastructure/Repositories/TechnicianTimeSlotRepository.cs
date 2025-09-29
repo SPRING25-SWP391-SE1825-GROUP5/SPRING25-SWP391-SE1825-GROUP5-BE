@@ -22,6 +22,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
     {
         return await _context.TechnicianTimeSlots
             .Include(t => t.Technician)
+            .ThenInclude(x => x.User)
             .Include(t => t.Slot)
             .Include(t => t.Booking)
             .FirstOrDefaultAsync(t => t.TechnicianSlotId == id);
@@ -31,6 +32,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
     {
         return await _context.TechnicianTimeSlots
             .Include(t => t.Technician)
+            .ThenInclude(x => x.User)
             .Include(t => t.Slot)
             .Include(t => t.Booking)
             .Where(t => t.TechnicianId == technicianId)
@@ -43,6 +45,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
     {
         return await _context.TechnicianTimeSlots
             .Include(t => t.Technician)
+            .ThenInclude(x => x.User)
             .Include(t => t.Slot)
             .Include(t => t.Booking)
             .Where(t => t.WorkDate.Date == date.Date)
@@ -98,6 +101,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
     {
         return await _context.TechnicianTimeSlots
             .Include(t => t.Technician)
+            .ThenInclude(x => x.User)
             .Include(t => t.Slot)
             .Where(t => t.WorkDate.Date == date.Date && 
                        t.SlotId == slotId && 
@@ -107,26 +111,45 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
 
     public async Task<bool> IsSlotAvailableAsync(int technicianId, DateTime date, int slotId)
     {
-        return await _context.TechnicianTimeSlots
-            .AnyAsync(t => t.TechnicianId == technicianId && 
-                          t.WorkDate.Date == date.Date && 
-                          t.SlotId == slotId && 
-                          t.IsAvailable);
+        var tts = await _context.TechnicianTimeSlots
+            .FirstOrDefaultAsync(t => t.TechnicianId == technicianId &&
+                                     t.WorkDate.Date == date.Date &&
+                                     t.SlotId == slotId);
+
+        // Nếu chưa có bản ghi → coi như còn trống (mặc định available)
+        if (tts == null) return true;
+        return tts.IsAvailable && tts.BookingId == null;
     }
 
     public async Task<bool> ReserveSlotAsync(int technicianId, DateTime date, int slotId, int bookingId)
     {
+        // Tìm slot tồn tại bất kể trạng thái
         var timeSlot = await _context.TechnicianTimeSlots
             .FirstOrDefaultAsync(t => t.TechnicianId == technicianId &&
                                      t.WorkDate.Date == date.Date &&
-                                     t.SlotId == slotId &&
-                                     t.IsAvailable);
-        
-        if (timeSlot == null)
-            return false;
+                                     t.SlotId == slotId);
 
-        timeSlot.IsAvailable = false;
-        timeSlot.BookingId = bookingId;
+        if (timeSlot == null)
+        {
+            // Chưa có thì tạo mới và giữ chỗ
+            timeSlot = new TechnicianTimeSlot
+            {
+                TechnicianId = technicianId,
+                WorkDate = date.Date,
+                SlotId = slotId,
+                IsAvailable = false,
+                BookingId = bookingId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.TechnicianTimeSlots.Add(timeSlot);
+        }
+        else
+        {
+            // Có rồi thì cập nhật giữ chỗ
+            timeSlot.IsAvailable = false;
+            timeSlot.BookingId = bookingId;
+        }
+
         await _context.SaveChangesAsync();
         return true;
     }
@@ -155,6 +178,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
                        t.WorkDate.Date == date.Date)
             .Include(t => t.Slot)
             .Include(t => t.Technician)
+            .ThenInclude(x => x.User)
             .ToListAsync();
     }
 }

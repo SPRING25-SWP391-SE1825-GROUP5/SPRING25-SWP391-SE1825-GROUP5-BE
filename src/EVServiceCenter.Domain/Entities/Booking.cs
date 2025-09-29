@@ -32,9 +32,11 @@ public partial class Booking
 
     public int? CenterScheduleId { get; set; }
 
+    // One booking = one service (denormalized)
+    public int ServiceId { get; set; }
+
     public int? TechnicianId { get; set; }
 
-    public virtual ICollection<BookingService> BookingServices { get; set; } = new List<BookingService>();
 
     public virtual ServiceCenter Center { get; set; }
 
@@ -47,6 +49,8 @@ public partial class Booking
     public virtual CenterSchedule CenterSchedule { get; set; }
 
     public virtual Technician Technician { get; set; }
+
+    public virtual Service Service { get; set; }
 
     public virtual ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
 

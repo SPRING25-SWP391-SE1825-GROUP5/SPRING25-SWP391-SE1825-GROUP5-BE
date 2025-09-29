@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Configurations;
+using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
@@ -23,8 +24,13 @@ public class PaymentService
 	private readonly IInvoiceRepository _invoiceRepository;
 	private readonly IPaymentRepository _paymentRepository;
     private readonly ITechnicianRepository _technicianRepository;
+    private readonly IEmailService _emailService;
+    private readonly IServicePartRepository _servicePartRepository;
+    private readonly IWorkOrderPartRepository _workOrderPartRepository;
+    private readonly IMaintenanceChecklistRepository _checklistRepository;
+    private readonly IMaintenanceChecklistResultRepository _checklistResultRepository;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IServicePartRepository servicePartRepository, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -33,7 +39,12 @@ public class PaymentService
 		_invoiceRepository = invoiceRepository;
 		_paymentRepository = paymentRepository;
         _technicianRepository = technicianRepository;
-	}
+        _emailService = emailService;
+        _servicePartRepository = servicePartRepository;
+        _workOrderPartRepository = workOrderPartRepository;
+        _checklistRepository = checklistRepository;
+        _checklistResultRepository = checklistResultRepository;
+        }
 
 	public async Task<string> CreateBookingPaymentLinkAsync(int bookingId)
 	{
@@ -136,31 +147,36 @@ public class PaymentService
 
 		Console.WriteLine($"[DEBUG] Found booking {booking.BookingId} with status: {booking.Status}");
 
+		Domain.Entities.Invoice emailInvoiceRef = null;
+
 		if (status == "PAID" || status == "SUCCESS" || status == "COMPLETED")
 		{
 			Console.WriteLine($"[DEBUG] Payment successful, updating booking {booking.BookingId} to CONFIRMED");
 			booking.Status = "CONFIRMED";
 
-			// 1) Ensure WorkOrder exists
+            // 1) Ensure WorkOrder exists
             var workOrder = await _workOrderRepository.GetByBookingIdAsync(booking.BookingId);
-			if (workOrder == null)
-			{
-                // Chọn technician bất kỳ thuộc center của booking, nếu không có thì lấy bất kỳ kỹ thuật viên nào
-                var techId = 0;
-                var techsInCenter = await _technicianRepository.GetTechniciansByCenterIdAsync(booking.CenterId);
-                if (techsInCenter != null && techsInCenter.Count > 0) techId = techsInCenter[0].TechnicianId;
-                else
+            if (workOrder == null)
+            {
+                // Ưu tiên kỹ thuật viên đã gán ở Booking; nếu chưa có thì mới tự chọn
+                var techId = booking.TechnicianId ?? 0;
+                if (techId == 0)
                 {
-                    var allTechs = await _technicianRepository.GetAllTechniciansAsync();
-                    if (allTechs != null && allTechs.Count > 0) techId = allTechs[0].TechnicianId;
+                    var techsInCenter = await _technicianRepository.GetTechniciansByCenterIdAsync(booking.CenterId);
+                    if (techsInCenter != null && techsInCenter.Count > 0) techId = techsInCenter[0].TechnicianId;
+                    else
+                    {
+                        var allTechs = await _technicianRepository.GetAllTechniciansAsync();
+                        if (allTechs != null && allTechs.Count > 0) techId = allTechs[0].TechnicianId;
+                    }
                 }
                 if (techId == 0) throw new InvalidOperationException("Không có kỹ thuật viên để lập WorkOrder");
-				workOrder = new Domain.Entities.WorkOrder
+                workOrder = new Domain.Entities.WorkOrder
 				{
 					WorkOrderNumber = $"WO-{DateTime.UtcNow:yyyyMMdd}-{booking.BookingId}",
 					BookingId = booking.BookingId,
                     TechnicianId = techId,
-					Status = "COMPLETED",
+                    Status = "NOT_STARTED",
 					StartTime = DateTime.UtcNow,
 					EndTime = DateTime.UtcNow,
 					CreatedAt = DateTime.UtcNow,
@@ -170,7 +186,7 @@ public class PaymentService
 				workOrder = await _workOrderRepository.CreateAsync(workOrder);
 			}
 
-			// 2) Ensure Invoice exists
+            // 2) Ensure Invoice exists
 			var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
 			if (invoice == null)
 			{
@@ -179,6 +195,7 @@ public class PaymentService
 				{
 					InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{workOrder.WorkOrderId}",
 					WorkOrderId = workOrder.WorkOrderId,
+					BookingId = booking.BookingId,
 					CustomerId = booking.CustomerId,
 					BillingName = booking.Customer?.User?.FullName ?? "Guest",
 					BillingPhone = booking.Customer?.User?.PhoneNumber,
@@ -198,7 +215,66 @@ public class PaymentService
 				Console.WriteLine($"[DEBUG] Invoice already exists with ID: {invoice.InvoiceId}");
 			}
 
-			// 3) Upsert Payment by PayOS order code
+			// Giữ tham chiếu để gửi email sau khi cập nhật booking
+			emailInvoiceRef = invoice;
+
+            // 3) Clone ServiceParts -> WorkOrderParts (checklist/gợi ý)
+            try
+            {
+                if (workOrder != null && booking.ServiceId > 0)
+                {
+                    var templates = await _servicePartRepository.GetByServiceIdAsync(booking.ServiceId);
+                    var existing = await _workOrderPartRepository.GetByWorkOrderIdAsync(workOrder.WorkOrderId);
+                    var existingPartIds = existing.Select(e => e.PartId).ToHashSet();
+
+                    foreach (var t in templates)
+                    {
+                        if (!existingPartIds.Contains(t.PartId))
+                        {
+                            await _workOrderPartRepository.AddAsync(new Domain.Entities.WorkOrderPart
+                            {
+                                WorkOrderId = workOrder.WorkOrderId,
+                                PartId = t.PartId,
+                                QuantityUsed = 0,
+                                UnitCost = 0,
+                                TotalCost = 0
+                            });
+                        }
+                    }
+
+                    // 3b) Auto-init maintenance checklist for this work order if not exists
+                    var existingChecklist = await _checklistRepository.GetByWorkOrderIdAsync(workOrder.WorkOrderId);
+                    if (existingChecklist == null)
+                    {
+                        var checklist = await _checklistRepository.CreateAsync(new Domain.Entities.MaintenanceChecklist
+                        {
+                            WorkOrderId = workOrder.WorkOrderId,
+                            CreatedAt = DateTime.UtcNow,
+                            Notes = null
+                        });
+
+                        // Create checklist results from ServiceParts
+                        var serviceParts = await _servicePartRepository.GetByServiceIdAsync(booking.ServiceId);
+                        var results = serviceParts.Select(sp => new Domain.Entities.MaintenanceChecklistResult
+                        {
+                            ChecklistId = checklist.ChecklistId,
+                            PartId = sp.PartId,
+                            Description = sp.Notes ?? sp.Part?.PartName ?? $"Part {sp.PartId}",
+                            IsMandatory = true,
+                            Performed = false,
+                            Result = null,
+                            Comment = null
+                        });
+                        await _checklistResultRepository.UpsertManyAsync(results);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WARN] Clone ServiceParts -> WorkOrderParts failed: {ex.Message}");
+            }
+
+            // 4) Upsert Payment by PayOS order code
 			if (!long.TryParse(orderCode, out var payOsOrder)) payOsOrder = booking.BookingId;
 			var payment = await _paymentRepository.GetByPayOsOrderCodeAsync(payOsOrder);
 			if (payment == null)
@@ -237,51 +313,66 @@ public class PaymentService
 			return false;
 		}
 
-		await _bookingRepository.UpdateBookingAsync(booking);
-		Console.WriteLine($"[DEBUG] Booking {booking.BookingId} updated successfully");
+        await _bookingRepository.UpdateBookingAsync(booking);
+        Console.WriteLine($"[DEBUG] Booking {booking.BookingId} updated successfully");
+
+		// Send invoice email (summary + items)
+        try
+        {
+            var customerEmail = booking.Customer?.User?.Email ?? booking.Customer?.Email;
+            if (!string.IsNullOrWhiteSpace(customerEmail))
+            {
+				// Đảm bảo invoice đã có (nếu không có từ trước, lấy lại theo booking)
+				var emailInvoice = emailInvoiceRef ?? await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
+                if (emailInvoice == null)
+                {
+                    Console.WriteLine("[WARN] Không tìm thấy invoice để gửi email");
+                }
+                else
+                {
+                    var subject = $"Hóa đơn thanh toán #{emailInvoice.InvoiceNumber} - EV Service Center";
+                var body = $@"<h3>Cảm ơn bạn đã thanh toán!</h3>
+<p><b>Mã hóa đơn:</b> {emailInvoice.InvoiceNumber}</p>
+<p><b>Tổng tiền:</b> {emailInvoice.TotalAmount:N0} VND</p>
+<p><b>Khách hàng:</b> {emailInvoice.BillingName}</p>
+<p><b>SĐT:</b> {emailInvoice.BillingPhone}</p>
+<p><b>Địa chỉ:</b> {emailInvoice.BillingAddress}</p>
+<hr/>
+<p>Chi tiết dịch vụ đã đặt sẽ hiển thị trên hóa đơn chi tiết trong hệ thống.</p>";
+                    await _emailService.SendEmailAsync(customerEmail, subject, body);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WARN] Gửi email hóa đơn thất bại: {ex.Message}");
+        }
 		return true;
 	}
 
-	private async Task CreateInvoiceItemsFromBookingServicesAsync(Domain.Entities.Invoice invoice, Domain.Entities.Booking booking)
+private async Task CreateInvoiceItemsFromBookingServicesAsync(Domain.Entities.Invoice invoice, Domain.Entities.Booking booking)
 	{
 		try
 		{
 			Console.WriteLine($"[DEBUG] Creating InvoiceItems for invoice {invoice.InvoiceId}");
-			
-			// Load booking services
-            var bookingServices = booking.BookingServices != null ? new List<Domain.Entities.BookingService>(booking.BookingServices) : new List<Domain.Entities.BookingService>();
-			
-			if (!bookingServices.Any())
-			{
-				Console.WriteLine($"[DEBUG] No booking services found for booking {booking.BookingId}");
-				return;
-			}
+        var invoiceItems = new List<Domain.Entities.InvoiceItem>();
 
-            var invoiceItems = new List<Domain.Entities.InvoiceItem>();
-			
-			foreach (var bookingService in bookingServices)
-			{
-				var invoiceItem = new Domain.Entities.InvoiceItem
-				{
-					InvoiceId = invoice.InvoiceId,
-					PartId = null, // Service không có PartId
-					Description = bookingService.Service?.ServiceName ?? "Dịch vụ",
-					Quantity = bookingService.Quantity,
-					UnitPrice = bookingService.UnitPrice,
-					LineTotal = bookingService.TotalPrice
-				};
-				
-				invoiceItems.Add(invoiceItem);
-				Console.WriteLine($"[DEBUG] Created InvoiceItem: {invoiceItem.Description} - Qty: {invoiceItem.Quantity} - Price: {invoiceItem.UnitPrice}");
-			}
+        // Mô hình 1 booking = 1 service: tạo 1 dòng invoice item từ booking.Service
+        var description = booking.Service?.ServiceName ?? "Dịch vụ";
+        var unitPrice = booking.TotalEstimatedCost ?? 0m;
+        var item = new Domain.Entities.InvoiceItem
+        {
+            InvoiceId = invoice.InvoiceId,
+            PartId = null,
+            Description = description,
+            Quantity = 1,
+            UnitPrice = unitPrice,
+            LineTotal = unitPrice
+        };
+        invoiceItems.Add(item);
 
-			// Lưu InvoiceItems vào database
-			if (invoiceItems.Any())
-			{
-				// Cần thêm method CreateInvoiceItemsAsync vào InvoiceRepository
-				await _invoiceRepository.CreateInvoiceItemsAsync(invoiceItems);
-				Console.WriteLine($"[DEBUG] Created {invoiceItems.Count} InvoiceItems successfully");
-			}
+        await _invoiceRepository.CreateInvoiceItemsAsync(invoiceItems);
+        Console.WriteLine($"[DEBUG] Created {invoiceItems.Count} InvoiceItems successfully");
 		}
 		catch (Exception ex)
 		{

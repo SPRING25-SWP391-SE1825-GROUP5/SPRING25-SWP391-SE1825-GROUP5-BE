@@ -36,5 +36,14 @@ namespace EVServiceCenter.Infrastructure.Repositories
             _context.Otpcodes.Update(otp);
             await _context.SaveChangesAsync();
         }
+
+        public Task<Otpcode?> GetByRawTokenAsync(string token)
+        {
+            // In this system, we store OTP codes in Otpcode.Otpcode1; we'll match directly
+            return Task.FromResult(_context.Otpcodes
+                .Where(o => o.Otpcode1 == token)
+                .OrderByDescending(o => o.CreatedAt)
+                .FirstOrDefault());
+        }
     }
 }

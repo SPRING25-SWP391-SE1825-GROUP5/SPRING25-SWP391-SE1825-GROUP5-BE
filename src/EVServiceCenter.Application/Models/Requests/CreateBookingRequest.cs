@@ -29,9 +29,13 @@ namespace EVServiceCenter.Application.Models.Requests
         [StringLength(500, ErrorMessage = "Yêu cầu đặc biệt không được vượt quá 500 ký tự")]
         public string SpecialRequests { get; set; }
 
-        [Required(ErrorMessage = "Danh sách dịch vụ là bắt buộc")]
-        [MinLength(1, ErrorMessage = "Phải có ít nhất 1 dịch vụ")]
-        public List<BookingServiceRequest> Services { get; set; } = new List<BookingServiceRequest>();
+        // Mô hình 1 booking = 1 service
+        [Required(ErrorMessage = "ID dịch vụ là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "ID dịch vụ phải là số nguyên dương")]
+        public int ServiceId { get; set; }
+
+        // Optional: cho phép chọn kỹ thuật viên. Nếu null, hệ thống sẽ auto-assign
+        public int? TechnicianId { get; set; }
     }
 
 }

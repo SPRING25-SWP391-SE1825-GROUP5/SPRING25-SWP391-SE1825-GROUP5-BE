@@ -189,6 +189,28 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        [AllowAnonymous]
+        [HttpPost("set-password")]
+        public async Task<IActionResult> SetPassword([FromQuery] string token, [FromBody] ChangePasswordRequest body)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return BadRequest(new { success = false, message = "Thiếu token" });
+
+            try
+            {
+                var msg = await _authService.SetPasswordWithTokenAsync(token, body.NewPassword);
+                return Ok(new { success = true, message = msg });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
         [HttpPost("verify-email")]
         public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request)
         {

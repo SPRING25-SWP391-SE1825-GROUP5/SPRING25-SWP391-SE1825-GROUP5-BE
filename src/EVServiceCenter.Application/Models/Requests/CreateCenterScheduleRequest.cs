@@ -23,6 +23,8 @@ namespace EVServiceCenter.Application.Models.Requests
 
 
 
+        public DateOnly? ScheduleDate { get; set; }
+
         public bool IsActive { get; set; } = true;
     }
 }

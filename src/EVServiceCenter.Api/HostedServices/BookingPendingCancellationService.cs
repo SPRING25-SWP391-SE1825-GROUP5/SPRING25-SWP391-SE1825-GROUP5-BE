@@ -35,17 +35,33 @@ public class BookingPendingCancellationService : BackgroundService
 				using var scope = _serviceScopeFactory.CreateScope();
 				var bookingRepository = scope.ServiceProvider.GetRequiredService<IBookingRepository>();
 				
-				var timeoutMinutes = _configuration.GetValue<int>("Booking:PendingTimeoutMinutes", 5);
-				var all = await bookingRepository.GetAllBookingsAsync();
-				var now = DateTime.UtcNow;
-				foreach (var b in all.Where(b => b.Status == "PENDING"))
+				var timeoutMinutes = _configuration.GetValue<int>("Booking:PendingTimeoutMinutes", 30);
+                var all = await bookingRepository.GetAllBookingsAsync();
+                var now = DateTime.UtcNow;
+				var cancelledCount = 0;
+				
+                foreach (var b in all.Where(b => b.Status == "PENDING"))
 				{
-					var elapsed = now - b.CreatedAt.ToUniversalTime();
-					if (elapsed.TotalMinutes >= timeoutMinutes)
+                    // Chuẩn hóa CreatedAt về UTC nếu cần
+                    var created = b.CreatedAt.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(b.CreatedAt, DateTimeKind.Utc)
+                        : b.CreatedAt.ToUniversalTime();
+                    var threshold = now.AddMinutes(-timeoutMinutes);
+                    // Không hủy booking mới tạo trong 2 phút đầu để tránh lệch đồng hồ
+                    if (created <= threshold && (now - created) > TimeSpan.FromMinutes(2))
 					{
+                        var elapsed = (now - created).TotalMinutes;
+                        _logger.LogInformation($"Tự động hủy booking {b.BookingId} (Code: {b.BookingCode}) sau {elapsed:F1} phút");
 						b.Status = "CANCELLED";
+						b.UpdatedAt = now;
 						await bookingRepository.UpdateBookingAsync(b);
+						cancelledCount++;
 					}
+				}
+				
+				if (cancelledCount > 0)
+				{
+					_logger.LogInformation($"Đã tự động hủy {cancelledCount} booking PENDING quá hạn");
 				}
 			}
 			catch (Exception ex)

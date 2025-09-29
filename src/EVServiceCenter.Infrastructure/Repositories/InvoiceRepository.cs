@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using EVServiceCenter.Domain.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
@@ -21,6 +22,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
             _db.Invoices.Add(invoice);
             await _db.SaveChangesAsync();
             return invoice;
+        }
+
+        public async Task CreateInvoiceItemsAsync(List<InvoiceItem> invoiceItems)
+        {
+            _db.InvoiceItems.AddRange(invoiceItems);
+            await _db.SaveChangesAsync();
         }
     }
 }

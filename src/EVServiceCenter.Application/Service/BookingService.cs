@@ -138,15 +138,14 @@ namespace EVServiceCenter.Application.Service
                         throw new ArgumentException($"Các dịch vụ sau không tồn tại hoặc không hoạt động: {string.Join(", ", invalidServices)}");
                 }
 
-                // Get day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
-                var dayOfWeek = (byte)date.DayOfWeek;
+                // Chuẩn hóa DayOfWeek: Monday=1..Sunday=7
+                var dotnetDow = (int)date.DayOfWeek; // Sunday=0..Saturday=6
+                var targetDow = (byte)(dotnetDow == 0 ? 7 : dotnetDow);
 
-                // Get weekly schedules for the center and day
-                var weeklySchedules = await _centerScheduleRepository.GetCenterSchedulesByCenterAndDayAsync(centerId, dayOfWeek);
-                var activeSchedules = weeklySchedules.Where(ws => 
-                    ws.IsActive).ToList();
+                // Lấy lịch theo ngày thực tế: lịch ngày (ScheduleDate) hoặc lịch tuần (DayOfWeek)
+                var activeSchedules = await _centerScheduleRepository.GetSchedulesForDateAsync(centerId, date, targetDow);
 
-                if (!activeSchedules.Any())
+                if (activeSchedules == null || !activeSchedules.Any())
                     throw new ArgumentException("Không có lịch hoạt động cho ngày này.");
 
                 // Note: CenterSchedule doesn't have TechnicianId, so we'll filter technicians later
@@ -335,6 +334,7 @@ namespace EVServiceCenter.Application.Service
 
                 // Save booking
                 var createdBooking = await _bookingRepository.CreateBookingAsync(booking);
+                Console.WriteLine($"[DEBUG] Booking {createdBooking.BookingId} created with status: {createdBooking.Status}");
 
                 // Add booking services
                 var bookingServices = new List<Domain.Entities.BookingService>();
@@ -359,7 +359,10 @@ namespace EVServiceCenter.Application.Service
                     await _bookingRepository.AddBookingServicesAsync(bookingServices);
                 }
 
-                return await MapToBookingResponseAsync(createdBooking.BookingId);
+                // Sử dụng booking vừa tạo thay vì query lại từ database để tránh race condition
+                var response = await MapToBookingResponseAsync(createdBooking);
+                Console.WriteLine($"[DEBUG] Booking {createdBooking.BookingId} response status: {response.Status}");
+                return response;
             }
             catch (ArgumentException)
             {
@@ -486,6 +489,17 @@ namespace EVServiceCenter.Application.Service
             var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
             if (booking == null)
                 throw new ArgumentException("Đặt lịch không tồn tại.");
+
+            return await MapToBookingResponseAsync(booking);
+        }
+
+        private async Task<BookingResponse> MapToBookingResponseAsync(Booking booking)
+        {
+            // Load related data if not already loaded
+            if (booking.Customer == null)
+            {
+                booking = await _bookingRepository.GetBookingByIdAsync(booking.BookingId);
+            }
 
             return new BookingResponse
             {

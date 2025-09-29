@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -103,6 +105,8 @@ public class PaymentService
 	{
 		if (string.IsNullOrWhiteSpace(orderCode)) return false;
 
+		Console.WriteLine($"[DEBUG] ConfirmPaymentAsync called with orderCode: {orderCode}");
+
 		var getUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
 		using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(getUrl));
 		request.Headers.Add("x-client-id", _options.ClientId);
@@ -112,6 +116,8 @@ public class PaymentService
 		response.EnsureSuccessStatusCode();
 		var json = await response.Content.ReadFromJsonAsync<JsonElement>();
 		var status = json.GetProperty("data").GetProperty("status").GetString();
+		
+		Console.WriteLine($"[DEBUG] PayOS status for orderCode {orderCode}: {status}");
 
 		Domain.Entities.Booking booking = null;
 		if (int.TryParse(orderCode, out var bookingIdFromOrder))
@@ -122,10 +128,17 @@ public class PaymentService
 		{
 			booking = await _bookingRepository.GetBookingByCodeAsync(orderCode);
 		}
-		if (booking == null) return false;
+		if (booking == null) 
+		{
+			Console.WriteLine($"[DEBUG] Booking not found for orderCode: {orderCode}");
+			return false;
+		}
+
+		Console.WriteLine($"[DEBUG] Found booking {booking.BookingId} with status: {booking.Status}");
 
 		if (status == "PAID" || status == "SUCCESS" || status == "COMPLETED")
 		{
+			Console.WriteLine($"[DEBUG] Payment successful, updating booking {booking.BookingId} to CONFIRMED");
 			booking.Status = "CONFIRMED";
 
 			// 1) Ensure WorkOrder exists
@@ -161,6 +174,7 @@ public class PaymentService
 			var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
 			if (invoice == null)
 			{
+				Console.WriteLine($"[DEBUG] Creating new invoice for booking {booking.BookingId}");
 				invoice = new Domain.Entities.Invoice
 				{
 					InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{workOrder.WorkOrderId}",
@@ -174,6 +188,14 @@ public class PaymentService
 					CreatedAt = DateTime.UtcNow,
 				};
 				invoice = await _invoiceRepository.CreateMinimalAsync(invoice);
+				Console.WriteLine($"[DEBUG] Invoice created with ID: {invoice.InvoiceId}");
+				
+				// Tạo InvoiceItems từ BookingServices
+				await CreateInvoiceItemsFromBookingServicesAsync(invoice, booking);
+			}
+			else
+			{
+				Console.WriteLine($"[DEBUG] Invoice already exists with ID: {invoice.InvoiceId}");
 			}
 
 			// 3) Upsert Payment by PayOS order code
@@ -181,6 +203,7 @@ public class PaymentService
 			var payment = await _paymentRepository.GetByPayOsOrderCodeAsync(payOsOrder);
 			if (payment == null)
 			{
+				Console.WriteLine($"[DEBUG] Creating new payment for booking {booking.BookingId}");
 				payment = new Domain.Entities.Payment
 				{
 					PaymentCode = $"PAY{DateTime.UtcNow:yyyyMMddHHmmss}{booking.BookingId}",
@@ -195,9 +218,11 @@ public class PaymentService
 					BuyerAddress = invoice.BillingAddress
 				};
 				await _paymentRepository.CreateAsync(payment);
+				Console.WriteLine($"[DEBUG] Payment created successfully");
 			}
 			else
 			{
+				Console.WriteLine($"[DEBUG] Payment already exists, updating status to PAID");
 				payment.Status = "PAID";
 				payment.PaidAt = DateTime.UtcNow;
 				await _paymentRepository.UpdateAsync(payment);
@@ -213,7 +238,56 @@ public class PaymentService
 		}
 
 		await _bookingRepository.UpdateBookingAsync(booking);
+		Console.WriteLine($"[DEBUG] Booking {booking.BookingId} updated successfully");
 		return true;
+	}
+
+	private async Task CreateInvoiceItemsFromBookingServicesAsync(Domain.Entities.Invoice invoice, Domain.Entities.Booking booking)
+	{
+		try
+		{
+			Console.WriteLine($"[DEBUG] Creating InvoiceItems for invoice {invoice.InvoiceId}");
+			
+			// Load booking services
+            var bookingServices = booking.BookingServices != null ? new List<Domain.Entities.BookingService>(booking.BookingServices) : new List<Domain.Entities.BookingService>();
+			
+			if (!bookingServices.Any())
+			{
+				Console.WriteLine($"[DEBUG] No booking services found for booking {booking.BookingId}");
+				return;
+			}
+
+            var invoiceItems = new List<Domain.Entities.InvoiceItem>();
+			
+			foreach (var bookingService in bookingServices)
+			{
+				var invoiceItem = new Domain.Entities.InvoiceItem
+				{
+					InvoiceId = invoice.InvoiceId,
+					PartId = null, // Service không có PartId
+					Description = bookingService.Service?.ServiceName ?? "Dịch vụ",
+					Quantity = bookingService.Quantity,
+					UnitPrice = bookingService.UnitPrice,
+					LineTotal = bookingService.TotalPrice
+				};
+				
+				invoiceItems.Add(invoiceItem);
+				Console.WriteLine($"[DEBUG] Created InvoiceItem: {invoiceItem.Description} - Qty: {invoiceItem.Quantity} - Price: {invoiceItem.UnitPrice}");
+			}
+
+			// Lưu InvoiceItems vào database
+			if (invoiceItems.Any())
+			{
+				// Cần thêm method CreateInvoiceItemsAsync vào InvoiceRepository
+				await _invoiceRepository.CreateInvoiceItemsAsync(invoiceItems);
+				Console.WriteLine($"[DEBUG] Created {invoiceItems.Count} InvoiceItems successfully");
+			}
+		}
+		catch (Exception ex)
+		{
+                Console.WriteLine($"[ERROR] Failed to create InvoiceItems: {ex.Message}");
+                throw;
+		}
 	}
 
 	

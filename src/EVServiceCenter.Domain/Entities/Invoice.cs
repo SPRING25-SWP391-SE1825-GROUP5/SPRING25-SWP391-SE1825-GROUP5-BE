@@ -31,7 +31,7 @@ public partial class Invoice
 
     public int? BookingId { get; set; }
 
-    public int? ParentInvoiceId { get; set; }
+    // public int? ParentInvoiceId { get; set; } // Column không tồn tại trong database
 
     public virtual Customer Customer { get; set; }
 

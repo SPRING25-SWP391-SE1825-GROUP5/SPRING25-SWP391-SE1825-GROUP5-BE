@@ -62,6 +62,7 @@ namespace EVServiceCenter.Application.Service
                     DayOfWeek = request.DayOfWeek,
                     StartTime = request.StartTime,
                     EndTime = request.EndTime,
+                    ScheduleDate = request.ScheduleDate,
                     IsActive = request.IsActive
                 };
 
@@ -405,6 +406,7 @@ namespace EVServiceCenter.Application.Service
                 existingSchedule.DayOfWeek = request.DayOfWeek;
                 existingSchedule.StartTime = request.StartTime;
                 existingSchedule.EndTime = request.EndTime;
+                existingSchedule.ScheduleDate = request.ScheduleDate;
                 existingSchedule.IsActive = request.IsActive;
 
                 var updatedSchedule = await _centerScheduleRepository.UpdateCenterScheduleAsync(existingSchedule);
@@ -444,6 +446,7 @@ namespace EVServiceCenter.Application.Service
                 DayOfWeekName = GetDayOfWeekName(schedule.DayOfWeek),
                 StartTime = schedule.StartTime,
                 EndTime = schedule.EndTime,
+                ScheduleDate = schedule.ScheduleDate,
                 // SlotLength removed
                 IsActive = schedule.IsActive,
                 CreatedAt = DateTime.UtcNow

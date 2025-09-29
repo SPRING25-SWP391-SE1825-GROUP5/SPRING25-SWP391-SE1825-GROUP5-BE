@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Principal;
 using System.Text;
+using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Security.Claims;
@@ -125,7 +126,7 @@ namespace EVServiceCenter.Application.Service
             // Kiểm tra email format
             if (!IsValidEmail(request.Email))
             {
-                errors.Add("Email phải có đuôi @gmail.com");
+                errors.Add("Email không đúng định dạng");
             }
 
             // Kiểm tra password strength
@@ -886,9 +887,7 @@ namespace EVServiceCenter.Application.Service
 
         private bool IsValidEmail(string email)
         {
-            // Chỉ chấp nhận email có đuôi @gmail.com
-            var gmailRegex = new Regex(@"^[a-zA-Z0-9._%+-]+@gmail\.com$");
-            return gmailRegex.IsMatch(email);
+            return !string.IsNullOrWhiteSpace(email) && new EmailAddressAttribute().IsValid(email);
         }
 
         private bool IsValidPassword(string password)

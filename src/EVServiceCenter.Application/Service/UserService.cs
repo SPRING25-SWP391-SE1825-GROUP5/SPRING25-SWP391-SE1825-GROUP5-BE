@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.ComponentModel.DataAnnotations;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
@@ -326,9 +327,9 @@ namespace EVServiceCenter.Application.Service
             var errors = new List<string>();
 
             // Check email format
-            if (!IsValidEmail(request.Email))
+            if (string.IsNullOrWhiteSpace(request.Email) || !new EmailAddressAttribute().IsValid(request.Email))
             {
-                errors.Add("Email phải có đuôi @gmail.com");
+                errors.Add("Email không đúng định dạng");
             }
 
             // Check password strength
@@ -422,14 +423,9 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        private bool IsValidEmail(string email)
-        {
-            if (string.IsNullOrWhiteSpace(email))
-                return false;
-
-            var gmailRegex = new Regex(@"^[a-zA-Z0-9._%+-]+@gmail\.com$");
-            return gmailRegex.IsMatch(email);
-        }
+        // Cho phép tất cả domain hợp lệ theo chuẩn EmailAddressAttribute
+        private bool IsValidEmail(string email) =>
+            !string.IsNullOrWhiteSpace(email) && new EmailAddressAttribute().IsValid(email);
 
         private bool IsValidPassword(string password)
         {

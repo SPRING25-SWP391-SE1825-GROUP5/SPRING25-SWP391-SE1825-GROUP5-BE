@@ -20,5 +20,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<List<CenterSchedule>> GetAvailableSchedulesAsync(int centerId, byte dayOfWeek, TimeOnly startTime, TimeOnly endTime);
         Task<List<CenterSchedule>> GetSchedulesByCenterDayAndTimeAsync(int centerId, byte dayOfWeek, TimeOnly startTime, TimeOnly endTime);
         Task<bool> UpdateScheduleStatusAsync(List<int> scheduleIds, bool isActive);
+        Task<List<CenterSchedule>> GetSchedulesForDateAsync(int centerId, DateOnly date, byte targetDow);
     }
 }

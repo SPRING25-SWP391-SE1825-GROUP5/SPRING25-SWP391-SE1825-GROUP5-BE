@@ -16,5 +16,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<bool> TechnicianExistsAsync(int technicianId);
         Task<bool> IsTechnicianCodeUniqueAsync(string technicianCode, int? excludeTechnicianId = null);
         Task<bool> IsUserAlreadyTechnicianAsync(int userId);
+        Task UpsertSkillsAsync(int technicianId, IEnumerable<TechnicianSkill> skills);
+        Task RemoveSkillAsync(int technicianId, int skillId);
     }
 }

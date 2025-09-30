@@ -16,17 +16,20 @@ public class OrderService : IOrderService
     private readonly IOrderStatusHistoryRepository _orderStatusHistoryRepository;
     private readonly IShoppingCartRepository _shoppingCartRepository;
     private readonly ICustomerRepository _customerRepository;
+    private readonly IPartRepository _partRepository;
 
     public OrderService(
         IOrderRepository orderRepository,
         IOrderStatusHistoryRepository orderStatusHistoryRepository,
         IShoppingCartRepository shoppingCartRepository,
-        ICustomerRepository customerRepository)
+        ICustomerRepository customerRepository,
+        IPartRepository partRepository)
     {
         _orderRepository = orderRepository;
         _orderStatusHistoryRepository = orderStatusHistoryRepository;
         _shoppingCartRepository = shoppingCartRepository;
         _customerRepository = customerRepository;
+        _partRepository = partRepository;
     }
 
     public async Task<List<OrderResponse>> GetByCustomerIdAsync(int customerId)
@@ -105,6 +108,77 @@ public class OrderService : IOrderService
         await _shoppingCartRepository.DeleteByCustomerIdAsync(request.CustomerId);
 
         return MapToResponse(createdOrder);
+    }
+
+    public async Task<OrderResponse> CreateQuickOrderAsync(QuickOrderRequest request)
+    {
+        // Validate customer exists
+        var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
+        if (customer == null)
+            throw new ArgumentException("Khách hàng không tồn tại");
+
+        if (request.Items == null || !request.Items.Any())
+            throw new ArgumentException("Danh sách sản phẩm không được rỗng");
+
+        // Validate parts, active, and compute total
+        var orderItems = new List<OrderItem>();
+        decimal total = 0m;
+        foreach (var item in request.Items)
+        {
+            if (item.PartId <= 0 || item.Quantity <= 0)
+                throw new ArgumentException("Sản phẩm hoặc số lượng không hợp lệ");
+
+            var part = await _partRepository.GetPartByIdAsync(item.PartId);
+            if (part == null)
+                throw new ArgumentException($"Sản phẩm {item.PartId} không tồn tại");
+            if (!part.IsActive)
+                throw new ArgumentException($"Sản phẩm {part.PartName} đã ngưng hoạt động");
+
+            var unitPrice = part.UnitPrice;
+            var lineTotal = unitPrice * item.Quantity;
+            total += lineTotal;
+
+            orderItems.Add(new OrderItem
+            {
+                PartId = part.PartId,
+                Quantity = item.Quantity,
+                UnitPrice = unitPrice,
+                LineTotal = lineTotal
+            });
+        }
+
+        var orderNumber = await _orderRepository.GenerateOrderNumberAsync();
+        var order = new Order
+        {
+            CustomerId = request.CustomerId,
+            OrderNumber = orderNumber,
+            TotalAmount = total,
+            Status = "PENDING",
+            Notes = request.Notes,
+            ShippingAddress = !string.IsNullOrWhiteSpace(request.ShippingAddress)
+                ? request.ShippingAddress
+                : (customer?.User?.Address ?? customer?.Email ?? "UNKNOWN"),
+            ShippingPhone = !string.IsNullOrWhiteSpace(request.ShippingPhone)
+                ? request.ShippingPhone
+                : (customer?.User?.PhoneNumber ?? customer?.NormalizedPhone ?? "UNKNOWN"),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            OrderItems = orderItems
+        };
+
+        var created = await _orderRepository.AddAsync(order);
+
+        var statusHistory = new OrderStatusHistory
+        {
+            OrderId = created.OrderId,
+            Status = "PENDING",
+            Notes = "Đơn hàng mua ngay được tạo",
+            SystemGenerated = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _orderStatusHistoryRepository.AddAsync(statusHistory);
+
+        return MapToResponse(created);
     }
 
     public async Task<List<OrderItemSimpleResponse>> GetItemsAsync(int orderId)

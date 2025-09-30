@@ -190,6 +190,33 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
+    /// Mua ngay: tạo đơn trực tiếp từ danh sách sản phẩm, không dùng giỏ hàng
+    /// </summary>
+    [HttpPost("customers/{customerId}/orders/quick")]
+    public async Task<IActionResult> CreateQuickOrder(int customerId, [FromBody] QuickOrderRequest request)
+    {
+        try
+        {
+            if (!ModelState.IsValid || request == null)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+            }
+            request.CustomerId = customerId;
+            var order = await _orderService.CreateQuickOrderAsync(request);
+            return Ok(new { success = true, data = order, message = "Đã tạo đơn hàng mua ngay thành công" });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Cập nhật trạng thái đơn hàng
     /// </summary>
     [HttpPut("{orderId}/status")]

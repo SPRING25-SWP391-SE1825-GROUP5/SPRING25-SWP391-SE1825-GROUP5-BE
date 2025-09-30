@@ -87,6 +87,7 @@ builder.Services.AddScoped<IPartService, PartService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<GuestBookingService>();
+builder.Services.AddScoped<ISkillService, SkillService>();
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ICenterScheduleService, CenterScheduleService>();
@@ -132,6 +133,7 @@ builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
 builder.Services.AddScoped<ICenterScheduleRepository, CenterScheduleRepository>();
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
+builder.Services.AddScoped<ISkillRepository, SkillRepository>();
 
 // E-commerce repositories
 builder.Services.AddScoped<IShoppingCartRepository, ShoppingCartRepository>();

@@ -68,6 +68,9 @@ public partial class EVDbContext : DbContext
     public  DbSet<Technician> Technicians { get; set; }
 
     public  DbSet<TechnicianTimeSlot> TechnicianTimeSlots { get; set; }
+    public  DbSet<Skill> Skills { get; set; }
+    public  DbSet<TechnicianSkill> TechnicianSkills { get; set; }
+    public  DbSet<SeveritySkillRequirement> SeveritySkillRequirements { get; set; }
 
     public  DbSet<TimeSlot> TimeSlots { get; set; }
 
@@ -130,6 +133,7 @@ public partial class EVDbContext : DbContext
                 .HasDefaultValue("PENDING");
             entity.Property(e => e.TotalEstimatedCost).HasColumnType("decimal(12, 2)");
             entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
+            entity.Property(e => e.Severity).HasColumnType("tinyint").HasDefaultValue((byte)2);
             // TotalSlots removed in single-slot model
             entity.Property(e => e.UpdatedAt)
                 .HasPrecision(0)
@@ -790,6 +794,7 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.TechnicianCode)
                 .IsRequired()
                 .HasMaxLength(20);
+            entity.Property(e => e.Rating).HasColumnType("decimal(3, 2)").HasDefaultValue(null);
             entity.Property(e => e.UserId).HasColumnName("UserID");
 
             entity.HasOne(d => d.Center).WithMany(p => p.Technicians)
@@ -801,6 +806,54 @@ public partial class EVDbContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Tech_Users");
+        });
+
+        modelBuilder.Entity<Skill>(entity =>
+        {
+            entity.HasKey(e => e.SkillId);
+            entity.ToTable("Skills", "dbo");
+            entity.Property(e => e.SkillId).HasColumnName("SkillID");
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Description).HasMaxLength(255);
+            entity.HasIndex(e => e.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<TechnicianSkill>(entity =>
+        {
+            entity.HasKey(e => new { e.TechnicianId, e.SkillId });
+            entity.ToTable("TechnicianSkills", "dbo");
+            entity.Property(e => e.TechnicianId).HasColumnName("TechnicianID");
+            entity.Property(e => e.SkillId).HasColumnName("SkillID");
+            entity.Property(e => e.Level).HasDefaultValue((byte)3);
+            entity.Property(e => e.Years).HasDefaultValue((byte)0);
+
+            entity.HasOne(e => e.Technician)
+                .WithMany(t => t.TechnicianSkills)
+                .HasForeignKey(e => e.TechnicianId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_TechSkills_Technicians");
+
+            entity.HasOne(e => e.Skill)
+                .WithMany(s => s.TechnicianSkills)
+                .HasForeignKey(e => e.SkillId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_TechSkills_Skills");
+        });
+
+        modelBuilder.Entity<SeveritySkillRequirement>(entity =>
+        {
+            entity.HasKey(e => new { e.Severity, e.SkillId });
+            entity.ToTable("SeveritySkillRequirements", "dbo");
+            entity.Property(e => e.Severity).HasColumnType("tinyint");
+            entity.Property(e => e.SkillId).HasColumnName("SkillID");
+            entity.Property(e => e.MinLevel).HasColumnType("tinyint");
+            entity.Property(e => e.Notes).HasMaxLength(200);
+
+            entity.HasOne(e => e.Skill)
+                .WithMany()
+                .HasForeignKey(e => e.SkillId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_SeveritySkillReq_Skills");
         });
 
         modelBuilder.Entity<TechnicianTimeSlot>(entity =>

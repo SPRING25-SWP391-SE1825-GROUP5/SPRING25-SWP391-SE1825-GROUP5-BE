@@ -22,6 +22,34 @@ namespace EVServiceCenter.Application.Service
             _timeSlotRepository = timeSlotRepository;
             _bookingRepository = bookingRepository;
         }
+        public async Task UpsertSkillsAsync(int technicianId, UpsertTechnicianSkillsRequest request)
+        {
+            if (technicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
+            if (request == null || request.Items == null || request.Items.Count == 0)
+                throw new ArgumentException("Danh sách kỹ năng không được rỗng");
+
+            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
+            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
+
+            var skills = request.Items.Select(i => new TechnicianSkill
+            {
+                TechnicianId = technicianId,
+                SkillId = i.SkillId,
+                Level = i.Level,
+                Years = i.Years
+            });
+
+            await _technicianRepository.UpsertSkillsAsync(technicianId, skills);
+        }
+
+        public async Task RemoveSkillAsync(int technicianId, int skillId)
+        {
+            if (technicianId <= 0 || skillId <= 0)
+                throw new ArgumentException("Thông tin không hợp lệ");
+            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
+            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
+            await _technicianRepository.RemoveSkillAsync(technicianId, skillId);
+        }
         public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date)
         {
             var result = new TechnicianBookingsResponse

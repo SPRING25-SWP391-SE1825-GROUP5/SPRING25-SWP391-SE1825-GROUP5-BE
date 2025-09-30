@@ -30,6 +30,8 @@ public partial class Booking
 
     public DateTime UpdatedAt { get; set; }
 
+    public byte Severity { get; set; }
+
     public int? CenterScheduleId { get; set; }
 
     // One booking = one service (denormalized)

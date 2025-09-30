@@ -12,6 +12,7 @@ public interface IOrderService
     Task<OrderResponse?> GetByIdAsync(int orderId);
     Task<List<OrderResponse>> GetAllAsync();
     Task<OrderResponse> CreateOrderAsync(CreateOrderRequest request);
+    Task<OrderResponse> CreateQuickOrderAsync(QuickOrderRequest request);
     Task<OrderResponse> UpdateOrderStatusAsync(int orderId, UpdateOrderStatusRequest request);
     Task DeleteOrderAsync(int orderId);
     Task<bool> ExistsAsync(int orderId);

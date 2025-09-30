@@ -21,9 +21,13 @@ public partial class Technician
 
     public DateTime CreatedAt { get; set; }
 
+    public decimal? Rating { get; set; }
+
     public virtual ServiceCenter Center { get; set; }
 
     public virtual ICollection<TechnicianTimeSlot> TechnicianTimeSlots { get; set; } = new List<TechnicianTimeSlot>();
+
+    public virtual ICollection<TechnicianSkill> TechnicianSkills { get; set; } = new List<TechnicianSkill>();
 
     public virtual User User { get; set; }
 

@@ -96,5 +96,32 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .OrderByDescending(up => up.UsedAt)
                 .ToListAsync();
         }
+
+        public async Task<List<UserPromotion>> GetUserPromotionsByInvoiceAsync(int invoiceId)
+        {
+            return await _context.UserPromotions
+                .Include(up => up.Promotion)
+                .Where(up => up.InvoiceId == invoiceId)
+                .OrderByDescending(up => up.UsedAt)
+                .ToListAsync();
+        }
+
+        public async Task<UserPromotion> CreateUserPromotionAsync(UserPromotion userPromotion)
+        {
+            _context.UserPromotions.Add(userPromotion);
+            await _context.SaveChangesAsync();
+            return userPromotion;
+        }
+
+        public async Task<bool> DeleteUserPromotionByInvoiceAndCodeAsync(int invoiceId, string promotionCode)
+        {
+            var up = await _context.UserPromotions
+                .Include(x => x.Promotion)
+                .FirstOrDefaultAsync(x => x.InvoiceId == invoiceId && x.Promotion.Code == promotionCode);
+            if (up == null) return false;
+            _context.UserPromotions.Remove(up);
+            await _context.SaveChangesAsync();
+            return true;
+        }
     }
 }

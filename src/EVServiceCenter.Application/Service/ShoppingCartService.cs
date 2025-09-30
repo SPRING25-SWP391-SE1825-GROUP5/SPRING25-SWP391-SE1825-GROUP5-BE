@@ -41,7 +41,7 @@ public class ShoppingCartService : IShoppingCartService
     public async Task<ShoppingCartResponse> AddToCartAsync(AddToCartRequest request)
     {
         // Kiểm tra sản phẩm có tồn tại không
-        var part = await _partRepository.GetPartByIdAsync(request.PartId);
+        var part = await _partRepository.GetPartLiteByIdAsync(request.PartId);
         if (part == null)
             throw new ArgumentException("Sản phẩm không tồn tại");
 
@@ -95,12 +95,33 @@ public class ShoppingCartService : IShoppingCartService
         return MapToResponse(updatedCartItem);
     }
 
+    public async Task<ShoppingCartResponse> UpdateCartItemByCustomerAndPartAsync(int customerId, int partId, int quantity)
+    {
+        if (customerId <= 0 || partId <= 0) throw new ArgumentException("Thiếu customerId/partId");
+        if (quantity <= 0) throw new ArgumentException("Số lượng phải > 0");
+
+        var cart = await _shoppingCartRepository.GetByCustomerAndPartAsync(customerId, partId);
+        if (cart == null) throw new ArgumentException("Mục giỏ hàng không tồn tại");
+
+        cart.Quantity = quantity;
+        cart.UpdatedAt = DateTime.UtcNow;
+        cart = await _shoppingCartRepository.UpdateAsync(cart);
+        return MapToResponse(cart);
+    }
+
     public async Task DeleteCartItemAsync(int cartId)
     {
         if (!await _shoppingCartRepository.ExistsAsync(cartId))
             throw new ArgumentException("Mục giỏ hàng không tồn tại");
 
         await _shoppingCartRepository.DeleteAsync(cartId);
+    }
+
+    public async Task DeleteCartItemByCustomerAndPartAsync(int customerId, int partId)
+    {
+        var cart = await _shoppingCartRepository.GetByCustomerAndPartAsync(customerId, partId);
+        if (cart == null) return;
+        await _shoppingCartRepository.DeleteAsync(cart.CartId);
     }
 
     public async Task ClearCartAsync(int customerId)

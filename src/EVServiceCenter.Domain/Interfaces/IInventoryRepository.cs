@@ -9,7 +9,10 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<List<Inventory>> GetAllInventoriesAsync();
         Task<Inventory> GetInventoryByIdAsync(int inventoryId);
         Task<Inventory> GetInventoryByCenterAndPartAsync(int centerId, int partId);
+        Task<List<Inventory>> GetByCenterAndPartIdsAsync(int centerId, List<int> partIds);
+        Task<List<Inventory>> GetByPartIdsAsync(List<int> partIds);
         Task UpdateInventoryAsync(Inventory inventory);
+        Task<Inventory> AddInventoryAsync(Inventory inventory);
         Task<bool> InventoryExistsAsync(int inventoryId);
         Task<bool> IsCenterPartCombinationUniqueAsync(int centerId, int partId, int? excludeInventoryId = null);
     }

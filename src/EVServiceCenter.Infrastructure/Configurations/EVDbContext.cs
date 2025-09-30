@@ -117,7 +117,6 @@ public partial class EVDbContext : DbContext
 
             entity.Property(e => e.BookingId).HasColumnName("BookingID");
             entity.Property(e => e.BookingCode)
-                .IsRequired()
                 .HasMaxLength(20);
             entity.Property(e => e.CenterId).HasColumnName("CenterID");
             entity.Property(e => e.CreatedAt)
@@ -127,7 +126,6 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.SlotId).HasColumnName("SlotID");
             entity.Property(e => e.SpecialRequests).HasMaxLength(500);
             entity.Property(e => e.Status)
-                .IsRequired()
                 .HasMaxLength(20)
                 .HasDefaultValue("PENDING");
             entity.Property(e => e.TotalEstimatedCost).HasColumnType("decimal(12, 2)");
@@ -295,6 +293,7 @@ public partial class EVDbContext : DbContext
                 .HasDefaultValue("DRAFT");
             entity.Property(e => e.TotalAmount).HasColumnType("decimal(12, 2)");
             entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
+            entity.Property(e => e.OrderId).HasColumnName("OrderID");
 
             entity.HasOne(d => d.Customer).WithMany(p => p.Invoices)
                 .HasForeignKey(d => d.CustomerId)
@@ -304,6 +303,10 @@ public partial class EVDbContext : DbContext
                 .HasForeignKey(d => d.WorkOrderId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Invoices_WorkOrders");
+
+            entity.HasOne(d => d.Order).WithMany(p => p.Invoices)
+                .HasForeignKey(d => d.OrderId)
+                .HasConstraintName("FK_Invoices_Orders");
         });
 
         modelBuilder.Entity<InvoiceItem>(entity =>
@@ -321,6 +324,7 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.PartId).HasColumnName("PartID");
             entity.Property(e => e.Quantity).HasColumnType("decimal(12, 2)");
             entity.Property(e => e.UnitPrice).HasColumnType("decimal(12, 2)");
+            entity.Property(e => e.OrderItemId).HasColumnName("OrderItemID");
 
             entity.HasOne(d => d.Invoice).WithMany(p => p.InvoiceItems)
                 .HasForeignKey(d => d.InvoiceId)
@@ -330,6 +334,10 @@ public partial class EVDbContext : DbContext
             entity.HasOne(d => d.Part).WithMany(p => p.InvoiceItems)
                 .HasForeignKey(d => d.PartId)
                 .HasConstraintName("FK__InvoiceIt__PartI__3138400F");
+
+            entity.HasOne(d => d.OrderItem).WithMany(p => p.InvoiceItems)
+                .HasForeignKey(d => d.OrderItemId)
+                .HasConstraintName("FK_InvoiceItems_OrderItems");
         });
 
 
@@ -537,6 +545,19 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.InvoiceId).HasColumnName("InvoiceID");
             entity.Property(e => e.PaidAt).HasPrecision(0);
             entity.Property(e => e.PayOsorderCode).HasColumnName("PayOSOrderCode");
+            entity.Property(e => e.PaymentMethod)
+                .IsRequired()
+                .HasMaxLength(10)
+                .HasDefaultValue("PAYOS");
+            entity.Property(e => e.PaidByUserId).HasColumnName("PaidByUserId");
+            entity.Property(e => e.AttemptNo)
+                .HasDefaultValue(1);
+            entity.Property(e => e.AttemptStatus)
+                .HasMaxLength(20);
+            entity.Property(e => e.AttemptAt)
+                .HasPrecision(0);
+            entity.Property(e => e.AttemptMessage)
+                .HasMaxLength(255);
             entity.Property(e => e.PaymentCode)
                 .IsRequired()
                 .HasMaxLength(50);

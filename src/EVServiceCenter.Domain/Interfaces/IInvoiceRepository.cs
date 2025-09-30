@@ -9,6 +9,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<Invoice?> GetByBookingIdAsync(int bookingId);
         Task<Invoice> CreateMinimalAsync(Invoice invoice);
         Task CreateInvoiceItemsAsync(List<InvoiceItem> invoiceItems);
+        Task<Invoice?> GetByIdAsync(int invoiceId);
     }
 }
 

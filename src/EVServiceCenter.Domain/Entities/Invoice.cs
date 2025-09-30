@@ -31,6 +31,8 @@ public partial class Invoice
 
     public int? BookingId { get; set; }
 
+    public int? OrderId { get; set; }
+
     // public int? ParentInvoiceId { get; set; } // Column không tồn tại trong database
 
     public virtual Customer Customer { get; set; }
@@ -44,4 +46,6 @@ public partial class Invoice
     public virtual WorkOrder WorkOrder { get; set; }
 
     public virtual Booking Booking { get; set; }
+
+    public virtual Order? Order { get; set; }
 }

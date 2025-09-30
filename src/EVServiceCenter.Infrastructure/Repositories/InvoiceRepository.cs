@@ -29,6 +29,15 @@ namespace EVServiceCenter.Infrastructure.Repositories
             _db.InvoiceItems.AddRange(invoiceItems);
             await _db.SaveChangesAsync();
         }
+
+        public async Task<Invoice?> GetByIdAsync(int invoiceId)
+        {
+            return await _db.Invoices
+                .Include(i => i.Customer)
+                .Include(i => i.WorkOrder)
+                .Include(i => i.Booking)
+                .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId);
+        }
     }
 }
 

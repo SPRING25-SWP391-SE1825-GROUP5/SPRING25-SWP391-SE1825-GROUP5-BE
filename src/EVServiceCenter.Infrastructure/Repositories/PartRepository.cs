@@ -30,11 +30,36 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(p => p.PartId == partId);
         }
 
+        public async Task<Part> GetPartLiteByIdAsync(int partId)
+        {
+            // Chỉ lấy các trường cần thiết để tránh Null đọc phải ở các navigation không cần
+            return await _context.Parts
+                .AsNoTracking()
+                .Select(p => new Part
+                {
+                    PartId = p.PartId,
+                    PartNumber = p.PartNumber,
+                    PartName = p.PartName,
+                    Brand = p.Brand,
+                    UnitPrice = p.UnitPrice,
+                    Unit = p.Unit,
+                    IsActive = p.IsActive,
+                    CreatedAt = p.CreatedAt
+                })
+                .FirstOrDefaultAsync(p => p.PartId == partId);
+        }
+
         public async Task<Part> CreatePartAsync(Part part)
         {
             _context.Parts.Add(part);
             await _context.SaveChangesAsync();
             return part;
+        }
+
+        public async Task UpdatePartAsync(Part part)
+        {
+            _context.Parts.Update(part);
+            await _context.SaveChangesAsync();
         }
 
         public async Task<bool> IsPartNumberUniqueAsync(string partNumber, int? excludePartId = null)

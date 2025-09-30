@@ -36,11 +36,12 @@ public class BookingPendingCancellationService : BackgroundService
 				var bookingRepository = scope.ServiceProvider.GetRequiredService<IBookingRepository>();
 				
 				var timeoutMinutes = _configuration.GetValue<int>("Booking:PendingTimeoutMinutes", 30);
-                var all = await bookingRepository.GetAllBookingsAsync();
+                // Dùng truy vấn tối giản, tránh include để không đụng các cột NULL bắt buộc từ bảng liên quan
+                var all = await bookingRepository.GetAllForAutoCancelAsync();
                 var now = DateTime.UtcNow;
 				var cancelledCount = 0;
 				
-                foreach (var b in all.Where(b => b.Status == "PENDING"))
+                foreach (var b in all.Where(b => string.Equals(b.Status, "PENDING", StringComparison.OrdinalIgnoreCase)))
 				{
                     // Chuẩn hóa CreatedAt về UTC nếu cần
                     var created = b.CreatedAt.Kind == DateTimeKind.Unspecified
@@ -52,10 +53,20 @@ public class BookingPendingCancellationService : BackgroundService
 					{
                         var elapsed = (now - created).TotalMinutes;
                         _logger.LogInformation($"Tự động hủy booking {b.BookingId} (Code: {b.BookingCode}) sau {elapsed:F1} phút");
-						b.Status = "CANCELLED";
-						b.UpdatedAt = now;
-						await bookingRepository.UpdateBookingAsync(b);
-						cancelledCount++;
+                        // Nạp đầy đủ entity trước khi cập nhật để tránh ghi đè các FK bằng giá trị mặc định 0
+                        var full = await bookingRepository.GetBookingByIdAsync(b.BookingId);
+                        if (full != null)
+                        {
+                            if (full.Customer == null)
+                            {
+                                _logger.LogWarning($"Bỏ qua hủy booking {b.BookingId} vì thiếu Customer (tránh lỗi FK)");
+                                continue;
+                            }
+                            full.Status = "CANCELLED";
+                            full.UpdatedAt = now;
+                            await bookingRepository.UpdateBookingAsync(full);
+                            cancelledCount++;
+                        }
 					}
 				}
 				

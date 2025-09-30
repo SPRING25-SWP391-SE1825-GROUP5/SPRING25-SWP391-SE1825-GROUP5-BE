@@ -17,6 +17,10 @@ public partial class Order
 
     public string? Notes { get; set; }
 
+    public string ShippingAddress { get; set; }
+
+    public string ShippingPhone { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
@@ -28,4 +32,6 @@ public partial class Order
     public virtual ICollection<OrderStatusHistory> OrderStatusHistories { get; set; } = new List<OrderStatusHistory>();
 
     public virtual ICollection<ProductReview> ProductReviews { get; set; } = new List<ProductReview>();
+
+    public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 }

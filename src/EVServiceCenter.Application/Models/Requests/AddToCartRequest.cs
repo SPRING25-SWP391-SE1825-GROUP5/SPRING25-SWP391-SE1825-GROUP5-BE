@@ -1,10 +1,11 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace EVServiceCenter.Application.Models.Requests;
 
 public class AddToCartRequest
 {
-    [Required]
+    [JsonIgnore]
     public int CustomerId { get; set; }
 
     [Required]

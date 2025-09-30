@@ -198,6 +198,7 @@ public class WorkOrderChargesController : ControllerBase
                     PaymentCode = $"PAY{DateTime.UtcNow:yyyyMMddHHmmss}{workOrderId}",
                     InvoiceId = invoice.InvoiceId,
                     PayOsorderCode = orderCode,
+                    PaymentMethod = "PAYOS",
                     Amount = (int)Math.Round(total),
                     Status = "PAID",
                     PaidAt = DateTime.UtcNow,
@@ -233,6 +234,69 @@ public class WorkOrderChargesController : ControllerBase
             }
 
             return Ok(new { success = true, invoiceId = invoice.InvoiceId, status = "PAID" });
+        }
+
+        public class OfflinePaymentRequest
+        {
+            public int Amount { get; set; }
+            public int PaidByUserId { get; set; }
+            public string Note { get; set; }
+        }
+
+        [HttpPost("offline")]
+        public async Task<IActionResult> CreateOffline(int workOrderId, [FromBody] OfflinePaymentRequest req)
+        {
+            if (req == null || req.Amount <= 0 || req.PaidByUserId <= 0)
+                return BadRequest(new { success = false, message = "amount và paidByUserId là bắt buộc" });
+
+            var wo = await _workOrderRepo.GetByIdAsync(workOrderId);
+            if (wo == null) return NotFound(new { success = false, message = "WorkOrder không tồn tại" });
+
+            // Tính tổng chi phí phát sinh
+            var total = (wo.WorkOrderParts ?? new System.Collections.Generic.List<Domain.Entities.WorkOrderPart>())
+                .Sum(p => p.UnitCost * p.QuantityUsed);
+            if (total <= 0) total = req.Amount; // fallback theo amount nhập nếu không có parts
+
+            // Tạo invoice DETAIL
+            var invoice = new Domain.Entities.Invoice
+            {
+                InvoiceNumber = $"INV-ADJ-{DateTime.UtcNow:yyyyMMdd}-{workOrderId}",
+                WorkOrderId = workOrderId,
+                BookingId = wo.BookingId,
+                CustomerId = wo.Booking?.CustomerId,
+                BillingName = wo.Booking?.Customer?.User?.FullName ?? "Guest",
+                BillingPhone = wo.Booking?.Customer?.User?.PhoneNumber,
+                BillingAddress = wo.Booking?.Center?.Address,
+                Status = "PAID",
+                TotalAmount = total,
+                CreatedAt = DateTime.UtcNow,
+                InvoiceType = "DETAIL"
+            };
+            invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
+
+            var attemptNo = 1 + await _paymentRepo.CountByInvoiceIdAsync(invoice.InvoiceId);
+            var payment = new Domain.Entities.Payment
+            {
+                PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{workOrderId}",
+                InvoiceId = invoice.InvoiceId,
+                PayOsorderCode = null,
+                PaymentMethod = "CASH",
+                Amount = (int)Math.Round(total),
+                Status = "PAID",
+                PaidAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                BuyerName = invoice.BillingName,
+                BuyerPhone = invoice.BillingPhone,
+                BuyerAddress = invoice.BillingAddress,
+                PaidByUserId = req.PaidByUserId,
+                AttemptNo = attemptNo,
+                AttemptStatus = "COMPLETED",
+                AttemptAt = DateTime.UtcNow,
+                AttemptMessage = string.IsNullOrWhiteSpace(req.Note) ? null : req.Note,
+            };
+            await _paymentRepo.CreateAsync(payment);
+
+            return Ok(new { success = true, invoiceId = invoice.InvoiceId, paymentId = payment.PaymentId, status = payment.Status });
         }
 
         private static byte[] BuildInvoicePdf(Domain.Entities.Invoice invoice, System.Collections.Generic.List<Domain.Entities.InvoiceItem> items)

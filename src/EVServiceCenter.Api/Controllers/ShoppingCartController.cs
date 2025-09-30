@@ -1,13 +1,16 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EVServiceCenter.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "AuthenticatedUser")]
 public class ShoppingCartController : ControllerBase
 {
     private readonly IShoppingCartService _shoppingCartService;
@@ -57,11 +60,17 @@ public class ShoppingCartController : ControllerBase
     /// <summary>
     /// Thêm sản phẩm vào giỏ hàng
     /// </summary>
-    [HttpPost("add")]
-    public async Task<IActionResult> AddToCart([FromBody] AddToCartRequest request)
+    [HttpPost("customer/{customerId}/cart/items")]
+    public async Task<IActionResult> AddToCart([FromRoute] int customerId, [FromBody] AddToCartRequest request)
     {
         try
         {
+            if (!ModelState.IsValid || request == null)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+            }
+            request.CustomerId = customerId;
             var cartItem = await _shoppingCartService.AddToCartAsync(request);
             return Ok(new { success = true, data = cartItem, message = "Đã thêm sản phẩm vào giỏ hàng" });
         }
@@ -71,19 +80,19 @@ public class ShoppingCartController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = "Lỗi khi thêm sản phẩm vào giỏ hàng" });
+            return BadRequest(new { success = false, message = ex.Message });
         }
     }
 
     /// <summary>
     /// Cập nhật số lượng sản phẩm trong giỏ hàng
     /// </summary>
-    [HttpPut("{cartId}")]
-    public async Task<IActionResult> UpdateCartItem(int cartId, [FromBody] UpdateCartItemRequest request)
+    [HttpPut("customer/{customerId}/cart/items/{partId}")]
+    public async Task<IActionResult> UpdateCartItem([FromRoute] int customerId, [FromRoute] int partId, [FromBody] UpdateCartItemRequest request)
     {
         try
         {
-            var cartItem = await _shoppingCartService.UpdateCartItemAsync(cartId, request);
+            var cartItem = await _shoppingCartService.UpdateCartItemByCustomerAndPartAsync(customerId, partId, request.Quantity);
             return Ok(new { success = true, data = cartItem, message = "Đã cập nhật giỏ hàng" });
         }
         catch (ArgumentException ex)
@@ -99,12 +108,12 @@ public class ShoppingCartController : ControllerBase
     /// <summary>
     /// Xóa sản phẩm khỏi giỏ hàng
     /// </summary>
-    [HttpDelete("{cartId}")]
-    public async Task<IActionResult> DeleteCartItem(int cartId)
+    [HttpDelete("customer/{customerId}/cart/items/{partId}")]
+    public async Task<IActionResult> DeleteCartItem([FromRoute] int customerId, [FromRoute] int partId)
     {
         try
         {
-            await _shoppingCartService.DeleteCartItemAsync(cartId);
+            await _shoppingCartService.DeleteCartItemByCustomerAndPartAsync(customerId, partId);
             return Ok(new { success = true, message = "Đã xóa sản phẩm khỏi giỏ hàng" });
         }
         catch (ArgumentException ex)
@@ -120,8 +129,8 @@ public class ShoppingCartController : ControllerBase
     /// <summary>
     /// Xóa toàn bộ giỏ hàng
     /// </summary>
-    [HttpDelete("customer/{customerId}")]
-    public async Task<IActionResult> ClearCart(int customerId)
+    [HttpDelete("customer/{customerId}/cart")]
+    public async Task<IActionResult> ClearCart([FromRoute] int customerId)
     {
         try
         {

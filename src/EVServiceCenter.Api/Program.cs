@@ -348,6 +348,12 @@ builder.Services.AddSwaggerGen(c =>
 // ============================================================================
 var app = builder.Build();
 
+// Detailed errors and developer exception page for easier debugging in Development
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+
 // ============================================================================
 // PORT CONFIGURATION (Production/Deployment)
 // ============================================================================

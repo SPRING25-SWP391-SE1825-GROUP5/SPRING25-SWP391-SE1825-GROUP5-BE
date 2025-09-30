@@ -13,6 +13,8 @@ public interface IShoppingCartService
     Task<ShoppingCartResponse> AddToCartAsync(AddToCartRequest request);
     Task<ShoppingCartResponse> UpdateCartItemAsync(int cartId, UpdateCartItemRequest request);
     Task DeleteCartItemAsync(int cartId);
+    Task<ShoppingCartResponse> UpdateCartItemByCustomerAndPartAsync(int customerId, int partId, int quantity);
+    Task DeleteCartItemByCustomerAndPartAsync(int customerId, int partId);
     Task ClearCartAsync(int customerId);
     Task<bool> ExistsAsync(int cartId);
 }

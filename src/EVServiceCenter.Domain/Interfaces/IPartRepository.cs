@@ -8,7 +8,9 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<List<Part>> GetAllPartsAsync();
         Task<Part> GetPartByIdAsync(int partId);
+        Task<Part> GetPartLiteByIdAsync(int partId);
         Task<Part> CreatePartAsync(Part part);
+        Task UpdatePartAsync(Part part);
         Task<bool> IsPartNumberUniqueAsync(string partNumber, int? excludePartId = null);
         Task<bool> PartExistsAsync(int partId);
     }

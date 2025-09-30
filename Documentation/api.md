@@ -318,6 +318,81 @@ Ghi chú:
 
 ---
 
+## 3. Payment APIs
+
+### 3.1 Tạo thanh toán offline cho Booking
+- Endpoint: `POST /api/bookings/{bookingId}/payments/offline`
+- Authorization: Required (StaffOrAdmin)
+- Request Body:
+```json
+{
+  "amount": 1500000,
+  "paidByUserId": 42,
+  "note": "Thu tiền mặt tại quầy"
+}
+```
+- Response:
+```json
+{
+  "paymentId": 123,
+  "paymentCode": "PAYCASH202509301530001",
+  "attemptNo": 1,
+  "attemptStatus": "COMPLETED",
+  "attemptAt": "2025-09-30T15:30:00Z",
+  "status": "PAID",
+  "amount": 1500000,
+  "paymentMethod": "CASH",
+  "paidByUserId": 42
+}
+```
+- Ghi chú: Hệ thống tự đảm bảo có `Invoice` từ `bookingId`, `PayOSOrderCode = null`, tăng `AttemptNo` theo `Invoice`.
+
+### 3.2 Danh sách payments theo Invoice
+- Endpoint: `GET /api/invoices/{invoiceId}/payments`
+- Authorization: Required (StaffOrAdmin)
+- Query optional: `status`, `method` (PAYOS|CASH), `from`, `to`
+- Response:
+```json
+[
+  {
+    "paymentId": 201,
+    "paymentCode": "PAYCASH202509301535001",
+    "attemptNo": 1,
+    "attemptStatus": "COMPLETED",
+    "attemptAt": "2025-09-30T15:35:00Z",
+    "attemptMessage": "Thu tiền mặt",
+    "status": "PAID",
+    "paymentMethod": "CASH",
+    "amount": 1500000,
+    "paidByUserId": 42,
+    "createdAt": "2025-09-30T15:35:00Z",
+    "paidAt": "2025-09-30T15:35:00Z"
+  }
+]
+```
+
+### 3.3 Tạo thanh toán offline cho phát sinh WorkOrderCharges
+- Endpoint: `POST /api/workorders/{workOrderId}/charges/offline`
+- Authorization: Required (StaffOrAdmin)
+- Request Body:
+```json
+{
+  "amount": 500000,
+  "paidByUserId": 42,
+  "note": "Thu tiền mặt phát sinh"
+}
+```
+- Response:
+```json
+{
+  "success": true,
+  "invoiceId": 789,
+  "paymentId": 345,
+  "status": "PAID"
+}
+```
+- Ghi chú: Tạo `Invoice` DETAIL từ `WorkOrderParts` (nếu có), tạo `Payment` với `paymentMethod = "CASH"`, `status = "PAID"`.
+
 ## 4. Customer APIs (`/api/customer`)
 
 ### 4.1 Lấy thông tin khách hàng hiện tại

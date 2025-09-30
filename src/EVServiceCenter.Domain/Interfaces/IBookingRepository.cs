@@ -16,5 +16,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<bool> IsBookingCodeUniqueAsync(string bookingCode, int? excludeBookingId = null);
         Task<List<Booking>> GetByTechnicianAndDateAsync(int technicianId, DateOnly date);
         // BookingServices removed in single-service model
+        Task<List<Booking>> GetAllForAutoCancelAsync();
     }
 }

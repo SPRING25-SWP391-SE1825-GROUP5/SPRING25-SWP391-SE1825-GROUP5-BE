@@ -19,8 +19,9 @@ public class PaymentService
 {
 	private readonly HttpClient _httpClient;
 	private readonly PayOsOptions _options;
-	private readonly IBookingRepository _bookingRepository;
+    private readonly IBookingRepository _bookingRepository;
     private readonly IWorkOrderRepository _workOrderRepository;
+    private readonly IOrderRepository _orderRepository;
 	private readonly IInvoiceRepository _invoiceRepository;
 	private readonly IPaymentRepository _paymentRepository;
     private readonly ITechnicianRepository _technicianRepository;
@@ -30,12 +31,13 @@ public class PaymentService
     private readonly IMaintenanceChecklistRepository _checklistRepository;
     private readonly IMaintenanceChecklistResultRepository _checklistResultRepository;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IServicePartRepository servicePartRepository, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IServicePartRepository servicePartRepository, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
 		_bookingRepository = bookingRepository;
 		_workOrderRepository = workOrderRepository;
+        _orderRepository = orderRepository;
 		_invoiceRepository = invoiceRepository;
 		_paymentRepository = paymentRepository;
         _technicianRepository = technicianRepository;
@@ -89,12 +91,70 @@ public class PaymentService
 		var response = await _httpClient.SendAsync(request);
 		var responseText = await response.Content.ReadAsStringAsync();
 		response.EnsureSuccessStatusCode();
-		var json = JsonDocument.Parse(responseText).RootElement;
-		if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
-			dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
-		{
-			return urlElem.GetString();
-		}
+        var json = JsonDocument.Parse(responseText).RootElement;
+        if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
+            dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
+        {
+            return urlElem.GetString();
+        }
+
+        var message =
+            (json.TryGetProperty("message", out var msgElem) && msgElem.ValueKind == JsonValueKind.String ? msgElem.GetString() : null)
+            ?? (json.TryGetProperty("desc", out var descElem) && descElem.ValueKind == JsonValueKind.String ? descElem.GetString() : null)
+            ?? "Không nhận được checkoutUrl từ PayOS";
+        throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
+    }
+
+    public async Task<string> CreateOrderPaymentLinkAsync(int orderId)
+    {
+        var order = await _orderRepository.GetByIdAsync(orderId);
+        if (order == null) throw new InvalidOperationException("Đơn hàng không tồn tại");
+
+        var amountDecimal = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? order.TotalAmount;
+        var amount = (int)Math.Round(amountDecimal);
+        if (amount < 1000) amount = 1000;
+
+        var orderCode = orderId; // PayOS yêu cầu số
+        var rawDesc = $"Order {order.OrderNumber}";
+        var description = rawDesc.Length > 25 ? rawDesc.Substring(0, 25) : rawDesc;
+
+        var returnUrl = (_options.ReturnUrl ?? string.Empty);
+        var cancelUrl = (_options.CancelUrl ?? string.Empty);
+
+        var canonical = string.Create(CultureInfo.InvariantCulture, $"amount={amount}&cancelUrl={cancelUrl}&description={description}&orderCode={orderCode}&returnUrl={returnUrl}");
+        var signature = ComputeHmacSha256Hex(canonical, _options.ChecksumKey);
+
+        var items = (order.OrderItems ?? new List<Domain.Entities.OrderItem>())
+            .Select(i => new { name = i.Part?.PartName ?? $"Part {i.PartId}", quantity = i.Quantity, price = (int)Math.Round(i.UnitPrice) })
+            .DefaultIfEmpty(new { name = $"Order {order.OrderNumber}", quantity = 1, price = amount })
+            .ToArray();
+
+        var payload = new
+        {
+            orderCode,
+            amount,
+            description,
+            items,
+            returnUrl,
+            cancelUrl,
+            signature
+        };
+
+        var createUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests";
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(createUrl));
+        request.Headers.Add("x-client-id", _options.ClientId);
+        request.Headers.Add("x-api-key", _options.ApiKey);
+        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+        var response = await _httpClient.SendAsync(request);
+        var responseText = await response.Content.ReadAsStringAsync();
+        response.EnsureSuccessStatusCode();
+        var json = JsonDocument.Parse(responseText).RootElement;
+        if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
+            dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
+        {
+            return urlElem.GetString();
+    }
 		var message =
 			(json.TryGetProperty("message", out var msgElem) && msgElem.ValueKind == JsonValueKind.String ? msgElem.GetString() : null)
 			?? (json.TryGetProperty("desc", out var descElem) && descElem.ValueKind == JsonValueKind.String ? descElem.GetString() : null)
@@ -285,6 +345,10 @@ public class PaymentService
 					PaymentCode = $"PAY{DateTime.UtcNow:yyyyMMddHHmmss}{booking.BookingId}",
 					InvoiceId = invoice.InvoiceId,
 					PayOsorderCode = payOsOrder,
+					PaymentMethod = "PAYOS",
+					AttemptNo = 1,
+					AttemptStatus = status,
+					AttemptAt = DateTime.UtcNow,
 					Amount = (int)Math.Round((booking.TotalEstimatedCost ?? 0m)),
 					Status = "PAID",
 					PaidAt = DateTime.UtcNow,
@@ -300,6 +364,8 @@ public class PaymentService
 			{
 				Console.WriteLine($"[DEBUG] Payment already exists, updating status to PAID");
 				payment.Status = "PAID";
+				payment.AttemptStatus = status;
+				payment.AttemptAt = DateTime.UtcNow;
 				payment.PaidAt = DateTime.UtcNow;
 				await _paymentRepository.UpdateAsync(payment);
 			}

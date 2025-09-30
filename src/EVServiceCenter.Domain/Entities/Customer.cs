@@ -11,9 +11,9 @@ public partial class Customer
 
     public string CustomerCode { get; set; }
 
-    public string NormalizedPhone { get; set; }
+    public string? NormalizedPhone { get; set; }
 
-    public string Email { get; set; }
+    public string? Email { get; set; }
 
     public bool IsGuest { get; set; }
 

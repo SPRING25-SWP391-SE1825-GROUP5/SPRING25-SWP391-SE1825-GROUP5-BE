@@ -22,4 +22,8 @@ public partial class InvoiceItem
     public virtual Invoice Invoice { get; set; }
 
     public virtual Part Part { get; set; }
+
+    public int? OrderItemId { get; set; }
+
+    public virtual OrderItem? OrderItem { get; set; }
 }

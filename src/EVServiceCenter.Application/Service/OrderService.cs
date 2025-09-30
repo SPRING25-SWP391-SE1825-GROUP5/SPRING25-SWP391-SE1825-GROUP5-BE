@@ -70,6 +70,12 @@ public class OrderService : IOrderService
             TotalAmount = totalAmount,
             Status = "PENDING",
             Notes = request.Notes,
+            ShippingAddress = !string.IsNullOrWhiteSpace(request.ShippingAddress)
+                ? request.ShippingAddress
+                : (customer?.User?.Address ?? customer?.Email ?? "UNKNOWN"),
+            ShippingPhone = !string.IsNullOrWhiteSpace(request.ShippingPhone)
+                ? request.ShippingPhone
+                : (customer?.User?.PhoneNumber ?? customer?.NormalizedPhone ?? "UNKNOWN"),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             OrderItems = cartItems.Select(cartItem => new OrderItem
@@ -99,6 +105,38 @@ public class OrderService : IOrderService
         await _shoppingCartRepository.DeleteByCustomerIdAsync(request.CustomerId);
 
         return MapToResponse(createdOrder);
+    }
+
+    public async Task<List<OrderItemSimpleResponse>> GetItemsAsync(int orderId)
+    {
+        var order = await _orderRepository.GetByIdAsync(orderId);
+        if (order == null) throw new ArgumentException("Đơn hàng không tồn tại.");
+        return order.OrderItems
+            .Select(oi => new OrderItemSimpleResponse
+            {
+                OrderItemId = oi.OrderItemId,
+                PartId = oi.PartId,
+                PartName = oi.Part?.PartName ?? string.Empty,
+                UnitPrice = oi.UnitPrice,
+                Quantity = oi.Quantity,
+                Subtotal = oi.LineTotal
+            }).ToList();
+    }
+
+    public async Task<List<OrderStatusHistoryResponse>> GetStatusHistoryAsync(int orderId)
+    {
+        var order = await _orderRepository.GetByIdAsync(orderId);
+        if (order == null) throw new ArgumentException("Đơn hàng không tồn tại.");
+        var list = order.OrderStatusHistories ?? new List<OrderStatusHistory>();
+        return list.Select(h => new OrderStatusHistoryResponse
+        {
+            HistoryId = h.HistoryId,
+            Status = h.Status,
+            Notes = h.Notes,
+            CreatedBy = h.CreatedByUser?.FullName,
+            SystemGenerated = h.SystemGenerated,
+            CreatedAt = h.CreatedAt
+        }).ToList();
     }
 
     public async Task<OrderResponse> UpdateOrderStatusAsync(int orderId, UpdateOrderStatusRequest request)

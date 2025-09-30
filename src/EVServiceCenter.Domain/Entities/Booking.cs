@@ -7,7 +7,7 @@ public partial class Booking
 {
     public int BookingId { get; set; }
 
-    public string BookingCode { get; set; }
+    public string? BookingCode { get; set; }
 
     public int CustomerId { get; set; }
 
@@ -20,7 +20,7 @@ public partial class Booking
     // Single-slot booking: store one SlotId
     public int SlotId { get; set; }
 
-    public string Status { get; set; }
+    public string? Status { get; set; }
 
     public decimal? TotalEstimatedCost { get; set; }
 

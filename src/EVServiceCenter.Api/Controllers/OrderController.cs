@@ -1,20 +1,26 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Application.Service;
 using EVServiceCenter.Application.Models.Requests;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EVServiceCenter.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "AuthenticatedUser")]
 public class OrderController : ControllerBase
 {
     private readonly IOrderService _orderService;
+    private readonly PaymentService _paymentService;
 
-    public OrderController(IOrderService orderService)
+    public OrderController(IOrderService orderService, PaymentService paymentService)
     {
         _orderService = orderService;
+        _paymentService = paymentService;
     }
 
     /// <summary>
@@ -27,6 +33,65 @@ public class OrderController : ControllerBase
         {
             var orders = await _orderService.GetByCustomerIdAsync(customerId);
             return Ok(new { success = true, data = orders });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Danh sách item của đơn hàng
+    /// </summary>
+    [HttpGet("{orderId}/items")]
+    public async Task<IActionResult> GetItems(int orderId)
+    {
+        try
+        {
+            var items = await _orderService.GetItemsAsync(orderId);
+            return Ok(new { success = true, data = items });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (Exception)
+        {
+            return BadRequest(new { success = false, message = "Lỗi khi lấy danh sách item" });
+        }
+    }
+
+    /// <summary>
+    /// Lịch sử trạng thái đơn hàng
+    /// </summary>
+    [HttpGet("{orderId}/status/history")]
+    public async Task<IActionResult> GetStatusHistory(int orderId)
+    {
+        try
+        {
+            var history = await _orderService.GetStatusHistoryAsync(orderId);
+            return Ok(new { success = true, data = history });
+        }
+        catch (Exception)
+        {
+            return BadRequest(new { success = false, message = "Lỗi khi lấy lịch sử trạng thái" });
+        }
+    }
+
+    /// <summary>
+    /// Checkout online cho Order (PayOS) - dùng ReturnUrl callback, không webhook
+    /// </summary>
+    [HttpPost("{orderId}/checkout/online")]
+    public async Task<IActionResult> CheckoutOnline(int orderId)
+    {
+        try
+        {
+            var url = await _paymentService.CreateOrderPaymentLinkAsync(orderId);
+            return Ok(new { success = true, checkoutUrl = url });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -79,6 +144,11 @@ public class OrderController : ControllerBase
     {
         try
         {
+            if (!ModelState.IsValid || request == null)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+            }
             var order = await _orderService.CreateOrderAsync(request);
             return Ok(new { success = true, data = order, message = "Đã tạo đơn hàng thành công" });
         }
@@ -88,7 +158,34 @@ public class OrderController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = "Lỗi khi tạo đơn hàng" });
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Tạo đơn hàng từ giỏ hàng theo customerId trên route (không cần truyền ID trong body)
+    /// </summary>
+    [HttpPost("customer/{customerId}/create")]
+    public async Task<IActionResult> CreateOrderForCustomer(int customerId, [FromBody] CreateOrderRequest request)
+    {
+        try
+        {
+            if (!ModelState.IsValid || request == null)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+            }
+            request.CustomerId = customerId;
+            var order = await _orderService.CreateOrderAsync(request);
+            return Ok(new { success = true, data = order, message = "Đã tạo đơn hàng thành công" });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
         }
     }
 

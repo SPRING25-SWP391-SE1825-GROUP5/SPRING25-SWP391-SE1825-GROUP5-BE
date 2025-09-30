@@ -116,6 +116,26 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<InventoryResponse> CreateInventoryAsync(CreateInventoryRequest request)
+        {
+            // Validate center-part uniqueness
+            var existing = await _inventoryRepository.GetInventoryByCenterAndPartAsync(request.CenterId, request.PartId);
+            if (existing != null)
+                throw new ArgumentException("Tồn kho cho cặp centerId/partId đã tồn tại");
+
+            var entity = new Inventory
+            {
+                CenterId = request.CenterId,
+                PartId = request.PartId,
+                CurrentStock = request.CurrentStock,
+                MinimumStock = request.MinimumStock,
+                LastUpdated = DateTime.UtcNow
+            };
+
+            entity = await _inventoryRepository.AddInventoryAsync(entity);
+            return MapToInventoryResponse(entity);
+        }
+
         private InventoryResponse MapToInventoryResponse(Inventory inventory)
         {
             return new InventoryResponse
@@ -135,6 +155,53 @@ namespace EVServiceCenter.Application.Service
                 IsLowStock = inventory.CurrentStock <= inventory.MinimumStock,
                 IsOutOfStock = inventory.CurrentStock == 0
             };
+        }
+
+        public async Task<List<InventoryResponse>> GetAvailabilityAsync(int centerId, List<int> partIds)
+        {
+            var list = await _inventoryRepository.GetByCenterAndPartIdsAsync(centerId, partIds);
+            return list.Select(MapToInventoryResponse).ToList();
+        }
+
+        public async Task<List<InventoryAvailabilityResponse>> GetGlobalAvailabilityAsync(List<int> partIds)
+        {
+            var inventories = await _inventoryRepository.GetByPartIdsAsync(partIds);
+            var grouped = inventories
+                .GroupBy(i => i.PartId)
+                .Select(g => new InventoryAvailabilityResponse
+                {
+                    PartId = g.Key,
+                    TotalStock = g.Sum(x => x.CurrentStock),
+                    MinimumStock = g.Sum(x => x.MinimumStock),
+                    IsLowStock = g.Sum(x => x.CurrentStock) <= g.Sum(x => x.MinimumStock),
+                    IsOutOfStock = g.Sum(x => x.CurrentStock) == 0,
+                    UnitPrice = g.FirstOrDefault()?.Part?.UnitPrice ?? 0,
+                    Unit = g.FirstOrDefault()?.Part?.Unit ?? "",
+                    LastUpdated = g.Max(x => x.LastUpdated)
+                })
+                .ToList();
+            return grouped;
+        }
+
+        public async Task<List<InventoryAvailabilityResponse>> GetGlobalAvailabilityAllAsync()
+        {
+            var inventories = await _inventoryRepository.GetAllInventoriesAsync();
+            var grouped = inventories
+                .GroupBy(i => i.PartId)
+                .Select(g => new InventoryAvailabilityResponse
+                {
+                    PartId = g.Key,
+                    TotalStock = g.Sum(x => x.CurrentStock),
+                    MinimumStock = g.Sum(x => x.MinimumStock),
+                    IsLowStock = g.Sum(x => x.CurrentStock) <= g.Sum(x => x.MinimumStock),
+                    IsOutOfStock = g.Sum(x => x.CurrentStock) == 0,
+                    UnitPrice = g.FirstOrDefault()?.Part?.UnitPrice ?? 0,
+                    Unit = g.FirstOrDefault()?.Part?.Unit ?? "",
+                    LastUpdated = g.Max(x => x.LastUpdated)
+                })
+                .Where(r => r.TotalStock > 0)
+                .ToList();
+            return grouped;
         }
     }
 }

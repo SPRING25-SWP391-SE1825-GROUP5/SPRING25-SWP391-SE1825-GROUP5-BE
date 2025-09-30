@@ -62,6 +62,46 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Tạo tồn kho mới
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] CreateInventoryRequest request)
+        {
+            try
+            {
+                var created = await _inventoryService.CreateInventoryAsync(request);
+                return Ok(new { success = true, data = created });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = "Lỗi khi tạo tồn kho" });
+            }
+        }
+
+        /// <summary>
+        /// Lấy tồn kho theo center và danh sách partIds
+        /// </summary>
+        [HttpGet("availability")]
+        public async Task<IActionResult> GetAvailability([FromQuery] int centerId, [FromQuery] string partIds)
+        {
+            if (centerId <= 0 || string.IsNullOrWhiteSpace(partIds))
+                return BadRequest(new { success = false, message = "centerId và partIds là bắt buộc" });
+
+            var ids = partIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                              .Select(s => int.TryParse(s, out var x) ? x : 0)
+                              .Where(x => x > 0)
+                              .ToList();
+            if (ids.Count == 0) return BadRequest(new { success = false, message = "partIds không hợp lệ" });
+
+            var result = await _inventoryService.GetAvailabilityAsync(centerId, ids);
+            return Ok(result);
+        }
+
+        /// <summary>
         /// Lấy thông tin tồn kho theo ID
         /// </summary>
         /// <param name="id">ID tồn kho</param>

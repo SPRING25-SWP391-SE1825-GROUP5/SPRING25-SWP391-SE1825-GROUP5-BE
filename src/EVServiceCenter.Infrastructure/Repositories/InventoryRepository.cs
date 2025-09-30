@@ -42,10 +42,34 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(i => i.CenterId == centerId && i.PartId == partId);
         }
 
+        public async Task<List<Inventory>> GetByCenterAndPartIdsAsync(int centerId, List<int> partIds)
+        {
+            return await _context.Inventories
+                .Include(i => i.Center)
+                .Include(i => i.Part)
+                .Where(i => i.CenterId == centerId && partIds.Contains(i.PartId))
+                .ToListAsync();
+        }
+
+        public async Task<List<Inventory>> GetByPartIdsAsync(List<int> partIds)
+        {
+            return await _context.Inventories
+                .Include(i => i.Part)
+                .Where(i => partIds.Contains(i.PartId))
+                .ToListAsync();
+        }
+
         public async Task UpdateInventoryAsync(Inventory inventory)
         {
             _context.Inventories.Update(inventory);
             await _context.SaveChangesAsync();
+        }
+
+        public async Task<Inventory> AddInventoryAsync(Inventory inventory)
+        {
+            _context.Inventories.Add(inventory);
+            await _context.SaveChangesAsync();
+            return inventory;
         }
 
         public async Task<bool> InventoryExistsAsync(int inventoryId)

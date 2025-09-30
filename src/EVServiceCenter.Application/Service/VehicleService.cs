@@ -161,11 +161,10 @@ namespace EVServiceCenter.Application.Service
                 if (vehicle == null)
                     throw new ArgumentException("Xe không tồn tại.");
 
-                // Validate request
+                // Validate request (các điều kiện khác)
                 await ValidateUpdateVehicleRequestAsync(request, vehicleId);
 
                 // Update vehicle
-                vehicle.LicensePlate = request.LicensePlate.Trim().ToUpper();
                 vehicle.Color = request.Color.Trim();
                 vehicle.CurrentMileage = request.CurrentMileage;
                 vehicle.LastServiceDate = request.LastServiceDate;
@@ -234,12 +233,7 @@ namespace EVServiceCenter.Application.Service
         private async Task ValidateUpdateVehicleRequestAsync(UpdateVehicleRequest request, int vehicleId)
         {
             var errors = new List<string>();
-
-            // Check for duplicate license plate
-            if (!await _vehicleRepository.IsLicensePlateUniqueAsync(request.LicensePlate.Trim().ToUpper(), vehicleId))
-            {
-                errors.Add("Biển số xe này đã tồn tại. Vui lòng chọn biển số khác.");
-            }
+            // Không còn kiểm tra biển số khi cập nhật
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));

@@ -62,6 +62,35 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<PartResponse> UpdatePartAsync(int partId, UpdatePartRequest request)
+        {
+            try
+            {
+                var part = await _partRepository.GetPartByIdAsync(partId);
+                if (part == null) throw new ArgumentException("Phụ tùng không tồn tại.");
+
+                // Không cho phép đổi PartNumber khi update
+                // Chỉ cập nhật các trường còn lại
+                part.PartName = request.PartName?.Trim();
+                part.Brand = request.Brand?.Trim();
+                part.UnitPrice = request.UnitPrice;
+                part.Unit = request.Unit?.Trim();
+                part.IsActive = request.IsActive;
+
+                await _partRepository.UpdatePartAsync(part);
+
+                return MapToPartResponse(part);
+            }
+            catch (ArgumentException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi cập nhật phụ tùng: {ex.Message}");
+            }
+        }
+
         public async Task<PartResponse> GetPartByIdAsync(int partId)
         {
             try

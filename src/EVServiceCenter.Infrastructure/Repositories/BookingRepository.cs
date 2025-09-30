@@ -24,11 +24,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
             {
                 return await _context.Bookings
                     .Include(b => b.Customer)
-                    .Include(b => b.Customer.User)
+                    .ThenInclude(c => c.User)
                     .Include(b => b.Vehicle)
                     .Include(b => b.Center)
                     .Include(b => b.Slot)
                     .Include(b => b.Service)
+                    .Include(b => b.Technician)
                     .OrderByDescending(b => b.CreatedAt)
                     .ToListAsync();
             }
@@ -106,6 +107,21 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.WorkOrders)
                 .Where(b => b.TechnicianId == technicianId && b.BookingDate == date)
                 .OrderBy(b => b.Slot.SlotTime)
+                .ToListAsync();
+        }
+
+        public async Task<List<Booking>> GetAllForAutoCancelAsync()
+        {
+            // Giảm include để tránh lỗi đọc giá trị NULL ở chuỗi bắt buộc từ các bảng liên quan
+            return await _context.Bookings
+                .Select(b => new Booking
+                {
+                    BookingId = b.BookingId,
+                    BookingCode = b.BookingCode,
+                    Status = b.Status,
+                    CreatedAt = b.CreatedAt,
+                    UpdatedAt = b.UpdatedAt
+                })
                 .ToListAsync();
         }
 

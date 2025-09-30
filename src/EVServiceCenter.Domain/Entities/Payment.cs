@@ -11,7 +11,7 @@ public partial class Payment
 
     public int InvoiceId { get; set; }
 
-    public long PayOsorderCode { get; set; }
+    public long? PayOsorderCode { get; set; }
 
     public int Amount { get; set; }
 
@@ -26,6 +26,18 @@ public partial class Payment
     public DateTime CreatedAt { get; set; }
 
     public DateTime? PaidAt { get; set; }
+
+    public string PaymentMethod { get; set; } = "PAYOS";
+
+    public int? PaidByUserId { get; set; }
+
+    public int AttemptNo { get; set; }
+
+    public string? AttemptStatus { get; set; }
+
+    public DateTime? AttemptAt { get; set; }
+
+    public string? AttemptMessage { get; set; }
 
     public virtual Invoice Invoice { get; set; }
 }

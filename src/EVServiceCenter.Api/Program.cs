@@ -30,6 +30,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.OpenApi.Models;
 using System.IO;
 using EVServiceCenter.Application.Configurations;
+using Microsoft.AspNetCore.HttpOverrides;
 
 
 // ============================================================================
@@ -345,11 +346,15 @@ if (!string.IsNullOrWhiteSpace(port))
     app.Urls.Add($"http://*:{port}");
 }
 
+// Forwarded headers để chạy đúng sau proxy (Render)
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 // ============================================================================
 // MIDDLEWARE PIPELINE CONFIGURATION
 // ============================================================================
-// Note: Order of middleware is important!
-
 // Swagger UI - API Documentation
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -359,30 +364,24 @@ app.UseSwaggerUI(c =>
     c.DocumentTitle = "EVServiceCenter API Documentation";
 });
 
-// Enable CORS - Must be before UseHttpsRedirection()
-app.UseCors(); // Use default policy
+app.UseCors(); // default policy
 
+// Tránh redirect loop sau proxy: chỉ bật HTTPS redirect ở non-production
+if (!app.Environment.IsProduction())
+{
+    app.UseHttpsRedirection();
+}
 
-// HTTPS Redirection
-app.UseHttpsRedirection();
-
-
-
-// Static Files - For serving uploaded files, images, etc.
 app.UseStaticFiles();
 
-
-
-// Authentication - Must come before Authorization
 app.UseAuthentication();
-app.UseAuthenticationErrorHandling(); // Custom JWT error handling
+app.UseAuthenticationErrorHandling();
 app.UseAuthorization();
 
-// Map API Controllers
+// Health endpoints cho Render
+app.MapGet("/healthz", () => Results.Ok("OK")).WithTags("Health");
+app.MapGet("/", () => Results.Ok("EVServiceCenter API"));
+
 app.MapControllers();
 
-
-// ============================================================================
-// APPLICATION STARTUP
-// ============================================================================
 app.Run();

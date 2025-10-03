@@ -80,18 +80,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Staff.AnyAsync(s => s.StaffId == staffId);
         }
 
-        public async Task<bool> IsStaffCodeUniqueAsync(string staffCode, int? excludeStaffId = null)
-        {
-            var query = _context.Staff.Where(s => s.StaffCode == staffCode);
-            
-            if (excludeStaffId.HasValue)
-            {
-                query = query.Where(s => s.StaffId != excludeStaffId.Value);
-            }
-
-            return !await query.AnyAsync();
-        }
-
         public async Task<bool> IsUserAlreadyStaffAsync(int userId)
         {
             return await _context.Staff.AnyAsync(s => s.UserId == userId);

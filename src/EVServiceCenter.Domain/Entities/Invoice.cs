@@ -7,27 +7,17 @@ public partial class Invoice
 {
     public int InvoiceId { get; set; }
 
-    public string InvoiceNumber { get; set; }
-
     public int WorkOrderId { get; set; }
 
     public int? CustomerId { get; set; }
 
-    public string BillingName { get; set; }
+    public string? Email { get; set; }
 
-    public string BillingPhone { get; set; }
-
-    public string BillingAddress { get; set; }
+    public string? Phone { get; set; }
 
     public string Status { get; set; }
 
-    public decimal TotalAmount { get; set; }
-
     public DateTime CreatedAt { get; set; }
-
-    public string NormalizedBillingPhone { get; set; }
-
-    public string InvoiceType { get; set; }
 
     public int? BookingId { get; set; }
 

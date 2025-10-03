@@ -73,8 +73,8 @@ namespace EVServiceCenter.Application.Service
                 // Chỉ cập nhật các trường còn lại
                 part.PartName = request.PartName?.Trim();
                 part.Brand = request.Brand?.Trim();
-                part.UnitPrice = request.UnitPrice;
-                part.Unit = request.Unit?.Trim();
+                part.Price = request.UnitPrice;
+                part.ImageUrl = request.ImageUrl?.Trim();
                 part.IsActive = request.IsActive;
 
                 await _partRepository.UpdatePartAsync(part);
@@ -124,8 +124,8 @@ namespace EVServiceCenter.Application.Service
                     PartNumber = request.PartNumber.Trim().ToUpper(),
                     PartName = request.PartName.Trim(),
                     Brand = request.Brand.Trim(),
-                    UnitPrice = request.UnitPrice,
-                    Unit = request.Unit.Trim(),
+                    Price = request.UnitPrice,
+                    ImageUrl = request.ImageUrl?.Trim(),
                     IsActive = request.IsActive,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -153,8 +153,8 @@ namespace EVServiceCenter.Application.Service
                 PartNumber = part.PartNumber,
                 PartName = part.PartName,
                 Brand = part.Brand,
-                UnitPrice = part.UnitPrice,
-                Unit = part.Unit,
+                Price = part.Price,
+                ImageUrl = part.ImageUrl,
                 IsActive = part.IsActive,
                 CreatedAt = part.CreatedAt
             };

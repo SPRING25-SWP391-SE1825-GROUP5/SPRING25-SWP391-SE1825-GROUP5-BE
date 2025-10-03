@@ -25,7 +25,7 @@ public class WorkOrderPartsController : ControllerBase
                 partName = x.Part?.PartName,
                 quantity = x.QuantityUsed,
                 unitPrice = x.UnitCost,
-                total = x.TotalCost
+                total = x.UnitCost * x.QuantityUsed
             });
             return Ok(new { success = true, data = result });
         }
@@ -40,8 +40,7 @@ public class WorkOrderPartsController : ControllerBase
                 WorkOrderId = workOrderId,
                 PartId = req.PartId,
                 QuantityUsed = req.Quantity,
-                UnitCost = req.UnitPrice,
-                TotalCost = req.UnitPrice * req.Quantity
+                UnitCost = req.UnitPrice
             };
             await _repo.AddAsync(item);
             return Ok(new { success = true });
@@ -57,8 +56,7 @@ public class WorkOrderPartsController : ControllerBase
                 WorkOrderId = workOrderId,
                 PartId = partId,
                 QuantityUsed = req.Quantity,
-                UnitCost = req.UnitPrice,
-                TotalCost = req.UnitPrice * req.Quantity
+                UnitCost = req.UnitPrice
             };
             await _repo.UpdateAsync(item);
             return Ok(new { success = true });

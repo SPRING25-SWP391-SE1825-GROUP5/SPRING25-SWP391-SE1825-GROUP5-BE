@@ -52,8 +52,6 @@ namespace EVServiceCenter.Api.Controllers
                 ChecklistId = checklist.ChecklistId,
                 PartId = sp.PartId,
                 Description = sp.Notes ?? sp.Part?.PartName,
-                IsMandatory = true,
-                Performed = false,
                 Result = null,
                 Comment = null
             });
@@ -76,15 +74,13 @@ namespace EVServiceCenter.Api.Controllers
                 partId = r.PartId,
                 partName = r.Part?.PartName,
                 description = r.Description,
-                isMandatory = r.IsMandatory,
-                performed = r.Performed,
                 result = r.Result,
                 note = r.Comment
             });
             return Ok(new { success = true, checklistId = checklist.ChecklistId, items = data });
         }
 
-        public class UpdateItemRequest { public string Description { get; set; } public bool IsMandatory { get; set; } public bool Performed { get; set; } public string Result { get; set; } public string Note { get; set; } }
+        public class UpdateItemRequest { public string Description { get; set; } public string Result { get; set; } public string Note { get; set; } }
 
         // PUT /api/workorders/{id}/checklist/{resultId}
         [HttpPut("{resultId:int}")]
@@ -98,15 +94,13 @@ namespace EVServiceCenter.Api.Controllers
                 ResultId = resultId,
                 ChecklistId = checklist.ChecklistId,
                 Description = req.Description,
-                IsMandatory = req.IsMandatory,
-                Performed = req.Performed,
                 Result = req.Result,
                 Comment = req.Note
             });
             return Ok(new { success = true });
         }
 
-        public class BulkRequest { public System.Collections.Generic.List<BulkItem> Items { get; set; } public class BulkItem { public int? ResultId { get; set; } public string Description { get; set; } public bool IsMandatory { get; set; } public bool Performed { get; set; } public string Result { get; set; } public string Note { get; set; } } }
+        public class BulkRequest { public System.Collections.Generic.List<BulkItem> Items { get; set; } public class BulkItem { public int? ResultId { get; set; } public string Description { get; set; } public string Result { get; set; } public string Note { get; set; } } }
 
         // PUT /api/workorders/{id}/checklist
         [HttpPut]
@@ -121,8 +115,6 @@ namespace EVServiceCenter.Api.Controllers
                 ResultId = i.ResultId ?? 0,
                 ChecklistId = checklist.ChecklistId,
                 Description = i.Description,
-                IsMandatory = i.IsMandatory,
-                Performed = i.Performed,
                 Result = i.Result,
                 Comment = i.Note
             });
@@ -141,9 +133,8 @@ namespace EVServiceCenter.Api.Controllers
             var pass = results.Count(r => string.Equals(r.Result, "PASS", StringComparison.OrdinalIgnoreCase));
             var fail = results.Count(r => string.Equals(r.Result, "FAIL", StringComparison.OrdinalIgnoreCase));
             var na = results.Count(r => string.Equals(r.Result, "NA", StringComparison.OrdinalIgnoreCase));
-            var performed = results.Count(r => r.Performed);
             var total = results.Count;
-            return Ok(new { success = true, checklistId = checklist.ChecklistId, total, performed, pass, fail, na });
+            return Ok(new { success = true, checklistId = checklist.ChecklistId, total, pass, fail, na });
         }
     }
 }

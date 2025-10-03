@@ -80,18 +80,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Technicians.AnyAsync(t => t.TechnicianId == technicianId);
         }
 
-        public async Task<bool> IsTechnicianCodeUniqueAsync(string technicianCode, int? excludeTechnicianId = null)
-        {
-            var query = _context.Technicians.Where(t => t.TechnicianCode == technicianCode);
-            
-            if (excludeTechnicianId.HasValue)
-            {
-                query = query.Where(t => t.TechnicianId != excludeTechnicianId.Value);
-            }
-
-            return !await query.AnyAsync();
-        }
-
         public async Task<bool> IsUserAlreadyTechnicianAsync(int userId)
         {
             return await _context.Technicians.AnyAsync(t => t.UserId == userId);
@@ -113,14 +101,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     {
                         TechnicianId = technicianId,
                         SkillId = s.SkillId,
-                        Level = s.Level,
-                        Years = s.Years
+                        Notes = s.Notes
                     });
                 }
                 else
                 {
-                    found.Level = s.Level;
-                    found.Years = s.Years;
+                    found.Notes = s.Notes;
                     _context.TechnicianSkills.Update(found);
                 }
             }

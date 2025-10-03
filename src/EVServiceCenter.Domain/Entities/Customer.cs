@@ -9,17 +9,7 @@ public partial class Customer
 
     public int? UserId { get; set; }
 
-    public string CustomerCode { get; set; }
-
-    public string? NormalizedPhone { get; set; }
-
-    public string? Email { get; set; }
-
     public bool IsGuest { get; set; }
-
-    public DateTime CreatedAt { get; set; }
-
-    public DateTime UpdatedAt { get; set; }
 
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
@@ -38,7 +28,7 @@ public partial class Customer
 
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
 
-    public virtual ICollection<Wishlist> Wishlists { get; set; } = new List<Wishlist>();
+    
 
-    public virtual ICollection<ProductReview> ProductReviews { get; set; } = new List<ProductReview>();
+    public virtual ICollection<Feedback> Feedbacks { get; set; } = new List<Feedback>();
 }

@@ -26,10 +26,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
             var existing = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.WorkOrderId == item.WorkOrderId && x.PartId == item.PartId);
             if (existing != null)
             {
-                // Upsert: cộng dồn số lượng, cập nhật đơn giá và tổng tiền
+                // Upsert: cộng dồn số lượng, cập nhật đơn giá
                 existing.QuantityUsed += item.QuantityUsed;
                 existing.UnitCost = item.UnitCost;
-                existing.TotalCost = existing.UnitCost * existing.QuantityUsed;
                 await _db.SaveChangesAsync();
                 return existing;
             }

@@ -18,9 +18,9 @@ namespace EVServiceCenter.Application.Models.Responses
         public DateTime UpdatedAt { get; set; }
         public int? UsageLimit { get; set; }
         public int UsageCount { get; set; }
-        public int? UserLimit { get; set; }
-        public string PromotionType { get; set; }
-        public string ApplyFor { get; set; }
+        
+        
+        
         
         // Calculated fields
         public bool IsActive { get; set; }

@@ -7,33 +7,38 @@ public partial class WorkOrder
 {
     public int WorkOrderId { get; set; }
 
-    public string WorkOrderNumber { get; set; }
-
     public int BookingId { get; set; }
 
     public int TechnicianId { get; set; }
 
+    public int? CustomerId { get; set; }
+
+    public int? VehicleId { get; set; }
+
+    public int? CurrentMileage { get; set; }
+
+    public string? LicensePlate { get; set; }
+
+    public int? CenterId { get; set; }
+
+    public int? ServiceId { get; set; }
+
     public string Status { get; set; }
 
-    public DateTime? StartTime { get; set; }
-
-    public DateTime? EndTime { get; set; }
-
-    public int? ActualDuration { get; set; }
-
-    public int? InitialMileage { get; set; }
-
-    public int? FinalMileage { get; set; }
-
-    public string? CustomerComplaints { get; set; }
-
-    public string? WorkPerformed { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
 
     public virtual Booking Booking { get; set; }
+
+    public virtual Customer? Customer { get; set; }
+
+    public virtual Vehicle? Vehicle { get; set; }
+
+    public virtual ServiceCenter? Center { get; set; }
+
+    public virtual Service? Service { get; set; }
 
     public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 
@@ -45,5 +50,5 @@ public partial class WorkOrder
 
     public virtual ICollection<WorkOrderPart> WorkOrderParts { get; set; } = new List<WorkOrderPart>();
 
-    public virtual ICollection<ServiceCreditUsage> ServiceCreditUsages { get; set; } = new List<ServiceCreditUsage>();
+    public virtual ICollection<Feedback> Feedbacks { get; set; } = new List<Feedback>();
 }

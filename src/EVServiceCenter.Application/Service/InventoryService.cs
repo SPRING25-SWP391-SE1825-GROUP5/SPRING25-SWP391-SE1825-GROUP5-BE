@@ -147,8 +147,8 @@ namespace EVServiceCenter.Application.Service
                 PartNumber = inventory.Part?.PartNumber ?? "N/A",
                 PartName = inventory.Part?.PartName ?? "N/A",
                 Brand = inventory.Part?.Brand ?? "N/A",
-                UnitPrice = inventory.Part?.UnitPrice ?? 0,
-                Unit = inventory.Part?.Unit ?? "N/A",
+                UnitPrice = inventory.Part?.Price ?? 0,
+                Unit = null,
                 CurrentStock = inventory.CurrentStock,
                 MinimumStock = inventory.MinimumStock,
                 LastUpdated = inventory.LastUpdated,
@@ -175,8 +175,8 @@ namespace EVServiceCenter.Application.Service
                     MinimumStock = g.Sum(x => x.MinimumStock),
                     IsLowStock = g.Sum(x => x.CurrentStock) <= g.Sum(x => x.MinimumStock),
                     IsOutOfStock = g.Sum(x => x.CurrentStock) == 0,
-                    UnitPrice = g.FirstOrDefault()?.Part?.UnitPrice ?? 0,
-                    Unit = g.FirstOrDefault()?.Part?.Unit ?? "",
+                    UnitPrice = g.FirstOrDefault()?.Part?.Price ?? 0,
+                    Unit = null,
                     LastUpdated = g.Max(x => x.LastUpdated)
                 })
                 .ToList();
@@ -195,8 +195,8 @@ namespace EVServiceCenter.Application.Service
                     MinimumStock = g.Sum(x => x.MinimumStock),
                     IsLowStock = g.Sum(x => x.CurrentStock) <= g.Sum(x => x.MinimumStock),
                     IsOutOfStock = g.Sum(x => x.CurrentStock) == 0,
-                    UnitPrice = g.FirstOrDefault()?.Part?.UnitPrice ?? 0,
-                    Unit = g.FirstOrDefault()?.Part?.Unit ?? "",
+                    UnitPrice = g.FirstOrDefault()?.Part?.Price ?? 0,
+                    Unit = null,
                     LastUpdated = g.Max(x => x.LastUpdated)
                 })
                 .Where(r => r.TotalStock > 0)

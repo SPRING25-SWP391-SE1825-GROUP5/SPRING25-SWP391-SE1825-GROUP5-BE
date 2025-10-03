@@ -8,12 +8,8 @@ public class UpsertTechnicianSkillItem
 	[Required]
 	public int SkillId { get; set; }
 
-	[Required]
-	[Range(1, 5, ErrorMessage = "Level phải từ 1 đến 5")]
-	public byte Level { get; set; }
-
-	[Range(0, 50, ErrorMessage = "Years phải từ 0 đến 50")]
-	public byte Years { get; set; }
+	[MaxLength(200)]
+	public string? Notes { get; set; }
 }
 
 public class UpsertTechnicianSkillsRequest

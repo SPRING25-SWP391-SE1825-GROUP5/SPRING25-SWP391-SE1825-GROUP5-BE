@@ -14,17 +14,11 @@ namespace EVServiceCenter.Application.Models.Requests
         [Required(ErrorMessage = "ID trung tâm là bắt buộc")]
         public int CenterId { get; set; }
 
-        [Required(ErrorMessage = "Mã kỹ thuật viên là bắt buộc")]
-        [StringLength(20, ErrorMessage = "Mã kỹ thuật viên không được vượt quá 20 ký tự")]
-        public string TechnicianCode { get; set; }
+        // TechnicianCode removed
 
-        [Required(ErrorMessage = "Chuyên môn là bắt buộc")]
-        [StringLength(200, ErrorMessage = "Chuyên môn không được vượt quá 200 ký tự")]
-        public string Specialization { get; set; }
-
-        [Required(ErrorMessage = "Số năm kinh nghiệm là bắt buộc")]
-        [Range(0, 50, ErrorMessage = "Số năm kinh nghiệm phải từ 0 đến 50")]
-        public int ExperienceYears { get; set; }
+        [Required(ErrorMessage = "Vị trí là bắt buộc")]
+        [StringLength(100, ErrorMessage = "Vị trí không được vượt quá 100 ký tự")]
+        public string Position { get; set; }
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {

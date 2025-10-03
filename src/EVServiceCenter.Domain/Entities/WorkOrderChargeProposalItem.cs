@@ -8,7 +8,7 @@ public partial class WorkOrderChargeProposalItem
 
     public int ProposalId { get; set; }
 
-    public int? PartId { get; set; }
+    public int? VehicleModelPartId { get; set; }
 
     public string Description { get; set; }
 
@@ -18,5 +18,5 @@ public partial class WorkOrderChargeProposalItem
 
     public virtual WorkOrderChargeProposal Proposal { get; set; }
 
-    public virtual Part Part { get; set; }
+    public virtual VehicleModelPart? VehicleModelPart { get; set; }
 }

@@ -41,15 +41,8 @@ namespace EVServiceCenter.Application.Models.Requests
         [Range(1, int.MaxValue, ErrorMessage = "Giới hạn sử dụng phải lớn hơn 0")]
         public int? UsageLimit { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Giới hạn người dùng phải lớn hơn 0")]
-        public int? UserLimit { get; set; }
-
-        [Required(ErrorMessage = "Loại khuyến mãi là bắt buộc")]
-        [RegularExpression("^(GENERAL|FIRST_TIME|BIRTHDAY|LOYALTY)$", ErrorMessage = "Loại khuyến mãi phải là GENERAL, FIRST_TIME, BIRTHDAY hoặc LOYALTY")]
-        public string PromotionType { get; set; }
-
-        [Required(ErrorMessage = "Áp dụng cho là bắt buộc")]
-        [RegularExpression("^(ALL|SERVICE|PRODUCT|BOOKING)$", ErrorMessage = "Áp dụng cho phải là ALL, SERVICE, PRODUCT hoặc BOOKING")]
-        public string ApplyFor { get; set; }
+        
+        
+        
     }
 }

@@ -35,9 +35,7 @@ public partial class User
 
     public byte[]? RefreshToken { get; set; }
 
-    public int FailedLoginAttempts { get; set; }
-
-    public DateTime? LockoutUntil { get; set; }
+    
 
     public  Customer Customer { get; set; }
 

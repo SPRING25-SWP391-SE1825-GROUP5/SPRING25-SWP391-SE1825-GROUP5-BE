@@ -19,9 +19,9 @@ public partial class ServiceCredit
 
     public DateOnly ValidTo { get; set; }
 
-    public decimal PricePaid { get; set; }
+    public decimal PriceDiscount { get; set; }
 
-    public int? InvoiceId { get; set; }
+    // Removed InvoiceId: credit không còn gắn trực tiếp invoice
 
     public DateTime CreatedAt { get; set; }
 
@@ -29,7 +29,5 @@ public partial class ServiceCredit
 
     public virtual Service Service { get; set; }
 
-    public virtual Invoice Invoice { get; set; }
-
-    public virtual ICollection<ServiceCreditUsage> ServiceCreditUsages { get; set; } = new List<ServiceCreditUsage>();
+    // Removed navigation to Invoice
 }

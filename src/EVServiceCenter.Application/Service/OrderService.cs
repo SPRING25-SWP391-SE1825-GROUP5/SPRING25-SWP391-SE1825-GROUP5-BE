@@ -63,30 +63,20 @@ public class OrderService : IOrderService
             throw new ArgumentException("Giỏ hàng trống");
 
         // Tạo đơn hàng
-        var orderNumber = await _orderRepository.GenerateOrderNumberAsync();
         var totalAmount = cartItems.Sum(item => item.Quantity * item.UnitPrice);
 
         var order = new Order
         {
             CustomerId = request.CustomerId,
-            OrderNumber = orderNumber,
-            TotalAmount = totalAmount,
             Status = "PENDING",
             Notes = request.Notes,
-            ShippingAddress = !string.IsNullOrWhiteSpace(request.ShippingAddress)
-                ? request.ShippingAddress
-                : (customer?.User?.Address ?? customer?.Email ?? "UNKNOWN"),
-            ShippingPhone = !string.IsNullOrWhiteSpace(request.ShippingPhone)
-                ? request.ShippingPhone
-                : (customer?.User?.PhoneNumber ?? customer?.NormalizedPhone ?? "UNKNOWN"),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             OrderItems = cartItems.Select(cartItem => new OrderItem
             {
                 PartId = cartItem.PartId,
                 Quantity = cartItem.Quantity,
-                UnitPrice = cartItem.UnitPrice,
-                LineTotal = cartItem.Quantity * cartItem.UnitPrice
+                UnitPrice = cartItem.UnitPrice
             }).ToList()
         };
 
@@ -134,7 +124,7 @@ public class OrderService : IOrderService
             if (!part.IsActive)
                 throw new ArgumentException($"Sản phẩm {part.PartName} đã ngưng hoạt động");
 
-            var unitPrice = part.UnitPrice;
+            var unitPrice = part.Price;
             var lineTotal = unitPrice * item.Quantity;
             total += lineTotal;
 
@@ -142,25 +132,15 @@ public class OrderService : IOrderService
             {
                 PartId = part.PartId,
                 Quantity = item.Quantity,
-                UnitPrice = unitPrice,
-                LineTotal = lineTotal
+                UnitPrice = unitPrice
             });
         }
 
-        var orderNumber = await _orderRepository.GenerateOrderNumberAsync();
         var order = new Order
         {
             CustomerId = request.CustomerId,
-            OrderNumber = orderNumber,
-            TotalAmount = total,
             Status = "PENDING",
             Notes = request.Notes,
-            ShippingAddress = !string.IsNullOrWhiteSpace(request.ShippingAddress)
-                ? request.ShippingAddress
-                : (customer?.User?.Address ?? customer?.Email ?? "UNKNOWN"),
-            ShippingPhone = !string.IsNullOrWhiteSpace(request.ShippingPhone)
-                ? request.ShippingPhone
-                : (customer?.User?.PhoneNumber ?? customer?.NormalizedPhone ?? "UNKNOWN"),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             OrderItems = orderItems
@@ -193,7 +173,7 @@ public class OrderService : IOrderService
                 PartName = oi.Part?.PartName ?? string.Empty,
                 UnitPrice = oi.UnitPrice,
                 Quantity = oi.Quantity,
-                Subtotal = oi.LineTotal
+                Subtotal = oi.Quantity * oi.UnitPrice
             }).ToList();
     }
 
@@ -259,11 +239,11 @@ public class OrderService : IOrderService
         return new OrderResponse
         {
             OrderId = order.OrderId,
-            OrderNumber = order.OrderNumber,
+            OrderNumber = $"ORD-#{order.OrderId}",
             CustomerId = order.CustomerId,
             CustomerName = order.Customer?.User?.FullName ?? "Khách hàng",
             CustomerPhone = order.Customer?.User?.PhoneNumber ?? "",
-            TotalAmount = order.TotalAmount,
+            TotalAmount = order.OrderItems?.Sum(oi => oi.Quantity * oi.UnitPrice) ?? 0m,
             Status = order.Status,
             Notes = order.Notes,
             CreatedAt = order.CreatedAt,
@@ -277,7 +257,7 @@ public class OrderService : IOrderService
                 Brand = oi.Part?.Brand ?? "",
                 Quantity = oi.Quantity,
                 UnitPrice = oi.UnitPrice,
-                LineTotal = oi.LineTotal
+                LineTotal = oi.Quantity * oi.UnitPrice
             }).ToList(),
             StatusHistory = order.OrderStatusHistories.Select(osh => new OrderStatusHistoryResponse
             {

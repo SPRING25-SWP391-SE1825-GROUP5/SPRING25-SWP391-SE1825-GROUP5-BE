@@ -13,8 +13,6 @@ public partial class Service
 
     public decimal BasePrice { get; set; }
 
-    public string RequiredSkills { get; set; }
-
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; }

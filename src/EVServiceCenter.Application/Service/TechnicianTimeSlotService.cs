@@ -154,7 +154,6 @@ namespace EVServiceCenter.Application.Service
                     {
                         TechnicianId = technician.TechnicianId,
                         TechnicianName = technician.User?.FullName ?? "N/A",
-                        TechnicianCode = technician.TechnicianCode,
                         TimeSlotsCreated = 0,
                         TimeSlots = new List<TechnicianTimeSlotResponse>()
                     };
@@ -229,7 +228,6 @@ namespace EVServiceCenter.Application.Service
                     {
                         TechnicianId = technician.TechnicianId,
                         TechnicianName = technician.User?.FullName ?? "N/A",
-                        TechnicianCode = technician.TechnicianCode,
                         TimeSlotsCreated = 0,
                         DayNames = new List<string>(),
                         TimeSlots = new List<TechnicianTimeSlotResponse>()
@@ -335,7 +333,6 @@ namespace EVServiceCenter.Application.Service
                 {
                     TechnicianId = technician.TechnicianId,
                     TechnicianName = technician.User?.FullName ?? "N/A",
-                    TechnicianCode = technician.TechnicianCode,
                     Date = startDate,
                     AvailableSlots = new List<TimeSlotAvailability>()
                 };
@@ -385,7 +382,6 @@ namespace EVServiceCenter.Application.Service
                 TechnicianSlotId = timeSlot.TechnicianSlotId,
                 TechnicianId = timeSlot.TechnicianId,
                 TechnicianName = timeSlot.Technician?.User?.FullName ?? "N/A",
-                TechnicianCode = timeSlot.Technician?.TechnicianCode ?? "N/A",
                 SlotId = timeSlot.SlotId,
                 SlotTime = timeSlot.Slot?.SlotTime.ToString() ?? "N/A",
                 WorkDate = timeSlot.WorkDate,

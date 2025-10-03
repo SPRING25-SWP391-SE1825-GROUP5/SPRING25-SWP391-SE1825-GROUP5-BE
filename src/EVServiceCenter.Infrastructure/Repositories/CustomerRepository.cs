@@ -42,11 +42,11 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
             if (!string.IsNullOrWhiteSpace(email))
             {
-                query = query.Where(c => c.Email == email);
+                query = query.Where(c => c.User != null && c.User.Email == email);
             }
             if (!string.IsNullOrWhiteSpace(normalizedPhone))
             {
-                query = query.Where(c => c.NormalizedPhone == normalizedPhone);
+                query = query.Where(c => c.User != null && c.User.PhoneNumber == normalizedPhone);
             }
 
             return await query.FirstOrDefaultAsync();
@@ -65,28 +65,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
             await _context.SaveChangesAsync();
         }
 
-        public async Task<bool> IsCustomerCodeUniqueAsync(string customerCode, int? excludeCustomerId = null)
-        {
-            var query = _context.Customers.Where(c => c.CustomerCode == customerCode);
-            
-            if (excludeCustomerId.HasValue)
-            {
-                query = query.Where(c => c.CustomerId != excludeCustomerId.Value);
-            }
-
-            return !await query.AnyAsync();
-        }
-
-        public async Task<bool> IsPhoneNumberUniqueAsync(string normalizedPhone, int? excludeCustomerId = null)
-        {
-            var query = _context.Customers.Where(c => c.NormalizedPhone == normalizedPhone);
-            
-            if (excludeCustomerId.HasValue)
-            {
-                query = query.Where(c => c.CustomerId != excludeCustomerId.Value);
-            }
-
-            return !await query.AnyAsync();
-        }
+        // CustomerCode & NormalizedPhone removed from Customer; uniqueness now handled on Users
     }
 }

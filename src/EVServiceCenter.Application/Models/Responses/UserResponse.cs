@@ -17,7 +17,6 @@ namespace EVServiceCenter.Application.Models.Responses
         public bool EmailVerified { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-        public int FailedLoginAttempts { get; set; }
-        public DateTime? LockoutUntil { get; set; }
+        
     }
 }

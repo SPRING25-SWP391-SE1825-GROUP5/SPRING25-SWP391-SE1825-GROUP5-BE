@@ -25,9 +25,13 @@ public partial class Vehicle
 
     public DateTime CreatedAt { get; set; }
 
+    public int? ModelId { get; set; }
+
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
     public virtual Customer Customer { get; set; }
+
+    public virtual VehicleModel? VehicleModel { get; set; }
 
     public virtual ICollection<MaintenanceReminder> MaintenanceReminders { get; set; } = new List<MaintenanceReminder>();
 }

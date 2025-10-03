@@ -17,10 +17,12 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class BookingController : ControllerBase
     {
         private readonly IBookingService _bookingService;
+        private readonly IBookingHistoryService _bookingHistoryService;
 
-    public BookingController(IBookingService bookingService)
+    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService)
         {
         _bookingService = bookingService;
+        _bookingHistoryService = bookingHistoryService;
         }
 
         /// <summary>
@@ -421,6 +423,41 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         // Endpoint đã loại bỏ trong mô hình 1 booking = 1 service
         
+        // ===== Booking History (moved here for grouping under Booking) =====
+        [HttpGet("Customer/{customerId}/booking-history")]
+        public async Task<ActionResult<BookingHistoryListResponse>> GetBookingHistory(
+            [FromRoute] int customerId,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string status = null,
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] string sortBy = "bookingDate",
+            [FromQuery] string sortOrder = "desc")
+        {
+            var result = await _bookingHistoryService.GetBookingHistoryAsync(
+                customerId, page, pageSize, status, fromDate, toDate, sortBy, sortOrder);
+            return Ok(result);
+        }
+
+        [HttpGet("Customer/{customerId}/booking-history/{bookingId}")]
+        public async Task<ActionResult<BookingHistoryResponse>> GetBookingHistoryById(
+            [FromRoute] int customerId,
+            [FromRoute] int bookingId)
+        {
+            var result = await _bookingHistoryService.GetBookingHistoryByIdAsync(customerId, bookingId);
+            return Ok(result);
+        }
+
+        [HttpGet("Customer/{customerId}/booking-history/stats")]
+        public async Task<ActionResult<BookingHistoryStatsResponse>> GetBookingHistoryStats(
+            [FromRoute] int customerId,
+            [FromQuery] string period = "all")
+        {
+            var result = await _bookingHistoryService.GetBookingHistoryStatsAsync(customerId, period);
+            return Ok(result);
+        }
+
         // Payment API đã được gỡ bỏ theo yêu cầu
     }
 }

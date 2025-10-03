@@ -34,8 +34,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
             else
             {
                 existing.Description = result.Description;
-                existing.IsMandatory = result.IsMandatory;
-                existing.Performed = result.Performed;
                 existing.Result = result.Result;
                 existing.Comment = result.Comment;
             }

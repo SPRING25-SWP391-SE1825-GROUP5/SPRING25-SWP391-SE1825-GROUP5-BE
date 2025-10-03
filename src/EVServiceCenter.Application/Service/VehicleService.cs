@@ -199,7 +199,7 @@ namespace EVServiceCenter.Application.Service
                 PurchaseDate = vehicle.PurchaseDate,
                 CreatedAt = vehicle.CreatedAt,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
-                CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? vehicle.Customer?.NormalizedPhone
+                CustomerPhone = vehicle.Customer?.User?.PhoneNumber
             };
         }
 

@@ -76,8 +76,6 @@ namespace EVServiceCenter.Application.Service
                     Role = "CUSTOMER", // Luôn là CUSTOMER cho đăng ký công khai
                     IsActive = true, // Tài khoản mặc định là active
                     EmailVerified = false,
-                    FailedLoginAttempts = 0,
-                    LockoutUntil = null,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -89,11 +87,7 @@ namespace EVServiceCenter.Application.Service
                 var customer = new Customer
                 {
                     UserId = user.UserId,
-                    CustomerCode = GenerateCustomerCode(),
-                    NormalizedPhone = NormalizePhoneNumber(request.PhoneNumber),
-                    IsGuest = false, // Đây là customer đã đăng ký, không phải guest
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
+                    IsGuest = false
                 };
 
                 await _customerRepository.CreateCustomerAsync(customer);
@@ -228,12 +222,7 @@ namespace EVServiceCenter.Application.Service
             if (user == null)
                 throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng");
 
-            // Kiểm tra tài khoản có bị lockout không
-            if (user.LockoutUntil.HasValue && user.LockoutUntil.Value > DateTime.UtcNow)
-            {
-                var remainingMinutes = (int)(user.LockoutUntil.Value - DateTime.UtcNow).TotalMinutes;
-                throw new ArgumentException($"Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau {remainingMinutes} phút.");
-            }
+            // LockoutRemoved: xử lý lockout bằng cache/logic khác nếu cần
 
             // Note: Email verification is optional - users can login without verification
             // Just log for tracking purposes
@@ -247,30 +236,7 @@ namespace EVServiceCenter.Application.Service
 
             // Verify password
             if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            {
-                // Tăng số lần đăng nhập sai
-                user.FailedLoginAttempts++;
-                
-                // Nếu đã sai 5 lần, khóa tài khoản 30 phút
-                if (user.FailedLoginAttempts >= 5)
-                {
-                    user.LockoutUntil = DateTime.UtcNow.AddMinutes(30);
-                    user.UpdatedAt = DateTime.UtcNow;
-                    await _authRepository.UpdateUserAsync(user);
-                    throw new ArgumentException("Đăng nhập sai quá 5 lần. Tài khoản đã bị khóa trong 30 phút.");
-                }
-                else
-                {
-                    user.UpdatedAt = DateTime.UtcNow;
-                    await _authRepository.UpdateUserAsync(user);
-                    var remainingAttempts = 5 - user.FailedLoginAttempts;
-                    throw new ArgumentException($"Email/số điện thoại hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
-                }
-            }
-
-            // Đăng nhập thành công - reset failed attempts
-            user.FailedLoginAttempts = 0;
-            user.LockoutUntil = null;
+                throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng.");
 
             // Generate JWT tokens
             var accessToken = _jwtService.GenerateAccessToken(user);
@@ -450,8 +416,6 @@ namespace EVServiceCenter.Application.Service
                 // Cập nhật mật khẩu mới
                 user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
                 user.UpdatedAt = DateTime.UtcNow;
-                user.FailedLoginAttempts = 0; // Reset failed attempts
-                user.LockoutUntil = null; // Remove lockout
                 await _authRepository.UpdateUserAsync(user);
 
                 return "Đặt lại mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.";
@@ -630,8 +594,7 @@ namespace EVServiceCenter.Application.Service
                 // Cập nhật mật khẩu mới
                 user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
                 user.UpdatedAt = DateTime.UtcNow;
-                user.FailedLoginAttempts = 0; // Reset failed attempts
-                user.LockoutUntil = null; // Remove lockout
+            // Reset lock state handled externally (cache/LoginHistory)
                 await _authRepository.UpdateUserAsync(user);
 
                 return "Đổi mật khẩu thành công! Vui lòng đăng nhập lại với mật khẩu mới.";
@@ -767,8 +730,6 @@ namespace EVServiceCenter.Application.Service
                         Role = "Customer",
                         IsActive = true,
                         EmailVerified = payload.EmailVerified,
-                        FailedLoginAttempts = 0,
-                        LockoutUntil = null,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
                     };

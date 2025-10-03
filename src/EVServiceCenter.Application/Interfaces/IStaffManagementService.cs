@@ -13,7 +13,6 @@ namespace EVServiceCenter.Application.Interfaces
         Task<StaffListResponse> GetAllStaffAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string position = null, bool? isActive = null);
         Task<StaffResponse> UpdateStaffAsync(int staffId, UpdateStaffRequest request);
         Task<bool> RemoveStaffFromCenterAsync(int staffId);
-        Task<bool> IsStaffCodeUniqueAsync(string staffCode, int? excludeStaffId = null);
 
         // Technician Management
         Task<TechnicianResponse> AddTechnicianToCenterAsync(AddTechnicianToCenterRequest request);
@@ -21,7 +20,6 @@ namespace EVServiceCenter.Application.Interfaces
         Task<TechnicianListResponse> GetTechniciansByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string searchTerm = null, string specialization = null, bool? isActive = null);
         Task<TechnicianResponse> UpdateTechnicianAsync(int technicianId, UpdateTechnicianRequest request);
         Task<bool> RemoveTechnicianFromCenterAsync(int technicianId);
-        Task<bool> IsTechnicianCodeUniqueAsync(string technicianCode, int? excludeTechnicianId = null);
 
         // Validation
         Task<bool> IsUserAlreadyStaffAsync(int userId);

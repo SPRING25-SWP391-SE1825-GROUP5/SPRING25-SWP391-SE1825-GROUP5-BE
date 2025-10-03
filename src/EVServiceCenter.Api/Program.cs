@@ -86,19 +86,24 @@ builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IPartService, PartService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddScoped<IBookingHistoryService, BookingHistoryService>();
+builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
 builder.Services.AddScoped<GuestBookingService>();
 builder.Services.AddScoped<ISkillService, SkillService>();
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
-builder.Services.AddScoped<ICenterScheduleService, CenterScheduleService>();
+// CenterScheduleService removed
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
 
 // E-commerce services
 builder.Services.AddScoped<IShoppingCartService, ShoppingCartService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
-builder.Services.AddScoped<IWishlistService, WishlistService>();
-builder.Services.AddScoped<IProductReviewService, ProductReviewService>();
+// Wishlist removed
+// removed: ProductReviewService deprecated
 
+// Vehicle Model Services
+builder.Services.AddScoped<IVehicleModelService, VehicleModelService>();
+builder.Services.AddScoped<IVehicleModelPartService, VehicleModelPartService>();
 
 // ============================================================================
 // REPOSITORY REGISTRATION
@@ -131,16 +136,20 @@ builder.Services.AddScoped<IMaintenanceChecklistResultRepository, MaintenanceChe
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
-builder.Services.AddScoped<ICenterScheduleRepository, CenterScheduleRepository>();
+// CenterScheduleRepository removed
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
 builder.Services.AddScoped<ISkillRepository, SkillRepository>();
+
+// Vehicle Model Repositories
+builder.Services.AddScoped<IVehicleModelRepository, VehicleModelRepository>();
+builder.Services.AddScoped<IVehicleModelPartRepository, VehicleModelPartRepository>();
 
 // E-commerce repositories
 builder.Services.AddScoped<IShoppingCartRepository, ShoppingCartRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderStatusHistoryRepository, OrderStatusHistoryRepository>();
-builder.Services.AddScoped<IWishlistRepository, WishlistRepository>();
-builder.Services.AddScoped<IProductReviewRepository, ProductReviewRepository>();
+// Wishlist repository removed
+// removed: ProductReviewRepository deprecated
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 
 // JWT Authentication

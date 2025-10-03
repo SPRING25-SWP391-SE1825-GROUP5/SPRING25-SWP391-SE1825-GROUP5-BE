@@ -447,68 +447,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         #region Validation APIs
 
         /// <summary>
-        /// Kiểm tra mã nhân viên có trùng không
-        /// </summary>
-        /// <param name="staffCode">Mã nhân viên</param>
-        /// <param name="excludeStaffId">ID nhân viên loại trừ (khi cập nhật)</param>
-        /// <returns>Kết quả kiểm tra</returns>
-        [HttpGet("validate/staff-code")]
-        public async Task<IActionResult> ValidateStaffCode([FromQuery] string staffCode, [FromQuery] int? excludeStaffId = null)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(staffCode))
-                    return BadRequest(new { success = false, message = "Mã nhân viên không được để trống" });
-
-                var isUnique = await _staffManagementService.IsStaffCodeUniqueAsync(staffCode, excludeStaffId);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Kiểm tra mã nhân viên thành công",
-                    data = new { isUnique, staffCode }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
-
-        /// <summary>
-        /// Kiểm tra mã kỹ thuật viên có trùng không
-        /// </summary>
-        /// <param name="technicianCode">Mã kỹ thuật viên</param>
-        /// <param name="excludeTechnicianId">ID kỹ thuật viên loại trừ (khi cập nhật)</param>
-        /// <returns>Kết quả kiểm tra</returns>
-        [HttpGet("validate/technician-code")]
-        public async Task<IActionResult> ValidateTechnicianCode([FromQuery] string technicianCode, [FromQuery] int? excludeTechnicianId = null)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(technicianCode))
-                    return BadRequest(new { success = false, message = "Mã kỹ thuật viên không được để trống" });
-
-                var isUnique = await _staffManagementService.IsTechnicianCodeUniqueAsync(technicianCode, excludeTechnicianId);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Kiểm tra mã kỹ thuật viên thành công",
-                    data = new { isUnique, technicianCode }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
-
-        /// <summary>
         /// Kiểm tra người dùng có thể được gán vào trung tâm không
         /// </summary>
         /// <param name="userId">ID người dùng</param>

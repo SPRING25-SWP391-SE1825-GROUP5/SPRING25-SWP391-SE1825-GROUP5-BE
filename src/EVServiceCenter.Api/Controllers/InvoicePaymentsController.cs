@@ -43,26 +43,16 @@ public class InvoicePaymentsController : ControllerBase
             return NotFound(new { success = false, message = "Không tìm thấy invoice" });
         }
 
-        var attemptNo = 1 + await _paymentRepo.CountByInvoiceIdAsync(invoiceId);
-
         var payment = new Payment
         {
             PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{invoiceId}",
             InvoiceId = invoiceId,
-            PayOsorderCode = null,
             PaymentMethod = "CASH",
             Amount = req.Amount,
             Status = "PAID",
             PaidAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
-            BuyerName = invoice.BillingName,
-            BuyerPhone = invoice.BillingPhone,
-            BuyerAddress = invoice.BillingAddress,
             PaidByUserId = req.PaidByUserId,
-            AttemptNo = attemptNo,
-            AttemptStatus = "COMPLETED",
-            AttemptAt = DateTime.UtcNow,
-            AttemptMessage = string.IsNullOrWhiteSpace(req.Note) ? null : req.Note,
         };
 
         payment = await _paymentRepo.CreateAsync(payment);
@@ -70,9 +60,6 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(new {
             paymentId = payment.PaymentId,
             paymentCode = payment.PaymentCode,
-            attemptNo = payment.AttemptNo,
-            attemptStatus = payment.AttemptStatus,
-            attemptAt = payment.AttemptAt,
             status = payment.Status,
             amount = payment.Amount,
             paymentMethod = payment.PaymentMethod,
@@ -94,10 +81,6 @@ public class InvoicePaymentsController : ControllerBase
         var resp = items.Select(p => new {
             paymentId = p.PaymentId,
             paymentCode = p.PaymentCode,
-            attemptNo = p.AttemptNo,
-            attemptStatus = p.AttemptStatus,
-            attemptAt = p.AttemptAt,
-            attemptMessage = p.AttemptMessage,
             status = p.Status,
             paymentMethod = p.PaymentMethod,
             amount = p.Amount,

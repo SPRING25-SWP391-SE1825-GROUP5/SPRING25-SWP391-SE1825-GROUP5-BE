@@ -52,14 +52,14 @@ public class BookingPendingCancellationService : BackgroundService
                     if (created <= threshold && (now - created) > TimeSpan.FromMinutes(2))
 					{
                         var elapsed = (now - created).TotalMinutes;
-                        _logger.LogInformation($"Tự động hủy booking {b.BookingId} (Code: {b.BookingCode}) sau {elapsed:F1} phút");
+                        _logger.LogInformation($"Tự động hủy booking #{b.BookingId} sau {elapsed:F1} phút");
                         // Nạp đầy đủ entity trước khi cập nhật để tránh ghi đè các FK bằng giá trị mặc định 0
                         var full = await bookingRepository.GetBookingByIdAsync(b.BookingId);
                         if (full != null)
                         {
                             if (full.Customer == null)
                             {
-                                _logger.LogWarning($"Bỏ qua hủy booking {b.BookingId} vì thiếu Customer (tránh lỗi FK)");
+                                _logger.LogWarning($"Bỏ qua hủy booking #{b.BookingId} vì thiếu Customer (tránh lỗi FK)");
                                 continue;
                             }
                             full.Status = "CANCELLED";

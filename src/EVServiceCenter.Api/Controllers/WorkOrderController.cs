@@ -33,13 +33,16 @@ namespace EVServiceCenter.Api.Controllers
                 workOrderId = wo.WorkOrderId,
                 bookingId = wo.BookingId,
                 technicianId = wo.TechnicianId,
+                customerId = wo.CustomerId,
+                vehicleId = wo.VehicleId,
+                centerId = wo.CenterId,
+                serviceId = wo.ServiceId,
                 technicianName = wo.Technician?.User?.FullName,
                 status = wo.Status,
-                startTime = wo.StartTime,
-                endTime = wo.EndTime,
+                
                 createdAt = wo.CreatedAt,
                 updatedAt = wo.UpdatedAt,
-                notes = wo.WorkPerformed
+                
             };
             return Ok(new { success = true, data });
         }
@@ -58,12 +61,13 @@ namespace EVServiceCenter.Api.Controllers
 
             var wo = new WorkOrder
             {
-                WorkOrderNumber = $"WO-{DateTime.UtcNow:yyyyMMdd}-{request.BookingId}",
                 BookingId = request.BookingId,
                 TechnicianId = request.TechnicianId,
+                CustomerId = null,
+                VehicleId = null,
+                CenterId = null,
+                ServiceId = null,
                 Status = request.Status ?? "NOT_STARTED",
-                StartTime = request.StartTime ?? DateTime.UtcNow,
-                EndTime = request.EndTime,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -81,7 +85,6 @@ namespace EVServiceCenter.Api.Controllers
             if (!string.Equals(wo.Status, "NOT_STARTED", StringComparison.OrdinalIgnoreCase))
                 return BadRequest(new { success = false, message = "Chỉ work order NOT_STARTED mới có thể start" });
             wo.Status = "IN_PROGRESS";
-            wo.StartTime ??= DateTime.UtcNow;
             wo.UpdatedAt = DateTime.UtcNow;
             await _workOrderRepository.UpdateAsync(wo);
             return Ok(new { success = true, message = "Đã bắt đầu work order", data = wo });
@@ -96,7 +99,6 @@ namespace EVServiceCenter.Api.Controllers
             if (!string.Equals(wo.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase))
                 return BadRequest(new { success = false, message = "Chỉ work order IN_PROGRESS mới có thể complete" });
             wo.Status = "COMPLETED";
-            wo.EndTime = DateTime.UtcNow;
             wo.UpdatedAt = DateTime.UtcNow;
             await _workOrderRepository.UpdateAsync(wo);
             return Ok(new { success = true, message = "Đã hoàn tất work order", data = wo });
@@ -110,9 +112,7 @@ namespace EVServiceCenter.Api.Controllers
         {
             var wo = await _workOrderRepository.GetByIdAsync(id);
             if (wo == null) return NotFound(new { success = false, message = "Work order không tồn tại" });
-            var sep = string.IsNullOrWhiteSpace(wo.WorkPerformed) ? "" : "\n";
-            var line = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm}] {request.Text}" + (string.IsNullOrWhiteSpace(request.ImageUrl) ? "" : $" (image: {request.ImageUrl})");
-            wo.WorkPerformed = (wo.WorkPerformed ?? string.Empty) + sep + line;
+            // Work notes removed from WorkOrder; ignored
             wo.UpdatedAt = DateTime.UtcNow;
             await _workOrderRepository.UpdateAsync(wo);
             return Ok(new { success = true, message = "Đã thêm ghi chú", data = wo });

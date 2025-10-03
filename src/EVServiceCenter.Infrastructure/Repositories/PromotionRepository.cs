@@ -101,7 +101,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _context.UserPromotions
                 .Include(up => up.Promotion)
-                .Where(up => up.InvoiceId == invoiceId)
+                .Where(up => false)
                 .OrderByDescending(up => up.UsedAt)
                 .ToListAsync();
         }
@@ -117,7 +117,49 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             var up = await _context.UserPromotions
                 .Include(x => x.Promotion)
-                .FirstOrDefaultAsync(x => x.InvoiceId == invoiceId && x.Promotion.Code == promotionCode);
+                .FirstOrDefaultAsync(x => false);
+            if (up == null) return false;
+            _context.UserPromotions.Remove(up);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        // Booking-based versions
+        public async Task<List<UserPromotion>> GetUserPromotionsByBookingAsync(int bookingId)
+        {
+            return await _context.UserPromotions
+                .Include(up => up.Promotion)
+                .Where(up => up.BookingId == bookingId)
+                .OrderByDescending(up => up.UsedAt)
+                .ToListAsync();
+        }
+
+        public async Task<bool> DeleteUserPromotionByBookingAndCodeAsync(int bookingId, string promotionCode)
+        {
+            var up = await _context.UserPromotions
+                .Include(x => x.Promotion)
+                .FirstOrDefaultAsync(x => x.BookingId == bookingId && x.Promotion.Code == promotionCode);
+            if (up == null) return false;
+            _context.UserPromotions.Remove(up);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        // Order-based versions
+        public async Task<List<UserPromotion>> GetUserPromotionsByOrderAsync(int orderId)
+        {
+            return await _context.UserPromotions
+                .Include(up => up.Promotion)
+                .Where(up => up.OrderId == orderId)
+                .OrderByDescending(up => up.UsedAt)
+                .ToListAsync();
+        }
+
+        public async Task<bool> DeleteUserPromotionByOrderAndCodeAsync(int orderId, string promotionCode)
+        {
+            var up = await _context.UserPromotions
+                .Include(x => x.Promotion)
+                .FirstOrDefaultAsync(x => x.OrderId == orderId && x.Promotion.Code == promotionCode);
             if (up == null) return false;
             _context.UserPromotions.Remove(up);
             await _context.SaveChangesAsync();

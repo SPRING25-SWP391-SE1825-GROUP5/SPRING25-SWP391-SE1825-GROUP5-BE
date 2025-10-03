@@ -118,8 +118,6 @@ namespace EVServiceCenter.Application.Service
                     Role = request.Role,
                     IsActive = request.IsActive,
                     EmailVerified = request.EmailVerified,
-                    FailedLoginAttempts = 0,
-                    LockoutUntil = null,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -133,11 +131,7 @@ namespace EVServiceCenter.Application.Service
                     var customer = new Customer
                     {
                         UserId = user.UserId,
-                        CustomerCode = GenerateCustomerCode(),
-                        NormalizedPhone = NormalizePhoneNumber(request.PhoneNumber),
-                        IsGuest = false, // Đây là customer được admin tạo, không phải guest
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
+                        IsGuest = false
                     };
 
                     await _customerRepository.CreateCustomerAsync(customer);
@@ -148,9 +142,6 @@ namespace EVServiceCenter.Application.Service
                     {
                         UserId = user.UserId,
                         CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
-                        StaffCode = GenerateStaffCode(),
-                        Position = "STAFF", // Default position - có thể cần thay đổi tùy theo logic business
-                        HireDate = DateOnly.FromDateTime(DateTime.Today),
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -163,9 +154,7 @@ namespace EVServiceCenter.Application.Service
                     {
                         UserId = user.UserId,
                         CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
-                        TechnicianCode = GenerateTechnicianCode(),
-                        Specialization = "GENERAL", // Default specialization - có thể cần thay đổi tùy theo logic business
-                        ExperienceYears = 0, // Default experience - có thể cần thay đổi tùy theo logic business
+                        Position = "GENERAL", // Default position
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -498,9 +487,7 @@ namespace EVServiceCenter.Application.Service
                 IsActive = user.IsActive,
                 EmailVerified = user.EmailVerified,
                 CreatedAt = user.CreatedAt,
-                UpdatedAt = user.UpdatedAt,
-                FailedLoginAttempts = user.FailedLoginAttempts,
-                LockoutUntil = user.LockoutUntil
+                UpdatedAt = user.UpdatedAt
             };
         }
 
@@ -518,12 +505,7 @@ namespace EVServiceCenter.Application.Service
             return $"ST{timestamp}{random}";
         }
 
-        private string GenerateTechnicianCode()
-        {
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmm");
-            var random = new Random().Next(10, 99);
-            return $"TC{timestamp}{random}";
-        }
+        // GenerateTechnicianCode removed
 
         private string NormalizePhoneNumber(string phoneNumber)
         {

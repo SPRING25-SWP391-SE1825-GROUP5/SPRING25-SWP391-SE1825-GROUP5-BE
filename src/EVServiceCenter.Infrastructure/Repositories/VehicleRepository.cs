@@ -85,5 +85,11 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _context.Vehicles.AnyAsync(v => v.VehicleId == vehicleId);
         }
+
+        public async Task<int> CountByModelIdAsync(int modelId)
+        {
+            return await _context.Vehicles
+                .CountAsync(v => v.ModelId == modelId);
+        }
     }
 }

@@ -43,12 +43,12 @@ public class OrderRepository : IOrderRepository
 
     public async Task<Order?> GetByOrderNumberAsync(string orderNumber)
     {
-        return await _context.Orders
-            .Include(o => o.Customer)
-            .Include(o => o.OrderItems)
-                .ThenInclude(oi => oi.Part)
-            .Include(o => o.OrderStatusHistories)
-            .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber);
+        // OrderNumber is deprecated; try parse id fallback
+        if (int.TryParse(orderNumber?.Replace("ORD-#", string.Empty), out var id))
+        {
+            return await GetByIdAsync(id);
+        }
+        return await GetByIdAsync(-1);
     }
 
     public async Task<List<Order>> GetAllAsync()
@@ -93,16 +93,109 @@ public class OrderRepository : IOrderRepository
 
     public async Task<bool> ExistsByOrderNumberAsync(string orderNumber)
     {
-        return await _context.Orders.AnyAsync(o => o.OrderNumber == orderNumber);
+        if (int.TryParse(orderNumber?.Replace("ORD-#", string.Empty), out var id))
+        {
+            return await _context.Orders.AnyAsync(o => o.OrderId == id);
+        }
+        return false;
     }
 
     public async Task<string> GenerateOrderNumberAsync()
     {
-        var today = DateTime.Now.ToString("yyyyMMdd");
-        var count = await _context.Orders
-            .Where(o => o.OrderNumber.StartsWith($"ORD-{today}"))
-            .CountAsync();
-        
-        return $"ORD-{today}-{(count + 1):D3}";
+        // Deprecated: return placeholder using OrderId sequence semantics
+        var nextId = await _context.Orders.MaxAsync(o => (int?)o.OrderId) ?? 0;
+        return $"ORD-#{nextId + 1}";
+    }
+
+    public async Task<List<Order>> GetOrdersByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10, 
+        string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+        string sortBy = "orderDate", string sortOrder = "desc")
+    {
+        var query = _context.Orders
+            .Include(o => o.Customer)
+            .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Part)
+            .Where(o => o.CustomerId == customerId);
+
+        // Apply filters
+        if (!string.IsNullOrEmpty(status))
+        {
+            query = query.Where(o => o.Status == status);
+        }
+
+        if (fromDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt >= fromDate.Value);
+        }
+
+        if (toDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt <= toDate.Value);
+        }
+
+        // Apply sorting
+        switch (sortBy.ToLower())
+        {
+            case "orderdate":
+                query = sortOrder.ToLower() == "asc" 
+                    ? query.OrderBy(o => o.CreatedAt)
+                    : query.OrderByDescending(o => o.CreatedAt);
+                break;
+            case "createdat":
+                query = sortOrder.ToLower() == "asc" 
+                    ? query.OrderBy(o => o.CreatedAt)
+                    : query.OrderByDescending(o => o.CreatedAt);
+                break;
+            case "totalamount":
+                query = sortOrder.ToLower() == "asc" 
+                    ? query.OrderBy(o => o.OrderItems.Sum(oi => oi.Quantity * oi.UnitPrice))
+                    : query.OrderByDescending(o => o.OrderItems.Sum(oi => oi.Quantity * oi.UnitPrice));
+                break;
+            default:
+                query = query.OrderByDescending(o => o.CreatedAt);
+                break;
+        }
+
+        // Apply pagination
+        return await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+    }
+
+    public async Task<int> CountOrdersByCustomerIdAsync(int customerId, string? status = null, 
+        DateTime? fromDate = null, DateTime? toDate = null)
+    {
+        var query = _context.Orders.Where(o => o.CustomerId == customerId);
+
+        // Apply filters
+        if (!string.IsNullOrEmpty(status))
+        {
+            query = query.Where(o => o.Status == status);
+        }
+
+        if (fromDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt >= fromDate.Value);
+        }
+
+        if (toDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt <= toDate.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
+    public async Task<Order?> GetOrderWithDetailsByIdAsync(int orderId)
+    {
+        return await _context.Orders
+            .Include(o => o.Customer)
+            .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Part)
+            .Include(o => o.OrderStatusHistories)
+            .Include(o => o.Invoices)
+                .ThenInclude(i => i.Payments)
+            .FirstOrDefaultAsync(o => o.OrderId == orderId);
     }
 }

@@ -5,7 +5,7 @@ namespace EVServiceCenter.Application.Models.Requests
 		public string PartName { get; set; }
 		public string Brand { get; set; }
 		public decimal UnitPrice { get; set; }
-		public string Unit { get; set; }
+		public string? ImageUrl { get; set; }
 		public bool IsActive { get; set; }
 	}
 }

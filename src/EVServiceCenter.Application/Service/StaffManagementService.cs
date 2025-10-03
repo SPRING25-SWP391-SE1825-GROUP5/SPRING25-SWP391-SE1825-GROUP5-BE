@@ -38,19 +38,11 @@ namespace EVServiceCenter.Application.Service
                 // Validate request
                 await ValidateAddStaffRequestAsync(request);
 
-                // Generate staff code if not provided
-                var staffCode = string.IsNullOrWhiteSpace(request.StaffCode) 
-                    ? GenerateStaffCode() 
-                    : request.StaffCode;
-
                 // Create staff entity
                 var staff = new Staff
                 {
                     UserId = request.UserId,
                     CenterId = request.CenterId,
-                    StaffCode = staffCode,
-                    Position = request.Position,
-                    HireDate = request.HireDate,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -139,13 +131,12 @@ namespace EVServiceCenter.Application.Service
                 var searchLower = searchTerm.ToLower();
                 filteredStaff = filteredStaff.Where(s => 
                     s.User.FullName.ToLower().Contains(searchLower) ||
-                    s.StaffCode.ToLower().Contains(searchLower) ||
                     s.User.Email.ToLower().Contains(searchLower));
             }
 
             if (!string.IsNullOrWhiteSpace(position))
             {
-                filteredStaff = filteredStaff.Where(s => s.Position.ToLower().Contains(position.ToLower()));
+                // Position field removed from Staff; ignore filter
             }
 
             if (isActive.HasValue)
@@ -173,9 +164,6 @@ namespace EVServiceCenter.Application.Service
                 UserPhoneNumber = s.User?.PhoneNumber ?? "N/A",
                 CenterId = s.CenterId,
                 CenterName = s.Center?.CenterName ?? "N/A",
-                StaffCode = s.StaffCode,
-                Position = s.Position,
-                HireDate = s.HireDate,
                 IsActive = s.IsActive,
                 CreatedAt = s.CreatedAt
             }).ToList();
@@ -199,22 +187,8 @@ namespace EVServiceCenter.Application.Service
                 if (staff == null)
                     throw new ArgumentException("Nhân viên không tồn tại.");
 
-                // Validate staff code uniqueness if provided
-                if (!string.IsNullOrWhiteSpace(request.StaffCode) && request.StaffCode != staff.StaffCode)
-                {
-                    if (!await _staffRepository.IsStaffCodeUniqueAsync(request.StaffCode, staffId))
-                        throw new ArgumentException("Mã nhân viên đã tồn tại.");
-                }
-
                 // Update staff properties
-                if (!string.IsNullOrWhiteSpace(request.StaffCode))
-                    staff.StaffCode = request.StaffCode;
-
-                if (!string.IsNullOrWhiteSpace(request.Position))
-                    staff.Position = request.Position;
-
-                if (request.HireDate.HasValue)
-                    staff.HireDate = request.HireDate.Value;
+                // No StaffCode/Position/HireDate anymore
 
                 if (request.IsActive.HasValue)
                     staff.IsActive = request.IsActive.Value;
@@ -258,10 +232,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<bool> IsStaffCodeUniqueAsync(string staffCode, int? excludeStaffId = null)
-        {
-            return await _staffRepository.IsStaffCodeUniqueAsync(staffCode, excludeStaffId);
-        }
+        // IsStaffCodeUniqueAsync removed (no StaffCode)
 
         #endregion
 
@@ -280,9 +251,8 @@ namespace EVServiceCenter.Application.Service
 
                     // Cập nhật center và các thuộc tính tùy chọn
                     existing.CenterId = request.CenterId;
-                    if (!string.IsNullOrWhiteSpace(request.TechnicianCode)) existing.TechnicianCode = request.TechnicianCode;
-                    if (!string.IsNullOrWhiteSpace(request.Specialization)) existing.Specialization = request.Specialization;
-                    existing.ExperienceYears = request.ExperienceYears;
+                    // TechnicianCode removed
+                    if (!string.IsNullOrWhiteSpace(request.Position)) existing.Position = request.Position;
 
                     await _technicianRepository.UpdateTechnicianAsync(existing);
                     return await MapToTechnicianResponseAsync(existing.TechnicianId);
@@ -293,18 +263,15 @@ namespace EVServiceCenter.Application.Service
                     await ValidateAddTechnicianRequestAsync(request);
 
                     // Generate technician code if not provided
-                    var technicianCode = string.IsNullOrWhiteSpace(request.TechnicianCode) 
-                        ? GenerateTechnicianCode() 
-                        : request.TechnicianCode;
+                    // TechnicianCode removed
 
                     // Create technician entity
                     var technician = new Technician
                     {
                         UserId = request.UserId!.Value,
                         CenterId = request.CenterId,
-                        TechnicianCode = technicianCode,
-                        Specialization = request.Specialization,
-                        ExperienceYears = request.ExperienceYears,
+                        
+                        Position = request.Position,
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -365,14 +332,13 @@ namespace EVServiceCenter.Application.Service
                     var searchLower = searchTerm.ToLower();
                     filteredTechnicians = filteredTechnicians.Where(t => 
                         t.User.FullName.ToLower().Contains(searchLower) ||
-                        t.TechnicianCode.ToLower().Contains(searchLower) ||
                         t.User.Email.ToLower().Contains(searchLower) ||
-                        t.Specialization.ToLower().Contains(searchLower));
+                        t.Position.ToLower().Contains(searchLower));
                 }
 
                 if (!string.IsNullOrWhiteSpace(specialization))
                 {
-                    filteredTechnicians = filteredTechnicians.Where(t => t.Specialization.ToLower().Contains(specialization.ToLower()));
+                    filteredTechnicians = filteredTechnicians.Where(t => t.Position.ToLower().Contains(specialization.ToLower()));
                 }
 
                 if (isActive.HasValue)
@@ -400,9 +366,8 @@ namespace EVServiceCenter.Application.Service
                     UserPhoneNumber = t.User?.PhoneNumber ?? "N/A",
                     CenterId = t.CenterId,
                     CenterName = t.Center?.CenterName ?? "N/A",
-                    TechnicianCode = t.TechnicianCode,
-                    Specialization = t.Specialization,
-                    ExperienceYears = t.ExperienceYears,
+                    
+                    Position = t.Position,
                     IsActive = t.IsActive,
                     CreatedAt = t.CreatedAt
                 }).ToList();
@@ -436,21 +401,13 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException("Kỹ thuật viên không tồn tại.");
 
                 // Validate technician code uniqueness if provided
-                if (!string.IsNullOrWhiteSpace(request.TechnicianCode) && request.TechnicianCode != technician.TechnicianCode)
-                {
-                    if (!await _technicianRepository.IsTechnicianCodeUniqueAsync(request.TechnicianCode, technicianId))
-                        throw new ArgumentException("Mã kỹ thuật viên đã tồn tại.");
-                }
+                // TechnicianCode uniqueness removed
 
                 // Update technician properties
-                if (!string.IsNullOrWhiteSpace(request.TechnicianCode))
-                    technician.TechnicianCode = request.TechnicianCode;
+                // TechnicianCode removed
 
-                if (!string.IsNullOrWhiteSpace(request.Specialization))
-                    technician.Specialization = request.Specialization;
-
-                if (request.ExperienceYears.HasValue)
-                    technician.ExperienceYears = request.ExperienceYears.Value;
+                if (!string.IsNullOrWhiteSpace(request.Position))
+                    technician.Position = request.Position;
 
                 if (request.IsActive.HasValue)
                     technician.IsActive = request.IsActive.Value;
@@ -494,10 +451,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<bool> IsTechnicianCodeUniqueAsync(string technicianCode, int? excludeTechnicianId = null)
-        {
-            return await _technicianRepository.IsTechnicianCodeUniqueAsync(technicianCode, excludeTechnicianId);
-        }
+        // TechnicianCode uniqueness removed
 
         #endregion
 
@@ -558,12 +512,7 @@ namespace EVServiceCenter.Application.Service
             if (await IsUserAlreadyTechnicianAsync(request.UserId))
                 errors.Add("Người dùng đã là kỹ thuật viên của trung tâm khác.");
 
-            // Validate staff code uniqueness
-            if (!string.IsNullOrWhiteSpace(request.StaffCode))
-            {
-                if (!await IsStaffCodeUniqueAsync(request.StaffCode))
-                    errors.Add("Mã nhân viên đã tồn tại.");
-            }
+            // No StaffCode validation
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
@@ -597,12 +546,7 @@ namespace EVServiceCenter.Application.Service
                     errors.Add("Người dùng đã là kỹ thuật viên của trung tâm khác.");
             }
 
-            // Validate technician code uniqueness
-            if (!string.IsNullOrWhiteSpace(request.TechnicianCode))
-            {
-                if (!await IsTechnicianCodeUniqueAsync(request.TechnicianCode))
-                    errors.Add("Mã kỹ thuật viên đã tồn tại.");
-            }
+            // TechnicianCode removed: không còn validate mã kỹ thuật viên
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
@@ -623,9 +567,6 @@ namespace EVServiceCenter.Application.Service
                 UserPhoneNumber = staff.User?.PhoneNumber ?? "N/A",
                 CenterId = staff.CenterId,
                 CenterName = staff.Center?.CenterName ?? "N/A",
-                StaffCode = staff.StaffCode,
-                Position = staff.Position,
-                HireDate = staff.HireDate,
                 IsActive = staff.IsActive,
                 CreatedAt = staff.CreatedAt
             };
@@ -637,7 +578,7 @@ namespace EVServiceCenter.Application.Service
             if (technician == null)
                 throw new ArgumentException("Kỹ thuật viên không tồn tại.");
 
-            return new TechnicianResponse
+                return new TechnicianResponse
             {
                 TechnicianId = technician.TechnicianId,
                 UserId = technician.UserId,
@@ -645,28 +586,16 @@ namespace EVServiceCenter.Application.Service
                 UserEmail = technician.User?.Email ?? "N/A",
                 UserPhoneNumber = technician.User?.PhoneNumber ?? "N/A",
                 CenterId = technician.CenterId,
-                CenterName = technician.Center?.CenterName ?? "N/A",
-                TechnicianCode = technician.TechnicianCode,
-                Specialization = technician.Specialization,
-                ExperienceYears = technician.ExperienceYears,
+                    CenterName = technician.Center?.CenterName ?? "N/A",
+                    Position = technician.Position,
                 IsActive = technician.IsActive,
                 CreatedAt = technician.CreatedAt
             };
         }
 
-        private string GenerateStaffCode()
-        {
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-            var random = new Random().Next(100, 999);
-            return $"ST{timestamp}{random}";
-        }
+        // GenerateStaffCode removed
 
-        private string GenerateTechnicianCode()
-        {
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-            var random = new Random().Next(100, 999);
-            return $"TC{timestamp}{random}";
-        }
+        // GenerateTechnicianCode removed
 
         #endregion
     }

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Service;
+using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Application.Models.Requests;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,11 +17,13 @@ public class OrderController : ControllerBase
 {
     private readonly IOrderService _orderService;
     private readonly PaymentService _paymentService;
+    private readonly IOrderHistoryService _orderHistoryService;
 
-    public OrderController(IOrderService orderService, PaymentService paymentService)
+    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService)
     {
         _orderService = orderService;
         _paymentService = paymentService;
+        _orderHistoryService = orderHistoryService;
     }
 
     /// <summary>
@@ -38,6 +41,40 @@ public class OrderController : ControllerBase
         {
             return BadRequest(new { success = false, message = ex.Message });
         }
+    }
+
+    // ===== Order History (merged from OrderHistoryController) =====
+    [HttpGet("Customer/{customerId}/order-history")]
+    [ProducesResponseType(typeof(OrderHistoryListResponse), 200)]
+    public async Task<IActionResult> GetOrderHistoryForCustomer(
+        int customerId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? status = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] string sortBy = "orderDate",
+        [FromQuery] string sortOrder = "desc")
+    {
+        var response = await _orderHistoryService.GetOrderHistoryAsync(
+            customerId, page, pageSize, status?.ToUpper(), fromDate, toDate, sortBy, sortOrder);
+        return Ok(response);
+    }
+
+    [HttpGet("Customer/{customerId}/order-history/{orderId}")]
+    [ProducesResponseType(typeof(OrderHistoryResponse), 200)]
+    public async Task<IActionResult> GetOrderDetailsForCustomer(int customerId, int orderId)
+    {
+        var response = await _orderHistoryService.GetOrderHistoryByIdAsync(customerId, orderId);
+        return Ok(response);
+    }
+
+    [HttpGet("Customer/{customerId}/order-history/stats")]
+    [ProducesResponseType(typeof(OrderHistoryStatsResponse), 200)]
+    public async Task<IActionResult> GetOrderHistoryStatsForCustomer(int customerId, [FromQuery] string period = "all")
+    {
+        var response = await _orderHistoryService.GetOrderHistoryStatsAsync(customerId, period.ToLower());
+        return Ok(response);
     }
 
     /// <summary>

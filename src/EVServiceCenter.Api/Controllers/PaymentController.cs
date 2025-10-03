@@ -87,7 +87,7 @@ public class PaymentController : ControllerBase
             workOrder = new Domain.Entities.WorkOrder
             {
                 BookingId = booking.BookingId,
-                TechnicianId = booking.TechnicianId ?? 0,
+
                 Status = "OPEN",
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -100,43 +100,31 @@ public class PaymentController : ControllerBase
         {
             invoice = new Domain.Entities.Invoice
             {
-                InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{workOrder.WorkOrderId}",
                 WorkOrderId = workOrder.WorkOrderId,
                 BookingId = booking.BookingId,
                 CustomerId = booking.CustomerId,
-                BillingName = booking.Customer?.User?.FullName ?? "Guest",
-                BillingPhone = booking.Customer?.User?.PhoneNumber,
-                BillingAddress = booking.Center?.Address,
+                Email = booking.Customer?.User?.Email,
+                Phone = booking.Customer?.User?.PhoneNumber,
                 Status = "PAID",
-                TotalAmount = booking.TotalEstimatedCost ?? 0m,
                 CreatedAt = DateTime.UtcNow,
             };
             invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
         }
 
-        var attemptNo = 1 + await _paymentRepo.CountByInvoiceIdAsync(invoice.InvoiceId);
         var payment = new Domain.Entities.Payment
         {
             PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{bookingId}",
             InvoiceId = invoice.InvoiceId,
-            PayOsorderCode = null,
             PaymentMethod = "CASH",
             Amount = req.Amount,
             Status = "PAID",
             PaidAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
-            BuyerName = invoice.BillingName,
-            BuyerPhone = invoice.BillingPhone,
-            BuyerAddress = invoice.BillingAddress,
             PaidByUserId = req.PaidByUserId,
-            AttemptNo = attemptNo,
-            AttemptStatus = "COMPLETED",
-            AttemptAt = DateTime.UtcNow,
-            AttemptMessage = string.IsNullOrWhiteSpace(req.Note) ? null : req.Note,
         };
 
         payment = await _paymentRepo.CreateAsync(payment);
-        return Ok(new { paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, attemptNo = payment.AttemptNo, attemptStatus = payment.AttemptStatus, attemptAt = payment.AttemptAt, status = payment.Status, amount = payment.Amount, paymentMethod = payment.PaymentMethod, paidByUserId = payment.PaidByUserId });
+        return Ok(new { paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, status = payment.Status, amount = payment.Amount, paymentMethod = payment.PaymentMethod, paidByUserId = payment.PaidByUserId });
     }
 
 	// (Tuỳ chọn) Kiểm tra trạng thái theo orderCode nếu FE cần hỏi lại

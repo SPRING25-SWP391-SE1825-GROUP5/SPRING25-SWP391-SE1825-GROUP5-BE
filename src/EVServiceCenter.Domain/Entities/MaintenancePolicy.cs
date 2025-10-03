@@ -14,8 +14,6 @@ public class MaintenancePolicy
 
     public bool IsActive { get; set; }
 
-    public string? Notes { get; set; }
-
     public int? ServiceId { get; set; }
 
     public virtual Service? Service { get; set; }

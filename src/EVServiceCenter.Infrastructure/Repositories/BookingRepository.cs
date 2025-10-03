@@ -29,7 +29,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     .Include(b => b.Center)
                     .Include(b => b.Slot)
                     .Include(b => b.Service)
-                    .Include(b => b.Technician)
+
                     .OrderByDescending(b => b.CreatedAt)
                     .ToListAsync();
             }
@@ -54,17 +54,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
         }
 
-        public async Task<Booking> GetBookingByCodeAsync(string bookingCode)
-        {
-            return await _context.Bookings
-                .Include(b => b.Customer)
-                .Include(b => b.Customer.User)
-                .Include(b => b.Vehicle)
-                .Include(b => b.Center)
-                .Include(b => b.Slot)
-                .Include(b => b.Service)
-                .FirstOrDefaultAsync(b => b.BookingCode == bookingCode);
-        }
+        // GetBookingByCodeAsync removed: BookingCode dropped
 
         public async Task<Booking> CreateBookingAsync(Booking booking)
         {
@@ -84,17 +74,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Bookings.AnyAsync(b => b.BookingId == bookingId);
         }
 
-        public async Task<bool> IsBookingCodeUniqueAsync(string bookingCode, int? excludeBookingId = null)
-        {
-            var query = _context.Bookings.Where(b => b.BookingCode == bookingCode);
-            
-            if (excludeBookingId.HasValue)
-            {
-                query = query.Where(b => b.BookingId != excludeBookingId.Value);
-            }
-
-            return !await query.AnyAsync();
-        }
+        // IsBookingCodeUniqueAsync removed
 
         public async Task<List<Booking>> GetByTechnicianAndDateAsync(int technicianId, DateOnly date)
         {
@@ -105,7 +85,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Slot)
                 .Include(b => b.Service)
                 .Include(b => b.WorkOrders)
-                .Where(b => b.TechnicianId == technicianId && b.BookingDate == date)
+                .Where(b => b.CreatedAt.Date == date.ToDateTime(TimeOnly.MinValue).Date)
                 .OrderBy(b => b.Slot.SlotTime)
                 .ToListAsync();
         }
@@ -117,7 +97,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Select(b => new Booking
                 {
                     BookingId = b.BookingId,
-                    BookingCode = b.BookingCode,
                     Status = b.Status,
                     CreatedAt = b.CreatedAt,
                     UpdatedAt = b.UpdatedAt
@@ -126,5 +105,94 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         // BookingServices removed in single-service model
+
+        public async Task<List<Booking>> GetBookingsByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10, 
+            string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+            string sortBy = "createdAt", string sortOrder = "desc")
+        {
+            var query = _context.Bookings
+                .Include(b => b.Customer)
+                .Include(b => b.Vehicle)
+                .ThenInclude(v => v.VehicleModel)
+                .Include(b => b.Center)
+                .Include(b => b.Slot)
+                .Include(b => b.Service)
+
+                .Where(b => b.CustomerId == customerId);
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(status))
+            {
+                query = query.Where(b => b.Status == status);
+            }
+
+            if (fromDate.HasValue)
+                query = query.Where(b => b.CreatedAt >= fromDate.Value);
+            if (toDate.HasValue)
+                query = query.Where(b => b.CreatedAt <= toDate.Value);
+
+            // Apply sorting
+            switch (sortBy.ToLower())
+            {
+                case "bookingdate":
+                case "createdat":
+                    query = sortOrder.ToLower() == "asc" 
+                        ? query.OrderBy(b => b.CreatedAt)
+                        : query.OrderByDescending(b => b.CreatedAt);
+                    break;
+                case "totalcost":
+                    query = sortOrder.ToLower() == "asc" 
+                        ? query.OrderBy(b => b.TotalCost)
+                        : query.OrderByDescending(b => b.TotalCost);
+                    break;
+                default:
+                    query = query.OrderByDescending(b => b.CreatedAt);
+                    break;
+            }
+
+            // Apply pagination
+            return await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+
+        public async Task<int> CountBookingsByCustomerIdAsync(int customerId, string? status = null, 
+            DateTime? fromDate = null, DateTime? toDate = null)
+        {
+            var query = _context.Bookings.Where(b => b.CustomerId == customerId);
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(status))
+            {
+                query = query.Where(b => b.Status == status);
+            }
+
+            if (fromDate.HasValue)
+                query = query.Where(b => b.CreatedAt >= fromDate.Value);
+            if (toDate.HasValue)
+                query = query.Where(b => b.CreatedAt <= toDate.Value);
+
+            return await query.CountAsync();
+        }
+
+        public async Task<Booking?> GetBookingWithDetailsByIdAsync(int bookingId)
+        {
+            return await _context.Bookings
+                .Include(b => b.Customer)
+                .Include(b => b.Vehicle)
+                .ThenInclude(v => v.VehicleModel)
+                .Include(b => b.Center)
+                .Include(b => b.Slot)
+                .Include(b => b.Service)
+
+                .Include(b => b.WorkOrders)
+                .ThenInclude(wo => wo.WorkOrderParts)
+                .ThenInclude(wop => wop.Part)
+                .Include(b => b.WorkOrders)
+                .ThenInclude(wo => wo.Invoices)
+                .ThenInclude(i => i.Payments)
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+        }
     }
 }

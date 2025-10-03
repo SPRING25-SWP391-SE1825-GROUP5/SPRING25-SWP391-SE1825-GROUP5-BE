@@ -41,10 +41,7 @@ namespace EVServiceCenter.Application.Service
                     promotions = promotions.Where(p => p.Status == status.ToUpper()).ToList();
                 }
 
-                if (!string.IsNullOrWhiteSpace(promotionType))
-                {
-                    promotions = promotions.Where(p => p.PromotionType == promotionType.ToUpper()).ToList();
-                }
+                // PromotionType removed
 
                 // Pagination
                 var totalCount = promotions.Count;
@@ -129,9 +126,8 @@ namespace EVServiceCenter.Application.Service
                     Status = request.Status.ToUpper(),
                     UsageLimit = request.UsageLimit,
                     UsageCount = 0,
-                    UserLimit = request.UserLimit,
-                    PromotionType = request.PromotionType.ToUpper(),
-                    ApplyFor = request.ApplyFor.ToUpper(),
+                    
+                    
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -174,9 +170,8 @@ namespace EVServiceCenter.Application.Service
                 promotion.MaxDiscount = request.MaxDiscount;
                 promotion.Status = request.Status.ToUpper();
                 promotion.UsageLimit = request.UsageLimit;
-                promotion.UserLimit = request.UserLimit;
-                promotion.PromotionType = request.PromotionType.ToUpper();
-                promotion.ApplyFor = request.ApplyFor.ToUpper();
+                
+                
                 promotion.UpdatedAt = DateTime.UtcNow;
 
                 await _promotionRepository.UpdatePromotionAsync(promotion);
@@ -291,17 +286,7 @@ namespace EVServiceCenter.Application.Service
                     };
                 }
 
-                // Check apply for
-                if (promotion.ApplyFor != "ALL" && promotion.ApplyFor != request.OrderType.ToUpper())
-                {
-                    return new PromotionValidationResponse
-                    {
-                        IsValid = false,
-                        Message = $"Mã khuyến mãi chỉ áp dụng cho {promotion.ApplyFor}.",
-                        DiscountAmount = 0,
-                        FinalAmount = request.OrderAmount
-                    };
-                }
+                // ApplyFor removed: scope is inferred by where the promotion is linked (booking/order)
 
                 // Calculate discount amount
                 decimal discountAmount = 0;
@@ -410,9 +395,8 @@ namespace EVServiceCenter.Application.Service
                 UpdatedAt = promotion.UpdatedAt,
                 UsageLimit = promotion.UsageLimit,
                 UsageCount = promotion.UsageCount,
-                UserLimit = promotion.UserLimit,
-                PromotionType = promotion.PromotionType,
-                ApplyFor = promotion.ApplyFor,
+                
+                
                 IsActive = isActive,
                 IsExpired = isExpired,
                 IsUsageLimitReached = isUsageLimitReached,

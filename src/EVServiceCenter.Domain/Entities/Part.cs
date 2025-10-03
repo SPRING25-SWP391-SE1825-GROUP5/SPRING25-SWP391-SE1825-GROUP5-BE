@@ -13,19 +13,21 @@ public partial class Part
 
     public string Brand { get; set; }
 
-    public decimal UnitPrice { get; set; }
+    public decimal Price { get; set; }
 
-    public string Unit { get; set; }
+    public string? ImageUrl { get; set; }
 
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
+    public decimal? Rating { get; set; }
+
     public virtual ICollection<Inventory> Inventories { get; set; } = new List<Inventory>();
 
     public virtual ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
 
-    public virtual ICollection<WorkOrderChargeProposalItem> WorkOrderChargeProposalItems { get; set; } = new List<WorkOrderChargeProposalItem>();
+    
 
     public virtual ICollection<WorkOrderPart> WorkOrderParts { get; set; } = new List<WorkOrderPart>();
 
@@ -34,7 +36,9 @@ public partial class Part
 
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 
-    public virtual ICollection<Wishlist> Wishlists { get; set; } = new List<Wishlist>();
+    
 
-    public virtual ICollection<ProductReview> ProductReviews { get; set; } = new List<ProductReview>();
+    
+
+    public virtual ICollection<VehicleModelPart> VehicleModelParts { get; set; } = new List<VehicleModelPart>();
 }

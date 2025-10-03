@@ -7,7 +7,6 @@ namespace EVServiceCenter.Application.Models.Responses
     {
         public int TechnicianId { get; set; }
         public string TechnicianName { get; set; } = string.Empty;
-        public string TechnicianCode { get; set; } = string.Empty;
         public DateTime Date { get; set; }
         public List<TimeSlotAvailability> AvailableSlots { get; set; } = new List<TimeSlotAvailability>();
     }

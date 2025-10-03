@@ -12,9 +12,6 @@ public partial class MaintenanceChecklistResult
     public int? PartId { get; set; }
 
     public string? Description { get; set; }
-    public bool IsMandatory { get; set; }
-
-    public bool Performed { get; set; }
 
     public string? Result { get; set; }
 

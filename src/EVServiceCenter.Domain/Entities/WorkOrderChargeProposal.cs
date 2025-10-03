@@ -15,11 +15,17 @@ public partial class WorkOrderChargeProposal
 
     public DateTime? ApprovedAt { get; set; }
 
-    public string ApprovedBy { get; set; }
+    public int? ApprovedByCustomerId { get; set; }
+
+    public int? CreatedByTechnicianId { get; set; }
 
     public string Note { get; set; }
 
     public virtual WorkOrder WorkOrder { get; set; }
+
+    public virtual Customer? ApprovedByCustomer { get; set; }
+
+    public virtual Technician? CreatedByTechnician { get; set; }
 
     public virtual ICollection<WorkOrderChargeProposalItem> WorkOrderChargeProposalItems { get; set; } = new List<WorkOrderChargeProposalItem>();
 }

@@ -164,17 +164,14 @@ public class WorkOrderChargesController : ControllerBase
                 .Sum(p => p.UnitCost * p.QuantityUsed);
             var invoice = new Domain.Entities.Invoice
             {
-                InvoiceNumber = $"INV-ADJ-{DateTime.UtcNow:yyyyMMdd}-{workOrderId}",
                 WorkOrderId = workOrderId,
                 BookingId = wo.BookingId,
                 CustomerId = wo.Booking?.CustomerId,
-                BillingName = wo.Booking?.Customer?.User?.FullName ?? "Guest",
-                BillingPhone = wo.Booking?.Customer?.User?.PhoneNumber,
-                BillingAddress = wo.Booking?.Center?.Address,
+                Email = wo.Booking?.Customer?.User?.Email,
+                Phone = wo.Booking?.Customer?.User?.PhoneNumber,
                 Status = "PAID",
-                TotalAmount = total,
                 CreatedAt = DateTime.UtcNow,
-                InvoiceType = "DETAIL"
+                
             };
             invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
 
@@ -182,30 +179,22 @@ public class WorkOrderChargesController : ControllerBase
                 .Select(p => new Domain.Entities.InvoiceItem
                 {
                     InvoiceId = invoice.InvoiceId,
-                    PartId = p.PartId,
-                    Description = p.Part?.PartName,
-                    Quantity = p.QuantityUsed,
-                    UnitPrice = p.UnitCost,
-                    LineTotal = p.UnitCost * p.QuantityUsed
+                    Description = p.Part?.PartName
                 }).ToList();
             await _invoiceRepo.CreateInvoiceItemsAsync(items);
 
-            var payment = await _paymentRepo.GetByPayOsOrderCodeAsync(orderCode);
+            var payment = (Domain.Entities.Payment)null;
             if (payment == null)
             {
                 payment = new Domain.Entities.Payment
                 {
                     PaymentCode = $"PAY{DateTime.UtcNow:yyyyMMddHHmmss}{workOrderId}",
                     InvoiceId = invoice.InvoiceId,
-                    PayOsorderCode = orderCode,
                     PaymentMethod = "PAYOS",
                     Amount = (int)Math.Round(total),
                     Status = "PAID",
                     PaidAt = DateTime.UtcNow,
                     CreatedAt = DateTime.UtcNow,
-                    BuyerName = invoice.BillingName,
-                    BuyerPhone = invoice.BillingPhone,
-                    BuyerAddress = invoice.BillingAddress
                 };
                 await _paymentRepo.CreateAsync(payment);
             }
@@ -223,9 +212,9 @@ public class WorkOrderChargesController : ControllerBase
                 if (!string.IsNullOrWhiteSpace(customerEmail))
                 {
                     var pdf = BuildInvoicePdf(invoice, items);
-                    var subject = $"Hóa đơn phát sinh #{invoice.InvoiceNumber}";
-                    var body = $"<p>Cảm ơn bạn đã thanh toán phát sinh.</p><p>Mã hóa đơn: {invoice.InvoiceNumber}</p><p>Tổng tiền: {invoice.TotalAmount:N0} VND</p>";
-                    await _email.SendEmailWithAttachmentAsync(customerEmail, subject, body, $"Invoice_{invoice.InvoiceNumber}.pdf", pdf);
+                    var subject = $"Hóa đơn phát sinh #{invoice.InvoiceId}";
+                    var body = $"<p>Cảm ơn bạn đã thanh toán phát sinh.</p><p>Mã hóa đơn: {invoice.InvoiceId}</p>";
+                    await _email.SendEmailWithAttachmentAsync(customerEmail, subject, body, $"Invoice_{invoice.InvoiceId}.pdf", pdf);
                 }
             }
             catch (Exception ex)
@@ -260,39 +249,27 @@ public class WorkOrderChargesController : ControllerBase
             // Tạo invoice DETAIL
             var invoice = new Domain.Entities.Invoice
             {
-                InvoiceNumber = $"INV-ADJ-{DateTime.UtcNow:yyyyMMdd}-{workOrderId}",
                 WorkOrderId = workOrderId,
                 BookingId = wo.BookingId,
                 CustomerId = wo.Booking?.CustomerId,
-                BillingName = wo.Booking?.Customer?.User?.FullName ?? "Guest",
-                BillingPhone = wo.Booking?.Customer?.User?.PhoneNumber,
-                BillingAddress = wo.Booking?.Center?.Address,
+                Email = wo.Booking?.Customer?.User?.Email,
+                Phone = wo.Booking?.Customer?.User?.PhoneNumber,
                 Status = "PAID",
-                TotalAmount = total,
                 CreatedAt = DateTime.UtcNow,
-                InvoiceType = "DETAIL"
+                
             };
             invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
 
-            var attemptNo = 1 + await _paymentRepo.CountByInvoiceIdAsync(invoice.InvoiceId);
             var payment = new Domain.Entities.Payment
             {
                 PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{workOrderId}",
                 InvoiceId = invoice.InvoiceId,
-                PayOsorderCode = null,
                 PaymentMethod = "CASH",
                 Amount = (int)Math.Round(total),
                 Status = "PAID",
                 PaidAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
-                BuyerName = invoice.BillingName,
-                BuyerPhone = invoice.BillingPhone,
-                BuyerAddress = invoice.BillingAddress,
                 PaidByUserId = req.PaidByUserId,
-                AttemptNo = attemptNo,
-                AttemptStatus = "COMPLETED",
-                AttemptAt = DateTime.UtcNow,
-                AttemptMessage = string.IsNullOrWhiteSpace(req.Note) ? null : req.Note,
             };
             await _paymentRepo.CreateAsync(payment);
 
@@ -303,14 +280,13 @@ public class WorkOrderChargesController : ControllerBase
         {
             // Simple PDF using plain text (placeholder). Replace with QuestPDF if available.
             var sb = new StringBuilder();
-            sb.AppendLine($"Invoice: {invoice.InvoiceNumber}");
+            sb.AppendLine($"Invoice: {invoice.InvoiceId}");
             sb.AppendLine($"Date: {DateTime.UtcNow:yyyy-MM-dd HH:mm}");
-            sb.AppendLine($"Customer: {invoice.BillingName}");
-            sb.AppendLine($"Total: {invoice.TotalAmount:N0} VND");
+            sb.AppendLine($"Customer email: {invoice.Email}");
             sb.AppendLine("Items:");
             foreach (var i in items)
             {
-                sb.AppendLine($"- {i.Description} x{i.Quantity} @ {i.UnitPrice:N0} = {i.LineTotal:N0}");
+                sb.AppendLine($"- {i.Description}");
             }
             return Encoding.UTF8.GetBytes(sb.ToString());
         }

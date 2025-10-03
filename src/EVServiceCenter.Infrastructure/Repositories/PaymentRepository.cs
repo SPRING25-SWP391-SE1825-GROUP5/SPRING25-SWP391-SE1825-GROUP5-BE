@@ -16,7 +16,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<Payment?> GetByPayOsOrderCodeAsync(long payOsOrderCode)
         {
-            return await _db.Payments.FirstOrDefaultAsync(p => p.PayOsorderCode == payOsOrderCode);
+            // Deprecated: PayOSOrderCode column removed. No-op and return null.
+            await Task.CompletedTask;
+            return null;
         }
 
         public async Task<Payment> CreateAsync(Payment payment)

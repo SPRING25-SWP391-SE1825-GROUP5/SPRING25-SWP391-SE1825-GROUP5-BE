@@ -13,8 +13,6 @@ public partial class WorkOrderPart
 
     public decimal UnitCost { get; set; }
 
-    public decimal TotalCost { get; set; }
-
     public virtual Part Part { get; set; }
 
     public virtual WorkOrder WorkOrder { get; set; }

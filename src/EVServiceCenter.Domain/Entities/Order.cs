@@ -9,17 +9,11 @@ public partial class Order
 
     public int CustomerId { get; set; }
 
-    public string OrderNumber { get; set; }
-
-    public decimal TotalAmount { get; set; }
-
     public string Status { get; set; }
 
     public string? Notes { get; set; }
 
-    public string ShippingAddress { get; set; }
-
-    public string ShippingPhone { get; set; }
+    
 
     public DateTime CreatedAt { get; set; }
 
@@ -31,7 +25,7 @@ public partial class Order
 
     public virtual ICollection<OrderStatusHistory> OrderStatusHistories { get; set; } = new List<OrderStatusHistory>();
 
-    public virtual ICollection<ProductReview> ProductReviews { get; set; } = new List<ProductReview>();
+    public virtual ICollection<Feedback> Feedbacks { get; set; } = new List<Feedback>();
 
     public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 }

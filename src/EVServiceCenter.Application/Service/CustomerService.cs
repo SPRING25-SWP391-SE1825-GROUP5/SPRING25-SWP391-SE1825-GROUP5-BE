@@ -56,20 +56,12 @@ namespace EVServiceCenter.Application.Service
                 // Normalize phone number
                 var normalizedPhone = NormalizePhoneNumber(request.PhoneNumber);
 
-                // Generate customer code if not provided
-                var customerCode = string.IsNullOrWhiteSpace(request.CustomerCode) 
-                    ? await GenerateCustomerCodeAsync() 
-                    : request.CustomerCode.Trim();
-
                 // Create customer entity
                 var customer = new Customer
                 {
                     UserId = null, // Will be set when user registers
-                    CustomerCode = customerCode,
-                    NormalizedPhone = normalizedPhone,
                     IsGuest = request.IsGuest,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
+                    
                 };
 
                 // Save customer
@@ -103,10 +95,8 @@ namespace EVServiceCenter.Application.Service
                 var normalizedPhone = NormalizePhoneNumber(request.PhoneNumber);
 
                 // Update customer
-                customer.NormalizedPhone = normalizedPhone;
-                customer.CustomerCode = request.CustomerCode?.Trim();
                 customer.IsGuest = request.IsGuest;
-                customer.UpdatedAt = DateTime.UtcNow;
+                
 
                 await _customerRepository.UpdateCustomerAsync(customer);
 
@@ -140,9 +130,7 @@ namespace EVServiceCenter.Application.Service
             if (existingByEmail != null)
                 throw new ArgumentException("Email đã tồn tại");
 
-            var phoneUnique = await _customerRepository.IsPhoneNumberUniqueAsync(normalizedPhone);
-            if (!phoneUnique)
-                throw new ArgumentException("Số điện thoại đã tồn tại");
+            // Phone uniqueness now validated against Users.PhoneNumber only
 
             // Generate secure random password (>=8, upper/lower/digit/special)
             var tempPassword = GenerateSecurePassword(12);
@@ -158,8 +146,6 @@ namespace EVServiceCenter.Application.Service
                 Role = "CUSTOMER",
                 IsActive = true,
                 EmailVerified = false,
-                FailedLoginAttempts = 0,
-                LockoutUntil = null,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -170,11 +156,7 @@ namespace EVServiceCenter.Application.Service
             var customer = new Customer
             {
                 UserId = user.UserId,
-                CustomerCode = await GenerateCustomerCodeAsync(),
-                NormalizedPhone = normalizedPhone,
                 IsGuest = false,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
             };
 
             var created = await _customerRepository.CreateCustomerAsync(customer);
@@ -223,11 +205,7 @@ namespace EVServiceCenter.Application.Service
             {
                 CustomerId = customer.CustomerId,
                 UserId = customer.UserId,
-                CustomerCode = customer.CustomerCode,
-                NormalizedPhone = customer.NormalizedPhone,
                 IsGuest = customer.IsGuest,
-                CreatedAt = customer.CreatedAt,
-                UpdatedAt = customer.UpdatedAt,
                 UserFullName = customer.User?.FullName,
                 UserEmail = customer.User?.Email,
                 UserPhoneNumber = customer.User?.PhoneNumber,
@@ -239,21 +217,7 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Check for duplicate customer code
-            if (!string.IsNullOrWhiteSpace(request.CustomerCode))
-            {
-                if (!await _customerRepository.IsCustomerCodeUniqueAsync(request.CustomerCode.Trim()))
-                {
-                    errors.Add("Mã khách hàng này đã tồn tại. Vui lòng chọn mã khác.");
-                }
-            }
-
-            // Check for duplicate phone number
-            var normalizedPhone = NormalizePhoneNumber(request.PhoneNumber);
-            if (!await _customerRepository.IsPhoneNumberUniqueAsync(normalizedPhone))
-            {
-                errors.Add("Số điện thoại này đã được sử dụng. Vui lòng chọn số khác.");
-            }
+            // CustomerCode/NormalizedPhone removed from Customer; uniqueness handled on User
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
@@ -263,21 +227,7 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Check for duplicate customer code
-            if (!string.IsNullOrWhiteSpace(request.CustomerCode))
-            {
-                if (!await _customerRepository.IsCustomerCodeUniqueAsync(request.CustomerCode.Trim(), customerId))
-                {
-                    errors.Add("Mã khách hàng này đã tồn tại. Vui lòng chọn mã khác.");
-                }
-            }
-
-            // Check for duplicate phone number
-            var normalizedPhone = NormalizePhoneNumber(request.PhoneNumber);
-            if (!await _customerRepository.IsPhoneNumberUniqueAsync(normalizedPhone, customerId))
-            {
-                errors.Add("Số điện thoại này đã được sử dụng. Vui lòng chọn số khác.");
-            }
+            // CustomerCode/NormalizedPhone removed from Customer; uniqueness handled on User
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
@@ -290,19 +240,6 @@ namespace EVServiceCenter.Application.Service
             return digits.StartsWith("0") ? digits : "0" + digits;
         }
 
-        private async Task<string> GenerateCustomerCodeAsync()
-        {
-            var prefix = "KH";
-            var random = new Random();
-            string customerCode;
-            
-            do
-            {
-                var number = random.Next(100000, 999999);
-                customerCode = $"{prefix}{number}";
-            } while (!await _customerRepository.IsCustomerCodeUniqueAsync(customerCode));
-
-            return customerCode;
-        }
+        
     }
 }

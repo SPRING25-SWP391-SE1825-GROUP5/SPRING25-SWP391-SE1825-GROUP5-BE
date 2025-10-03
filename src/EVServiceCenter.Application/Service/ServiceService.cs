@@ -30,14 +30,8 @@ namespace EVServiceCenter.Application.Service
                 {
                     services = services.Where(s =>
                         s.ServiceName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        s.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        s.RequiredSkills.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        s.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
                     ).ToList();
-                }
-
-                if (categoryId.HasValue)
-                {
-                    // Category filtering removed - no longer supported
                 }
 
                 // Pagination
@@ -93,14 +87,8 @@ namespace EVServiceCenter.Application.Service
                 {
                     services = services.Where(s =>
                         s.ServiceName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        s.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        s.RequiredSkills.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        s.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
                     ).ToList();
-                }
-
-                if (categoryId.HasValue)
-                {
-                    // Category filtering removed - no longer supported
                 }
 
                 // Pagination
@@ -135,7 +123,6 @@ namespace EVServiceCenter.Application.Service
                     ServiceName = request.ServiceName.Trim(),
                     Description = !string.IsNullOrWhiteSpace(request.Description) ? request.Description.Trim() : null,
                     BasePrice = request.Price,
-                    RequiredSkills = !string.IsNullOrWhiteSpace(request.Notes) ? request.Notes.Trim() : null,
                     IsActive = request.IsActive,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -159,19 +146,15 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Check if service exists
                 var existingService = await _serviceRepository.GetServiceByIdAsync(serviceId);
                 if (existingService == null)
                     throw new ArgumentException("Dịch vụ không tồn tại.");
 
-                // Update service properties
                 existingService.ServiceName = request.ServiceName.Trim();
                 existingService.Description = !string.IsNullOrWhiteSpace(request.Description) ? request.Description.Trim() : null;
                 existingService.BasePrice = request.Price;
-                existingService.RequiredSkills = !string.IsNullOrWhiteSpace(request.Notes) ? request.Notes.Trim() : null;
                 existingService.IsActive = request.IsActive;
 
-                // Save changes
                 await _serviceRepository.UpdateServiceAsync(existingService);
 
                 return MapToServiceResponse(existingService);
@@ -194,7 +177,6 @@ namespace EVServiceCenter.Application.Service
                 ServiceName = service.ServiceName,
                 Description = service.Description,
                 BasePrice = service.BasePrice,
-                RequiredSkills = service.RequiredSkills,
                 IsActive = service.IsActive,
                 CreatedAt = service.CreatedAt
             };

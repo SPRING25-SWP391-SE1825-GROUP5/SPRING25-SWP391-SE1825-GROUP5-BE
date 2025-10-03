@@ -19,7 +19,6 @@ public class GuestBookingService
     private readonly ITimeSlotRepository _timeSlotRepository;
     private readonly ITechnicianRepository _technicianRepository;
     private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
-    private readonly ICenterScheduleRepository _centerScheduleRepository;
     private readonly PaymentService _paymentService;
 
     public GuestBookingService(
@@ -31,7 +30,6 @@ public class GuestBookingService
         ITimeSlotRepository timeSlotRepository,
         ITechnicianRepository technicianRepository,
         ITechnicianTimeSlotRepository technicianTimeSlotRepository,
-        ICenterScheduleRepository centerScheduleRepository,
         PaymentService paymentService)
     {
         _customerRepository = customerRepository;
@@ -42,7 +40,6 @@ public class GuestBookingService
         _timeSlotRepository = timeSlotRepository;
         _technicianRepository = technicianRepository;
         _technicianTimeSlotRepository = technicianTimeSlotRepository;
-        _centerScheduleRepository = centerScheduleRepository;
         _paymentService = paymentService;
     }
 
@@ -60,11 +57,7 @@ public class GuestBookingService
         if (request.BookingDate < DateOnly.FromDateTime(DateTime.Today)) throw new ArgumentException("Ngày đặt lịch không được là ngày trong quá khứ.");
         var slot = await _timeSlotRepository.GetByIdAsync(request.SlotId) ?? throw new ArgumentException("SlotId không tồn tại.");
 
-        // Check schedule
-        var dotnetDow = (int)request.BookingDate.DayOfWeek; var targetDow = (byte)(dotnetDow == 0 ? 7 : dotnetDow);
-        var schedules = await _centerScheduleRepository.GetSchedulesForDateAsync(request.CenterId, request.BookingDate, targetDow);
-        var inSchedule = schedules != null && schedules.Any(sc => slot.SlotTime >= sc.StartTime && slot.SlotTime < sc.EndTime && sc.IsActive);
-        if (!inSchedule) throw new ArgumentException("Khung giờ đã chọn không nằm trong lịch hoạt động của trung tâm cho ngày này.");
+        // CenterSchedule removed: chỉ kiểm tra Slot tồn tại & trung tâm active
 
         // Find or create guest customer
         var customer = await _customerRepository.GetGuestByEmailOrPhoneAsync(email, normalizedPhone);
@@ -73,12 +66,8 @@ public class GuestBookingService
             customer = new Customer
             {
                 UserId = null,
-                CustomerCode = GenerateCustomerCode(),
-                Email = email,
-                NormalizedPhone = normalizedPhone,
                 IsGuest = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                
             };
             customer = await _customerRepository.CreateCustomerAsync(customer);
         }
@@ -142,29 +131,21 @@ public class GuestBookingService
         // Create booking PENDING
         var booking = new Booking
         {
-            BookingCode = GenerateBookingCode(),
             CustomerId = customer.CustomerId,
             VehicleId = vehicle.VehicleId,
             CenterId = request.CenterId,
-            BookingDate = request.BookingDate,
             SlotId = request.SlotId,
             Status = "PENDING",
-            TotalEstimatedCost = service.BasePrice,
+            TotalCost = service.BasePrice,
             ServiceId = request.ServiceId,
             SpecialRequests = request.SpecialRequests?.Trim(),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-            TechnicianId = technicianId
+            // TechnicianId removed from Booking
         };
 
         // centerScheduleId
-        try
-        {
-            var schedulesSel = await _centerScheduleRepository.GetSchedulesForDateAsync(request.CenterId, request.BookingDate, targetDow);
-            var matched = schedulesSel?.FirstOrDefault(sc => slot.SlotTime >= sc.StartTime && slot.SlotTime < sc.EndTime);
-            if (matched != null) booking.CenterScheduleId = matched.CenterScheduleId;
-        }
-        catch { }
+        // CenterScheduleId removed
 
         booking = await _bookingRepository.CreateBookingAsync(booking);
 
@@ -177,7 +158,7 @@ public class GuestBookingService
         return new GuestBookingResponse
         {
             BookingId = booking.BookingId,
-            BookingCode = booking.BookingCode,
+            BookingCode = null,
             CheckoutUrl = checkoutUrl
         };
     }

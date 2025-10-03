@@ -11,11 +11,7 @@ public partial class Technician
 
     public int CenterId { get; set; }
 
-    public string TechnicianCode { get; set; }
-
-    public string Specialization { get; set; }
-
-    public int ExperienceYears { get; set; }
+    public string Position { get; set; }
 
     public bool IsActive { get; set; }
 

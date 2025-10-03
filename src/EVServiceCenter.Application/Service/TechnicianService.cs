@@ -35,8 +35,7 @@ namespace EVServiceCenter.Application.Service
             {
                 TechnicianId = technicianId,
                 SkillId = i.SkillId,
-                Level = i.Level,
-                Years = i.Years
+                Notes = i.Notes
             });
 
             await _technicianRepository.UpsertSkillsAsync(technicianId, skills);
@@ -66,7 +65,7 @@ namespace EVServiceCenter.Application.Service
                 result.Bookings.Add(new TechnicianBookingItem
                 {
                     BookingId = b.BookingId,
-                    BookingCode = b.BookingCode,
+                    BookingCode = null,
                     Status = b.Status,
                     ServiceId = b.ServiceId,
                     ServiceName = b.Service?.ServiceName ?? "N/A",
@@ -79,8 +78,8 @@ namespace EVServiceCenter.Application.Service
                     VehiclePlate = b.Vehicle?.LicensePlate,
                     WorkOrderId = wo?.WorkOrderId,
                     WorkOrderStatus = wo?.Status,
-                    WorkStartTime = wo?.StartTime,
-                    WorkEndTime = wo?.EndTime
+                    WorkStartTime = null,
+                    WorkEndTime = null
                 });
             }
 
@@ -98,8 +97,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     technicians = technicians.Where(t =>
                         t.User.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        t.TechnicianCode.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        t.Specialization.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        t.Position.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
                     ).ToList();
                 }
 
@@ -183,7 +181,6 @@ namespace EVServiceCenter.Application.Service
                 {
                     TechnicianId = technician.TechnicianId,
                     TechnicianName = technician.User.FullName,
-                    TechnicianCode = technician.TechnicianCode,
                     Date = date.ToDateTime(TimeOnly.MinValue),
                     AvailableSlots = timeSlotAvailability
                 };
@@ -251,9 +248,7 @@ namespace EVServiceCenter.Application.Service
                 TechnicianId = technician.TechnicianId,
                 UserId = technician.UserId,
                 CenterId = technician.CenterId,
-                TechnicianCode = technician.TechnicianCode,
-                Specialization = technician.Specialization,
-                ExperienceYears = technician.ExperienceYears,
+                Position = technician.Position,
                 IsActive = technician.IsActive,
                 CreatedAt = technician.CreatedAt,
                 UserFullName = technician.User?.FullName,

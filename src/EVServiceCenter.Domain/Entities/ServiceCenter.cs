@@ -11,11 +11,11 @@ public partial class ServiceCenter
 
     public string Address { get; set; }
 
-    public string City { get; set; }
+    
 
     public string PhoneNumber { get; set; }
 
-    public string Email { get; set; }
+    
 
     public bool IsActive { get; set; }
 
@@ -28,7 +28,5 @@ public partial class ServiceCenter
     public virtual ICollection<Staff> Staff { get; set; } = new List<Staff>();
 
     public virtual ICollection<Technician> Technicians { get; set; } = new List<Technician>();
-
-    public virtual ICollection<CenterSchedule> CenterSchedules { get; set; } = new List<CenterSchedule>();
 
 }

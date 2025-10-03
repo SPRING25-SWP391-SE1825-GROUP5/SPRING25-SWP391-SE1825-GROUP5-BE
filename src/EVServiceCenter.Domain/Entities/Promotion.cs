@@ -33,11 +33,9 @@ public partial class Promotion
 
     public int UsageCount { get; set; }
 
-    public int? UserLimit { get; set; }
-
-    public string PromotionType { get; set; }
-
-    public string ApplyFor { get; set; }
+    
+    
+    
 
     public virtual ICollection<UserPromotion> UserPromotions { get; set; } = new List<UserPromotion>();
 }

@@ -8,7 +8,6 @@ namespace EVServiceCenter.Application.Models.Responses
         public required string ServiceName { get; set; }
         public required string Description { get; set; }
         public decimal BasePrice { get; set; }
-        public required string RequiredSkills { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
     }

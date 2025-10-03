@@ -12,7 +12,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public string PartName { get; set; }
         public string Brand { get; set; }
         public decimal UnitPrice { get; set; }
-        public string Unit { get; set; }
+        public string? Unit { get; set; }
         public int CurrentStock { get; set; }
         public int MinimumStock { get; set; }
         public DateTime LastUpdated { get; set; }

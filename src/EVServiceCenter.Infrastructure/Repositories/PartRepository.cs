@@ -41,8 +41,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     PartNumber = p.PartNumber,
                     PartName = p.PartName,
                     Brand = p.Brand,
-                    UnitPrice = p.UnitPrice,
-                    Unit = p.Unit,
+                    Price = p.Price,
+                    ImageUrl = p.ImageUrl,
                     IsActive = p.IsActive,
                     CreatedAt = p.CreatedAt
                 })

@@ -6,7 +6,7 @@ namespace EVServiceCenter.Application.Models.Responses
     public class BookingResponse
     {
         public int BookingId { get; set; }
-        public string BookingCode { get; set; }
+        public string? BookingCode { get; set; }
         public int CustomerId { get; set; }
         public string CustomerName { get; set; }
         public int VehicleId { get; set; }
@@ -18,10 +18,9 @@ namespace EVServiceCenter.Application.Models.Responses
         public string SlotTime { get; set; }
         public DateOnly? CenterScheduleDate { get; set; }
         public byte? CenterScheduleDayOfWeek { get; set; }
-        public int? CenterScheduleId { get; set; }
-        public int? TechnicianId { get; set; }
+
         public string Status { get; set; }
-        public decimal? TotalEstimatedCost { get; set; }
+        public decimal? TotalCost { get; set; }
         public string SpecialRequests { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

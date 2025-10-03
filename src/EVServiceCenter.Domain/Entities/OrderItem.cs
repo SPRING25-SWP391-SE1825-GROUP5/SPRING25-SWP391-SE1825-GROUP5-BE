@@ -14,8 +14,6 @@ public partial class OrderItem
 
     public decimal UnitPrice { get; set; }
 
-    public decimal LineTotal { get; set; }
-
     public virtual Order Order { get; set; }
 
     public virtual Part Part { get; set; }

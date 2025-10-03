@@ -72,7 +72,7 @@ public class ShoppingCartService : IShoppingCartService
                 CustomerId = request.CustomerId,
                 PartId = request.PartId,
                 Quantity = request.Quantity,
-                UnitPrice = part.UnitPrice,
+                UnitPrice = part.Price,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };

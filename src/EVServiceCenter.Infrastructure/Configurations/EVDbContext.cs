@@ -108,7 +108,6 @@ public partial class EVDbContext : DbContext
 
     public  DbSet<Feedback> Feedbacks { get; set; }
 
-    public  DbSet<LoginHistory> LoginHistories { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
@@ -1189,27 +1188,6 @@ public partial class EVDbContext : DbContext
             
         });
 
-        modelBuilder.Entity<LoginHistory>(entity =>
-        {
-            entity.HasKey(e => e.LoginHistoryId).HasName("PK_LoginHistory");
-            entity.ToTable("LoginHistory", "dbo");
-            entity.Property(e => e.LoginHistoryId).HasColumnName("LoginHistoryID");
-            entity.Property(e => e.UserId).HasColumnName("UserID");
-            entity.Property(e => e.AttemptAt).HasPrecision(0).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.FailedLoginAttempts).HasDefaultValue(0);
-            entity.Property(e => e.LockoutUntil);
-
-            entity.HasOne(d => d.User).WithMany()
-                .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_LoginHistory_Users");
-
-            entity.HasIndex(e => new { e.UserId, e.AttemptAt })
-                .HasDatabaseName("IX_LoginHistory_User_AttemptAt");
-
-            entity.HasIndex(e => e.LockoutUntil)
-                .HasDatabaseName("IX_LoginHistory_LockoutUntil");
-        });
 
         // VehicleModel configuration
         modelBuilder.Entity<VehicleModel>(entity =>

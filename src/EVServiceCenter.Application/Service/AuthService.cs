@@ -34,12 +34,9 @@ namespace EVServiceCenter.Application.Service
         private readonly IAccountRepository _accountRepository;
         private readonly IOtpCodeRepository _otpRepository;
         private readonly IMemoryCache _cache;
+        private readonly ILoginLockoutService _loginLockoutService;
         
-        // cấu hình lock
-        private const int MAX_FAILED_ATTEMPTS = 5;   // số lần nhập sai tối đa
-        private static readonly TimeSpan LOCK_DURATION = TimeSpan.FromMinutes(10); // thời gian khóa
-        
-        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache)
+        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache, ILoginLockoutService loginLockoutService)
         {
             _accountService = accountService;
             _authRepository = authRepository;
@@ -51,10 +48,17 @@ namespace EVServiceCenter.Application.Service
             _accountRepository = accountRepository;
             _otpRepository = otpRepository;
             _cache = cache;
+            _loginLockoutService = loginLockoutService;
         }
-        private static string FailKey(string email) => $"login:fail:{email.ToLower()}";
-        private static string LockKey(string email) => $"login:lock:{email.ToLower()}";
-
+        private bool IsValidUrl(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return false;
+                
+            return Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult) 
+                && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
+        }
+        
         public async Task<string> RegisterAsync(AccountRequest request)
         {
             // Validation chi tiết từng trường
@@ -204,25 +208,45 @@ namespace EVServiceCenter.Application.Service
         public async Task<LoginTokenResponse> LoginAsync(LoginRequest request)
         {
             User user = null;
+            string email = string.Empty;
 
             // Kiểm tra xem input là email hay phone number
             if (IsValidEmail(request.EmailOrPhone))
             {
                 user = await _accountService.GetAccountByEmailAsync(request.EmailOrPhone);
+                email = request.EmailOrPhone;
             }
             else if (IsValidPhoneNumber(request.EmailOrPhone))
             {
                 user = await _accountService.GetAccountByPhoneNumberAsync(request.EmailOrPhone);
+                email = user?.Email ?? string.Empty;
             }
             else
             {
                 throw new ArgumentException("Vui lòng nhập email (@gmail.com) hoặc số điện thoại hợp lệ");
             }
 
-            if (user == null)
-                throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng");
+            // Kiểm tra lockout trước khi xử lý login
+            if (!string.IsNullOrEmpty(email))
+            {
+                var isLocked = await _loginLockoutService.IsAccountLockedAsync(email);
+                if (isLocked)
+                {
+                    var lockoutExpiry = await _loginLockoutService.GetLockoutExpiryAsync(email);
+                    var remainingTime = lockoutExpiry?.Subtract(DateTime.UtcNow) ?? TimeSpan.Zero;
+                    throw new ArgumentException($"Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau {remainingTime.Minutes} phút {remainingTime.Seconds} giây.");
+                }
+            }
 
-            // LockoutRemoved: xử lý lockout bằng cache/logic khác nếu cần
+            if (user == null)
+            {
+                // Ghi nhận lần thử sai nếu có email
+                if (!string.IsNullOrEmpty(email))
+                {
+                    await _loginLockoutService.RecordFailedAttemptAsync(email);
+                }
+                throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng");
+            }
 
             // Note: Email verification is optional - users can login without verification
             // Just log for tracking purposes
@@ -230,13 +254,32 @@ namespace EVServiceCenter.Application.Service
             {
                 Console.WriteLine($"User {user.Email} logged in without email verification");
             }
+            
             // Kiểm tra tài khoản có active không
             if (!user.IsActive)
                 throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên");
 
             // Verify password
             if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-                throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng.");
+            {
+                // Ghi nhận lần thử sai
+                await _loginLockoutService.RecordFailedAttemptAsync(user.Email);
+                
+                var remainingAttempts = await _loginLockoutService.GetRemainingAttemptsAsync(user.Email);
+                if (remainingAttempts > 0)
+                {
+                    throw new ArgumentException($"Email/số điện thoại hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
+                }
+                else
+                {
+                    var lockoutExpiry = await _loginLockoutService.GetLockoutExpiryAsync(user.Email);
+                    var remainingTime = lockoutExpiry?.Subtract(DateTime.UtcNow) ?? TimeSpan.Zero;
+                    throw new ArgumentException($"Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau {remainingTime.Minutes} phút {remainingTime.Seconds} giây.");
+                }
+            }
+
+            // Xóa failed attempts khi login thành công
+            await _loginLockoutService.ClearFailedAttemptsAsync(user.Email);
 
             // Generate JWT tokens
             var accessToken = _jwtService.GenerateAccessToken(user);
@@ -603,7 +646,6 @@ namespace EVServiceCenter.Application.Service
                 // Cập nhật mật khẩu mới
                 user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
                 user.UpdatedAt = DateTime.UtcNow;
-            // Reset lock state handled externally (cache/LoginHistory)
                 await _authRepository.UpdateUserAsync(user);
 
                 return "Đổi mật khẩu thành công! Vui lòng đăng nhập lại với mật khẩu mới.";
@@ -651,35 +693,6 @@ namespace EVServiceCenter.Application.Service
             return true;
         }
 
-
-        private void RegisterFailedAttempt(string email)
-        {
-            var key = FailKey(email);
-            int current = 0;
-            if (_cache.TryGetValue<int>(key, out var fails))
-            {
-                current = fails;
-            }
-            current++;
-
-            // Lưu lại số lần fail, set TTL nhẹ (ví dụ 30 phút) để không giữ mãi
-            _cache.Set(key, current, TimeSpan.FromMinutes(30));
-
-            if (current >= MAX_FAILED_ATTEMPTS)
-            {
-                // Đặt khóa
-                _cache.Set(LockKey(email), DateTime.UtcNow.Add(LOCK_DURATION), LOCK_DURATION);
-            }
-        }
-
-        private bool IsValidUrl(string? url)
-        {
-            if (string.IsNullOrWhiteSpace(url))
-                return false;
-                
-            return Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult) 
-                && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
-        }
 
         public async Task<LoginTokenResponse> LoginWithGoogleAsync(GoogleLoginRequest request)
         {

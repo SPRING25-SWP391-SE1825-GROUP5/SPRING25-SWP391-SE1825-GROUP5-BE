@@ -31,6 +31,7 @@ using Microsoft.OpenApi.Models;
 using System.IO;
 using EVServiceCenter.Application.Configurations;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Caching.SqlServer;
 
 
 // ============================================================================
@@ -55,6 +56,7 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 // CORE SERVICES REGISTRATION
 // ============================================================================
 builder.Services.AddControllers();
+// Cache configuration
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<PaymentService>();
@@ -71,6 +73,7 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
+builder.Services.AddScoped<ILoginLockoutService, LoginLockoutService>();
 
 // Communication Services
 builder.Services.AddScoped<IEmailService, EmailService>();

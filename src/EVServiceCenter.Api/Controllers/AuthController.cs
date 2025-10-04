@@ -160,13 +160,34 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message += ". Khuyến nghị: Hãy xác thực email để bảo mật tài khoản tốt hơn.";
                 }
 
-                return Ok(new
+                // Tạo response phù hợp với FE
+                var response = new
                 {
-
                     success = true,
                     message = message,
-                    data = result
-                });
+                    data = new
+                    {
+                        token = result.AccessToken,
+                        user = new
+                        {
+                            userId = result.UserId,
+                            email = result.Email ?? "",
+                            fullName = result.FullName,
+                            phoneNumber = result.PhoneNumber ?? "",
+                            dateOfBirth = result.DateOfBirth,
+                            address = result.Address ?? "",
+                            gender = result.Gender ?? "",
+                            avatarUrl = result.AvatarUrl ?? "",
+                            role = result.Role,
+                            isActive = result.IsActive,
+                            emailVerified = result.EmailVerified,
+                            createdAt = result.CreatedAt,
+                            updatedAt = result.UpdatedAt
+                        }
+                    }
+                };
+
+                return Ok(response);
             }
             catch (ArgumentException argEx)
             {
@@ -586,11 +607,34 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var result = await _authService.LoginWithGoogleAsync(request);
                 
-                return Ok(new { 
-                    success = true, 
+                // Tạo response phù hợp với FE
+                var response = new
+                {
+                    success = true,
                     message = "Đăng nhập với Google thành công",
-                    data = result
-                });
+                    data = new
+                    {
+                        token = result.AccessToken,
+                        user = new
+                        {
+                            userId = result.UserId,
+                            email = result.Email ?? "",
+                            fullName = result.FullName,
+                            phoneNumber = result.PhoneNumber ?? "",
+                            dateOfBirth = result.DateOfBirth,
+                            address = result.Address ?? "",
+                            gender = result.Gender ?? "",
+                            avatarUrl = result.AvatarUrl ?? "",
+                            role = result.Role,
+                            isActive = result.IsActive,
+                            emailVerified = result.EmailVerified,
+                            createdAt = result.CreatedAt,
+                            updatedAt = result.UpdatedAt
+                        }
+                    }
+                };
+                
+                return Ok(response);
             }
             catch (ArgumentException ex)
             {

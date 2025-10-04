@@ -170,6 +170,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         token = result.AccessToken,
                         user = new
                         {
+                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
                             userId = result.UserId,
                             email = result.Email ?? "",
                             fullName = result.FullName,
@@ -617,6 +618,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         token = result.AccessToken,
                         user = new
                         {
+                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
                             userId = result.UserId,
                             email = result.Email ?? "",
                             fullName = result.FullName,

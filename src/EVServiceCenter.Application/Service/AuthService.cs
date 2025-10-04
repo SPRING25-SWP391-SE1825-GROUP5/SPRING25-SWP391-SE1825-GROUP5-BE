@@ -259,7 +259,16 @@ namespace EVServiceCenter.Application.Service
                 UserId = user.UserId,
                 FullName = user.FullName,
                 Role = user.Role ?? "CUSTOMER",
-                EmailVerified = user.EmailVerified
+                EmailVerified = user.EmailVerified,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
+                DateOfBirth = user.DateOfBirth,
+                Address = user.Address,
+                Gender = user.Gender,
+                AvatarUrl = user.AvatarUrl,
+                IsActive = user.IsActive,
+                CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt
             };
         }
 
@@ -780,7 +789,16 @@ namespace EVServiceCenter.Application.Service
                     UserId = user.UserId,
                     FullName = user.FullName,
                     Role = user.Role ?? "CUSTOMER",
-                    EmailVerified = user.EmailVerified
+                    EmailVerified = user.EmailVerified,
+                    Email = user.Email,
+                    PhoneNumber = user.PhoneNumber,
+                    DateOfBirth = user.DateOfBirth,
+                    Address = user.Address,
+                    Gender = user.Gender,
+                    AvatarUrl = user.AvatarUrl,
+                    IsActive = user.IsActive,
+                    CreatedAt = user.CreatedAt,
+                    UpdatedAt = user.UpdatedAt
                 };
             }
             catch (ArgumentException)

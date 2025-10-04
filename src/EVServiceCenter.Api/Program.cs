@@ -395,11 +395,8 @@ app.UseSwaggerUI(c =>
 
 app.UseCors(); // default policy
 
-// Tránh redirect loop sau proxy: chỉ bật HTTPS redirect ở non-production
-if (!app.Environment.IsProduction())
-{
-    app.UseHttpsRedirection();
-}
+// Enable HTTPS redirect for security
+app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 

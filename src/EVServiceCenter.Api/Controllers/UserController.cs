@@ -12,7 +12,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "AdminOnly")] // Chỉ ADMIN mới có quyền truy cập
+    [Authorize] // Yêu cầu đăng nhập, nhưng không giới hạn role
     public class UserController : ControllerBase
     {
         private readonly IUserService _userService;
@@ -67,9 +67,10 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Tìm user theo email hoặc phone (Admin-only) - easy name: find-by-email-or-phone
+        /// Tìm user theo email hoặc phone (Staff/Admin) - easy name: find-by-email-or-phone
         /// </summary>
         [HttpGet("find-by-email-or-phone")]
+        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
         public async Task<IActionResult> FindByEmailOrPhone([FromQuery] string email = null, [FromQuery] string phone = null)
         {
             try
@@ -156,11 +157,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Tạo người dùng mới (chỉ ADMIN)
+        /// Tạo người dùng mới (Staff/Admin)
         /// </summary>
         /// <param name="request">Thông tin người dùng mới</param>
         /// <returns>Thông tin người dùng đã tạo</returns>
         [HttpPost]
+        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
         {
             try
@@ -197,11 +199,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Kích hoạt người dùng (chỉ ADMIN)
+        /// Kích hoạt người dùng (Staff/Admin)
         /// </summary>
         /// <param name="id">ID người dùng</param>
         /// <returns>Kết quả kích hoạt</returns>
         [HttpPatch("{id}/activate")]
+        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
         public async Task<IActionResult> ActivateUser(int id)
         {
             try
@@ -240,11 +243,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Vô hiệu hóa người dùng (chỉ ADMIN)
+        /// Vô hiệu hóa người dùng (Staff/Admin)
         /// </summary>
         /// <param name="id">ID người dùng</param>
         /// <returns>Kết quả vô hiệu hóa</returns>
         [HttpPatch("{id}/deactivate")]
+        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
         public async Task<IActionResult> DeactivateUser(int id)
         {
             try

@@ -1,0 +1,12 @@
+{
+  "uuid": "ff88b6b6-918d-4dfe-bf9f-0332eb8904d9",
+  "name": "EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests",
+  "children": [
+    "55b43dec-d15a-4c47-b0a8-2184eeb6a77d"
+  ],
+  "befores": [],
+  "afters": [],
+  "links": [],
+  "start": 1759563160607,
+  "stop": 1759563160661
+}

@@ -1,0 +1,67 @@
+{
+  "uuid": "7aa5d991-9b8e-402a-b252-2b7d357b7b14",
+  "historyId": "ea847aa47e43e97c6c446733f22dfd02",
+  "testCaseId": "120b049f69e95652c0e503780cf39213",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests.RegisterAsync_WhenRepositoryFails_ShouldThrowException()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests.RegisterAsync_WhenRepositoryFails_ShouldThrowException"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests"
+    },
+    {
+      "name": "layer",
+      "value": "application"
+    },
+    {
+      "name": "suite",
+      "value": "Authentication"
+    },
+    {
+      "name": "feature",
+      "value": "User Registration"
+    },
+    {
+      "name": "story",
+      "value": "Exception Handling"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests.RegisterAsync_WhenRepositoryFails_ShouldThrowException",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759563843984,
+  "stop": 1759563844986
+}

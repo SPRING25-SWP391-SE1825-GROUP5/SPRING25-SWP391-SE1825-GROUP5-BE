@@ -1,0 +1,51 @@
+{
+  "uuid": "74c9179a-cadd-4d5a-8155-af63ba0a15b5",
+  "historyId": "c2a7236180c130823c3d4690bf212cde",
+  "testCaseId": "557d0bab904c919c296000cef4b20093",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests.CreateCustomer_Should_Validate_Required_Fields()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests.CreateCustomer_Should_Validate_Required_Fields"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests.CreateCustomer_Should_Validate_Required_Fields",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759563843035,
+  "stop": 1759563843035
+}

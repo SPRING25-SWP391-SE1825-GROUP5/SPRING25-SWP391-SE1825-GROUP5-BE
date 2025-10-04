@@ -1,0 +1,51 @@
+{
+  "uuid": "624b9866-5f0b-473b-972a-4882f90e2e60",
+  "historyId": "815fcb2ce45469f7946b49d50bfe8496",
+  "testCaseId": "b6b9115723b899ef90158be64a3b35f0",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests.GetBookingsByCustomer_Should_Return_Customer_Bookings()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests.GetBookingsByCustomer_Should_Return_Customer_Bookings"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests.GetBookingsByCustomer_Should_Return_Customer_Bookings",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759546182415,
+  "stop": 1759546182415
+}

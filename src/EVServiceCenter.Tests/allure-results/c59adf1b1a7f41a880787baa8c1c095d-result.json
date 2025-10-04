@@ -1,0 +1,51 @@
+{
+  "uuid": "6965d603-6280-4587-a9a6-e2f7d30bdabb",
+  "historyId": "258a2dc5372b112619786e2714e3c8ec",
+  "testCaseId": "9168b0af1432e947fe9c6ca075ce7e4c",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests.CustomerController_Should_Have_Update_Method()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests.CustomerController_Should_Have_Update_Method"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests.CustomerController_Should_Have_Update_Method",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759546169473,
+  "stop": 1759546169482
+}

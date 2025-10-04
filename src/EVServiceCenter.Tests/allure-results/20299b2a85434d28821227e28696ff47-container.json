@@ -1,0 +1,12 @@
+{
+  "uuid": "b3472887-9c84-4b7e-9e99-91f4747fa0f0",
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests",
+  "children": [
+    "8af7069d-67d2-4410-8f46-10434c961bea"
+  ],
+  "befores": [],
+  "afters": [],
+  "links": [],
+  "start": 1759562788638,
+  "stop": 1759562788640
+}

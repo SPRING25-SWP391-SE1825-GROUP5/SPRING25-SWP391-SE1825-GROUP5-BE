@@ -29,6 +29,8 @@ public class AuthServiceTests
     private readonly Mock<IAccountRepository> _accountRepositoryMock;
     private readonly Mock<IOtpCodeRepository> _otpRepositoryMock;
     private readonly Mock<IMemoryCache> _cacheMock;
+    private readonly Mock<ILoginLockoutService> _loginLockoutServiceMock;
+
     private readonly AuthService _authService;
 
     public AuthServiceTests()
@@ -43,6 +45,7 @@ public class AuthServiceTests
         _accountRepositoryMock = new Mock<IAccountRepository>();
         _otpRepositoryMock = new Mock<IOtpCodeRepository>();
         _cacheMock = new Mock<IMemoryCache>();
+        _loginLockoutServiceMock = new Mock<ILoginLockoutService>();
 
         _authService = new AuthService(
             _accountServiceMock.Object,
@@ -54,7 +57,8 @@ public class AuthServiceTests
             _customerRepositoryMock.Object,
             _accountRepositoryMock.Object,
             _otpRepositoryMock.Object,
-            _cacheMock.Object
+            _cacheMock.Object,
+            _loginLockoutServiceMock.Object
         );
     }
 

@@ -63,3 +63,60 @@
 14. **POST** `/api/auth/login-google`
     - Đăng nhập bằng Google
     - Body: GoogleLoginRequest
+
+## User Controller (`api/User`)
+
+### Endpoints
+
+1. **GET** `/api/User`
+   - Lấy danh sách tất cả người dùng với phân trang và tìm kiếm
+   - Query: pageNumber, pageSize, searchTerm, role
+   - Authorization: Required
+
+2. **GET** `/api/User/{id}`
+   - Lấy thông tin người dùng theo ID
+   - Authorization: Required
+
+3. **POST** `/api/User`
+   - Tạo người dùng mới (Staff/Admin) - Luôn tạo CUSTOMER, cần verify email
+   - Body: CreateUserRequest (role phải là CUSTOMER, emailVerified phải là false)
+   - Authorization: Required (Roles: ADMIN, STAFF, MANAGER)
+   - Returns: Thông tin người dùng đã tạo + gửi OTP verification
+
+4. **PATCH** `/api/User/{id}/activate`
+   - Kích hoạt người dùng (Admin only)
+   - Authorization: Required (Roles: ADMIN)
+
+5. **PATCH** `/api/User/{id}/deactivate`
+   - Vô hiệu hóa người dùng (Admin only)
+   - Authorization: Required (Roles: ADMIN)
+
+6. **PATCH** `/api/User/assign-role`
+   - Gán vai trò cho người dùng (Admin only)
+   - Body: AssignUserRoleRequest
+   - Authorization: Required (Roles: ADMIN)
+   - Validation: Không cho phép Admin thay đổi vai trò của chính mình
+
+## Vehicle Controller (`api/Vehicle`)
+
+### Endpoints
+
+1. **GET** `/api/Vehicle`
+   - Lấy danh sách tất cả xe
+   - Query: pageNumber, pageSize, searchTerm, customerId
+
+2. **GET** `/api/Vehicle/{id}`
+   - Lấy thông tin xe theo ID
+
+3. **POST** `/api/Vehicle`
+   - Tạo xe mới
+   - Body: CreateVehicleRequest
+   - Validation: purchaseDate phải từ năm 1900 đến năm 2100
+
+4. **PUT** `/api/Vehicle/{id}`
+   - Cập nhật thông tin xe
+   - Body: UpdateVehicleRequest
+   - Validation: purchaseDate phải từ năm 1900 đến năm 2100
+
+5. **DELETE** `/api/Vehicle/{id}`
+   - Xóa xe

@@ -1,0 +1,51 @@
+{
+  "uuid": "5a2d2c47-8588-44e4-a468-b47483a12dc7",
+  "historyId": "616e2d1ddaf6f7944f6882109a69c564",
+  "testCaseId": "3e946614abbdffb7a6adc841a6876eb4",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests.BookingController_Should_Have_Create_Method()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests.BookingController_Should_Have_Create_Method"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests.BookingController_Should_Have_Create_Method",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759563322482,
+  "stop": 1759563322660
+}

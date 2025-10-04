@@ -1,0 +1,51 @@
+{
+  "uuid": "0a99718d-7e75-4b08-ab4b-b97598abaa4c",
+  "historyId": "6715536892dc1bf2cc781e81b6867d51",
+  "testCaseId": "573b42d32a01a375d6e7f7763b25296f",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests.UpdateBookingStatus_Should_Update_Status_Correctly()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests.UpdateBookingStatus_Should_Update_Status_Correctly"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.BookingServiceTests.UpdateBookingStatus_Should_Update_Status_Correctly",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759562833724,
+  "stop": 1759562833811
+}

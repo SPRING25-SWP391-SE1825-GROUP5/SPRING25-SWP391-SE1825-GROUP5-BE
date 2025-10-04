@@ -1,0 +1,12 @@
+{
+  "uuid": "5bde8bc1-8a1a-4524-9654-edb38f433d5c",
+  "name": "EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests",
+  "children": [
+    "65504906-1173-4553-b311-249254bdeb6c"
+  ],
+  "befores": [],
+  "afters": [],
+  "links": [],
+  "start": 1759563558103,
+  "stop": 1759563558157
+}

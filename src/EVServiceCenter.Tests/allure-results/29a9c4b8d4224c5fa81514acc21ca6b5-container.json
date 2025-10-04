@@ -1,0 +1,12 @@
+{
+  "uuid": "5028948c-6362-44fc-b88b-2f16c6a51b34",
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests",
+  "children": [
+    "53a38ebd-1263-4097-848e-f698e3838517"
+  ],
+  "befores": [],
+  "afters": [],
+  "links": [],
+  "start": 1759563322445,
+  "stop": 1759563322674
+}

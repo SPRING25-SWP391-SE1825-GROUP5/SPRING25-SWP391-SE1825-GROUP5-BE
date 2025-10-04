@@ -1,0 +1,51 @@
+{
+  "uuid": "55b43dec-d15a-4c47-b0a8-2184eeb6a77d",
+  "historyId": "3472da7b48c83c6a19979e577e2fc89e",
+  "testCaseId": "1ea5f26529ce2b6cf2b75d2727adb17b",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests.CustomerController_Should_Have_Create_Method()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests.CustomerController_Should_Have_Create_Method"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Integration.Controllers.CustomerControllerTests.CustomerController_Should_Have_Create_Method",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759563160617,
+  "stop": 1759563160635
+}

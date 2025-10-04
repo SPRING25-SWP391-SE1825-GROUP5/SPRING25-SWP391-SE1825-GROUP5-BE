@@ -1,0 +1,67 @@
+{
+  "uuid": "92b31c7f-14bd-4c39-a742-a2f573a0a0b4",
+  "historyId": "17462b47b45196cbfa9223ba66d19b14",
+  "testCaseId": "d7cd304dd8a1cfa2e0709e232a7e3289",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests.RegisterAsync_WithUnderageUser_ShouldThrowArgumentException()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests.RegisterAsync_WithUnderageUser_ShouldThrowArgumentException"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests"
+    },
+    {
+      "name": "layer",
+      "value": "application"
+    },
+    {
+      "name": "suite",
+      "value": "Authentication"
+    },
+    {
+      "name": "feature",
+      "value": "User Registration"
+    },
+    {
+      "name": "story",
+      "value": "Validation Errors"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests.RegisterAsync_WithUnderageUser_ShouldThrowArgumentException",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759562790918,
+  "stop": 1759562790920
+}

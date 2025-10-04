@@ -1,0 +1,51 @@
+{
+  "uuid": "1c58e2fb-47f3-4801-8127-8144e97d47c5",
+  "historyId": "e745281fe9024c06569042e7a3b3136a",
+  "testCaseId": "47425d87d5216ae07643e79af1ff0b54",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests.UpdateCustomer_Should_Update_Existing_Customer()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests.UpdateCustomer_Should_Update_Existing_Customer"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests.UpdateCustomer_Should_Update_Existing_Customer",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759563932215,
+  "stop": 1759563932216
+}

@@ -1,0 +1,51 @@
+{
+  "uuid": "d62fa406-6390-405f-8414-c8f877583d0a",
+  "historyId": "af4dc118e71236a95dbb0c87a343d1d2",
+  "testCaseId": "9b8472257ca695b41f72a61052ddacf5",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests.GetCustomer_Should_Return_Customer_When_Found()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests.GetCustomer_Should_Return_Customer_When_Found"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.CustomerServiceTests.GetCustomer_Should_Return_Customer_When_Found",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759546220074,
+  "stop": 1759546220074
+}

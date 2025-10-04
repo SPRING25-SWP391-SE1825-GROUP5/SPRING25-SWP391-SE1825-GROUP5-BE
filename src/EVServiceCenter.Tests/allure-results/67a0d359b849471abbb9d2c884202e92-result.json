@@ -1,0 +1,51 @@
+{
+  "uuid": "0ad2622c-3a59-4b14-9ca7-de436995a6a8",
+  "historyId": "fadd3caa70cd1a47cbf429cb7b43804a",
+  "testCaseId": "245ee837abe6b6736e2b095a1bb3327f",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Integration.Controllers.AuthControllerIntegrationTests.AuthController_Should_Have_Register_Method()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.AuthControllerIntegrationTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.AuthControllerIntegrationTests.AuthController_Should_Have_Register_Method"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.AuthControllerIntegrationTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Integration.Controllers.AuthControllerIntegrationTests.AuthController_Should_Have_Register_Method",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759563322775,
+  "stop": 1759563322777
+}

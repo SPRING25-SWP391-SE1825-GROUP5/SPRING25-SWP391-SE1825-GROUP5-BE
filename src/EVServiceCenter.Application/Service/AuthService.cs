@@ -667,7 +667,7 @@ namespace EVServiceCenter.Application.Service
             var user = await _accountRepository.GetAccountByEmailAsync(email);
             if (user == null) throw new Exception("Người dùng không tồn tại.");
 
-            var lastOtp = await _otpRepository.GetLastOtpCodeAsync(user.UserId, "Register");
+            var lastOtp = await _otpRepository.GetLastOtpCodeAsync(user.UserId, "EMAIL_VERIFICATION");
             if (lastOtp == null) throw new Exception("Không tìm thấy mã OTP.");
 
             if (lastOtp.IsUsed || lastOtp.ExpiresAt < DateTime.UtcNow)

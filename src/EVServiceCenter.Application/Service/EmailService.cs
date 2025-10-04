@@ -131,13 +131,20 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
+                // Log OTP code to console for debugging
+                Console.WriteLine($"🔐 OTP CODE FOR {toEmail}: {otpCode}");
+                Console.WriteLine($"📧 Sending verification email to: {toEmail}");
+                
                 var subject = "Xác thực tài khoản EV Service Center";
                 var body = CreateVerificationEmailTemplate(fullName, otpCode);
                 
                 await SendEmailAsync(toEmail, subject, body);
+                
+                Console.WriteLine($"✅ Verification email sent successfully to: {toEmail}");
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"❌ Failed to send verification email to {toEmail}: {ex.Message}");
                 throw new Exception($"Không thể gửi email xác thực: {ex.Message}");
             }
         }

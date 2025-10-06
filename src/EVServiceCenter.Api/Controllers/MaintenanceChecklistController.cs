@@ -136,6 +136,24 @@ namespace EVServiceCenter.Api.Controllers
             var total = results.Count;
             return Ok(new { success = true, checklistId = checklist.ChecklistId, total, pass, fail, na });
         }
+
+        // GET /api/workorders/{id}/checklist/export
+        [HttpGet("export")]
+        public async Task<IActionResult> ExportPdf(int workOrderId)
+        {
+            var checklist = await _checkRepo.GetByWorkOrderIdAsync(workOrderId);
+            if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
+
+            var results = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Checklist #{checklist.ChecklistId} for WorkOrder #{workOrderId}");
+            foreach (var r in results)
+            {
+                sb.AppendLine($"- {r.Description}: {r.Result ?? "N/A"} {(string.IsNullOrWhiteSpace(r.Comment) ? string.Empty : "(" + r.Comment + ")")}");
+            }
+            var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+            return File(bytes, "application/octet-stream", $"Checklist_{workOrderId}.txt");
+        }
     }
 }
 

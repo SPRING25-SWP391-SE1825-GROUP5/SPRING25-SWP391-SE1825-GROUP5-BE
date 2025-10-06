@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Linq;
 using EVServiceCenter.Domain.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
@@ -15,6 +16,16 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<Invoice?> GetByBookingIdAsync(int bookingId)
         {
             return await _db.Invoices.FirstOrDefaultAsync(i => i.WorkOrder != null && i.WorkOrder.BookingId == bookingId);
+        }
+
+        public async Task<Invoice?> GetByWorkOrderIdAsync(int workOrderId)
+        {
+            return await _db.Invoices.FirstOrDefaultAsync(i => i.WorkOrderId == workOrderId);
+        }
+
+        public async Task<Invoice?> GetByOrderIdAsync(int orderId)
+        {
+            return await _db.Invoices.FirstOrDefaultAsync(i => i.OrderId == orderId);
         }
 
         public async Task<Invoice> CreateMinimalAsync(Invoice invoice)
@@ -37,6 +48,25 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(i => i.WorkOrder)
                 .Include(i => i.Booking)
                 .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId);
+        }
+
+        public async Task<List<Invoice>> GetAllAsync()
+        {
+            return await _db.Invoices
+                .Include(i => i.Customer)
+                .Include(i => i.WorkOrder)
+                .Include(i => i.Booking)
+                .ToListAsync();
+        }
+
+        public async Task<List<Invoice>> GetByCustomerIdAsync(int customerId)
+        {
+            return await _db.Invoices
+                .Include(i => i.Customer)
+                .Include(i => i.WorkOrder)
+                .Include(i => i.Booking)
+                .Where(i => i.CustomerId == customerId)
+                .ToListAsync();
         }
     }
 }

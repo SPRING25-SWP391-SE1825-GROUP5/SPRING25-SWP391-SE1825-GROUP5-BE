@@ -5,11 +5,15 @@ namespace EVServiceCenter.Application.Models.Requests
 {
     public class CreateWorkOrderRequest
     {
-        [Required]
-        public int BookingId { get; set; }
+        public int? BookingId { get; set; }
 
-        [Required]
-        public int TechnicianId { get; set; }
+        // Walk-in: nếu không có BookingId, các trường sau bắt buộc
+        public int? CenterId { get; set; }
+        public int? ServiceId { get; set; }
+        public int? CustomerId { get; set; }
+        public int? VehicleId { get; set; }
+
+        public int? TechnicianId { get; set; }
 
         [StringLength(20)]
         public string? Status { get; set; } = "NOT_STARTED";

@@ -84,5 +84,10 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _context.Staff.AnyAsync(s => s.UserId == userId);
         }
+
+        public async Task<bool> ExistsActiveByUserAsync(int userId)
+        {
+            return await _context.Staff.AnyAsync(s => s.UserId == userId && s.IsActive);
+        }
     }
 }

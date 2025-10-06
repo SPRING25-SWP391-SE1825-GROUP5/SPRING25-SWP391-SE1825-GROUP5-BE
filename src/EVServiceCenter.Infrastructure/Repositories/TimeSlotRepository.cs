@@ -43,5 +43,25 @@ namespace EVServiceCenter.Infrastructure.Repositories
             await _context.SaveChangesAsync();
             return timeSlot;
         }
+
+        public async Task<TimeSlot> UpdateAsync(TimeSlot timeSlot)
+        {
+            _context.TimeSlots.Update(timeSlot);
+            await _context.SaveChangesAsync();
+            return timeSlot;
+        }
+
+        public async Task<bool> DeleteAsync(int slotId)
+        {
+            var ts = await _context.TimeSlots.FirstOrDefaultAsync(x => x.SlotId == slotId);
+            if (ts == null) return false;
+            // Safety: prevent delete if referenced by TechnicianTimeSlots or Bookings
+            var hasTech = await _context.TechnicianTimeSlots.AnyAsync(x => x.SlotId == slotId);
+            var hasBooking = await _context.Bookings.AnyAsync(x => x.SlotId == slotId);
+            if (hasTech || hasBooking) return false;
+            _context.TimeSlots.Remove(ts);
+            await _context.SaveChangesAsync();
+            return true;
+        }
     }
 }

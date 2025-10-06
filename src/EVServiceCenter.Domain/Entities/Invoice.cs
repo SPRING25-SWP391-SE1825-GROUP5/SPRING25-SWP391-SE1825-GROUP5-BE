@@ -21,9 +21,8 @@ public partial class Invoice
 
     public int? BookingId { get; set; }
 
-
-    // New: link directly to a single OrderItem (replacing InvoiceItems table)
-    public int? OrderItemId { get; set; }
+    // Link trực tiếp tới Order thay vì OrderItem
+    public int? OrderId { get; set; }
 
     // public int? ParentInvoiceId { get; set; } // Column không tồn tại trong database
 
@@ -36,6 +35,8 @@ public partial class Invoice
     public virtual WorkOrder WorkOrder { get; set; }
 
     public virtual Booking Booking { get; set; }
+
+    public virtual Order? Order { get; set; }
 
     
 }

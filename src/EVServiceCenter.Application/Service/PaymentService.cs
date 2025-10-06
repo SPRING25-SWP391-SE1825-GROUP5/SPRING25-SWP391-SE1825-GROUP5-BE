@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Configurations;
 using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
@@ -30,10 +31,11 @@ public class PaymentService
     private readonly IWorkOrderPartRepository _workOrderPartRepository;
     private readonly IMaintenanceChecklistRepository _checklistRepository;
     private readonly IMaintenanceChecklistResultRepository _checklistResultRepository;
+    private readonly IPromotionService _promotionService;
 
     private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IServicePartRepository servicePartRepository, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IServicePartRepository servicePartRepository, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -49,6 +51,7 @@ public class PaymentService
         _checklistRepository = checklistRepository;
         _checklistResultRepository = checklistResultRepository;
         _holdStore = holdStore;
+        _promotionService = promotionService;
         }
 
 	public async Task<string> CreateBookingPaymentLinkAsync(int bookingId)
@@ -367,7 +370,7 @@ public class PaymentService
 					CreatedAt = DateTime.UtcNow,
                     
 				};
-				await _paymentRepository.CreateAsync(payment);
+                await _paymentRepository.CreateAsync(payment);
 				Console.WriteLine($"[DEBUG] Payment created successfully");
 			}
 			else
@@ -377,6 +380,16 @@ public class PaymentService
 				payment.PaidAt = DateTime.UtcNow;
 				await _paymentRepository.UpdateAsync(payment);
 			}
+
+            // Mark promotions as USED for this booking
+            try
+            {
+                await _promotionService.MarkUsedByBookingAsync(booking.BookingId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WARN] MarkUsedByBookingAsync failed: {ex.Message}");
+            }
 		}
 		else if (status == "CANCELLED" || status == "FAILED" || status == "EXPIRED")
 		{

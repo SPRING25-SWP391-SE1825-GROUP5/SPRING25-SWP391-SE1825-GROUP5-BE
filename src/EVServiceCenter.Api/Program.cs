@@ -64,6 +64,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<PaymentService>();
 builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
 builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection("GuestSession"));
+builder.Services.Configure<PromotionOptions>(builder.Configuration.GetSection("Promotion"));
+builder.Services.Configure<MaintenanceReminderOptions>(builder.Configuration.GetSection("MaintenanceReminder"));
 builder.Services.AddSingleton<EVServiceCenter.Application.Interfaces.IHoldStore, EVServiceCenter.Application.Service.InMemoryHoldStore>();
 builder.Services.AddScoped<ISettingsService, EVServiceCenter.Application.Service.SettingsService>();
 builder.Services.AddScoped<EVServiceCenter.Domain.Interfaces.ISystemSettingRepository, EVServiceCenter.Infrastructure.Repositories.SystemSettingRepository>();
@@ -99,7 +101,7 @@ builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IBookingHistoryService, BookingHistoryService>();
 builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
-builder.Services.AddScoped<GuestBookingService>();
+builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
 builder.Services.AddScoped<ISkillService, SkillService>();
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
@@ -159,6 +161,7 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 // Wishlist repository removed
 // removed: ProductReviewRepository deprecated
 builder.Services.AddHostedService<BookingPendingCancellationService>();
+builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");

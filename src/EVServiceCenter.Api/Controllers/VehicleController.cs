@@ -15,10 +15,16 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class VehicleController : ControllerBase
     {
         private readonly IVehicleService _vehicleService;
+        private readonly EVServiceCenter.Domain.Interfaces.IVehicleRepository _vehicleRepository;
+        private readonly EVServiceCenter.Domain.Interfaces.IWorkOrderRepository _workOrderRepository;
+        private readonly EVServiceCenter.Domain.Interfaces.IMaintenancePolicyRepository _policyRepository;
 
-        public VehicleController(IVehicleService vehicleService)
+        public VehicleController(IVehicleService vehicleService, EVServiceCenter.Domain.Interfaces.IVehicleRepository vehicleRepository, EVServiceCenter.Domain.Interfaces.IWorkOrderRepository workOrderRepository, EVServiceCenter.Domain.Interfaces.IMaintenancePolicyRepository policyRepository)
         {
             _vehicleService = vehicleService;
+            _vehicleRepository = vehicleRepository;
+            _workOrderRepository = workOrderRepository;
+            _policyRepository = policyRepository;
         }
 
         /// <summary>
@@ -56,6 +62,88 @@ namespace EVServiceCenter.WebAPI.Controllers
                     success = false, 
                     message = "Lỗi hệ thống: " + ex.Message 
                 });
+            }
+        }
+
+        public class UpdateMileageRequest { public int CurrentMileage { get; set; } }
+
+        [HttpPost("{vehicleId:int}/mileage")]
+        public async Task<IActionResult> UpdateMileage(int vehicleId, [FromBody] UpdateMileageRequest req)
+        {
+            try
+            {
+                if (req == null || req.CurrentMileage < 0)
+                    return BadRequest(new { success = false, message = "CurrentMileage không hợp lệ" });
+                var v = await _vehicleRepository.GetVehicleByIdAsync(vehicleId);
+                if (v == null) return NotFound(new { success = false, message = "Không tìm thấy xe" });
+                v.CurrentMileage = req.CurrentMileage;
+                await _vehicleRepository.UpdateVehicleAsync(v);
+                return Ok(new { success = true, vehicleId, currentMileage = v.CurrentMileage });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        [HttpGet("{vehicleId:int}/next-service-due")]
+        public async Task<IActionResult> GetNextServiceDue(int vehicleId, [FromQuery] int? serviceId = null)
+        {
+            try
+            {
+                var vehicle = await _vehicleRepository.GetVehicleByIdAsync(vehicleId);
+                if (vehicle == null) return NotFound(new { success = false, message = "Không tìm thấy xe" });
+
+                DateTime? lastDate = vehicle.LastServiceDate?.ToDateTime(TimeOnly.MinValue);
+                int? lastMileage = vehicle.CurrentMileage;
+                int? effectiveServiceId = serviceId;
+
+                var lastWo = await _workOrderRepository.GetLastCompletedByVehicleAsync(vehicleId);
+                if (lastWo != null)
+                {
+                    lastDate = lastWo.UpdatedAt;
+                    if (lastWo.CurrentMileage.HasValue) lastMileage = lastWo.CurrentMileage.Value;
+                    if (!effectiveServiceId.HasValue && lastWo.ServiceId.HasValue) effectiveServiceId = lastWo.ServiceId.Value;
+                }
+
+                if (!effectiveServiceId.HasValue)
+                {
+                    return Ok(new { success = true, message = "Chưa xác định được dịch vụ để tính chu kỳ", data = new { vehicleId, next = (object)null } });
+                }
+
+                var policies = await _policyRepository.GetActiveByServiceIdAsync(effectiveServiceId.Value);
+                var policy = policies?.FirstOrDefault();
+                if (policy == null)
+                {
+                    return Ok(new { success = true, message = "Chưa cấu hình policy cho dịch vụ", data = new { vehicleId, serviceId = effectiveServiceId } });
+                }
+
+                DateTime? nextDateByMonths = null;
+                if (policy.IntervalMonths > 0 && lastDate.HasValue)
+                {
+                    nextDateByMonths = lastDate.Value.AddMonths(policy.IntervalMonths);
+                }
+                int? dueMileage = null;
+                int? remainingKm = null;
+                if (policy.IntervalKm > 0 && lastMileage.HasValue)
+                {
+                    dueMileage = lastMileage.Value + policy.IntervalKm;
+                    remainingKm = dueMileage - vehicle.CurrentMileage;
+                }
+
+                var dto = new
+                {
+                    vehicleId,
+                    serviceId = effectiveServiceId,
+                    lastService = new { date = lastDate, mileage = lastMileage },
+                    policy = new { policy.IntervalMonths, policy.IntervalKm },
+                    next = new { nextDateByMonths, dueMileage, remainingKm }
+                };
+                return Ok(new { success = true, data = dto });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
             }
         }
 

@@ -12,6 +12,7 @@ public class SettingsService : ISettingsService
     private readonly IOptionsMonitor<BookingRealtimeOptions> _bookingOptions;
     private readonly IOptionsMonitor<PayOsOptions> _payOsOptions;
     private readonly IOptionsMonitor<GuestSessionOptions> _guestOptions;
+    private readonly IOptionsMonitor<MaintenanceReminderOptions> _reminderOptions;
 
     // Setting keys
     private const string BookingHoldTtlKey = "BookingRealtime.HoldTtlMinutes";
@@ -19,12 +20,13 @@ public class SettingsService : ISettingsService
     private const string PayOsMinAmountKey = "PayOS.MinAmount";
     private const string PayOsDescMaxKey = "PayOS.DescriptionMaxLength";
 
-    public SettingsService(ISystemSettingRepository repo, IOptionsMonitor<BookingRealtimeOptions> bookingOptions, IOptionsMonitor<PayOsOptions> payOsOptions, IOptionsMonitor<GuestSessionOptions> guestOptions)
+    public SettingsService(ISystemSettingRepository repo, IOptionsMonitor<BookingRealtimeOptions> bookingOptions, IOptionsMonitor<PayOsOptions> payOsOptions, IOptionsMonitor<GuestSessionOptions> guestOptions, IOptionsMonitor<MaintenanceReminderOptions> reminderOptions)
     {
         _repo = repo;
         _bookingOptions = bookingOptions;
         _payOsOptions = payOsOptions;
         _guestOptions = guestOptions;
+        _reminderOptions = reminderOptions;
     }
 
     public Task<BookingRealtimeSettingsDto> GetBookingRealtimeAsync()
@@ -89,6 +91,28 @@ public class SettingsService : ISettingsService
         await _repo.UpsertAsync("GuestSession.SecureOnly", request.SecureOnly ? "true" : "false", "Cookie secure flag");
         await _repo.UpsertAsync("GuestSession.SameSite", request.SameSite ?? "Lax", "Cookie SameSite");
         await _repo.UpsertAsync("GuestSession.Path", request.Path ?? "/", "Cookie path");
+    }
+
+    public Task<MaintenanceReminderSettingsDto> GetMaintenanceReminderAsync()
+    {
+        var snap = _reminderOptions.CurrentValue;
+        return Task.FromResult(new MaintenanceReminderSettingsDto
+        {
+            UpcomingDays = snap.UpcomingDays,
+            DispatchHourLocal = snap.DispatchHourLocal,
+            TimeZoneId = snap.TimeZoneId
+        });
+    }
+
+    public async Task UpdateMaintenanceReminderAsync(UpdateMaintenanceReminderSettingsRequest request)
+    {
+        if (request.UpcomingDays <= 0) throw new System.ArgumentOutOfRangeException(nameof(request.UpcomingDays));
+        if (request.DispatchHourLocal < 0 || request.DispatchHourLocal > 23) throw new System.ArgumentOutOfRangeException(nameof(request.DispatchHourLocal));
+        if (string.IsNullOrWhiteSpace(request.TimeZoneId)) throw new System.ArgumentException("TimeZoneId is required", nameof(request.TimeZoneId));
+
+        await _repo.UpsertAsync("MaintenanceReminder.UpcomingDays", request.UpcomingDays.ToString(), "Days ahead to consider upcoming reminders");
+        await _repo.UpsertAsync("MaintenanceReminder.DispatchHourLocal", request.DispatchHourLocal.ToString(), "Local hour to dispatch reminder emails");
+        await _repo.UpsertAsync("MaintenanceReminder.TimeZoneId", request.TimeZoneId, "Windows/Olson timezone id");
     }
 }
 

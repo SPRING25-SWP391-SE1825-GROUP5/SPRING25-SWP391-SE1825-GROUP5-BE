@@ -15,5 +15,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task DeleteStaffAsync(int staffId);
         Task<bool> StaffExistsAsync(int staffId);
         Task<bool> IsUserAlreadyStaffAsync(int userId);
+        Task<bool> ExistsActiveByUserAsync(int userId);
     }
 }

@@ -101,7 +101,7 @@ public partial class EVDbContext : DbContext
 
     public  DbSet<OrderItem> OrderItems { get; set; }
 
-    public  DbSet<OrderStatusHistory> OrderStatusHistories { get; set; }
+    // public  DbSet<OrderStatusHistory> OrderStatusHistories { get; set; }
 
 
 
@@ -269,7 +269,7 @@ public partial class EVDbContext : DbContext
                 .HasDefaultValue("DRAFT");
             // Removed TotalAmount property mapping
             entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
-            entity.Property(e => e.OrderItemId).HasColumnName("OrderItemID");
+            entity.Property(e => e.OrderId).HasColumnName("OrderID");
 
             entity.HasOne(d => d.Customer).WithMany(p => p.Invoices)
                 .HasForeignKey(d => d.CustomerId)
@@ -280,7 +280,10 @@ public partial class EVDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Invoices_WorkOrders");
 
-            // Removed FK to Orders: Invoice no longer stores OrderID
+            entity.HasOne(d => d.Order).WithMany(p => p.Invoices)
+                .HasForeignKey(d => d.OrderId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Invoices_Orders");
         });
 
         // InvoiceItems removed; invoices link directly to one OrderItem
@@ -1056,31 +1059,7 @@ public partial class EVDbContext : DbContext
                 .HasConstraintName("FK_OrderItems_Parts");
         });
 
-        // OrderStatusHistory configuration
-        modelBuilder.Entity<OrderStatusHistory>(entity =>
-        {
-            entity.HasKey(e => e.HistoryId).HasName("PK_OrderStatusHistory");
-            entity.ToTable("OrderStatusHistories", "dbo");
-            entity.Property(e => e.HistoryId).HasColumnName("HistoryID");
-            entity.Property(e => e.OrderId).HasColumnName("OrderID");
-            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Notes).HasMaxLength(500);
-            entity.Property(e => e.CreatedBy).HasColumnName("CreatedBy");
-            entity.Property(e => e.SystemGenerated).HasDefaultValue(false);
-            entity.Property(e => e.CreatedAt).HasPrecision(0).HasDefaultValueSql("(sysdatetime())");
-
-            entity.HasOne(d => d.Order)
-                .WithMany()
-                .HasForeignKey(d => d.OrderId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .HasConstraintName("FK_OrderStatusHistory_Orders");
-
-            entity.HasOne(d => d.CreatedByUser)
-                .WithMany()
-                .HasForeignKey(d => d.CreatedBy)
-                .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("FK_OrderStatusHistory_Users");
-        });
+        // Removed: OrderStatusHistory mapping
 
         
 

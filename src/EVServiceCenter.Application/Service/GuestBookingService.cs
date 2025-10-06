@@ -5,11 +5,12 @@ using System.Threading.Tasks;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 
 namespace EVServiceCenter.Application.Service;
 
-public class GuestBookingService
+public class GuestBookingService : IGuestBookingService
 {
     private readonly ICustomerRepository _customerRepository;
     private readonly IVehicleRepository _vehicleRepository;

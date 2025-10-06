@@ -75,6 +75,38 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<TimeSlotResponse> GetByIdAsync(int slotId)
+        {
+            var ts = await _timeSlotRepository.GetByIdAsync(slotId);
+            if (ts == null) throw new ArgumentException("Time slot không tồn tại");
+            return MapToTimeSlotResponse(ts);
+        }
+
+        public async Task<TimeSlotResponse> UpdateTimeSlotAsync(int slotId, UpdateTimeSlotRequest request)
+        {
+            var ts = await _timeSlotRepository.GetByIdAsync(slotId);
+            if (ts == null) throw new ArgumentException("Time slot không tồn tại");
+
+            // Validate duplicate against others
+            var all = await _timeSlotRepository.GetAllTimeSlotsAsync();
+            if (all.Any(x => x.SlotId != slotId && x.SlotTime == request.SlotTime))
+                throw new ArgumentException("Thời gian slot này đã tồn tại");
+            if (all.Any(x => x.SlotId != slotId && x.SlotLabel.Equals(request.SlotLabel.Trim(), StringComparison.OrdinalIgnoreCase)))
+                throw new ArgumentException("Nhãn slot này đã tồn tại");
+
+            ts.SlotTime = request.SlotTime;
+            ts.SlotLabel = request.SlotLabel.Trim();
+            ts.IsActive = request.IsActive;
+
+            // repository chưa có Update -> dùng context tracking qua GetByIdAsync: đảm bảo SaveChanges ở repo; tạm thời thêm Update
+            return MapToTimeSlotResponse(await _timeSlotRepository.UpdateAsync(ts));
+        }
+
+        public async Task<bool> DeleteTimeSlotAsync(int slotId)
+        {
+            return await _timeSlotRepository.DeleteAsync(slotId);
+        }
+
         private TimeSlotResponse MapToTimeSlotResponse(TimeSlot timeSlot)
         {
             return new TimeSlotResponse

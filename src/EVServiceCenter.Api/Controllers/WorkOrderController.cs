@@ -47,6 +47,30 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, data });
         }
 
+        /// <summary>
+        /// Lấy kỹ thuật viên được gán cho WorkOrder của một booking
+        /// </summary>
+        [HttpGet("by-booking/{bookingId:int}/technician")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> GetTechnicianByBooking(int bookingId)
+        {
+            var wo = await _workOrderRepository.GetByBookingIdAsync(bookingId);
+            if (wo == null)
+                return NotFound(new { success = false, message = "Không tìm thấy work order cho booking này" });
+
+            if (wo.TechnicianId <= 0 || wo.Technician == null)
+                return Ok(new { success = true, data = (object)null, message = "Chưa được gán kỹ thuật viên" });
+
+            var data = new
+            {
+                technicianId = wo.TechnicianId,
+                technicianName = wo.Technician?.User?.FullName,
+                phone = wo.Technician?.User?.PhoneNumber,
+                email = wo.Technician?.User?.Email
+            };
+            return Ok(new { success = true, data });
+        }
+
         [HttpPost]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> Create([FromBody] CreateWorkOrderRequest request)
@@ -102,6 +126,29 @@ namespace EVServiceCenter.Api.Controllers
             wo.UpdatedAt = DateTime.UtcNow;
             await _workOrderRepository.UpdateAsync(wo);
             return Ok(new { success = true, message = "Đã hoàn tất work order", data = wo });
+        }
+
+        public class UpdateWorkOrderStatusRequest { public string Status { get; set; } }
+
+        [HttpPut("{id:int}/status")]
+        [Authorize(Policy = "TechnicianOrAdmin")]
+        public async Task<IActionResult> ChangeStatus(int id, [FromBody] UpdateWorkOrderStatusRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request?.Status))
+                return BadRequest(new { success = false, message = "Trạng thái không được để trống" });
+
+            var allowed = new[] { "NOT_STARTED", "IN_PROGRESS", "ON_HOLD", "COMPLETED" };
+            var status = request.Status.Trim().ToUpper();
+            if (!Array.Exists(allowed, s => s == status))
+                return BadRequest(new { success = false, message = "Trạng thái work order không hợp lệ" });
+
+            var wo = await _workOrderRepository.GetByIdAsync(id);
+            if (wo == null) return NotFound(new { success = false, message = "Work order không tồn tại" });
+
+            wo.Status = status;
+            wo.UpdatedAt = DateTime.UtcNow;
+            await _workOrderRepository.UpdateAsync(wo);
+            return Ok(new { success = true, message = "Cập nhật trạng thái work order thành công", data = new { wo.WorkOrderId, wo.Status } });
         }
 
         public class WorkOrderNoteRequest { public string Text { get; set; } public string ImageUrl { get; set; } }

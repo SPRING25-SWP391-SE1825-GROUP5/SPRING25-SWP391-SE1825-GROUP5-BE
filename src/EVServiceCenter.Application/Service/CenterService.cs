@@ -185,6 +185,24 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<bool> ToggleActiveAsync(int centerId)
+        {
+            try
+            {
+                var center = await _centerRepository.GetCenterByIdAsync(centerId);
+                if (center == null)
+                    return false;
+
+                center.IsActive = !center.IsActive;
+                await _centerRepository.UpdateCenterAsync(center);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi thay đổi trạng thái trung tâm: {ex.Message}");
+            }
+        }
+
         private CenterResponse MapToCenterResponse(ServiceCenter center)
         {
             return new CenterResponse

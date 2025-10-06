@@ -35,9 +35,8 @@ namespace EVServiceCenter.Application.Models.Requests
         [StringLength(255, ErrorMessage = "Địa chỉ không được vượt quá 255 ký tự")]
         public required string Address { get; set; }
 
-        [Required(ErrorMessage = "Vai trò là bắt buộc")]
         [RegularExpression(@"^(ADMIN|STAFF|TECHNICIAN|CUSTOMER)$", ErrorMessage = "Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER")]
-        public required string Role { get; set; }
+        public string Role { get; set; } = "CUSTOMER";
 
         public bool IsActive { get; set; } = true;
         public bool EmailVerified { get; set; } = false;

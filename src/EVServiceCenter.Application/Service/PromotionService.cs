@@ -21,6 +21,65 @@ namespace EVServiceCenter.Application.Service
             _customerRepository = customerRepository;
         }
 
+        public async Task<int> MarkUsedByOrderAsync(int orderId)
+        {
+            var items = await _promotionRepository.GetUserPromotionsByOrderAsync(orderId);
+            var count = 0;
+            foreach (var up in items)
+            {
+                if (!string.Equals(up.Status, "USED", StringComparison.OrdinalIgnoreCase))
+                {
+                    up.Status = "USED";
+                    up.UsedAt = DateTime.UtcNow;
+                    await _promotionRepository.UpdateUserPromotionAsync(up);
+                    // increase promotion usage
+                    var promo = await _promotionRepository.GetPromotionByIdAsync(up.PromotionId);
+                    if (promo != null)
+                    {
+                        promo.UsageCount = promo.UsageCount + 1;
+                        await _promotionRepository.UpdatePromotionAsync(promo);
+                    }
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public async Task<int> MarkUsedByBookingAsync(int bookingId)
+        {
+            var items = await _promotionRepository.GetUserPromotionsByBookingAsync(bookingId);
+            var count = 0;
+            foreach (var up in items)
+            {
+                if (!string.Equals(up.Status, "USED", StringComparison.OrdinalIgnoreCase))
+                {
+                    up.Status = "USED";
+                    up.UsedAt = DateTime.UtcNow;
+                    await _promotionRepository.UpdateUserPromotionAsync(up);
+                    var promo = await _promotionRepository.GetPromotionByIdAsync(up.PromotionId);
+                    if (promo != null)
+                    {
+                        promo.UsageCount = promo.UsageCount + 1;
+                        await _promotionRepository.UpdatePromotionAsync(promo);
+                    }
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public async Task<int> RemoveByBookingAsync(int bookingId)
+        {
+            var items = await _promotionRepository.GetUserPromotionsByBookingAsync(bookingId);
+            var count = 0;
+            foreach (var up in items)
+            {
+                var removed = await _promotionRepository.DeleteUserPromotionByBookingAndCodeAsync(bookingId, up.Promotion?.Code);
+                if (removed) count++;
+            }
+            return count;
+        }
+
         public async Task<PromotionListResponse> GetAllPromotionsAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string status = null, string promotionType = null)
         {
             try

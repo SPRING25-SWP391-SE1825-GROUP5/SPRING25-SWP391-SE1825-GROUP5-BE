@@ -23,7 +23,7 @@ public partial class Order
 
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 
-    public virtual ICollection<OrderStatusHistory> OrderStatusHistories { get; set; } = new List<OrderStatusHistory>();
+    // Removed: OrderStatusHistories (table dropped)
 
     public virtual ICollection<Feedback> Feedbacks { get; set; } = new List<Feedback>();
 

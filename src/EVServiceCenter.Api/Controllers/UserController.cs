@@ -157,10 +157,10 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Tạo người dùng mới (Staff/Admin)
+        /// Tạo người dùng mới (Staff/Admin) - Luôn tạo CUSTOMER, cần verify email
         /// </summary>
-        /// <param name="request">Thông tin người dùng mới</param>
-        /// <returns>Thông tin người dùng đã tạo</returns>
+        /// <param name="request">Thông tin người dùng mới (role phải là CUSTOMER, emailVerified phải là false)</param>
+        /// <returns>Thông tin người dùng đã tạo + gửi OTP verification</returns>
         [HttpPost]
         [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
@@ -199,12 +199,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Kích hoạt người dùng (Staff/Admin)
+        /// Kích hoạt người dùng (Admin only)
         /// </summary>
         /// <param name="id">ID người dùng</param>
         /// <returns>Kết quả kích hoạt</returns>
         [HttpPatch("{id}/activate")]
-        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> ActivateUser(int id)
         {
             try
@@ -243,12 +243,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Vô hiệu hóa người dùng (Staff/Admin)
+        /// Vô hiệu hóa người dùng (Admin only)
         /// </summary>
         /// <param name="id">ID người dùng</param>
         /// <returns>Kết quả vô hiệu hóa</returns>
         [HttpPatch("{id}/deactivate")]
-        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> DeactivateUser(int id)
         {
             try
@@ -280,6 +280,57 @@ namespace EVServiceCenter.WebAPI.Controllers
             catch (ArgumentException ex)
             {
                 return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Gán vai trò cho người dùng (chỉ Admin)
+        /// </summary>
+        /// <param name="request">Thông tin gán vai trò</param>
+        /// <returns>Kết quả gán vai trò</returns>
+        [HttpPatch("assign-role")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> AssignUserRole([FromBody] AssignUserRoleRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = errors });
+                }
+
+                // Không cho phép thay đổi vai trò của chính mình
+                if (IsCurrentUser(request.UserId))
+                    return BadRequest(new { success = false, message = "Không thể thay đổi vai trò của chính mình" });
+
+                var result = await _userService.AssignUserRoleAsync(request.UserId, request.Role);
+                
+                if (result)
+                {
+                    return Ok(new { 
+                        success = true, 
+                        message = $"Đã gán vai trò {request.Role} cho người dùng thành công" 
+                    });
+                }
+                else
+                {
+                    return StatusCode(500, new { 
+                        success = false, 
+                        message = "Không thể gán vai trò cho người dùng" 
+                    });
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {

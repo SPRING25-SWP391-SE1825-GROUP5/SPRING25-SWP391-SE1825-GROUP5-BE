@@ -179,5 +179,74 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        /// <summary>
+        /// Lấy thông tin khách hàng theo ID xe
+        /// </summary>
+        /// <param name="id">ID xe</param>
+        /// <returns>Thông tin khách hàng</returns>
+        [HttpGet("{id}/customer")]
+        public async Task<IActionResult> GetCustomerByVehicleId(int id)
+        {
+            try
+            {
+                if (id <= 0)
+                    return BadRequest(new { success = false, message = "ID xe không hợp lệ" });
+
+                var customer = await _vehicleService.GetCustomerByVehicleIdAsync(id);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy thông tin khách hàng thành công",
+                    data = customer
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+
+        /// <summary>
+        /// Tìm xe theo VIN hoặc biển số xe
+        /// </summary>
+        /// <param name="vinOrLicensePlate">VIN hoặc biển số xe</param>
+        /// <returns>Thông tin xe</returns>
+        [HttpGet("search/{vinOrLicensePlate}")]
+        public async Task<IActionResult> GetVehicleByVinOrLicensePlate(string vinOrLicensePlate)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(vinOrLicensePlate))
+                    return BadRequest(new { success = false, message = "VIN hoặc biển số xe không được để trống" });
+
+                var vehicle = await _vehicleService.GetVehicleByVinOrLicensePlateAsync(vinOrLicensePlate);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Tìm xe thành công",
+                    data = vehicle
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
     }
 }

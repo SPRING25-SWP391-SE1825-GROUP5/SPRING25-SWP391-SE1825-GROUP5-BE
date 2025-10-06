@@ -46,8 +46,6 @@ public partial class WorkOrder
 
     public virtual Technician Technician { get; set; }
 
-    public virtual ICollection<WorkOrderChargeProposal> WorkOrderChargeProposals { get; set; } = new List<WorkOrderChargeProposal>();
-
     public virtual ICollection<WorkOrderPart> WorkOrderParts { get; set; } = new List<WorkOrderPart>();
 
     public virtual ICollection<Feedback> Feedbacks { get; set; } = new List<Feedback>();

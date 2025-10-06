@@ -176,6 +176,7 @@ namespace EVServiceCenter.Application.Service
                 var currentTime = DateTime.Now;
                 var allTimeSlots = await _timeSlotRepository.GetAllTimeSlotsAsync();
 
+                // optional: subtract holds via DI hold store (resolved at controller level)
                 foreach (var slot in allTimeSlots)
                 {
                     foreach (var technician in centerTechnicians)
@@ -415,6 +416,12 @@ namespace EVServiceCenter.Application.Service
                 booking.UpdatedAt = DateTime.UtcNow;
 
                 await _bookingRepository.UpdateBookingAsync(booking);
+
+                // Auto-remove promotions when cancelled
+                if (string.Equals(booking.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+                {
+                    // TODO: Promotion cleanup handled at controller/service layer outside to avoid service locator pattern
+                }
 
                 return await MapToBookingResponseAsync(bookingId);
             }

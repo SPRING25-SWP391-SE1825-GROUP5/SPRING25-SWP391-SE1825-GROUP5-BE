@@ -169,6 +169,24 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<bool> ToggleActiveAsync(int serviceId)
+        {
+            try
+            {
+                var service = await _serviceRepository.GetServiceByIdAsync(serviceId);
+                if (service == null)
+                    return false;
+
+                service.IsActive = !service.IsActive;
+                await _serviceRepository.UpdateServiceAsync(service);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi thay đổi trạng thái dịch vụ: {ex.Message}");
+            }
+        }
+
         private ServiceResponse MapToServiceResponse(Domain.Entities.Service service)
         {
             return new ServiceResponse

@@ -17,8 +17,6 @@ public partial class VehicleModel
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
-    public DateTime? UpdatedAt { get; set; }
-
     // Navigation properties
     public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
 

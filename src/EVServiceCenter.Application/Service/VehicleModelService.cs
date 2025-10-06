@@ -40,16 +40,8 @@ public class VehicleModelService : IVehicleModelService
             ModelId = model.ModelId,
             ModelName = model.ModelName,
             Brand = model.Brand,
-            BatteryCapacity = null,
-            MaxRange = null,
-            MaxSpeed = null,
-            ChargingTime = null,
-            Weight = null,
-            Price = null,
-            Year = null,
             IsActive = model.IsActive,
             CreatedAt = model.CreatedAt,
-            UpdatedAt = model.UpdatedAt,
             VehicleCount = vehicleCount,
             CompatiblePartsCount = compatiblePartsCount
         };
@@ -70,16 +62,8 @@ public class VehicleModelService : IVehicleModelService
                 ModelId = model.ModelId,
                 ModelName = model.ModelName,
                 Brand = model.Brand,
-                BatteryCapacity = null,
-                MaxRange = null,
-                MaxSpeed = null,
-                ChargingTime = null,
-                Weight = null,
-                Price = null,
-                Year = null,
                 IsActive = model.IsActive,
                 CreatedAt = model.CreatedAt,
-                UpdatedAt = model.UpdatedAt,
                 VehicleCount = vehicleCount,
                 CompatiblePartsCount = compatiblePartsCount
             });
@@ -103,16 +87,8 @@ public class VehicleModelService : IVehicleModelService
                 ModelId = model.ModelId,
                 ModelName = model.ModelName,
                 Brand = model.Brand,
-                BatteryCapacity = null,
-                MaxRange = null,
-                MaxSpeed = null,
-                ChargingTime = null,
-                Weight = null,
-                Price = null,
-                Year = null,
                 IsActive = model.IsActive,
                 CreatedAt = model.CreatedAt,
-                UpdatedAt = model.UpdatedAt,
                 VehicleCount = vehicleCount,
                 CompatiblePartsCount = compatiblePartsCount
             });
@@ -136,16 +112,8 @@ public class VehicleModelService : IVehicleModelService
                 ModelId = model.ModelId,
                 ModelName = model.ModelName,
                 Brand = model.Brand,
-                BatteryCapacity = null,
-                MaxRange = null,
-                MaxSpeed = null,
-                ChargingTime = null,
-                Weight = null,
-                Price = null,
-                Year = null,
                 IsActive = model.IsActive,
                 CreatedAt = model.CreatedAt,
-                UpdatedAt = model.UpdatedAt,
                 VehicleCount = vehicleCount,
                 CompatiblePartsCount = compatiblePartsCount
             });
@@ -171,16 +139,8 @@ public class VehicleModelService : IVehicleModelService
             ModelId = createdModel.ModelId,
             ModelName = createdModel.ModelName,
             Brand = createdModel.Brand,
-            BatteryCapacity = null,
-            MaxRange = null,
-            MaxSpeed = null,
-            ChargingTime = null,
-            Weight = null,
-            Price = null,
-            Year = null,
             IsActive = createdModel.IsActive,
             CreatedAt = createdModel.CreatedAt,
-            UpdatedAt = createdModel.UpdatedAt,
             VehicleCount = 0,
             CompatiblePartsCount = 0
         };
@@ -200,7 +160,7 @@ public class VehicleModelService : IVehicleModelService
         if (request.IsActive.HasValue)
             model.IsActive = request.IsActive.Value;
 
-        model.UpdatedAt = DateTime.Now;
+        // UpdatedAt removed - not in database
 
         var updatedModel = await _vehicleModelRepository.UpdateAsync(model);
         var vehicleCount = await _vehicleRepository.CountByModelIdAsync(id);
@@ -211,16 +171,8 @@ public class VehicleModelService : IVehicleModelService
             ModelId = updatedModel.ModelId,
             ModelName = updatedModel.ModelName,
             Brand = updatedModel.Brand,
-            BatteryCapacity = null,
-            MaxRange = null,
-            MaxSpeed = null,
-            ChargingTime = null,
-            Weight = null,
-            Price = null,
-            Year = null,
             IsActive = updatedModel.IsActive,
             CreatedAt = updatedModel.CreatedAt,
-            UpdatedAt = updatedModel.UpdatedAt,
             VehicleCount = vehicleCount,
             CompatiblePartsCount = compatiblePartsCount
         };
@@ -242,7 +194,7 @@ public class VehicleModelService : IVehicleModelService
             return false;
 
         model.IsActive = !model.IsActive;
-        model.UpdatedAt = DateTime.Now;
+        // UpdatedAt removed - not in database
 
         await _vehicleModelRepository.UpdateAsync(model);
         return true;
@@ -263,16 +215,8 @@ public class VehicleModelService : IVehicleModelService
                 ModelId = model.ModelId,
                 ModelName = model.ModelName,
                 Brand = model.Brand,
-                BatteryCapacity = null,
-                MaxRange = null,
-                MaxSpeed = null,
-                ChargingTime = null,
-                Weight = null,
-                Price = null,
-                Year = null,
                 IsActive = model.IsActive,
                 CreatedAt = model.CreatedAt,
-                UpdatedAt = model.UpdatedAt,
                 VehicleCount = vehicleCount,
                 CompatiblePartsCount = compatiblePartsCount
             });

@@ -23,6 +23,8 @@ public partial class EVDbContext : DbContext
 
     public  DbSet<Inventory> Inventories { get; set; }
 
+    public  DbSet<InventoryPart> InventoryParts { get; set; }
+
 
 
 
@@ -30,7 +32,7 @@ public partial class EVDbContext : DbContext
 
     public  DbSet<Invoice> Invoices { get; set; }
 
-    public  DbSet<InvoiceItem> InvoiceItems { get; set; }
+    
     public  DbSet<ServicePart> ServiceParts { get; set; }
 
 
@@ -86,9 +88,7 @@ public partial class EVDbContext : DbContext
 
     public  DbSet<WorkOrder> WorkOrders { get; set; }
 
-    public  DbSet<WorkOrderChargeProposal> WorkOrderChargeProposals { get; set; }
-
-    public  DbSet<WorkOrderChargeProposalItem> WorkOrderChargeProposalItems { get; set; }
+    // Proposals removed per requirements
 
     public  DbSet<WorkOrderPart> WorkOrderParts { get; set; }
     public  DbSet<MaintenancePolicy> MaintenancePolicies { get; set; }
@@ -96,7 +96,6 @@ public partial class EVDbContext : DbContext
     public  DbSet<ServiceRequiredSkill> ServiceRequiredSkills { get; set; }
 
     // E-commerce tables
-    public  DbSet<ShoppingCart> ShoppingCarts { get; set; }
 
     public  DbSet<Order> Orders { get; set; }
 
@@ -107,7 +106,6 @@ public partial class EVDbContext : DbContext
 
 
     public  DbSet<Feedback> Feedbacks { get; set; }
-
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
@@ -196,24 +194,44 @@ public partial class EVDbContext : DbContext
 
             entity.ToTable("Inventory", "dbo");
 
-            entity.HasIndex(e => new { e.CenterId, e.PartId }, "UQ_Inv_CenterPart").IsUnique();
+            entity.HasIndex(e => e.CenterId, "UQ_Inv_Center").IsUnique();
 
             entity.Property(e => e.InventoryId).HasColumnName("InventoryID");
             entity.Property(e => e.CenterId).HasColumnName("CenterID");
             entity.Property(e => e.LastUpdated)
                 .HasPrecision(0)
                 .HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.PartId).HasColumnName("PartID");
 
             entity.HasOne(d => d.Center).WithMany(p => p.Inventories)
                 .HasForeignKey(d => d.CenterId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Inv_Centers");
+        });
 
-            entity.HasOne(d => d.Part).WithMany(p => p.Inventories)
+        modelBuilder.Entity<InventoryPart>(entity =>
+        {
+            entity.HasKey(e => e.InventoryPartId).HasName("PK__InventoryParts__F5FDE6D35C44F65E");
+
+            entity.ToTable("InventoryParts", "dbo");
+
+            entity.HasIndex(e => new { e.InventoryId, e.PartId }, "UQ_InvPart_InventoryPart").IsUnique();
+
+            entity.Property(e => e.InventoryPartId).HasColumnName("InventoryPartID");
+            entity.Property(e => e.InventoryId).HasColumnName("InventoryID");
+            entity.Property(e => e.PartId).HasColumnName("PartID");
+            entity.Property(e => e.LastUpdated)
+                .HasPrecision(0)
+                .HasDefaultValueSql("(sysdatetime())");
+
+            entity.HasOne(d => d.Inventory).WithMany(p => p.InventoryParts)
+                .HasForeignKey(d => d.InventoryId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_InvPart_Inventory");
+
+            entity.HasOne(d => d.Part).WithMany(p => p.InventoryParts)
                 .HasForeignKey(d => d.PartId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Inv_Parts");
+                .HasConstraintName("FK_InvPart_Parts");
         });
 
 
@@ -234,7 +252,8 @@ public partial class EVDbContext : DbContext
 
             // Removed InvoiceNumber unique index
 
-            // Removed InvoiceID column
+            // Map primary key column name
+            entity.Property(e => e.InvoiceId).HasColumnName("InvoiceID");
             entity.Property(e => e.Email).HasMaxLength(255);
             entity.Property(e => e.Phone).HasMaxLength(20);
             entity.Property(e => e.CreatedAt)
@@ -250,7 +269,7 @@ public partial class EVDbContext : DbContext
                 .HasDefaultValue("DRAFT");
             // Removed TotalAmount property mapping
             entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
-            entity.Property(e => e.OrderId).HasColumnName("OrderID");
+            entity.Property(e => e.OrderItemId).HasColumnName("OrderItemID");
 
             entity.HasOne(d => d.Customer).WithMany(p => p.Invoices)
                 .HasForeignKey(d => d.CustomerId)
@@ -261,35 +280,11 @@ public partial class EVDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Invoices_WorkOrders");
 
-            entity.HasOne(d => d.Order).WithMany(p => p.Invoices)
-                .HasForeignKey(d => d.OrderId)
-                .HasConstraintName("FK_Invoices_Orders");
+            // Removed FK to Orders: Invoice no longer stores OrderID
         });
 
-        modelBuilder.Entity<InvoiceItem>(entity =>
-        {
-            entity.HasKey(e => e.InvoiceItemId).HasName("PK__InvoiceI__478FE0FC9644E7D3");
-
-            entity.ToTable("InvoiceItems", "dbo");
-
-            entity.HasIndex(e => e.InvoiceId, "IX_InvoiceItems_InvoiceID");
-
-            entity.Property(e => e.InvoiceItemId).HasColumnName("InvoiceItemID");
-            entity.Property(e => e.Description).HasMaxLength(300);
-            entity.Property(e => e.InvoiceId).HasColumnName("InvoiceID");
-            entity.Property(e => e.OrderItemId).HasColumnName("OrderItemID");
-
-            entity.HasOne(d => d.Invoice).WithMany(p => p.InvoiceItems)
-                .HasForeignKey(d => d.InvoiceId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__InvoiceIt__Invoi__30441BD6");
-
-            // Removed FK to Parts; InvoiceItems no longer reference Parts directly
-
-            entity.HasOne(d => d.OrderItem).WithMany(p => p.InvoiceItems)
-                .HasForeignKey(d => d.OrderItemId)
-                .HasConstraintName("FK_InvoiceItems_OrderItems");
-        });
+        // InvoiceItems removed; invoices link directly to one OrderItem
+        modelBuilder.Entity<Invoice>(entity => { });
 
 
 
@@ -834,6 +829,7 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.BookingId).HasColumnName("BookingID");
             entity.Property(e => e.OrderId).HasColumnName("OrderID");
             entity.Property(e => e.PromotionId).HasColumnName("PromotionID");
+            entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
             entity.Property(e => e.Status)
                 .IsRequired()
                 .HasMaxLength(20)
@@ -859,6 +855,10 @@ public partial class EVDbContext : DbContext
                 .HasForeignKey(d => d.PromotionId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_UserPromotions_Promotions");
+
+            entity.HasOne(d => d.Service).WithMany()
+                .HasForeignKey(d => d.ServiceId)
+                .HasConstraintName("FK_UserPromotions_Services");
         });
 
         modelBuilder.Entity<Vehicle>(entity =>
@@ -968,72 +968,6 @@ public partial class EVDbContext : DbContext
                 .HasConstraintName("FK_WO_Services");
         });
 
-        modelBuilder.Entity<WorkOrderChargeProposal>(entity =>
-        {
-            entity.HasKey(e => e.ProposalId).HasName("PK__WorkOrde__6F39E100BDB375C0");
-
-            entity.ToTable("WorkOrderChargeProposals", "dbo");
-
-            entity.Property(e => e.ProposalId).HasColumnName("ProposalID");
-            entity.Property(e => e.ApprovedAt).HasPrecision(0);
-            // Removed: ApprovedBy (text)
-            entity.Property(e => e.CreatedAt)
-                .HasPrecision(0)
-                .HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.Note).HasMaxLength(500);
-            entity.Property(e => e.ApprovedByCustomerId).HasColumnName("ApprovedByCustomerID");
-            entity.Property(e => e.CreatedByTechnicianId).HasColumnName("CreatedByTechnicianID");
-            entity.Property(e => e.Status)
-                .IsRequired()
-                .HasMaxLength(20)
-                .IsUnicode(false)
-                .HasDefaultValue("PENDING");
-            entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
-
-            entity.HasOne(d => d.WorkOrder).WithMany(p => p.WorkOrderChargeProposals)
-                .HasForeignKey(d => d.WorkOrderId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__WorkOrder__WorkO__200DB40D");
-
-            entity.HasOne(d => d.ApprovedByCustomer).WithMany()
-                .HasForeignKey(d => d.ApprovedByCustomerId)
-                .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("FK_WOCP_ApprovedByCustomer");
-
-            entity.HasOne(d => d.CreatedByTechnician).WithMany()
-                .HasForeignKey(d => d.CreatedByTechnicianId)
-                .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("FK_WOCP_CreatedByTechnician");
-        });
-
-        modelBuilder.Entity<WorkOrderChargeProposalItem>(entity =>
-        {
-            entity.HasKey(e => e.ProposalItemId).HasName("PK_WOCPItems");
-
-            entity.ToTable("WorkOrderChargeProposalItems", "dbo");
-
-            entity.HasIndex(e => new { e.ProposalId, e.VehicleModelPartId }, "UX_WOCPItems_Proposal_VMP_NotNull")
-                .IsUnique()
-                .HasFilter("([VehicleModelPartID] IS NOT NULL)");
-
-            entity.Property(e => e.ProposalItemId).HasColumnName("ProposalItemID");
-            entity.Property(e => e.Description).HasMaxLength(200);
-            entity.Property(e => e.VehicleModelPartId).HasColumnName("VehicleModelPartID");
-            entity.Property(e => e.ProposalId).HasColumnName("ProposalID");
-            entity.Property(e => e.Quantity).HasColumnType("decimal(12, 2)");
-            entity.Property(e => e.UnitPrice).HasColumnType("decimal(12, 2)");
-
-            entity.HasOne(d => d.VehicleModelPart).WithMany()
-                .HasForeignKey(d => d.VehicleModelPartId)
-                .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("FK_WOCPItems_VehicleModelParts");
-
-            entity.HasOne(d => d.Proposal).WithMany(p => p.WorkOrderChargeProposalItems)
-                .HasForeignKey(d => d.ProposalId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__WorkOrder__Propo__24D2692A");
-        });
-
         modelBuilder.Entity<MaintenanceChecklist>(entity =>
         {
             entity.HasKey(e => e.ChecklistId).HasName("PK_MaintenanceChecklist");
@@ -1062,6 +996,7 @@ public partial class EVDbContext : DbContext
 
             entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
             entity.Property(e => e.PartId).HasColumnName("PartID");
+            entity.Property(e => e.VehicleModelPartId).HasColumnName("VehicleModelPartID");
             entity.Property(e => e.UnitCost).HasColumnType("decimal(10, 2)");
 
             entity.HasOne(d => d.Part).WithMany(p => p.WorkOrderParts)
@@ -1073,31 +1008,17 @@ public partial class EVDbContext : DbContext
                 .HasForeignKey(d => d.WorkOrderId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_WOP_WorkOrders");
+
+            entity.HasOne(d => d.VehicleModelPart).WithMany()
+                .HasForeignKey(d => d.VehicleModelPartId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_WOP_VehicleModelParts");
+
+            entity.HasIndex(e => e.VehicleModelPartId).HasDatabaseName("IX_WOP_VehicleModelPartID");
         });
         // Removed sequence for InvoiceNumber
 
-        // E-commerce tables configuration
-        modelBuilder.Entity<ShoppingCart>(entity =>
-        {
-            entity.HasKey(e => e.CartId).HasName("PK__Shopping__C52A0BB3E9A32E1C");
-            entity.ToTable("ShoppingCarts", "dbo");
-            entity.Property(e => e.CartId).HasColumnName("CartID");
-            entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
-            entity.Property(e => e.PartId).HasColumnName("PartID");
-            entity.Property(e => e.UnitPrice).HasColumnType("decimal(10, 2)");
-            entity.Property(e => e.CreatedAt).HasPrecision(0).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.UpdatedAt).HasPrecision(0).HasDefaultValueSql("(sysdatetime())");
-
-            entity.HasOne(d => d.Customer).WithMany(p => p.ShoppingCarts)
-                .HasForeignKey(d => d.CustomerId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_ShoppingCarts_Customers");
-
-            entity.HasOne(d => d.Part).WithMany(p => p.ShoppingCarts)
-                .HasForeignKey(d => d.PartId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_ShoppingCarts_Parts");
-        });
+        // E-commerce tables configuration - ShoppingCarts removed
 
         modelBuilder.Entity<Order>(entity =>
         {
@@ -1135,24 +1056,29 @@ public partial class EVDbContext : DbContext
                 .HasConstraintName("FK_OrderItems_Parts");
         });
 
+        // OrderStatusHistory configuration
         modelBuilder.Entity<OrderStatusHistory>(entity =>
         {
-            entity.HasKey(e => e.HistoryId).HasName("PK__OrderStat__2D7B4C4FE9A32E1C");
-            entity.ToTable("OrderStatusHistory", "dbo");
+            entity.HasKey(e => e.HistoryId).HasName("PK_OrderStatusHistory");
+            entity.ToTable("OrderStatusHistories", "dbo");
             entity.Property(e => e.HistoryId).HasColumnName("HistoryID");
             entity.Property(e => e.OrderId).HasColumnName("OrderID");
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Notes).HasMaxLength(500);
             entity.Property(e => e.CreatedBy).HasColumnName("CreatedBy");
             entity.Property(e => e.SystemGenerated).HasDefaultValue(false);
             entity.Property(e => e.CreatedAt).HasPrecision(0).HasDefaultValueSql("(sysdatetime())");
 
-            entity.HasOne(d => d.Order).WithMany(p => p.OrderStatusHistories)
+            entity.HasOne(d => d.Order)
+                .WithMany()
                 .HasForeignKey(d => d.OrderId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
+                .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_OrderStatusHistory_Orders");
 
-            entity.HasOne(d => d.CreatedByUser).WithMany(p => p.OrderStatusHistories)
+            entity.HasOne(d => d.CreatedByUser)
+                .WithMany()
                 .HasForeignKey(d => d.CreatedBy)
-                .OnDelete(DeleteBehavior.ClientSetNull)
+                .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("FK_OrderStatusHistory_Users");
         });
 
@@ -1166,6 +1092,8 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
             entity.Property(e => e.OrderId).HasColumnName("OrderID");
             entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
+            entity.Property(e => e.PartId).HasColumnName("PartID");
+            entity.Property(e => e.TechnicianId).HasColumnName("TechnicianID");
             // IsVerified removed
             // IsVerified removed
             entity.Property(e => e.IsAnonymous).HasDefaultValue(false);
@@ -1173,7 +1101,7 @@ public partial class EVDbContext : DbContext
 
             entity.HasOne(d => d.Customer).WithMany(p => p.Feedbacks)
                 .HasForeignKey(d => d.CustomerId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
+                .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("FK_Feedbacks_Customers");
 
             entity.HasOne(d => d.Order).WithMany(p => p.Feedbacks)
@@ -1185,6 +1113,16 @@ public partial class EVDbContext : DbContext
                 .HasForeignKey(d => d.WorkOrderId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Feedbacks_WorkOrders");
+            
+            entity.HasOne(d => d.Part).WithMany()
+                .HasForeignKey(d => d.PartId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_Feedbacks_Parts");
+
+            entity.HasOne(d => d.Technician).WithMany()
+                .HasForeignKey(d => d.TechnicianId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_Feedbacks_Technicians");
             
         });
 
@@ -1210,8 +1148,7 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.CreatedAt)
                 .HasPrecision(0)
                 .HasDefaultValueSql("(getdate())");
-            entity.Property(e => e.UpdatedAt)
-                .HasPrecision(0);
+            // UpdatedAt removed - not in database
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true);
         });

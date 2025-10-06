@@ -18,5 +18,5 @@ public partial class OrderItem
 
     public virtual Part Part { get; set; }
 
-    public virtual System.Collections.Generic.ICollection<InvoiceItem> InvoiceItems { get; set; } = new System.Collections.Generic.List<InvoiceItem>();
+    
 }

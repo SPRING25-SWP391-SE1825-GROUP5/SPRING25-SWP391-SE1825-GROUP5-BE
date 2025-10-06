@@ -22,14 +22,18 @@ namespace EVServiceCenter.Application.Service
         private readonly IAccountRepository _accountRepository;
         private readonly IStaffRepository _staffRepository;
         private readonly ITechnicianRepository _technicianRepository;
+        private readonly IEmailService _emailService;
+        private readonly IOtpService _otpService;
 
-        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository)
+        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IOtpService otpService)
         {
             _authRepository = authRepository;
             _accountRepository = accountRepository;
             _customerRepository = customerRepository;
             _staffRepository = staffRepository;
             _technicianRepository = technicianRepository;
+            _emailService = emailService;
+            _otpService = otpService;
         }
 
         public async Task<UserListResponse> GetAllUsersAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string role = null)
@@ -115,9 +119,9 @@ namespace EVServiceCenter.Application.Service
                     Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : null,
                     DateOfBirth = request.DateOfBirth,
                     Gender = request.Gender,
-                    Role = request.Role,
-                    IsActive = request.IsActive,
-                    EmailVerified = request.EmailVerified,
+                    Role = "CUSTOMER", // Luôn mặc định là CUSTOMER
+                    IsActive = true, // Mặc định là active
+                    EmailVerified = false, // Luôn cần verify email
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -136,31 +140,11 @@ namespace EVServiceCenter.Application.Service
 
                     await _customerRepository.CreateCustomerAsync(customer);
                 }
-                else if (user.Role == "STAFF")
-                {
-                    var staff = new Staff
-                    {
-                        UserId = user.UserId,
-                        CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
 
-                    await _staffRepository.CreateStaffAsync(staff);
-                }
-                else if (user.Role == "TECHNICIAN")
-                {
-                    var technician = new Technician
-                    {
-                        UserId = user.UserId,
-                        CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
-                        Position = "GENERAL", // Default position
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    await _technicianRepository.CreateTechnicianAsync(technician);
-                }
+                // Tạo và gửi mã OTP xác thực email
+                var otpCode = _otpService.GenerateOtp();
+                await _otpService.CreateOtpAsync(user.UserId, otpCode, "EMAIL_VERIFICATION");
+                await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
 
                 return MapToUserResponse(user);
             }
@@ -345,10 +329,16 @@ namespace EVServiceCenter.Application.Service
                 errors.Add("Giới tính phải là MALE hoặc FEMALE.");
             }
 
-            // Check role
-            if (!IsValidRole(request.Role))
+            // Validate role - chỉ cho phép CUSTOMER (default value đã là CUSTOMER)
+            if (request.Role != "CUSTOMER")
             {
-                errors.Add("Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
+                errors.Add("Chỉ được tạo tài khoản CUSTOMER. Vai trò khác phải được tạo bởi Admin.");
+            }
+
+            // Validate emailVerified - phải là false
+            if (request.EmailVerified)
+            {
+                errors.Add("Email chưa được xác thực. Vui lòng để emailVerified = false.");
             }
 
             // Check email uniqueness
@@ -506,6 +496,48 @@ namespace EVServiceCenter.Application.Service
         }
 
         // GenerateTechnicianCode removed
+
+        /// <summary>
+        /// Gán vai trò cho người dùng (chỉ Admin)
+        /// </summary>
+        /// <param name="userId">ID người dùng</param>
+        /// <param name="role">Vai trò mới</param>
+        /// <returns>Kết quả gán vai trò</returns>
+        public async Task<bool> AssignUserRoleAsync(int userId, string role)
+        {
+            try
+            {
+                // Validate role
+                if (!IsValidRole(role))
+                {
+                    throw new ArgumentException("Vai trò không hợp lệ. Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
+                }
+
+                // Lấy thông tin user
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                {
+                    throw new ArgumentException("Không tìm thấy người dùng với ID này.");
+                }
+
+                // Cập nhật role
+                user.Role = role;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                // Lưu thay đổi
+                await _authRepository.UpdateUserAsync(user);
+
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi gán vai trò cho người dùng: {ex.Message}");
+            }
+        }
 
         private string NormalizePhoneNumber(string phoneNumber)
         {

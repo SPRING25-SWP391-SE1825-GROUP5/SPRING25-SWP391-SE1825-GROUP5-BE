@@ -21,21 +21,21 @@ public partial class Invoice
 
     public int? BookingId { get; set; }
 
-    public int? OrderId { get; set; }
+
+    // New: link directly to a single OrderItem (replacing InvoiceItems table)
+    public int? OrderItemId { get; set; }
 
     // public int? ParentInvoiceId { get; set; } // Column không tồn tại trong database
 
     public virtual Customer Customer { get; set; }
 
-    public virtual ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
-
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
-    public virtual ICollection<UserPromotion> UserPromotions { get; set; } = new List<UserPromotion>();
+    // Removed navigation to UserPromotions to prevent EF from creating a shadow FK (InvoiceId)
 
     public virtual WorkOrder WorkOrder { get; set; }
 
     public virtual Booking Booking { get; set; }
 
-    public virtual Order? Order { get; set; }
+    
 }

@@ -7,7 +7,7 @@ using EVServiceCenter.Application.Models.Responses;
 using System;
 using System.Collections.Generic;
 using System.Linq;
- 
+using EVServiceCenter.Application.Service;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -18,11 +18,21 @@ namespace EVServiceCenter.WebAPI.Controllers
     {
         private readonly IBookingService _bookingService;
         private readonly IBookingHistoryService _bookingHistoryService;
+        private readonly GuestBookingService _guestBookingService;
+        private static readonly string[] AllowedBookingStatuses = new[] { "PENDING", "CONFIRMED", "CANCELLED", "COMPLETED" };
 
-    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService)
+        private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
+        private readonly Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> _hub;
+        private readonly int _ttlMinutes;
+
+    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub, Microsoft.Extensions.Options.IOptions<EVServiceCenter.Application.Configurations.BookingRealtimeOptions> realtimeOptions, GuestBookingService guestBookingService)
         {
         _bookingService = bookingService;
         _bookingHistoryService = bookingHistoryService;
+        _holdStore = holdStore;
+        _hub = hub;
+        _ttlMinutes = realtimeOptions?.Value?.HoldTtlMinutes ?? 5;
+        _guestBookingService = guestBookingService;
         }
 
         /// <summary>
@@ -79,6 +89,46 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message = "Lỗi hệ thống: " + ex.Message 
                 });
             }
+        }
+
+        /// <summary>
+        /// Tạo đặt lịch cho khách (không cần đăng nhập)
+        /// </summary>
+        [AllowAnonymous]
+        [HttpPost("guest")] // moved from /api/guest/bookings
+        public async Task<IActionResult> CreateGuestBooking([FromBody] GuestBookingRequest request)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
+            }
+
+            try
+            {
+                var result = await _guestBookingService.CreateGuestBookingAsync(request);
+                return Ok(new { success = true, message = "Tạo đặt lịch thành công. Vui lòng thanh toán để xác nhận.", data = result });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Intent nhẹ khi khách chọn center/date/slot (không lưu DB)
+        /// </summary>
+        [AllowAnonymous]
+        [HttpPost("intent")]
+        public IActionResult Intent([FromQuery] int centerId, [FromQuery] string date, [FromQuery] int? slotId = null)
+        {
+            // No-op for now: this allows FE to ping server to attach guest_session_id via cookie
+            if (centerId <= 0) return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
+            if (!DateOnly.TryParse(date, out _)) return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
+            return Ok(new { success = true, message = "Intent recorded" });
         }
 
         /// <summary>
@@ -156,6 +206,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             [FromQuery] int technicianId,
             [FromQuery] string date,
             [FromQuery] int slotId,
+            [FromQuery] int centerId,
             [FromQuery] int? bookingId = null)
         {
             try
@@ -169,22 +220,27 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!DateOnly.TryParse(date, out var bookingDate))
                     return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
 
-                var result = await _bookingService.ReserveTimeSlotAsync(technicianId, bookingDate, slotId, bookingId);
-
-                if (result)
+                // Hold via in-memory store (TTL 5 minutes)
+                var customerId = 0; // if you have auth context, map to current user id
+                var ttl = System.TimeSpan.FromMinutes(_ttlMinutes);
+                if (_holdStore == null)
                 {
-                    return Ok(new { 
-                        success = true, 
-                        message = "Tạm giữ time slot thành công",
-                        data = new { technicianId, date = bookingDate, slotId, bookingId }
-                    });
+                    var result = await _bookingService.ReserveTimeSlotAsync(technicianId, bookingDate, slotId, bookingId);
+                    if (result)
+                        return Ok(new { success = true, message = "Tạm giữ time slot thành công", data = new { technicianId, date = bookingDate, slotId, bookingId } });
+                    return BadRequest(new { success = false, message = "Không thể tạm giữ time slot. Slot có thể đã được đặt hoặc không khả dụng." });
                 }
                 else
                 {
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Không thể tạm giữ time slot. Slot có thể đã được đặt hoặc không khả dụng." 
-                    });
+                    if (_holdStore.IsHeld(centerId, bookingDate, slotId, technicianId))
+                        return BadRequest(new { success = false, message = "Slot đang được giữ bởi người khác" });
+                    if (_holdStore.TryHold(centerId, bookingDate, slotId, technicianId, customerId, ttl, out var expiresAt))
+                    {
+                        var group = $"center:{centerId}:date:{bookingDate:yyyy-MM-dd}";
+                        await _hub.Clients.Group(group).SendCoreAsync("slotHeld", new object[] { new { technicianId, slotId, expiresAt } });
+                        return Ok(new { success = true, message = "Tạm giữ time slot thành công", data = new { technicianId, date = bookingDate, slotId, bookingId, expiresAt } });
+                    }
+                    return BadRequest(new { success = false, message = "Không thể tạm giữ time slot" });
                 }
             }
             catch (Exception ex)
@@ -194,6 +250,22 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message = "Lỗi hệ thống: " + ex.Message 
                 });
             }
+        }
+
+        public class UpdateBookingStatusRequest { public string Status { get; set; } }
+
+        [HttpPut("{id:int}/status")]
+        public async Task<IActionResult> ChangeStatus(int id, [FromBody] UpdateBookingStatusRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request?.Status))
+                return BadRequest(new { success = false, message = "Trạng thái không được để trống" });
+
+            var status = request.Status.Trim().ToUpper();
+            if (!AllowedBookingStatuses.Contains(status))
+                return BadRequest(new { success = false, message = "Trạng thái booking không hợp lệ" });
+
+            var updated = await _bookingService.UpdateBookingStatusAsync(id, new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = status });
+            return Ok(new { success = true, message = "Cập nhật trạng thái booking thành công", data = new { bookingId = updated.BookingId, status = updated.Status } });
         }
 
         /// <summary>
@@ -207,7 +279,8 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> ReleaseTimeSlot(
             [FromQuery] int technicianId,
             [FromQuery] string date,
-            [FromQuery] int slotId)
+            [FromQuery] int slotId,
+            [FromQuery] int centerId)
         {
             try
             {
@@ -220,22 +293,23 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!DateOnly.TryParse(date, out var bookingDate))
                     return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
 
-                var result = await _bookingService.ReleaseTimeSlotAsync(technicianId, bookingDate, slotId);
-
-                if (result)
+                if (_holdStore != null)
                 {
-                    return Ok(new { 
-                        success = true, 
-                        message = "Giải phóng time slot thành công",
-                        data = new { technicianId, date = bookingDate, slotId }
-                    });
+                    var customerId = 0;
+                    var ok = _holdStore.Release(centerId, bookingDate, slotId, technicianId, customerId);
+                    if (ok)
+                    {
+                        var group = $"center:{centerId}:date:{bookingDate:yyyy-MM-dd}";
+                        await _hub.Clients.Group(group).SendCoreAsync("slotReleased", new object[] { new { technicianId, slotId } });
+                        return Ok(new { success = true, message = "Giải phóng time slot thành công", data = new { technicianId, date = bookingDate, slotId } });
+                    }
+                    return BadRequest(new { success = false, message = "Không thể giải phóng time slot." });
                 }
                 else
                 {
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Không thể giải phóng time slot." 
-                    });
+                    var result = await _bookingService.ReleaseTimeSlotAsync(technicianId, bookingDate, slotId);
+                    if (result) return Ok(new { success = true, message = "Giải phóng time slot thành công", data = new { technicianId, date = bookingDate, slotId } });
+                    return BadRequest(new { success = false, message = "Không thể giải phóng time slot." });
                 }
             }
             catch (Exception ex)
@@ -361,7 +435,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                var req = new UpdateBookingStatusRequest { Status = "CANCELLED" };
+                var req = new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = "CANCELLED" };
                 var updated = await _bookingService.UpdateBookingStatusAsync(id, req);
                 return Ok(new { success = true, message = "Hủy đặt lịch thành công", data = updated });
             }
@@ -375,51 +449,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật trạng thái đặt lịch (Staff/Admin only)
-        /// </summary>
-        /// <param name="id">ID đặt lịch</param>
-        /// <param name="request">Thông tin cập nhật trạng thái</param>
-        /// <returns>Kết quả cập nhật</returns>
-        [HttpPut("{id}/status")]
-        [Authorize(Policy = "StaffOrAdmin")]
-        public async Task<IActionResult> UpdateBookingStatus(int id, [FromBody] UpdateBookingStatusRequest request)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID đặt lịch không hợp lệ" });
-
-                if (!ModelState.IsValid)
-                {
-                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
-                    });
-                }
-
-                var booking = await _bookingService.UpdateBookingStatusAsync(id, request);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Cập nhật trạng thái đặt lịch thành công",
-                    data = booking
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
+        // Consolidated status update into ChangeStatus above to avoid duplicate route conflicts
 
         // Endpoint đã loại bỏ trong mô hình 1 booking = 1 service
         

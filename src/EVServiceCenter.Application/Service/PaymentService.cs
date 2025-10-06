@@ -31,7 +31,9 @@ public class PaymentService
     private readonly IMaintenanceChecklistRepository _checklistRepository;
     private readonly IMaintenanceChecklistResultRepository _checklistResultRepository;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IServicePartRepository servicePartRepository, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository)
+    private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
+
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IServicePartRepository servicePartRepository, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -46,6 +48,7 @@ public class PaymentService
         _workOrderPartRepository = workOrderPartRepository;
         _checklistRepository = checklistRepository;
         _checklistResultRepository = checklistResultRepository;
+        _holdStore = holdStore;
         }
 
 	public async Task<string> CreateBookingPaymentLinkAsync(int bookingId)
@@ -54,12 +57,12 @@ public class PaymentService
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
 		if (booking.Status == "CANCELLED") throw new InvalidOperationException("Booking đã bị hủy");
 
-		var amount = (int)Math.Round((booking.TotalCost ?? 0m)); // VNĐ integer
-		if (amount < 1000) amount = 1000; // Tối thiểu theo PayOS
+        var amount = (int)Math.Round((booking.TotalCost ?? 0m)); // VNĐ integer
+        if (amount < _options.MinAmount) amount = _options.MinAmount;
 
 		var orderCode = booking.BookingId; // PayOS yêu cầu là số
         var rawDesc = $"Booking #{booking.BookingId}";
-		var description = rawDesc.Length > 25 ? rawDesc.Substring(0, 25) : rawDesc;
+        var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
 		var returnUrl = (_options.ReturnUrl ?? string.Empty);
 		var cancelUrl = (_options.CancelUrl ?? string.Empty);
@@ -112,11 +115,11 @@ public class PaymentService
 
         var amountDecimal = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? 0m;
         var amount = (int)Math.Round(amountDecimal);
-        if (amount < 1000) amount = 1000;
+        if (amount < _options.MinAmount) amount = _options.MinAmount;
 
         var orderCode = orderId; // PayOS yêu cầu số
         var rawDesc = $"Order #{order.OrderId}";
-        var description = rawDesc.Length > 25 ? rawDesc.Substring(0, 25) : rawDesc;
+        var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
         var returnUrl = (_options.ReturnUrl ?? string.Empty);
         var cancelUrl = (_options.CancelUrl ?? string.Empty);
@@ -215,8 +218,21 @@ public class PaymentService
             var workOrder = await _workOrderRepository.GetByBookingIdAsync(booking.BookingId);
             if (workOrder == null)
             {
-                // Ưu tiên kỹ thuật viên đã gán ở Booking; nếu chưa có thì mới tự chọn
+                // Ưu tiên kỹ thuật viên đang được hold cho slot này
                 var techId = 0; // TechnicianId removed from Booking
+                try
+                {
+                    var bookDate = DateOnly.FromDateTime(booking.CreatedAt);
+                    var holds = _holdStore?.GetHolds(booking.CenterId, bookDate);
+                    if (holds != null)
+                    {
+                        foreach (var h in holds)
+                        {
+                            if (h.slotId == booking.SlotId) { techId = h.technicianId; break; }
+                        }
+                    }
+                }
+                catch { }
                 if (techId == 0)
                 {
                     var techsInCenter = await _technicianRepository.GetTechniciansByCenterIdAsync(booking.CenterId);
@@ -243,7 +259,13 @@ public class PaymentService
                     UpdatedAt = DateTime.UtcNow
                 };
 
-				workOrder = await _workOrderRepository.CreateAsync(workOrder);
+                workOrder = await _workOrderRepository.CreateAsync(workOrder);
+                try
+                {
+                    var bookDate = DateOnly.FromDateTime(booking.CreatedAt);
+                    _holdStore?.Release(booking.CenterId, bookDate, booking.SlotId, techId, 0);
+                }
+                catch { }
 			}
 
             // 2) Ensure Invoice exists
@@ -265,7 +287,7 @@ public class PaymentService
 				Console.WriteLine($"[DEBUG] Invoice created with ID: {invoice.InvoiceId}");
 				
 				// Tạo InvoiceItems từ BookingServices
-				await CreateInvoiceItemsFromBookingServicesAsync(invoice, booking);
+                // InvoiceItems removed – link invoice to a single OrderItem if applicable elsewhere
 			}
 			else
 			{
@@ -382,7 +404,7 @@ public class PaymentService
                 }
                 else
                 {
-                    var subject = $"Hóa đơn thanh toán #{emailInvoice.InvoiceId} - EV Service Center";
+            var subject = $"Hóa đơn thanh toán #{emailInvoice.InvoiceId} - EV Service Center";
                 var body = $@"<h3>Cảm ơn bạn đã thanh toán!</h3>
 <p><b>Mã hóa đơn:</b> {emailInvoice.InvoiceId}</p>
 <p><b>Email:</b> {emailInvoice.Email}</p>
@@ -400,32 +422,7 @@ public class PaymentService
 		return true;
 	}
 
-private async Task CreateInvoiceItemsFromBookingServicesAsync(Domain.Entities.Invoice invoice, Domain.Entities.Booking booking)
-	{
-		try
-		{
-			Console.WriteLine($"[DEBUG] Creating InvoiceItems for invoice {invoice.InvoiceId}");
-        var invoiceItems = new List<Domain.Entities.InvoiceItem>();
-
-        // Mô hình 1 booking = 1 service: tạo 1 dòng invoice item từ booking.Service
-        var description = booking.Service?.ServiceName ?? "Dịch vụ";
-        var unitPrice = booking.TotalCost ?? 0m;
-        var item = new Domain.Entities.InvoiceItem
-        {
-            InvoiceId = invoice.InvoiceId,
-            Description = description
-        };
-        invoiceItems.Add(item);
-
-        await _invoiceRepository.CreateInvoiceItemsAsync(invoiceItems);
-        Console.WriteLine($"[DEBUG] Created {invoiceItems.Count} InvoiceItems successfully");
-		}
-		catch (Exception ex)
-		{
-                Console.WriteLine($"[ERROR] Failed to create InvoiceItems: {ex.Message}");
-                throw;
-		}
-	}
+// InvoiceItems removed – helper deleted
 
     private async Task SeedEmptyPartIfNoneAsync(Domain.Entities.WorkOrder workOrder)
     {

@@ -51,6 +51,7 @@ public class WorkOrderChargesController : ControllerBase
                 .Select(p => new
                 {
                     partId = p.PartId,
+                    vehicleModelPartId = p.VehicleModelPartId,
                     partName = p.Part?.PartName,
                     qty = p.QuantityUsed,
                     unitPrice = p.UnitCost,
@@ -175,13 +176,7 @@ public class WorkOrderChargesController : ControllerBase
             };
             invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
 
-            var items = (wo.WorkOrderParts ?? new System.Collections.Generic.List<Domain.Entities.WorkOrderPart>())
-                .Select(p => new Domain.Entities.InvoiceItem
-                {
-                    InvoiceId = invoice.InvoiceId,
-                    Description = p.Part?.PartName
-                }).ToList();
-            await _invoiceRepo.CreateInvoiceItemsAsync(items);
+            // InvoiceItems removed – no detailed lines created
 
             var payment = (Domain.Entities.Payment)null;
             if (payment == null)
@@ -211,7 +206,7 @@ public class WorkOrderChargesController : ControllerBase
                 var customerEmail = wo.Booking?.Customer?.User?.Email;
                 if (!string.IsNullOrWhiteSpace(customerEmail))
                 {
-                    var pdf = BuildInvoicePdf(invoice, items);
+                    var pdf = BuildInvoicePdf(invoice);
                     var subject = $"Hóa đơn phát sinh #{invoice.InvoiceId}";
                     var body = $"<p>Cảm ơn bạn đã thanh toán phát sinh.</p><p>Mã hóa đơn: {invoice.InvoiceId}</p>";
                     await _email.SendEmailWithAttachmentAsync(customerEmail, subject, body, $"Invoice_{invoice.InvoiceId}.pdf", pdf);
@@ -276,18 +271,14 @@ public class WorkOrderChargesController : ControllerBase
             return Ok(new { success = true, invoiceId = invoice.InvoiceId, paymentId = payment.PaymentId, status = payment.Status });
         }
 
-        private static byte[] BuildInvoicePdf(Domain.Entities.Invoice invoice, System.Collections.Generic.List<Domain.Entities.InvoiceItem> items)
+        private static byte[] BuildInvoicePdf(Domain.Entities.Invoice invoice)
         {
             // Simple PDF using plain text (placeholder). Replace with QuestPDF if available.
             var sb = new StringBuilder();
             sb.AppendLine($"Invoice: {invoice.InvoiceId}");
             sb.AppendLine($"Date: {DateTime.UtcNow:yyyy-MM-dd HH:mm}");
             sb.AppendLine($"Customer email: {invoice.Email}");
-            sb.AppendLine("Items:");
-            foreach (var i in items)
-            {
-                sb.AppendLine($"- {i.Description}");
-            }
+            sb.AppendLine("Items: (chi tiết đã giản lược)");
             return Encoding.UTF8.GetBytes(sb.ToString());
         }
     }

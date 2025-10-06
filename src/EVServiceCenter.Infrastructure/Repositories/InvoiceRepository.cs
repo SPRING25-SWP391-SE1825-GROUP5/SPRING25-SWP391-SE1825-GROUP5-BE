@@ -24,10 +24,10 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return invoice;
         }
 
-        public async Task CreateInvoiceItemsAsync(List<InvoiceItem> invoiceItems)
+        // InvoiceItems removed – no-op placeholder to keep interface compatibility if used elsewhere
+        public async Task CreateInvoiceItemsAsync(System.Collections.Generic.List<object> invoiceItems)
         {
-            _db.InvoiceItems.AddRange(invoiceItems);
-            await _db.SaveChangesAsync();
+            await Task.CompletedTask;
         }
 
         public async Task<Invoice?> GetByIdAsync(int invoiceId)

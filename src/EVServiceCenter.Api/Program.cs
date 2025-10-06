@@ -30,6 +30,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.OpenApi.Models;
 using System.IO;
 using EVServiceCenter.Application.Configurations;
+using EVServiceCenter.Application.Interfaces;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Caching.SqlServer;
 
@@ -56,11 +57,17 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 // CORE SERVICES REGISTRATION
 // ============================================================================
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
+builder.Services.Configure<BookingRealtimeOptions>(builder.Configuration.GetSection("BookingRealtime"));
 // Cache configuration
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<PaymentService>();
 builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
+builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection("GuestSession"));
+builder.Services.AddSingleton<EVServiceCenter.Application.Interfaces.IHoldStore, EVServiceCenter.Application.Service.InMemoryHoldStore>();
+builder.Services.AddScoped<ISettingsService, EVServiceCenter.Application.Service.SettingsService>();
+builder.Services.AddScoped<EVServiceCenter.Domain.Interfaces.ISystemSettingRepository, EVServiceCenter.Infrastructure.Repositories.SystemSettingRepository>();
 
 
 // ============================================================================
@@ -100,7 +107,6 @@ builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
 
 // E-commerce services
-builder.Services.AddScoped<IShoppingCartService, ShoppingCartService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 // Wishlist removed
 // removed: ProductReviewService deprecated
@@ -149,9 +155,7 @@ builder.Services.AddScoped<IVehicleModelRepository, VehicleModelRepository>();
 builder.Services.AddScoped<IVehicleModelPartRepository, VehicleModelPartRepository>();
 
 // E-commerce repositories
-builder.Services.AddScoped<IShoppingCartRepository, ShoppingCartRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
-builder.Services.AddScoped<IOrderStatusHistoryRepository, OrderStatusHistoryRepository>();
 // Wishlist repository removed
 // removed: ProductReviewRepository deprecated
 builder.Services.AddHostedService<BookingPendingCancellationService>();
@@ -378,10 +382,13 @@ app.UseAuthentication();
 app.UseAuthenticationErrorHandling();
 app.UseAuthorization();
 
+// Guest session cookie middleware
+app.UseMiddleware<EVServiceCenter.Api.Middleware.GuestSessionMiddleware>();
+
 // Health endpoints cho Render
-app.MapGet("/healthz", () => Results.Ok("OK")).WithTags("Health");
-app.MapGet("/", () => Results.Ok("EVServiceCenter API"));
+// removed public health and root endpoints per request
 
 app.MapControllers();
+app.MapHub<EVServiceCenter.Api.BookingHub>("/hubs/booking");
 
 app.Run();

@@ -48,5 +48,5 @@ public partial class User
     public  ICollection<Technician> Technicians { get; set; } = new List<Technician>();
 
     // E-commerce navigation properties
-    public virtual ICollection<OrderStatusHistory> OrderStatusHistories { get; set; } = new List<OrderStatusHistory>();
+    // Removed: OrderStatusHistories (table dropped)
 }

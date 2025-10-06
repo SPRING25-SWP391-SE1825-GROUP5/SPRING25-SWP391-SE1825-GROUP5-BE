@@ -14,10 +14,12 @@ namespace EVServiceCenter.Api.Controllers
     public class ConfigurationController : ControllerBase
     {
         private readonly ILoginLockoutService _loginLockoutService;
+        private readonly EVServiceCenter.Application.Interfaces.ISettingsService _settingsService;
 
-        public ConfigurationController(ILoginLockoutService loginLockoutService)
+        public ConfigurationController(ILoginLockoutService loginLockoutService, EVServiceCenter.Application.Interfaces.ISettingsService settingsService)
         {
             _loginLockoutService = loginLockoutService;
+            _settingsService = settingsService;
         }
 
         /// <summary>
@@ -87,6 +89,60 @@ namespace EVServiceCenter.Api.Controllers
                     error = ex.Message
                 });
             }
+        }
+
+        // ------------------- Admin Config: BookingRealtime -------------------
+        [HttpGet("booking-realtime")] 
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> GetBookingRealtime()
+        {
+            var config = await _settingsService.GetBookingRealtimeAsync();
+            return Ok(new { success = true, data = config });
+        }
+
+        [HttpPut("booking-realtime")] 
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> UpdateBookingRealtime([FromBody] EVServiceCenter.Application.Interfaces.UpdateBookingRealtimeRequest request)
+        {
+            if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ" });
+            await _settingsService.UpdateBookingRealtimeAsync(request);
+            return Ok(new { success = true, message = "Cập nhật BookingRealtime thành công" });
+        }
+
+        // ------------------- Admin Config: PayOS -------------------
+        [HttpGet("payos")] 
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> GetPayOs()
+        {
+            var config = await _settingsService.GetPayOsAsync();
+            return Ok(new { success = true, data = config });
+        }
+
+        [HttpPut("payos")] 
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> UpdatePayOs([FromBody] EVServiceCenter.Application.Interfaces.UpdatePayOsSettingsRequest request)
+        {
+            if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ" });
+            await _settingsService.UpdatePayOsAsync(request);
+            return Ok(new { success = true, message = "Cập nhật PayOS thành công" });
+        }
+
+        // ------------------- Admin Config: GuestSession -------------------
+        [HttpGet("guest-session")] 
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> GetGuestSession()
+        {
+            var config = await _settingsService.GetGuestSessionAsync();
+            return Ok(new { success = true, data = config });
+        }
+
+        [HttpPut("guest-session")] 
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> UpdateGuestSession([FromBody] EVServiceCenter.Application.Interfaces.UpdateGuestSessionSettingsRequest request)
+        {
+            if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ" });
+            await _settingsService.UpdateGuestSessionAsync(request);
+            return Ok(new { success = true, message = "Cập nhật GuestSession thành công" });
         }
 
         /// <summary>

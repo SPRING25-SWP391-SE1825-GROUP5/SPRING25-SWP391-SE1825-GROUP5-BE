@@ -26,15 +26,16 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<Promotion> GetPromotionByIdAsync(int promotionId)
         {
+            // Không Include UserPromotions để tránh sinh cột InvoiceId từ shadow FK
             return await _context.Promotions
-                .Include(p => p.UserPromotions)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.PromotionId == promotionId);
         }
 
         public async Task<Promotion> GetPromotionByCodeAsync(string code)
         {
             return await _context.Promotions
-                .Include(p => p.UserPromotions)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Code == code);
         }
 
@@ -80,11 +81,39 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<List<UserPromotion>> GetUserPromotionsByCustomerAsync(int customerId)
         {
-            return await _context.UserPromotions
-                .Include(up => up.Promotion)
-                .Where(up => up.CustomerId == customerId)
-                .OrderByDescending(up => up.UsedAt)
-                .ToListAsync();
+            // Lọc chỉ những khuyến mãi còn hiệu lực cho khách: ACTIVE và trong khoảng ngày, còn lượt
+            var today = System.DateOnly.FromDateTime(System.DateTime.Today);
+            var query = from up in _context.UserPromotions.AsNoTracking()
+                        join p in _context.Promotions.AsNoTracking() on up.PromotionId equals p.PromotionId
+                        where up.CustomerId == customerId
+                              && p.Status == "ACTIVE"
+                              && p.StartDate <= today
+                              && (p.EndDate == null || p.EndDate >= today)
+                              && (p.UsageLimit == null || p.UsageCount < p.UsageLimit)
+                        orderby up.UsedAt descending
+                        select new UserPromotion
+                        {
+                            UserPromotionId = up.UserPromotionId,
+                            CustomerId = up.CustomerId,
+                            PromotionId = up.PromotionId,
+                            BookingId = up.BookingId,
+                            OrderId = up.OrderId,
+                            ServiceId = up.ServiceId,
+                            UsedAt = up.UsedAt,
+                            DiscountAmount = up.DiscountAmount,
+                            Status = up.Status,
+                            Promotion = new Promotion
+                            {
+                                PromotionId = p.PromotionId,
+                                Code = p.Code,
+                                Description = p.Description,
+                                StartDate = p.StartDate,
+                                EndDate = p.EndDate,
+                                Status = p.Status
+                            }
+                        };
+
+            return await query.ToListAsync();
         }
 
         public async Task<List<UserPromotion>> GetUserPromotionsByPromotionAsync(int promotionId)
@@ -97,32 +126,36 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<List<UserPromotion>> GetUserPromotionsByInvoiceAsync(int invoiceId)
-        {
-            return await _context.UserPromotions
-                .Include(up => up.Promotion)
-                .Where(up => false)
-                .OrderByDescending(up => up.UsedAt)
-                .ToListAsync();
-        }
-
         public async Task<UserPromotion> CreateUserPromotionAsync(UserPromotion userPromotion)
         {
+            // Guard against duplicates at app level to avoid SQL unique index violation
+            var exists = await _context.UserPromotions.AsNoTracking().AnyAsync(up =>
+                up.PromotionId == userPromotion.PromotionId &&
+                up.CustomerId == userPromotion.CustomerId &&
+                ((up.OrderId != null && userPromotion.OrderId != null && up.OrderId == userPromotion.OrderId) ||
+                 (up.BookingId != null && userPromotion.BookingId != null && up.BookingId == userPromotion.BookingId) ||
+                 (up.ServiceId != null && userPromotion.ServiceId != null && up.ServiceId == userPromotion.ServiceId))
+            );
+            if (exists)
+            {
+                // Idempotent behavior
+                return await _context.UserPromotions
+                    .FirstOrDefaultAsync(up => up.PromotionId == userPromotion.PromotionId && up.CustomerId == userPromotion.CustomerId &&
+                        (up.OrderId == userPromotion.OrderId || up.BookingId == userPromotion.BookingId || up.ServiceId == userPromotion.ServiceId));
+            }
+
             _context.UserPromotions.Add(userPromotion);
             await _context.SaveChangesAsync();
             return userPromotion;
         }
 
-        public async Task<bool> DeleteUserPromotionByInvoiceAndCodeAsync(int invoiceId, string promotionCode)
+        public async Task UpdateUserPromotionAsync(UserPromotion userPromotion)
         {
-            var up = await _context.UserPromotions
-                .Include(x => x.Promotion)
-                .FirstOrDefaultAsync(x => false);
-            if (up == null) return false;
-            _context.UserPromotions.Remove(up);
+            _context.UserPromotions.Update(userPromotion);
             await _context.SaveChangesAsync();
-            return true;
         }
+
+        
 
         // Booking-based versions
         public async Task<List<UserPromotion>> GetUserPromotionsByBookingAsync(int bookingId)
@@ -148,11 +181,31 @@ namespace EVServiceCenter.Infrastructure.Repositories
         // Order-based versions
         public async Task<List<UserPromotion>> GetUserPromotionsByOrderAsync(int orderId)
         {
-            return await _context.UserPromotions
-                .Include(up => up.Promotion)
-                .Where(up => up.OrderId == orderId)
-                .OrderByDescending(up => up.UsedAt)
-                .ToListAsync();
+            // Tránh để EF tự sinh truy vấn dư thừa bằng Include; join rõ ràng và project
+            var query = from up in _context.UserPromotions.AsNoTracking()
+                        join p in _context.Promotions.AsNoTracking() on up.PromotionId equals p.PromotionId
+                        where up.OrderId == orderId
+                        orderby up.UsedAt descending
+                        select new UserPromotion
+                        {
+                            UserPromotionId = up.UserPromotionId,
+                            CustomerId = up.CustomerId,
+                            PromotionId = up.PromotionId,
+                            BookingId = up.BookingId,
+                            OrderId = up.OrderId,
+                            ServiceId = up.ServiceId,
+                            UsedAt = up.UsedAt,
+                            DiscountAmount = up.DiscountAmount,
+                            Status = up.Status,
+                            Promotion = new Promotion
+                            {
+                                PromotionId = p.PromotionId,
+                                Code = p.Code,
+                                Description = p.Description
+                            }
+                        };
+
+            return await query.ToListAsync();
         }
 
         public async Task<bool> DeleteUserPromotionByOrderAndCodeAsync(int orderId, string promotionCode)

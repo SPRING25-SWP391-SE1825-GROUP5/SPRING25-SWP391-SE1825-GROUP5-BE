@@ -120,3 +120,130 @@
 
 5. **DELETE** `/api/Vehicle/{id}`
    - Xóa xe
+
+6. **GET** `/api/Vehicle/{id}/customer`
+   - Lấy thông tin khách hàng theo ID xe
+   - Authorization: Required
+
+7. **GET** `/api/Vehicle/search/{vinOrLicensePlate}`
+   - Tìm xe theo VIN hoặc biển số xe
+   - Authorization: Required
+
+## Center Controller (`api/Center`)
+
+### Endpoints
+
+1. **GET** `/api/Center`
+   - Lấy danh sách tất cả trung tâm với phân trang và tìm kiếm
+   - Query: pageNumber, pageSize, searchTerm, city
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+2. **GET** `/api/Center/active`
+   - Lấy danh sách trung tâm đang hoạt động với phân trang và tìm kiếm
+   - Query: pageNumber, pageSize, searchTerm, city
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+3. **GET** `/api/Center/{id}`
+   - Lấy thông tin trung tâm theo ID
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+4. **POST** `/api/Center`
+   - Tạo trung tâm mới
+   - Body: CreateCenterRequest
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+5. **PUT** `/api/Center/{id}`
+   - Cập nhật thông tin trung tâm
+   - Body: UpdateCenterRequest
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+6. **PATCH** `/api/Center/{id}/toggle-active`
+   - Kích hoạt/Vô hiệu hóa trung tâm (Admin only)
+   - Authorization: Required (Roles: ADMIN)
+   - Chức năng: Toggle trạng thái IsActive của trung tâm
+
+## Service Controller (`api/Service`)
+
+### Endpoints
+
+1. **GET** `/api/Service`
+   - Lấy danh sách tất cả dịch vụ với phân trang và tìm kiếm
+   - Query: pageNumber, pageSize, searchTerm, categoryId
+   - Authorization: Required (Policy: AuthenticatedUser)
+
+2. **GET** `/api/Service/active`
+   - Lấy danh sách dịch vụ đang hoạt động với phân trang và tìm kiếm
+   - Query: pageNumber, pageSize, searchTerm, categoryId
+   - Authorization: Required (Policy: AuthenticatedUser)
+
+3. **GET** `/api/Service/{id}`
+   - Lấy thông tin dịch vụ theo ID
+   - Authorization: Required (Policy: AuthenticatedUser)
+
+4. **POST** `/api/Service`
+   - Tạo dịch vụ mới
+   - Body: CreateServiceRequest
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+5. **PUT** `/api/Service/{id}`
+   - Cập nhật thông tin dịch vụ
+   - Body: UpdateServiceRequest
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+6. **PATCH** `/api/Service/{id}/toggle-active`
+   - Kích hoạt/Vô hiệu hóa dịch vụ
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+### Service Parts Management
+
+7. **GET** `/api/Service/{serviceId}/parts`
+   - Lấy danh sách phụ tùng của dịch vụ
+   - Authorization: Required (Policy: AuthenticatedUser)
+
+8. **PUT** `/api/Service/{serviceId}/parts`
+   - Thay thế toàn bộ phụ tùng của dịch vụ
+   - Body: ServicePartsReplaceRequest
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+9. **POST** `/api/Service/{serviceId}/parts`
+   - Thêm phụ tùng vào dịch vụ
+   - Body: ServicePartAddRequest
+   - Authorization: Required (Policy: StaffOrAdmin)
+
+10. **DELETE** `/api/Service/{serviceId}/parts/{partId}`
+    - Xóa phụ tùng khỏi dịch vụ
+    - Authorization: Required (Policy: StaffOrAdmin)
+
+## Inventory Controller (`api/Inventory`)
+
+### Endpoints
+
+1. **GET** `/api/Inventory`
+   - Lấy danh sách tồn kho với phân trang và tìm kiếm
+   - Query: pageNumber, pageSize, centerId, partId, searchTerm
+   - Authorization: Required (Policy: AuthenticatedUser)
+
+2. **GET** `/api/Inventory/center/{centerId}`
+   - Lấy danh sách tồn kho theo trung tâm
+   - Query: pageNumber, pageSize, searchTerm
+   - Authorization: Required (Policy: AuthenticatedUser)
+
+3. **GET** `/api/Inventory/availability`
+   - Lấy tồn kho theo center và danh sách partIds
+   - Query: centerId, partIds (comma-separated)
+   - Authorization: Required (Policy: AuthenticatedUser)
+
+4. **GET** `/api/Inventory/{id}`
+   - Lấy thông tin tồn kho theo ID
+   - Authorization: Required (Policy: AuthenticatedUser)
+
+5. **POST** `/api/Inventory`
+   - Tạo tồn kho mới
+   - Body: CreateInventoryRequest
+   - Authorization: Required (Policy: AuthenticatedUser)
+   - Validation: Mỗi cặp centerId/partId chỉ được tồn tại 1 lần duy nhất
+
+6. **PUT** `/api/Inventory/{id}`
+   - Cập nhật tồn kho (chỉ ADMIN)
+   - Body: UpdateInventoryRequest
+   - Authorization: Required (Policy: AdminOnly)

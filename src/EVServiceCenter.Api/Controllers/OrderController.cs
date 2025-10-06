@@ -43,39 +43,7 @@ public class OrderController : ControllerBase
         }
     }
 
-    // ===== Order History (merged from OrderHistoryController) =====
-    [HttpGet("Customer/{customerId}/order-history")]
-    [ProducesResponseType(typeof(OrderHistoryListResponse), 200)]
-    public async Task<IActionResult> GetOrderHistoryForCustomer(
-        int customerId,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] string? status = null,
-        [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null,
-        [FromQuery] string sortBy = "orderDate",
-        [FromQuery] string sortOrder = "desc")
-    {
-        var response = await _orderHistoryService.GetOrderHistoryAsync(
-            customerId, page, pageSize, status?.ToUpper(), fromDate, toDate, sortBy, sortOrder);
-        return Ok(response);
-    }
-
-    [HttpGet("Customer/{customerId}/order-history/{orderId}")]
-    [ProducesResponseType(typeof(OrderHistoryResponse), 200)]
-    public async Task<IActionResult> GetOrderDetailsForCustomer(int customerId, int orderId)
-    {
-        var response = await _orderHistoryService.GetOrderHistoryByIdAsync(customerId, orderId);
-        return Ok(response);
-    }
-
-    [HttpGet("Customer/{customerId}/order-history/stats")]
-    [ProducesResponseType(typeof(OrderHistoryStatsResponse), 200)]
-    public async Task<IActionResult> GetOrderHistoryStatsForCustomer(int customerId, [FromQuery] string period = "all")
-    {
-        var response = await _orderHistoryService.GetOrderHistoryStatsAsync(customerId, period.ToLower());
-        return Ok(response);
-    }
+    // Removed order history/customer endpoints (per request)
 
     /// <summary>
     /// Danh sách item của đơn hàng
@@ -98,22 +66,7 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lịch sử trạng thái đơn hàng
-    /// </summary>
-    [HttpGet("{orderId}/status/history")]
-    public async Task<IActionResult> GetStatusHistory(int orderId)
-    {
-        try
-        {
-            var history = await _orderService.GetStatusHistoryAsync(orderId);
-            return Ok(new { success = true, data = history });
-        }
-        catch (Exception)
-        {
-            return BadRequest(new { success = false, message = "Lỗi khi lấy lịch sử trạng thái" });
-        }
-    }
+    // Removed order status history endpoint
 
     /// <summary>
     /// Checkout online cho Order (PayOS) - dùng ReturnUrl callback, không webhook
@@ -173,31 +126,7 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Tạo đơn hàng từ giỏ hàng
-    /// </summary>
-    [HttpPost("create")]
-    public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
-    {
-        try
-        {
-            if (!ModelState.IsValid || request == null)
-            {
-                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
-            }
-            var order = await _orderService.CreateOrderAsync(request);
-            return Ok(new { success = true, data = order, message = "Đã tạo đơn hàng thành công" });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-    }
+    // Removed: POST /api/Order/create (dùng route có customerId)
 
     /// <summary>
     /// Tạo đơn hàng từ giỏ hàng theo customerId trên route (không cần truyền ID trong body)

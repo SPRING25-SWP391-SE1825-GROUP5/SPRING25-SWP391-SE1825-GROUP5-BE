@@ -16,7 +16,7 @@ public class OrderResponse
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<OrderItemResponse> OrderItems { get; set; } = new List<OrderItemResponse>();
-    public List<OrderStatusHistoryResponse> StatusHistory { get; set; } = new List<OrderStatusHistoryResponse>();
+    // Removed: StatusHistory (history table dropped)
 }
 
 public class OrderItemResponse
@@ -31,12 +31,4 @@ public class OrderItemResponse
     public decimal LineTotal { get; set; }
 }
 
-public class OrderStatusHistoryResponse
-{
-    public int HistoryId { get; set; }
-    public string Status { get; set; } = string.Empty;
-    public string? Notes { get; set; }
-    public string? CreatedBy { get; set; }
-    public bool SystemGenerated { get; set; }
-    public DateTime CreatedAt { get; set; }
-}
+// Removed: OrderStatusHistoryResponse (history table dropped)

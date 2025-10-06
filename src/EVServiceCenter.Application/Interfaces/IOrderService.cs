@@ -17,5 +17,4 @@ public interface IOrderService
     Task DeleteOrderAsync(int orderId);
     Task<bool> ExistsAsync(int orderId);
     Task<List<OrderItemSimpleResponse>> GetItemsAsync(int orderId);
-    Task<List<OrderStatusHistoryResponse>> GetStatusHistoryAsync(int orderId);
 }

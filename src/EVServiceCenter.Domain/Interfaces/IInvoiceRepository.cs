@@ -8,7 +8,8 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<Invoice?> GetByBookingIdAsync(int bookingId);
         Task<Invoice> CreateMinimalAsync(Invoice invoice);
-        Task CreateInvoiceItemsAsync(List<InvoiceItem> invoiceItems);
+        // Legacy no-op to keep compatibility with old calls
+        Task CreateInvoiceItemsAsync(System.Collections.Generic.List<object> invoiceItems);
         Task<Invoice?> GetByIdAsync(int invoiceId);
     }
 }

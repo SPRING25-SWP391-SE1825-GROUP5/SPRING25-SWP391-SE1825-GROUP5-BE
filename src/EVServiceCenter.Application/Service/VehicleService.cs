@@ -238,5 +238,69 @@ namespace EVServiceCenter.Application.Service
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
         }
+
+        // New methods implementation
+        public async Task<CustomerResponse> GetCustomerByVehicleIdAsync(int vehicleId)
+        {
+            try
+            {
+                var vehicle = await _vehicleRepository.GetVehicleByIdAsync(vehicleId);
+                if (vehicle == null)
+                    throw new ArgumentException("Xe không tồn tại.");
+
+                var customer = await _customerRepository.GetCustomerByIdAsync(vehicle.CustomerId);
+                if (customer == null)
+                    throw new ArgumentException("Khách hàng không tồn tại.");
+
+                return new CustomerResponse
+                {
+                    CustomerId = customer.CustomerId,
+                    UserId = customer.UserId,
+                    IsGuest = customer.UserId == null,
+                    UserFullName = customer.User?.FullName ?? "Khách vãng lai",
+                    UserEmail = customer.User?.Email,
+                    UserPhoneNumber = customer.User?.PhoneNumber,
+                    VehicleCount = 1 // We know this customer has at least this vehicle
+                };
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy thông tin khách hàng: {ex.Message}");
+            }
+        }
+
+
+        public async Task<VehicleResponse> GetVehicleByVinOrLicensePlateAsync(string vinOrLicensePlate)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(vinOrLicensePlate))
+                    throw new ArgumentException("VIN hoặc biển số xe không được để trống.");
+
+                var vehicles = await _vehicleRepository.GetAllVehiclesAsync();
+                var normalizedSearch = vinOrLicensePlate.Trim().ToUpper();
+
+                var vehicle = vehicles.FirstOrDefault(v => 
+                    v.Vin.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    v.LicensePlate.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase));
+
+                if (vehicle == null)
+                    throw new ArgumentException("Không tìm thấy xe với VIN hoặc biển số này.");
+
+                return MapToVehicleResponse(vehicle);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi tìm xe: {ex.Message}");
+            }
+        }
     }
 }

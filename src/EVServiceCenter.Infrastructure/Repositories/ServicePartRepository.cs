@@ -21,6 +21,14 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<List<ServicePart>> GetByPartIdAsync(int partId)
+        {
+            return await _db.ServiceParts
+                .Include(sp => sp.Service)
+                .Where(sp => sp.PartId == partId)
+                .ToListAsync();
+        }
+
         public async Task ReplaceForServiceAsync(int serviceId, IEnumerable<ServicePart> items)
         {
             var existing = await _db.ServiceParts.Where(x => x.ServiceId == serviceId).ToListAsync();

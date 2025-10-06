@@ -13,11 +13,7 @@ public partial class TimeSlot
 
     public bool IsActive { get; set; }
 
-    public virtual ICollection<Booking> BookingEndSlots { get; set; } = new List<Booking>();
-
-    public virtual ICollection<Booking> BookingStartSlots { get; set; } = new List<Booking>();
-
-    public virtual ICollection<BookingTimeSlot> BookingTimeSlots { get; set; } = new List<BookingTimeSlot>();
+    public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
     public virtual ICollection<TechnicianTimeSlot> TechnicianTimeSlots { get; set; } = new List<TechnicianTimeSlot>();
 }

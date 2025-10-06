@@ -16,5 +16,13 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<bool> PromotionExistsAsync(int promotionId);
         Task<List<UserPromotion>> GetUserPromotionsByCustomerAsync(int customerId);
         Task<List<UserPromotion>> GetUserPromotionsByPromotionAsync(int promotionId);
+        Task<UserPromotion> CreateUserPromotionAsync(UserPromotion userPromotion);
+        Task UpdateUserPromotionAsync(UserPromotion userPromotion);
+        // Booking-based
+        Task<List<UserPromotion>> GetUserPromotionsByBookingAsync(int bookingId);
+        Task<bool> DeleteUserPromotionByBookingAndCodeAsync(int bookingId, string promotionCode);
+        // Order-based
+        Task<List<UserPromotion>> GetUserPromotionsByOrderAsync(int orderId);
+        Task<bool> DeleteUserPromotionByOrderAndCodeAsync(int orderId, string promotionCode);
     }
 }

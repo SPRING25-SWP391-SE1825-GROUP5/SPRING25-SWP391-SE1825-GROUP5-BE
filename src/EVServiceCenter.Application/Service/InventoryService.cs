@@ -19,34 +19,31 @@ namespace EVServiceCenter.Application.Service
             _inventoryRepository = inventoryRepository;
         }
 
-        public async Task<InventoryListResponse> GetInventoriesAsync(int pageNumber = 1, int pageSize = 10, int? centerId = null, int? partId = null, string searchTerm = null)
+        public async Task<InventoryListResponse> GetInventoriesAsync(int pageNumber = 1, int pageSize = 10, int? centerId = null, string searchTerm = null)
         {
             try
             {
                 var inventories = await _inventoryRepository.GetAllInventoriesAsync();
 
-                // Filtering
+                // Filtering by Center
                 if (centerId.HasValue)
                 {
                     inventories = inventories.Where(i => i.CenterId == centerId.Value).ToList();
                 }
 
-                if (partId.HasValue)
-                {
-                    inventories = inventories.Where(i => i.PartId == partId.Value).ToList();
-                }
-
+                // Filtering by search term (on CenterName or Part details within InventoryParts)
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
                     inventories = inventories.Where(i =>
-                        i.Part.PartNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        i.Part.PartName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        i.Part.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        i.Center.CenterName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        i.Center.CenterName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        i.InventoryParts.Any(ip =>
+                            ip.Part.PartNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                            ip.Part.PartName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                            ip.Part.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        )
                     ).ToList();
                 }
 
-                // Pagination
                 var totalCount = inventories.Count;
                 var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
                 var paginatedInventories = inventories.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
@@ -65,6 +62,60 @@ namespace EVServiceCenter.Application.Service
             catch (Exception ex)
             {
                 throw new Exception($"Lỗi khi lấy danh sách tồn kho: {ex.Message}");
+            }
+        }
+
+        public async Task<InventoryListResponse> GetInventoriesByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string searchTerm = null)
+        {
+            try
+            {
+                var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+
+                if (inventory == null)
+                {
+                    return new InventoryListResponse
+                    {
+                        Inventories = new List<InventoryResponse>(),
+                        PageNumber = pageNumber,
+                        PageSize = pageSize,
+                        TotalPages = 0,
+                        TotalCount = 0
+                    };
+                }
+
+                var inventoryParts = inventory.InventoryParts.AsQueryable();
+
+                // Filter by search term on parts
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    inventoryParts = inventoryParts.Where(ip =>
+                        ip.Part.PartNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        ip.Part.PartName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        ip.Part.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                    );
+                }
+
+                var totalCount = inventoryParts.Count();
+                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+                var paginatedInventoryParts = inventoryParts.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+
+                var inventoryResponses = new List<InventoryResponse>
+                {
+                    MapToInventoryResponse(inventory, paginatedInventoryParts)
+                };
+
+                return new InventoryListResponse
+                {
+                    Inventories = inventoryResponses,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    TotalPages = totalPages,
+                    TotalCount = totalCount
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy danh sách tồn kho theo trung tâm: {ex.Message}");
             }
         }
 
@@ -88,20 +139,50 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<InventoryResponse> CreateInventoryAsync(CreateInventoryRequest request)
+        {
+            try
+            {
+                // Validate center exists and is active
+                var center = await _inventoryRepository.GetCenterByIdAsync(request.CenterId);
+                if (center == null)
+                    throw new ArgumentException($"Trung tâm với ID {request.CenterId} không tồn tại.");
+                if (!center.IsActive)
+                    throw new ArgumentException($"Trung tâm với ID {request.CenterId} đã bị vô hiệu hóa.");
+
+                // Validate if center already has an inventory
+                if (await _inventoryRepository.CenterHasInventoryAsync(request.CenterId))
+                    throw new ArgumentException($"Trung tâm với ID {request.CenterId} đã có tồn kho. Mỗi trung tâm chỉ có thể có một tồn kho duy nhất.");
+
+                var entity = new Inventory
+                {
+                    CenterId = request.CenterId,
+                    LastUpdated = DateTime.UtcNow
+                };
+
+                entity = await _inventoryRepository.AddInventoryAsync(entity);
+                return MapToInventoryResponse(entity);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi tạo tồn kho: {ex.Message}");
+            }
+        }
+
         public async Task<InventoryResponse> UpdateInventoryAsync(int inventoryId, UpdateInventoryRequest request)
         {
             try
             {
-                // Validate inventory exists
                 var inventory = await _inventoryRepository.GetInventoryByIdAsync(inventoryId);
                 if (inventory == null)
                     throw new ArgumentException("Tồn kho không tồn tại.");
 
-                // Update inventory
-                inventory.CurrentStock = request.CurrentStock;
-                inventory.MinimumStock = request.MinimumStock;
+                // Only LastUpdated is updated for the main Inventory entity
                 inventory.LastUpdated = DateTime.UtcNow;
-
                 await _inventoryRepository.UpdateInventoryAsync(inventory);
 
                 return MapToInventoryResponse(inventory);
@@ -116,24 +197,247 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        private InventoryResponse MapToInventoryResponse(Inventory inventory)
+        // ====================================================================================================
+        // INVENTORY PART MANAGEMENT
+        // ====================================================================================================
+
+        public async Task<InventoryPartResponse> AddPartToInventoryAsync(int inventoryId, int partId, int currentStock, int minimumStock)
         {
+            try
+            {
+                var inventory = await _inventoryRepository.GetInventoryByIdAsync(inventoryId);
+                if (inventory == null)
+                    throw new ArgumentException("Tồn kho không tồn tại.");
+
+                var part = await _inventoryRepository.GetPartByIdAsync(partId);
+                if (part == null)
+                    throw new ArgumentException($"Phụ tùng với ID {partId} không tồn tại.");
+                if (!part.IsActive)
+                    throw new ArgumentException($"Phụ tùng với ID {partId} đã bị vô hiệu hóa.");
+
+                if (await _inventoryRepository.InventoryPartExistsAsync(inventoryId, partId))
+                    throw new ArgumentException($"Phụ tùng ID {partId} đã tồn tại trong tồn kho ID {inventoryId}.");
+
+                var inventoryPart = new InventoryPart
+                {
+                    InventoryId = inventoryId,
+                    PartId = partId,
+                    CurrentStock = currentStock,
+                    MinimumStock = minimumStock,
+                    LastUpdated = DateTime.UtcNow
+                };
+
+                inventoryPart = await _inventoryRepository.AddInventoryPartAsync(inventoryPart);
+
+                // Update parent inventory's LastUpdated
+                inventory.LastUpdated = DateTime.UtcNow;
+                await _inventoryRepository.UpdateInventoryAsync(inventory);
+
+                return MapToInventoryPartResponse(inventoryPart);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi thêm phụ tùng vào tồn kho: {ex.Message}");
+            }
+        }
+
+        public async Task<InventoryPartResponse> UpdateInventoryPartAsync(int inventoryId, int partId, int currentStock, int minimumStock)
+        {
+            try
+            {
+                var inventoryPart = await _inventoryRepository.GetInventoryPartByInventoryAndPartAsync(inventoryId, partId);
+                if (inventoryPart == null)
+                    throw new ArgumentException($"Phụ tùng ID {partId} không tồn tại trong tồn kho ID {inventoryId}.");
+
+                inventoryPart.CurrentStock = currentStock;
+                inventoryPart.MinimumStock = minimumStock;
+                inventoryPart.LastUpdated = DateTime.UtcNow;
+
+                await _inventoryRepository.UpdateInventoryPartAsync(inventoryPart);
+
+                // Update parent inventory's LastUpdated
+                var inventory = await _inventoryRepository.GetInventoryByIdAsync(inventoryId);
+                if (inventory != null)
+                {
+                    inventory.LastUpdated = DateTime.UtcNow;
+                    await _inventoryRepository.UpdateInventoryAsync(inventory);
+                }
+
+                return MapToInventoryPartResponse(inventoryPart);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi cập nhật phụ tùng trong tồn kho: {ex.Message}");
+            }
+        }
+
+        public async Task<bool> RemovePartFromInventoryAsync(int inventoryId, int partId)
+        {
+            try
+            {
+                var inventoryPart = await _inventoryRepository.GetInventoryPartByInventoryAndPartAsync(inventoryId, partId);
+                if (inventoryPart == null)
+                    throw new ArgumentException($"Phụ tùng ID {partId} không tồn tại trong tồn kho ID {inventoryId}.");
+
+                await _inventoryRepository.DeleteInventoryPartAsync(inventoryId, partId);
+
+                // Update parent inventory's LastUpdated
+                var inventory = await _inventoryRepository.GetInventoryByIdAsync(inventoryId);
+                if (inventory != null)
+                {
+                    inventory.LastUpdated = DateTime.UtcNow;
+                    await _inventoryRepository.UpdateInventoryAsync(inventory);
+                }
+
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi xóa phụ tùng khỏi tồn kho: {ex.Message}");
+            }
+        }
+
+        // ====================================================================================================
+        // AVAILABILITY
+        // ====================================================================================================
+
+        public async Task<List<InventoryPartResponse>> GetAvailabilityAsync(int centerId, List<int> partIds)
+        {
+            try
+            {
+                var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+                if (inventory == null)
+                    return new List<InventoryPartResponse>(); // Center has no inventory
+
+                var availableParts = inventory.InventoryParts
+                    .Where(ip => partIds.Contains(ip.PartId))
+                    .Select(MapToInventoryPartResponse)
+                    .ToList();
+
+                return availableParts;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy thông tin khả dụng tồn kho: {ex.Message}");
+            }
+        }
+
+        public async Task<List<InventoryAvailabilityResponse>> GetGlobalAvailabilityAsync(List<int> partIds)
+        {
+            try
+            {
+                var allInventories = await _inventoryRepository.GetAllInventoriesAsync();
+                var relevantInventoryParts = allInventories
+                    .SelectMany(inv => inv.InventoryParts)
+                    .Where(ip => partIds.Contains(ip.PartId))
+                    .ToList();
+
+                var grouped = relevantInventoryParts
+                    .GroupBy(ip => ip.PartId)
+                    .Select(g => new InventoryAvailabilityResponse
+                    {
+                        PartId = g.Key,
+                        PartNumber = g.FirstOrDefault()?.Part?.PartNumber ?? "N/A",
+                        PartName = g.FirstOrDefault()?.Part?.PartName ?? "N/A",
+                        Brand = g.FirstOrDefault()?.Part?.Brand ?? "N/A",
+                        TotalStock = g.Sum(x => x.CurrentStock),
+                        MinimumStock = g.Sum(x => x.MinimumStock),
+                        IsLowStock = g.Sum(x => x.CurrentStock) <= g.Sum(x => x.MinimumStock),
+                        IsOutOfStock = g.Sum(x => x.CurrentStock) == 0,
+                        UnitPrice = g.FirstOrDefault()?.Part?.Price ?? 0,
+                        Unit = null,
+                        LastUpdated = g.Max(x => x.LastUpdated)
+                    })
+                    .ToList();
+                return grouped;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy thông tin khả dụng tồn kho toàn cầu: {ex.Message}");
+            }
+        }
+
+        public async Task<List<InventoryAvailabilityResponse>> GetGlobalAvailabilityAllAsync()
+        {
+            try
+            {
+                var allInventories = await _inventoryRepository.GetAllInventoriesAsync();
+                var allInventoryParts = allInventories.SelectMany(inv => inv.InventoryParts).ToList();
+
+                var grouped = allInventoryParts
+                    .GroupBy(ip => ip.PartId)
+                    .Select(g => new InventoryAvailabilityResponse
+                    {
+                        PartId = g.Key,
+                        PartNumber = g.FirstOrDefault()?.Part?.PartNumber ?? "N/A",
+                        PartName = g.FirstOrDefault()?.Part?.PartName ?? "N/A",
+                        Brand = g.FirstOrDefault()?.Part?.Brand ?? "N/A",
+                        TotalStock = g.Sum(x => x.CurrentStock),
+                        MinimumStock = g.Sum(x => x.MinimumStock),
+                        IsLowStock = g.Sum(x => x.CurrentStock) <= g.Sum(x => x.MinimumStock),
+                        IsOutOfStock = g.Sum(x => x.CurrentStock) == 0,
+                        UnitPrice = g.FirstOrDefault()?.Part?.Price ?? 0,
+                        Unit = null,
+                        LastUpdated = g.Max(x => x.LastUpdated)
+                    })
+                    .Where(r => r.TotalStock > 0)
+                    .ToList();
+                return grouped;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy thông tin khả dụng tồn kho toàn cầu: {ex.Message}");
+            }
+        }
+
+        // ====================================================================================================
+        // MAPPERS
+        // ====================================================================================================
+
+        private InventoryResponse MapToInventoryResponse(Inventory inventory, IEnumerable<InventoryPart> inventoryParts = null)
+        {
+            inventoryParts ??= inventory.InventoryParts;
+
             return new InventoryResponse
             {
                 InventoryId = inventory.InventoryId,
                 CenterId = inventory.CenterId,
                 CenterName = inventory.Center?.CenterName ?? "N/A",
-                PartId = inventory.PartId,
-                PartNumber = inventory.Part?.PartNumber ?? "N/A",
-                PartName = inventory.Part?.PartName ?? "N/A",
-                Brand = inventory.Part?.Brand ?? "N/A",
-                UnitPrice = inventory.Part?.UnitPrice ?? 0,
-                Unit = inventory.Part?.Unit ?? "N/A",
-                CurrentStock = inventory.CurrentStock,
-                MinimumStock = inventory.MinimumStock,
                 LastUpdated = inventory.LastUpdated,
-                IsLowStock = inventory.CurrentStock <= inventory.MinimumStock,
-                IsOutOfStock = inventory.CurrentStock == 0
+                PartsCount = inventoryParts.Count(),
+                InventoryParts = inventoryParts.Select(MapToInventoryPartResponse).ToList()
+            };
+        }
+
+        private InventoryPartResponse MapToInventoryPartResponse(InventoryPart inventoryPart)
+        {
+            return new InventoryPartResponse
+            {
+                InventoryPartId = inventoryPart.InventoryPartId,
+                InventoryId = inventoryPart.InventoryId,
+                PartId = inventoryPart.PartId,
+                PartNumber = inventoryPart.Part?.PartNumber ?? "N/A",
+                PartName = inventoryPart.Part?.PartName ?? "N/A",
+                Brand = inventoryPart.Part?.Brand ?? "N/A",
+                UnitPrice = inventoryPart.Part?.Price ?? 0,
+                Unit = null, // Assuming Unit is not directly on Part or InventoryPart for now
+                CurrentStock = inventoryPart.CurrentStock,
+                MinimumStock = inventoryPart.MinimumStock,
+                LastUpdated = inventoryPart.LastUpdated,
+                IsLowStock = inventoryPart.CurrentStock <= inventoryPart.MinimumStock,
+                IsOutOfStock = inventoryPart.CurrentStock == 0
             };
         }
     }

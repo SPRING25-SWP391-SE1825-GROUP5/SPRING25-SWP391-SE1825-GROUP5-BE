@@ -20,9 +20,8 @@ namespace EVServiceCenter.Application.Models.Requests
         [Range(0.01, double.MaxValue, ErrorMessage = "Đơn giá phải là số lớn hơn 0")]
         public decimal UnitPrice { get; set; }
 
-        [Required(ErrorMessage = "Đơn vị là bắt buộc")]
-        [StringLength(20, MinimumLength = 1, ErrorMessage = "Đơn vị phải từ 1 đến 20 ký tự")]
-        public string Unit { get; set; }
+        [StringLength(255)]
+        public string? ImageUrl { get; set; }
 
         [Required(ErrorMessage = "Trạng thái hoạt động là bắt buộc")]
         public bool IsActive { get; set; }

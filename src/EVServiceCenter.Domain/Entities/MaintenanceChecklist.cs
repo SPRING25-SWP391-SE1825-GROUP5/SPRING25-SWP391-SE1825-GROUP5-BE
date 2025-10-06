@@ -9,11 +9,15 @@ public partial class MaintenanceChecklist
 
     public int WorkOrderId { get; set; }
 
+    public int? VehicleModelPartId { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
-    public string Notes { get; set; }
+    public string? Notes { get; set; }
 
     public virtual ICollection<MaintenanceChecklistResult> MaintenanceChecklistResults { get; set; } = new List<MaintenanceChecklistResult>();
 
     public virtual WorkOrder WorkOrder { get; set; }
+
+    public virtual VehicleModelPart? VehicleModelPart { get; set; }
 }

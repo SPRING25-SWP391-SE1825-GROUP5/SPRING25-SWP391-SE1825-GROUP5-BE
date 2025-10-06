@@ -13,10 +13,12 @@ namespace EVServiceCenter.Application.Service
     public class PartService : IPartService
     {
         private readonly IPartRepository _partRepository;
+        private readonly IServicePartRepository _servicePartRepository;
 
-        public PartService(IPartRepository partRepository)
+        public PartService(IPartRepository partRepository, IServicePartRepository servicePartRepository)
         {
             _partRepository = partRepository;
+            _servicePartRepository = servicePartRepository;
         }
 
         public async Task<PartListResponse> GetAllPartsAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, bool? isActive = null)
@@ -62,6 +64,35 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<PartResponse> UpdatePartAsync(int partId, UpdatePartRequest request)
+        {
+            try
+            {
+                var part = await _partRepository.GetPartByIdAsync(partId);
+                if (part == null) throw new ArgumentException("Phụ tùng không tồn tại.");
+
+                // Không cho phép đổi PartNumber khi update
+                // Chỉ cập nhật các trường còn lại
+                part.PartName = request.PartName?.Trim();
+                part.Brand = request.Brand?.Trim();
+                part.Price = request.UnitPrice;
+                part.ImageUrl = request.ImageUrl?.Trim();
+                part.IsActive = request.IsActive;
+
+                await _partRepository.UpdatePartAsync(part);
+
+                return MapToPartResponse(part);
+            }
+            catch (ArgumentException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi cập nhật phụ tùng: {ex.Message}");
+            }
+        }
+
         public async Task<PartResponse> GetPartByIdAsync(int partId)
         {
             try
@@ -95,8 +126,8 @@ namespace EVServiceCenter.Application.Service
                     PartNumber = request.PartNumber.Trim().ToUpper(),
                     PartName = request.PartName.Trim(),
                     Brand = request.Brand.Trim(),
-                    UnitPrice = request.UnitPrice,
-                    Unit = request.Unit.Trim(),
+                    Price = request.UnitPrice,
+                    ImageUrl = request.ImageUrl?.Trim(),
                     IsActive = request.IsActive,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -116,6 +147,41 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<List<ServiceCompatibilityResponse>> GetServicesByPartIdAsync(int partId)
+        {
+            try
+            {
+                // Verify part exists
+                var part = await _partRepository.GetPartByIdAsync(partId);
+                if (part == null)
+                    throw new ArgumentException("Phụ tùng không tồn tại.");
+
+                // Get service parts relationships
+                var serviceParts = await _servicePartRepository.GetByPartIdAsync(partId);
+                
+                var result = serviceParts.Select(sp => new ServiceCompatibilityResponse
+                {
+                    ServiceId = sp.ServiceId,
+                    ServiceName = sp.Service?.ServiceName ?? "N/A",
+                    Description = sp.Service?.Description,
+                    BasePrice = sp.Service?.BasePrice ?? 0,
+                    IsActive = sp.Service?.IsActive ?? false,
+                    Notes = sp.Notes,
+                    CreatedAt = sp.Service?.CreatedAt ?? DateTime.MinValue
+                }).ToList();
+
+                return result;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy danh sách dịch vụ tương thích: {ex.Message}");
+            }
+        }
+
         private PartResponse MapToPartResponse(Part part)
         {
             return new PartResponse
@@ -124,8 +190,8 @@ namespace EVServiceCenter.Application.Service
                 PartNumber = part.PartNumber,
                 PartName = part.PartName,
                 Brand = part.Brand,
-                UnitPrice = part.UnitPrice,
-                Unit = part.Unit,
+                Price = part.Price,
+                ImageUrl = part.ImageUrl,
                 IsActive = part.IsActive,
                 CreatedAt = part.CreatedAt
             };

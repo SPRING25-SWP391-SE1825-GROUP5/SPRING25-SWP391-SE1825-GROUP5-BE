@@ -185,6 +185,43 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        /// <summary>
+        /// STAFF/TECHNICIAN/ADMIN tạo nhanh tài khoản CUSTOMER với 3 trường cơ bản
+        /// </summary>
+        [HttpPost("quick-create")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Policy = "TechnicianOrAdmin")]
+        public async Task<IActionResult> QuickCreateCustomer([FromBody] QuickCreateCustomerRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors
+                    });
+                }
+
+                var customer = await _customerService.QuickCreateCustomerAsync(request);
+                return StatusCode(201, new {
+                    success = true,
+                    message = "Tạo tài khoản khách hàng thành công",
+                    data = customer
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return Conflict(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
         private int? GetCurrentUserId()
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

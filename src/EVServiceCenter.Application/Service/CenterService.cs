@@ -32,15 +32,11 @@ namespace EVServiceCenter.Application.Service
                     centers = centers.Where(c =>
                         c.CenterName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                         c.Address.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        c.PhoneNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        c.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        c.PhoneNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
                     ).ToList();
                 }
 
-                if (!string.IsNullOrWhiteSpace(city))
-                {
-                    centers = centers.Where(c => c.City.Equals(city, StringComparison.OrdinalIgnoreCase)).ToList();
-                }
+                // City removed: no filter by city
 
                 // Pagination
                 var totalCount = centers.Count;
@@ -76,15 +72,11 @@ namespace EVServiceCenter.Application.Service
                     centers = centers.Where(c =>
                         c.CenterName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                         c.Address.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        c.PhoneNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        c.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        c.PhoneNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
                     ).ToList();
                 }
 
-                if (!string.IsNullOrWhiteSpace(city))
-                {
-                    centers = centers.Where(c => c.City.Equals(city, StringComparison.OrdinalIgnoreCase)).ToList();
-                }
+                // City removed: no filter by city
 
                 // Pagination
                 var totalCount = centers.Count;
@@ -140,9 +132,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     CenterName = request.CenterName.Trim(),
                     Address = request.Address.Trim(),
-                    City = request.City.Trim(),
                     PhoneNumber = request.PhoneNumber.Trim(),
-                    Email = request.Email.ToLower().Trim(),
                     IsActive = request.IsActive,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -177,9 +167,7 @@ namespace EVServiceCenter.Application.Service
                 // Update center properties
                 center.CenterName = request.CenterName.Trim();
                 center.Address = request.Address.Trim();
-                center.City = request.City.Trim();
                 center.PhoneNumber = request.PhoneNumber.Trim();
-                center.Email = request.Email.ToLower().Trim();
                 center.IsActive = request.IsActive;
 
                 // Save changes
@@ -197,6 +185,24 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<bool> ToggleActiveAsync(int centerId)
+        {
+            try
+            {
+                var center = await _centerRepository.GetCenterByIdAsync(centerId);
+                if (center == null)
+                    return false;
+
+                center.IsActive = !center.IsActive;
+                await _centerRepository.UpdateCenterAsync(center);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi thay đổi trạng thái trung tâm: {ex.Message}");
+            }
+        }
+
         private CenterResponse MapToCenterResponse(ServiceCenter center)
         {
             return new CenterResponse
@@ -204,40 +210,40 @@ namespace EVServiceCenter.Application.Service
                 CenterId = center.CenterId,
                 CenterName = center.CenterName,
                 Address = center.Address,
-                City = center.City,
                 PhoneNumber = center.PhoneNumber,
-                Email = center.Email,
                 IsActive = center.IsActive,
                 CreatedAt = center.CreatedAt
             };
         }
 
-        private async Task ValidateCreateCenterRequestAsync(CreateCenterRequest request)
+        private Task ValidateCreateCenterRequestAsync(CreateCenterRequest request)
         {
             var errors = new List<string>();
 
             if (!IsValidPhoneNumber(request.PhoneNumber)) 
                 errors.Add("Số điện thoại phải bắt đầu bằng số 0 và có đúng 10 chữ số.");
             
-            if (!IsValidEmail(request.Email)) 
-                errors.Add("Email không đúng định dạng.");
+            // Email removed: skip email validation
 
             if (errors.Any()) 
                 throw new ArgumentException(string.Join(" ", errors));
+            
+            return Task.CompletedTask;
         }
 
-        private async Task ValidateUpdateCenterRequestAsync(UpdateCenterRequest request)
+        private Task ValidateUpdateCenterRequestAsync(UpdateCenterRequest request)
         {
             var errors = new List<string>();
 
             if (!IsValidPhoneNumber(request.PhoneNumber)) 
                 errors.Add("Số điện thoại phải bắt đầu bằng số 0 và có đúng 10 chữ số.");
             
-            if (!IsValidEmail(request.Email)) 
-                errors.Add("Email không đúng định dạng.");
+            // Email removed: skip email validation
 
             if (errors.Any()) 
                 throw new ArgumentException(string.Join(" ", errors));
+            
+            return Task.CompletedTask;
         }
 
         private bool IsValidPhoneNumber(string phoneNumber)

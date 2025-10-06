@@ -8,8 +8,8 @@ namespace EVServiceCenter.Application.Models.Responses
         public string PartNumber { get; set; }
         public string PartName { get; set; }
         public string Brand { get; set; }
-        public decimal UnitPrice { get; set; }
-        public string Unit { get; set; }
+        public decimal Price { get; set; }
+        public string? ImageUrl { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
     }

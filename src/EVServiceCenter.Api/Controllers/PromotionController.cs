@@ -15,10 +15,21 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class PromotionController : ControllerBase
     {
         private readonly IPromotionService _promotionService;
+        private readonly EVServiceCenter.Domain.Interfaces.IBookingRepository _bookingRepo;
+        private readonly EVServiceCenter.Domain.Interfaces.IOrderRepository _orderRepo;
+        private readonly EVServiceCenter.Domain.Interfaces.IPromotionRepository _promotionRepo;
+        
 
-        public PromotionController(IPromotionService promotionService)
+        public PromotionController(
+            IPromotionService promotionService,
+            EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepo,
+            EVServiceCenter.Domain.Interfaces.IOrderRepository orderRepo,
+            EVServiceCenter.Domain.Interfaces.IPromotionRepository promotionRepo)
         {
             _promotionService = promotionService;
+            _bookingRepo = bookingRepo;
+            _orderRepo = orderRepo;
+            _promotionRepo = promotionRepo;
         }
 
         /// <summary>
@@ -61,6 +72,193 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        // ===== APPLY/REMOVE/LIST for BOOKINGS and ORDERS (unified under PromotionController) =====
+        public class BookingApplyPromotionRequest { public string Code { get; set; } }
+
+        [HttpPost("bookings/{bookingId:int}/apply")]
+        public async Task<IActionResult> ApplyForBooking(int bookingId, [FromBody] BookingApplyPromotionRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request?.Code))
+                return BadRequest(new { success = false, message = "Mã khuyến mãi không được để trống" });
+
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+
+            // Chỉ cho áp dụng nếu booking chưa thanh toán/chưa hoàn tất
+            var disallowedStatuses = new[] { "PAID", "COMPLETED", "DONE", "FINISHED", "CANCELLED" };
+            if (!string.IsNullOrWhiteSpace(booking.Status) && disallowedStatuses.Contains(booking.Status.ToUpper()))
+            {
+                return BadRequest(new { success = false, message = "Booking đã hoàn tất/đã thanh toán/đã hủy, không thể áp dụng khuyến mãi." });
+            }
+
+            var validate = await _promotionService.ValidatePromotionAsync(new ValidatePromotionRequest
+            {
+                Code = request.Code.Trim().ToUpper(),
+                OrderAmount = booking.TotalCost ?? 0,
+                OrderType = "BOOKING"
+            });
+            if (!validate.IsValid)
+                return BadRequest(new { success = false, message = validate.Message, data = validate });
+
+            var promoEntity = await _promotionRepo.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
+            if (promoEntity == null) return NotFound(new { success = false, message = "Mã khuyến mãi không tồn tại" });
+
+            // Chỉ cho 1 promotion cho mỗi booking (ngăn nhiều code)
+            var existingOnBooking = await _promotionRepo.GetUserPromotionsByBookingAsync(booking.BookingId);
+            if (existingOnBooking.Any())
+            {
+                return BadRequest(new { success = false, message = "Booking chỉ được áp dụng 1 khuyến mãi." });
+            }
+
+            var userPromotion = new EVServiceCenter.Domain.Entities.UserPromotion
+            {
+                CustomerId = booking.CustomerId,
+                PromotionId = promoEntity.PromotionId,
+                BookingId = booking.BookingId,
+                UsedAt = DateTime.UtcNow,
+                DiscountAmount = validate.DiscountAmount,
+                Status = "APPLIED"
+            };
+            await _promotionRepo.CreateUserPromotionAsync(userPromotion);
+
+            return Ok(new { success = true, message = "Áp dụng khuyến mãi thành công", data = validate });
+        }
+
+        [HttpDelete("bookings/{bookingId:int}/{promotionCode}")]
+        public async Task<IActionResult> RemoveFromBooking(int bookingId, string promotionCode)
+        {
+            if (string.IsNullOrWhiteSpace(promotionCode))
+                return BadRequest(new { success = false, message = "Mã khuyến mãi không được để trống" });
+
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+
+            var removed = await _promotionRepo.DeleteUserPromotionByBookingAndCodeAsync(bookingId, promotionCode.Trim().ToUpper());
+            if (!removed) return NotFound(new { success = false, message = "Không tìm thấy khuyến mãi trên booking" });
+
+            return Ok(new { success = true, message = "Đã gỡ khuyến mãi khỏi booking" });
+        }
+
+        [HttpGet("bookings/{bookingId:int}")]
+        public async Task<IActionResult> ListByBooking(int bookingId)
+        {
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+
+            var items = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
+            var result = items.Select(x => new
+            {
+                code = x.Promotion?.Code,
+                description = x.Promotion?.Description,
+                discountAmount = x.DiscountAmount,
+                usedAt = x.UsedAt,
+                status = x.Status
+            });
+            return Ok(new { success = true, data = result });
+        }
+
+        public class OrderApplyPromotionRequest { public string Code { get; set; } }
+
+        [HttpPost("orders/{orderId:int}/apply")]
+        public async Task<IActionResult> ApplyForOrder(int orderId, [FromBody] OrderApplyPromotionRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request?.Code))
+                return BadRequest(new { success = false, message = "Mã khuyến mãi không được để trống" });
+
+            var order = await _orderRepo.GetByIdAsync(orderId);
+            if (order == null) return NotFound(new { success = false, message = "Order không tồn tại" });
+
+            // Chỉ cho áp dụng nếu order chưa thanh toán/chưa hoàn tất
+            var disallowedStatuses = new[] { "PAID", "COMPLETED", "DONE", "FINISHED", "CANCELLED" };
+            if (!string.IsNullOrWhiteSpace(order.Status) && disallowedStatuses.Contains(order.Status.ToUpper()))
+            {
+                return BadRequest(new { success = false, message = "Order đã hoàn tất/đã thanh toán/đã hủy, không thể áp dụng khuyến mãi." });
+            }
+
+            var validate = await _promotionService.ValidatePromotionAsync(new ValidatePromotionRequest
+            {
+                Code = request.Code.Trim().ToUpper(),
+                OrderAmount = order.OrderItems?.Sum(oi => oi.Quantity * oi.UnitPrice) ?? 0m,
+                OrderType = "ORDER"
+            });
+            if (!validate.IsValid)
+                return BadRequest(new { success = false, message = validate.Message, data = validate });
+
+            var promoEntity = await _promotionRepo.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
+            if (promoEntity == null) return NotFound(new { success = false, message = "Mã khuyến mãi không tồn tại" });
+
+            // Chỉ cho 1 promotion cho mỗi order (ngăn nhiều code)
+            var existingOnOrder = await _promotionRepo.GetUserPromotionsByOrderAsync(order.OrderId);
+            if (existingOnOrder.Any())
+            {
+                return BadRequest(new { success = false, message = "Order chỉ được áp dụng 1 khuyến mãi." });
+            }
+
+            var userPromotion = new EVServiceCenter.Domain.Entities.UserPromotion
+            {
+                CustomerId = order.CustomerId,
+                PromotionId = promoEntity.PromotionId,
+                OrderId = order.OrderId,
+                UsedAt = DateTime.UtcNow,
+                DiscountAmount = validate.DiscountAmount,
+                Status = "APPLIED"
+            };
+            await _promotionRepo.CreateUserPromotionAsync(userPromotion);
+
+            return Ok(new { success = true, message = "Áp dụng khuyến mãi thành công", data = validate });
+        }
+
+        // ===== Usage (migrated from PromotionUsageController) =====
+        [HttpGet("promotions/usage")]
+        public async Task<IActionResult> GetUsage([FromQuery] int customerId)
+        {
+            if (customerId <= 0) return BadRequest(new { success = false, message = "customerId không hợp lệ" });
+            var items = await _promotionRepo.GetUserPromotionsByCustomerAsync(customerId);
+            var result = items.Select(x => new
+            {
+                code = x.Promotion?.Code,
+                description = x.Promotion?.Description,
+                bookingId = x.BookingId,
+                orderId = x.OrderId,
+                discountAmount = x.DiscountAmount,
+                usedAt = x.UsedAt,
+                status = x.Status
+            });
+            return Ok(new { success = true, data = result });
+        }
+
+        [HttpDelete("orders/{orderId:int}/{promotionCode}")]
+        public async Task<IActionResult> RemoveFromOrder(int orderId, string promotionCode)
+        {
+            if (string.IsNullOrWhiteSpace(promotionCode))
+                return BadRequest(new { success = false, message = "Mã khuyến mãi không được để trống" });
+
+            var order = await _orderRepo.GetByIdAsync(orderId);
+            if (order == null) return NotFound(new { success = false, message = "Order không tồn tại" });
+
+            var removed = await _promotionRepo.DeleteUserPromotionByOrderAndCodeAsync(orderId, promotionCode.Trim().ToUpper());
+            if (!removed) return NotFound(new { success = false, message = "Không tìm thấy khuyến mãi trên đơn hàng" });
+
+            return Ok(new { success = true, message = "Đã gỡ khuyến mãi khỏi đơn hàng" });
+        }
+
+        [HttpGet("orders/{orderId:int}")]
+        public async Task<IActionResult> ListByOrder(int orderId)
+        {
+            var order = await _orderRepo.GetByIdAsync(orderId);
+            if (order == null) return NotFound(new { success = false, message = "Order không tồn tại" });
+
+            var items = await _promotionRepo.GetUserPromotionsByOrderAsync(orderId);
+            var result = items.Select(x => new
+            {
+                code = x.Promotion?.Code,
+                description = x.Promotion?.Description,
+                discountAmount = x.DiscountAmount,
+                usedAt = x.UsedAt,
+                status = x.Status
+            });
+            return Ok(new { success = true, data = result });
+        }
         /// <summary>
         /// Lấy thông tin khuyến mãi theo ID
         /// </summary>
@@ -95,39 +293,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thông tin khuyến mãi theo mã
-        /// </summary>
-        /// <param name="code">Mã khuyến mãi</param>
-        /// <returns>Thông tin khuyến mãi</returns>
-        [HttpGet("code/{code}")]
-        public async Task<IActionResult> GetPromotionByCode(string code)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(code))
-                    return BadRequest(new { success = false, message = "Mã khuyến mãi không được để trống" });
-
-                var promotion = await _promotionService.GetPromotionByCodeAsync(code);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Lấy thông tin khuyến mãi thành công",
-                    data = promotion
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
+        
 
         /// <summary>
         /// Tạo khuyến mãi mới (chỉ ADMIN)
@@ -218,41 +384,53 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
 
-        /// <summary>
-        /// Xác thực mã khuyến mãi
-        /// </summary>
-        /// <param name="request">Thông tin xác thực</param>
-        /// <returns>Kết quả xác thực</returns>
-        [HttpPost("validate")]
-        public async Task<IActionResult> ValidatePromotion([FromBody] ValidatePromotionRequest request)
+        
+        // ===== Customer promotions: list & save =====
+        [HttpGet("customers/{customerId:int}/promotions")]
+        public async Task<IActionResult> GetCustomerPromotions(int customerId)
         {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
-                    });
-                }
+            if (customerId <= 0) return BadRequest(new { success = false, message = "customerId không hợp lệ" });
+            var items = await _promotionRepo.GetUserPromotionsByCustomerAsync(customerId);
+            // Chỉ trả danh sách đã lưu/đã dùng, không có trường Invoice
+            var result = items.Select(x => new {
+                code = x.Promotion?.Code,
+                description = x.Promotion?.Description,
+                bookingId = x.BookingId,
+                orderId = x.OrderId,
+                discountAmount = x.DiscountAmount,
+                usedAt = x.UsedAt,
+                status = x.Status
+            });
+            return Ok(new { success = true, data = result });
+        }
 
-                var result = await _promotionService.ValidatePromotionAsync(request);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = result.IsValid ? "Xác thực mã khuyến mãi thành công" : "Mã khuyến mãi không hợp lệ",
-                    data = result
-                });
-            }
-            catch (Exception ex)
+        public class SaveCustomerPromotionRequest { public string Code { get; set; } }
+
+        [HttpPost("customers/{customerId:int}/promotions")]
+        public async Task<IActionResult> SaveCustomerPromotion(int customerId, [FromBody] SaveCustomerPromotionRequest request)
+        {
+            if (customerId <= 0) return BadRequest(new { success = false, message = "customerId không hợp lệ" });
+            if (string.IsNullOrWhiteSpace(request?.Code)) return BadRequest(new { success = false, message = "Mã khuyến mãi không được để trống" });
+
+            // Tìm promotion theo code
+            var promo = await _promotionRepo.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
+            if (promo == null) return NotFound(new { success = false, message = "Mã khuyến mãi không tồn tại" });
+
+            // Lưu vào UserPromotions ở trạng thái SAVED (chưa áp dụng booking/order)
+            var up = new EVServiceCenter.Domain.Entities.UserPromotion
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
+                CustomerId = customerId,
+                PromotionId = promo.PromotionId,
+                BookingId = null,
+                OrderId = null,
+                ServiceId = null,
+                UsedAt = DateTime.UtcNow,
+                DiscountAmount = 0,
+                Status = "SAVED"
+            };
+            await _promotionRepo.CreateUserPromotionAsync(up);
+
+            return Ok(new { success = true, message = "Đã lưu khuyến mãi cho khách hàng" });
         }
 
         /// <summary>

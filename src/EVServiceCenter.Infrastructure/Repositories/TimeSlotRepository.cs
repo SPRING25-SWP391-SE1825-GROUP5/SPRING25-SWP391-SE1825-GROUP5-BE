@@ -32,6 +32,11 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<TimeSlot> GetByIdAsync(int slotId)
+        {
+            return await _context.TimeSlots.FirstOrDefaultAsync(ts => ts.SlotId == slotId);
+        }
+
         public async Task<TimeSlot> CreateTimeSlotAsync(TimeSlot timeSlot)
         {
             _context.TimeSlots.Add(timeSlot);

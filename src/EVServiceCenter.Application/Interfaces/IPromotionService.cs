@@ -13,6 +13,9 @@ namespace EVServiceCenter.Application.Interfaces
         Task<PromotionResponse> UpdatePromotionAsync(int promotionId, UpdatePromotionRequest request);
         Task<bool> DeletePromotionAsync(int promotionId);
         Task<PromotionValidationResponse> ValidatePromotionAsync(ValidatePromotionRequest request);
+        Task<int> MarkUsedByOrderAsync(int orderId);
+        Task<int> MarkUsedByBookingAsync(int bookingId);
+        Task<int> RemoveByBookingAsync(int bookingId);
         Task<bool> ActivatePromotionAsync(int promotionId);
         Task<bool> DeactivatePromotionAsync(int promotionId);
     }

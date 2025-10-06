@@ -11,5 +11,6 @@ namespace EVServiceCenter.Application.Interfaces
         Task<CenterResponse> GetCenterByIdAsync(int centerId);
         Task<CenterResponse> CreateCenterAsync(CreateCenterRequest request);
         Task<CenterResponse> UpdateCenterAsync(int centerId, UpdateCenterRequest request);
+        Task<bool> ToggleActiveAsync(int centerId);
     }
 }

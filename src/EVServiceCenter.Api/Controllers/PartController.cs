@@ -15,10 +15,12 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class PartController : ControllerBase
     {
         private readonly IPartService _partService;
+        private readonly IInventoryService _inventoryService;
 
-        public PartController(IPartService partService)
+        public PartController(IPartService partService, IInventoryService inventoryService)
         {
             _partService = partService;
+            _inventoryService = inventoryService;
         }
 
         /// <summary>
@@ -56,6 +58,52 @@ namespace EVServiceCenter.WebAPI.Controllers
                     success = false, 
                     message = "Lỗi hệ thống: " + ex.Message 
                 });
+            }
+        }
+
+        /// <summary>
+        /// Tồn kho tổng hợp toàn hệ thống cho danh sách phụ tùng
+        /// </summary>
+        [HttpGet("availability")]
+        public async Task<IActionResult> GetGlobalAvailability([FromQuery] string partIds)
+        {
+            // Nếu không truyền partIds => trả toàn bộ các phụ tùng còn hàng (Get All)
+            if (string.IsNullOrWhiteSpace(partIds))
+            {
+                var all = await _inventoryService.GetGlobalAvailabilityAllAsync();
+                return Ok(new { success = true, data = all });
+            }
+
+            var ids = partIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                              .Select(s => int.TryParse(s, out var x) ? x : 0)
+                              .Where(x => x > 0)
+                              .ToList();
+            if (ids.Count == 0)
+                return BadRequest(new { success = false, message = "partIds không hợp lệ" });
+
+            var result = await _inventoryService.GetGlobalAvailabilityAsync(ids);
+            var inStock = result.Where(r => r.TotalStock > 0).ToList();
+            return Ok(new { success = true, data = inStock });
+        }
+
+        /// <summary>
+        /// Cập nhật phụ tùng
+        /// </summary>
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdatePartRequest request)
+        {
+            try
+            {
+                var updated = await _partService.UpdatePartAsync(id, request);
+                return Ok(new { success = true, data = updated });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return BadRequest(new { success = false, message = "Lỗi khi cập nhật phụ tùng" });
             }
         }
 
@@ -125,6 +173,40 @@ namespace EVServiceCenter.WebAPI.Controllers
             catch (ArgumentException ex)
             {
                 return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách dịch vụ tương thích với phụ tùng
+        /// </summary>
+        /// <param name="id">ID phụ tùng</param>
+        /// <returns>Danh sách dịch vụ tương thích</returns>
+        [HttpGet("{id}/services")]
+        public async Task<IActionResult> GetServicesByPartId(int id)
+        {
+            try
+            {
+                if (id <= 0)
+                    return BadRequest(new { success = false, message = "ID phụ tùng không hợp lệ" });
+
+                var services = await _partService.GetServicesByPartIdAsync(id);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy danh sách dịch vụ tương thích thành công",
+                    data = services
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {

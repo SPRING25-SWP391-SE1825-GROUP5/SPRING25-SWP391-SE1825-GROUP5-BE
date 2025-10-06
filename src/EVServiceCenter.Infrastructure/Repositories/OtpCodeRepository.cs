@@ -17,11 +17,11 @@ namespace EVServiceCenter.Infrastructure.Repositories
             _context = context;
         }
 
-        public async Task<Otpcode?> GetLastOtpCodeAsync(int userId, string type)
+        public Task<Otpcode?> GetLastOtpCodeAsync(int userId, string type)
         {
-            return  _context.Otpcodes.Where(o => o.UserId == userId && o.Otptype == type)
+            return Task.FromResult(_context.Otpcodes.Where(o => o.UserId == userId && o.Otptype == type)
                 .OrderByDescending(o => o.CreatedAt)
-                .FirstOrDefault();
+                .FirstOrDefault());
         }
 
         public async Task<Otpcode> CreateOtpCodeAsync(Otpcode otp)
@@ -35,6 +35,15 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             _context.Otpcodes.Update(otp);
             await _context.SaveChangesAsync();
+        }
+
+        public Task<Otpcode?> GetByRawTokenAsync(string token)
+        {
+            // In this system, we store OTP codes in Otpcode.Otpcode1; we'll match directly
+            return Task.FromResult(_context.Otpcodes
+                .Where(o => o.Otpcode1 == token)
+                .OrderByDescending(o => o.CreatedAt)
+                .FirstOrDefault());
         }
     }
 }

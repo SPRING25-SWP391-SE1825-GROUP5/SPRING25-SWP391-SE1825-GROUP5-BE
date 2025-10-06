@@ -14,5 +14,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<bool> IsVinUniqueAsync(string vin, int? excludeVehicleId = null);
         Task<bool> IsLicensePlateUniqueAsync(string licensePlate, int? excludeVehicleId = null);
         Task<bool> VehicleExistsAsync(int vehicleId);
+        Task<int> CountByModelIdAsync(int modelId);
     }
 }

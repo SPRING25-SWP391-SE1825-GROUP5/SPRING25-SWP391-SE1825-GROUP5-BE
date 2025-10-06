@@ -1,0 +1,12 @@
+{
+  "uuid": "458e787e-033a-4081-8925-85496c63a0da",
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests",
+  "children": [
+    "c87667fa-843c-4672-bcff-1f35501312d7"
+  ],
+  "befores": [],
+  "afters": [],
+  "links": [],
+  "start": 1759563933927,
+  "stop": 1759563935432
+}

@@ -1,0 +1,67 @@
+{
+  "uuid": "f1766176-6000-456c-9b31-c3052df0255b",
+  "historyId": "ecea3b8ad6568a20f02ed99d59d8252d",
+  "testCaseId": "7aaf782b775aa6be91e900eff71980bb",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests.RegisterAsync_WithInvalidGender_ShouldThrowArgumentException()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests.RegisterAsync_WithInvalidGender_ShouldThrowArgumentException"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests"
+    },
+    {
+      "name": "layer",
+      "value": "application"
+    },
+    {
+      "name": "suite",
+      "value": "Authentication"
+    },
+    {
+      "name": "feature",
+      "value": "User Registration"
+    },
+    {
+      "name": "story",
+      "value": "Validation Errors"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Unit.Application.Services.AuthServiceTests.RegisterAsync_WithInvalidGender_ShouldThrowArgumentException",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759563161492,
+  "stop": 1759563161493
+}

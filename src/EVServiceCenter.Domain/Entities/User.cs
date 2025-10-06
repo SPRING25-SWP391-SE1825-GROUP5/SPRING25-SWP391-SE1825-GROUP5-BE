@@ -13,17 +13,17 @@ public partial class User
 
     public string FullName { get; set; }
 
-    public string PhoneNumber { get; set; }
+    public string? PhoneNumber { get; set; }
 
     public DateOnly? DateOfBirth { get; set; }
 
-    public string Address { get; set; }
+    public string? Address { get; set; }
 
-    public string Gender { get; set; }
+    public string? Gender { get; set; }
 
-    public string AvatarUrl { get; set; }
+    public string? AvatarUrl { get; set; }
 
-    public string Role { get; set; }
+    public string? Role { get; set; }
 
     public bool IsActive { get; set; }
 
@@ -33,15 +33,11 @@ public partial class User
 
     public DateTime UpdatedAt { get; set; }
 
-    public byte[] RefreshToken { get; set; }
+    public byte[]? RefreshToken { get; set; }
 
-    public int FailedLoginAttempts { get; set; }
-
-    public DateTime? LockoutUntil { get; set; }
+    
 
     public  Customer Customer { get; set; }
-
-    public  ICollection<LeaveRequest> LeaveRequests { get; set; } = new List<LeaveRequest>();
 
     public  ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 
@@ -50,4 +46,7 @@ public partial class User
     public  ICollection<Staff> Staff { get; set; } = new List<Staff>();
 
     public  ICollection<Technician> Technicians { get; set; } = new List<Technician>();
+
+    // E-commerce navigation properties
+    // Removed: OrderStatusHistories (table dropped)
 }

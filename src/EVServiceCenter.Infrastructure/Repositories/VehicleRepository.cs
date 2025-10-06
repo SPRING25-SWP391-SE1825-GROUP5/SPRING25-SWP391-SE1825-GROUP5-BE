@@ -22,7 +22,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Vehicles
                 .Include(v => v.Customer)
                 .Include(v => v.Customer.User)
-                .Include(v => v.Model)
                 .OrderByDescending(v => v.CreatedAt)
                 .ToListAsync();
         }
@@ -32,7 +31,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Vehicles
                 .Include(v => v.Customer)
                 .Include(v => v.Customer.User)
-                .Include(v => v.Model)
                 .FirstOrDefaultAsync(v => v.VehicleId == vehicleId);
         }
 
@@ -86,6 +84,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<bool> VehicleExistsAsync(int vehicleId)
         {
             return await _context.Vehicles.AnyAsync(v => v.VehicleId == vehicleId);
+        }
+
+        public async Task<int> CountByModelIdAsync(int modelId)
+        {
+            return await _context.Vehicles
+                .CountAsync(v => v.ModelId == modelId);
         }
     }
 }

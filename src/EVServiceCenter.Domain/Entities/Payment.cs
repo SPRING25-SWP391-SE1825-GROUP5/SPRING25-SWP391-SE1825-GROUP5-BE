@@ -11,23 +11,18 @@ public partial class Payment
 
     public int InvoiceId { get; set; }
 
-    public long PayOsorderCode { get; set; }
-
     public int Amount { get; set; }
 
     public string Status { get; set; }
 
-    public string BuyerName { get; set; }
-
-    public string BuyerPhone { get; set; }
-
-    public string BuyerAddress { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime? PaidAt { get; set; }
 
-    public virtual Invoice Invoice { get; set; }
+    public string PaymentMethod { get; set; } = "PAYOS";
 
-    public virtual ICollection<InvoicePayment> InvoicePayments { get; set; } = new List<InvoicePayment>();
+    public int? PaidByUserId { get; set; }
+
+    public virtual Invoice Invoice { get; set; }
 }

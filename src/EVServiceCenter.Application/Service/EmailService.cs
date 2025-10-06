@@ -64,26 +64,66 @@ namespace EVServiceCenter.Application.Service
 
             try
             {
-            using var smtp = new SmtpClient(host, port)
-            {
-                Credentials = new NetworkCredential(user, password),
-                EnableSsl = true
-            };
+                using var smtp = new SmtpClient(host, port)
+                {
+                    Credentials = new NetworkCredential(user, password),
+                    EnableSsl = true
+                };
 
-            var mail = new MailMessage
-            {
-                From = new MailAddress(from, fromName),
-                Subject = subject,
-                Body = body,
-                IsBodyHtml = true
-            };
-            mail.To.Add(to);
+                var mail = new MailMessage
+                {
+                    From = new MailAddress(from, fromName),
+                    Subject = subject,
+                    Body = body,
+                    IsBodyHtml = true
+                };
+                mail.To.Add(to);
 
-            await smtp.SendMailAsync(mail);
-        }
+                await smtp.SendMailAsync(mail);
+            }
             catch (Exception ex)
             {
                 throw new Exception($"Failed to send email: {ex.Message}", ex);
+            }
+        }
+
+        public async Task SendEmailWithAttachmentAsync(string to, string subject, string body, string attachmentName, byte[] attachmentContent, string contentType = "application/pdf")
+        {
+            if (string.IsNullOrEmpty(to)) throw new ArgumentNullException(nameof(to));
+            if (string.IsNullOrEmpty(subject)) throw new ArgumentNullException(nameof(subject));
+            if (string.IsNullOrEmpty(body)) throw new ArgumentNullException(nameof(body));
+            if (attachmentContent == null || attachmentContent.Length == 0) throw new ArgumentNullException(nameof(attachmentContent));
+
+            var host = _config["Email:Host"] ?? throw new InvalidOperationException("Email:Host configuration is missing");
+            if (!int.TryParse(_config["Email:Port"], out int port)) throw new InvalidOperationException("Email:Port configuration is invalid or missing");
+            var user = _config["Email:User"] ?? throw new InvalidOperationException("Email:User configuration is missing");
+            var password = _config["Email:Password"] ?? throw new InvalidOperationException("Email:Password configuration is missing");
+            var from = _config["Email:From"] ?? throw new InvalidOperationException("Email:From configuration is missing");
+            var fromName = _config["Email:FromName"] ?? throw new InvalidOperationException("Email:FromName configuration is missing");
+
+            try
+            {
+                using var smtp = new SmtpClient(host, port)
+                {
+                    Credentials = new NetworkCredential(user, password),
+                    EnableSsl = true
+                };
+
+                var mail = new MailMessage
+                {
+                    From = new MailAddress(from, fromName),
+                    Subject = subject,
+                    Body = body,
+                    IsBodyHtml = true
+                };
+                mail.To.Add(to);
+                mail.Attachments.Add(new Attachment(new System.IO.MemoryStream(attachmentContent), attachmentName, contentType));
+
+                await smtp.SendMailAsync(mail);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to send email with attachment: {ex.Message}", ex);
             }
         }
 
@@ -91,13 +131,20 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
+                // Log OTP code to console for debugging
+                Console.WriteLine($"🔐 OTP CODE FOR {toEmail}: {otpCode}");
+                Console.WriteLine($"📧 Sending verification email to: {toEmail}");
+                
                 var subject = "Xác thực tài khoản EV Service Center";
                 var body = CreateVerificationEmailTemplate(fullName, otpCode);
                 
                 await SendEmailAsync(toEmail, subject, body);
+                
+                Console.WriteLine($"✅ Verification email sent successfully to: {toEmail}");
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"❌ Failed to send verification email to {toEmail}: {ex.Message}");
                 throw new Exception($"Không thể gửi email xác thực: {ex.Message}");
             }
         }

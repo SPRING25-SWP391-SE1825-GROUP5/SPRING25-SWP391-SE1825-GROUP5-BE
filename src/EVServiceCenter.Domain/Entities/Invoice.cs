@@ -7,39 +7,35 @@ public partial class Invoice
 {
     public int InvoiceId { get; set; }
 
-    public string InvoiceNumber { get; set; }
-
     public int WorkOrderId { get; set; }
 
     public int? CustomerId { get; set; }
 
-    public string BillingName { get; set; }
+    public string? Email { get; set; }
 
-    public string BillingPhone { get; set; }
-
-    public string BillingAddress { get; set; }
+    public string? Phone { get; set; }
 
     public string Status { get; set; }
 
-    public decimal TotalAmount { get; set; }
-
     public DateTime CreatedAt { get; set; }
 
-    public string NormalizedBillingPhone { get; set; }
+    public int? BookingId { get; set; }
 
-    public string InvoiceType { get; set; }
 
-    public int? ParentInvoiceId { get; set; }
+    // New: link directly to a single OrderItem (replacing InvoiceItems table)
+    public int? OrderItemId { get; set; }
+
+    // public int? ParentInvoiceId { get; set; } // Column không tồn tại trong database
 
     public virtual Customer Customer { get; set; }
 
-    public virtual ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
-
-    public virtual ICollection<InvoicePayment> InvoicePayments { get; set; } = new List<InvoicePayment>();
-
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
-    public virtual ICollection<UserPromotion> UserPromotions { get; set; } = new List<UserPromotion>();
+    // Removed navigation to UserPromotions to prevent EF from creating a shadow FK (InvoiceId)
 
     public virtual WorkOrder WorkOrder { get; set; }
+
+    public virtual Booking Booking { get; set; }
+
+    
 }

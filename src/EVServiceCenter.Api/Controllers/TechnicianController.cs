@@ -62,6 +62,22 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Danh sách booking theo ngày của kỹ thuật viên (kèm WorkOrder)
+        /// </summary>
+        [HttpGet("{technicianId}/bookings")]
+        [Authorize(Policy = "TechnicianOrAdmin")]
+        public async Task<IActionResult> GetBookingsByDate(int technicianId, [FromQuery] string date)
+        {
+            if (technicianId <= 0)
+                return BadRequest(new { success = false, message = "TechnicianId không hợp lệ" });
+            if (!DateOnly.TryParse(date, out var d))
+                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
+
+            var data = await _technicianService.GetBookingsByDateAsync(technicianId, d);
+            return Ok(new { success = true, message = "Lấy danh sách booking theo ngày thành công", data });
+        }
+
+        /// <summary>
         /// Lấy thông tin kỹ thuật viên theo ID
         /// </summary>
         /// <param name="id">ID kỹ thuật viên</param>
@@ -239,5 +255,55 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Thêm/cập nhật danh sách kỹ năng cho kỹ thuật viên (ADMIN)
+        /// </summary>
+        [HttpPost("{technicianId}/skills")]
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> UpsertSkills(int technicianId, [FromBody] UpsertTechnicianSkillsRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid || request == null)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+                }
+                await _technicianService.UpsertSkillsAsync(technicianId, request);
+                return Ok(new { success = true, message = "Cập nhật kỹ năng thành công" });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Xoá một kỹ năng của kỹ thuật viên (ADMIN)
+        /// </summary>
+        [HttpDelete("{technicianId}/skills/{skillId}")]
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> RemoveSkill(int technicianId, int skillId)
+        {
+            try
+            {
+                await _technicianService.RemoveSkillAsync(technicianId, skillId);
+                return Ok(new { success = true, message = "Xoá kỹ năng thành công" });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
     }
+
 }

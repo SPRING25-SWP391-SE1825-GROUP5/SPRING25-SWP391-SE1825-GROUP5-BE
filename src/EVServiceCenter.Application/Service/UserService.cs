@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.ComponentModel.DataAnnotations;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
@@ -21,14 +22,18 @@ namespace EVServiceCenter.Application.Service
         private readonly IAccountRepository _accountRepository;
         private readonly IStaffRepository _staffRepository;
         private readonly ITechnicianRepository _technicianRepository;
+        private readonly IEmailService _emailService;
+        private readonly IOtpService _otpService;
 
-        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository)
+        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IOtpService otpService)
         {
             _authRepository = authRepository;
             _accountRepository = accountRepository;
             _customerRepository = customerRepository;
             _staffRepository = staffRepository;
             _technicianRepository = technicianRepository;
+            _emailService = emailService;
+            _otpService = otpService;
         }
 
         public async Task<UserListResponse> GetAllUsersAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string role = null)
@@ -114,11 +119,9 @@ namespace EVServiceCenter.Application.Service
                     Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : null,
                     DateOfBirth = request.DateOfBirth,
                     Gender = request.Gender,
-                    Role = request.Role,
-                    IsActive = request.IsActive,
-                    EmailVerified = request.EmailVerified,
-                    FailedLoginAttempts = 0,
-                    LockoutUntil = null,
+                    Role = "CUSTOMER", // Luôn mặc định là CUSTOMER
+                    IsActive = true, // Mặc định là active
+                    EmailVerified = false, // Luôn cần verify email
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -132,45 +135,16 @@ namespace EVServiceCenter.Application.Service
                     var customer = new Customer
                     {
                         UserId = user.UserId,
-                        CustomerCode = GenerateCustomerCode(),
-                        NormalizedPhone = NormalizePhoneNumber(request.PhoneNumber),
-                        IsGuest = false, // Đây là customer được admin tạo, không phải guest
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
+                        IsGuest = false
                     };
 
                     await _customerRepository.CreateCustomerAsync(customer);
                 }
-                else if (user.Role == "STAFF")
-                {
-                    var staff = new Staff
-                    {
-                        UserId = user.UserId,
-                        CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
-                        StaffCode = GenerateStaffCode(),
-                        Position = "STAFF", // Default position - có thể cần thay đổi tùy theo logic business
-                        HireDate = DateOnly.FromDateTime(DateTime.Today),
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
 
-                    await _staffRepository.CreateStaffAsync(staff);
-                }
-                else if (user.Role == "TECHNICIAN")
-                {
-                    var technician = new Technician
-                    {
-                        UserId = user.UserId,
-                        CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
-                        TechnicianCode = GenerateTechnicianCode(),
-                        Specialization = "GENERAL", // Default specialization - có thể cần thay đổi tùy theo logic business
-                        ExperienceYears = 0, // Default experience - có thể cần thay đổi tùy theo logic business
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    await _technicianRepository.CreateTechnicianAsync(technician);
-                }
+                // Tạo và gửi mã OTP xác thực email
+                var otpCode = _otpService.GenerateOtp();
+                await _otpService.CreateOtpAsync(user.UserId, otpCode, "EMAIL_VERIFICATION");
+                await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
 
                 return MapToUserResponse(user);
             }
@@ -326,9 +300,9 @@ namespace EVServiceCenter.Application.Service
             var errors = new List<string>();
 
             // Check email format
-            if (!IsValidEmail(request.Email))
+            if (string.IsNullOrWhiteSpace(request.Email) || !new EmailAddressAttribute().IsValid(request.Email))
             {
-                errors.Add("Email phải có đuôi @gmail.com");
+                errors.Add("Email không đúng định dạng");
             }
 
             // Check password strength
@@ -355,10 +329,16 @@ namespace EVServiceCenter.Application.Service
                 errors.Add("Giới tính phải là MALE hoặc FEMALE.");
             }
 
-            // Check role
-            if (!IsValidRole(request.Role))
+            // Validate role - chỉ cho phép CUSTOMER (default value đã là CUSTOMER)
+            if (request.Role != "CUSTOMER")
             {
-                errors.Add("Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
+                errors.Add("Chỉ được tạo tài khoản CUSTOMER. Vai trò khác phải được tạo bởi Admin.");
+            }
+
+            // Validate emailVerified - phải là false
+            if (request.EmailVerified)
+            {
+                errors.Add("Email chưa được xác thực. Vui lòng để emailVerified = false.");
             }
 
             // Check email uniqueness
@@ -422,14 +402,9 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        private bool IsValidEmail(string email)
-        {
-            if (string.IsNullOrWhiteSpace(email))
-                return false;
-
-            var gmailRegex = new Regex(@"^[a-zA-Z0-9._%+-]+@gmail\.com$");
-            return gmailRegex.IsMatch(email);
-        }
+        // Cho phép tất cả domain hợp lệ theo chuẩn EmailAddressAttribute
+        private bool IsValidEmail(string email) =>
+            !string.IsNullOrWhiteSpace(email) && new EmailAddressAttribute().IsValid(email);
 
         private bool IsValidPassword(string password)
         {
@@ -502,9 +477,7 @@ namespace EVServiceCenter.Application.Service
                 IsActive = user.IsActive,
                 EmailVerified = user.EmailVerified,
                 CreatedAt = user.CreatedAt,
-                UpdatedAt = user.UpdatedAt,
-                FailedLoginAttempts = user.FailedLoginAttempts,
-                LockoutUntil = user.LockoutUntil
+                UpdatedAt = user.UpdatedAt
             };
         }
 
@@ -522,11 +495,48 @@ namespace EVServiceCenter.Application.Service
             return $"ST{timestamp}{random}";
         }
 
-        private string GenerateTechnicianCode()
+        // GenerateTechnicianCode removed
+
+        /// <summary>
+        /// Gán vai trò cho người dùng (chỉ Admin)
+        /// </summary>
+        /// <param name="userId">ID người dùng</param>
+        /// <param name="role">Vai trò mới</param>
+        /// <returns>Kết quả gán vai trò</returns>
+        public async Task<bool> AssignUserRoleAsync(int userId, string role)
         {
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmm");
-            var random = new Random().Next(10, 99);
-            return $"TC{timestamp}{random}";
+            try
+            {
+                // Validate role
+                if (!IsValidRole(role))
+                {
+                    throw new ArgumentException("Vai trò không hợp lệ. Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
+                }
+
+                // Lấy thông tin user
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                {
+                    throw new ArgumentException("Không tìm thấy người dùng với ID này.");
+                }
+
+                // Cập nhật role
+                user.Role = role;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                // Lưu thay đổi
+                await _authRepository.UpdateUserAsync(user);
+
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi gán vai trò cho người dùng: {ex.Message}");
+            }
         }
 
         private string NormalizePhoneNumber(string phoneNumber)

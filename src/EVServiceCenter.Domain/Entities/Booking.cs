@@ -7,46 +7,44 @@ public partial class Booking
 {
     public int BookingId { get; set; }
 
-    public string BookingCode { get; set; }
-
     public int CustomerId { get; set; }
 
     public int VehicleId { get; set; }
 
     public int CenterId { get; set; }
 
-    public DateOnly BookingDate { get; set; }
+    
 
-    public int StartSlotId { get; set; }
+    // Single-slot booking: store one SlotId
+    public int SlotId { get; set; }
 
-    public int EndSlotId { get; set; }
+    public string? Status { get; set; }
 
-    public string Status { get; set; }
+    public decimal? TotalCost { get; set; }
 
-    public decimal? TotalEstimatedCost { get; set; }
-
-    public string SpecialRequests { get; set; }
+    public string? SpecialRequests { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
 
-    public int? TotalSlots { get; set; }
+    
 
-    public 
-        ICollection<BookingService> BookingServices { get; set; } = new List<BookingService>();
+    // One booking = one service (denormalized)
+    public int ServiceId { get; set; }
 
-    public  ICollection<BookingTimeSlot> BookingTimeSlots { get; set; } = new List<BookingTimeSlot>();
 
-    public  ServiceCenter Center { get; set; }
+    public virtual ServiceCenter Center { get; set; }
 
-    public  Customer Customer { get; set; }
+    public virtual Customer Customer { get; set; }
 
-    public  TimeSlot EndSlot { get; set; }
+    public virtual TimeSlot Slot { get; set; }
 
-    public  TimeSlot StartSlot { get; set; }
+    public virtual Vehicle Vehicle { get; set; }
 
-    public  Vehicle Vehicle { get; set; }
+    public virtual Service Service { get; set; }
 
-    public  ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
+    public virtual ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
+
+    public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 }

@@ -11,23 +11,19 @@ public partial class Technician
 
     public int CenterId { get; set; }
 
-    public string TechnicianCode { get; set; }
-
-    public string Specialization { get; set; }
-
-    public int ExperienceYears { get; set; }
+    public string Position { get; set; }
 
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
-    public virtual ICollection<BookingTimeSlot> BookingTimeSlots { get; set; } = new List<BookingTimeSlot>();
+    public decimal? Rating { get; set; }
 
     public virtual ServiceCenter Center { get; set; }
 
-    public virtual ICollection<LeaveRequest> LeaveRequests { get; set; } = new List<LeaveRequest>();
-
     public virtual ICollection<TechnicianTimeSlot> TechnicianTimeSlots { get; set; } = new List<TechnicianTimeSlot>();
+
+    public virtual ICollection<TechnicianSkill> TechnicianSkills { get; set; } = new List<TechnicianSkill>();
 
     public virtual User User { get; set; }
 

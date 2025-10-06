@@ -160,12 +160,35 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message += ". Khuyến nghị: Hãy xác thực email để bảo mật tài khoản tốt hơn.";
                 }
 
-                return Ok(new
+                // Tạo response phù hợp với FE
+                var response = new
                 {
                     success = true,
                     message = message,
-                    data = result
-                });
+                    data = new
+                    {
+                        token = result.AccessToken,
+                        user = new
+                        {
+                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
+                            userId = result.UserId,
+                            email = result.Email ?? "",
+                            fullName = result.FullName,
+                            phoneNumber = result.PhoneNumber ?? "",
+                            dateOfBirth = result.DateOfBirth,
+                            address = result.Address ?? "",
+                            gender = result.Gender ?? "",
+                            avatarUrl = result.AvatarUrl ?? "",
+                            role = result.Role,
+                            isActive = result.IsActive,
+                            emailVerified = result.EmailVerified,
+                            createdAt = result.CreatedAt,
+                            updatedAt = result.UpdatedAt
+                        }
+                    }
+                };
+
+                return Ok(response);
             }
             catch (ArgumentException argEx)
             {
@@ -186,6 +209,28 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message = "Có lỗi xảy ra trong quá trình đăng nhập. Vui lòng thử lại sau.",
                     errors = new[] { "Lỗi hệ thống" }
                 });
+            }
+        }
+
+        [AllowAnonymous]
+        [HttpPost("set-password")]
+        public async Task<IActionResult> SetPassword([FromQuery] string token, [FromBody] ChangePasswordRequest body)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return BadRequest(new { success = false, message = "Thiếu token" });
+
+            try
+            {
+                var msg = await _authService.SetPasswordWithTokenAsync(token, body.NewPassword);
+                return Ok(new { success = true, message = msg });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
             }
         }
 
@@ -563,11 +608,35 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var result = await _authService.LoginWithGoogleAsync(request);
                 
-                return Ok(new { 
-                    success = true, 
+                // Tạo response phù hợp với FE
+                var response = new
+                {
+                    success = true,
                     message = "Đăng nhập với Google thành công",
-                    data = result
-                });
+                    data = new
+                    {
+                        token = result.AccessToken,
+                        user = new
+                        {
+                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
+                            userId = result.UserId,
+                            email = result.Email ?? "",
+                            fullName = result.FullName,
+                            phoneNumber = result.PhoneNumber ?? "",
+                            dateOfBirth = result.DateOfBirth,
+                            address = result.Address ?? "",
+                            gender = result.Gender ?? "",
+                            avatarUrl = result.AvatarUrl ?? "",
+                            role = result.Role,
+                            isActive = result.IsActive,
+                            emailVerified = result.EmailVerified,
+                            createdAt = result.CreatedAt,
+                            updatedAt = result.UpdatedAt
+                        }
+                    }
+                };
+                
+                return Ok(response);
             }
             catch (ArgumentException ex)
             {

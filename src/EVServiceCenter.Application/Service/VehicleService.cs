@@ -38,9 +38,7 @@ namespace EVServiceCenter.Application.Service
                     vehicles = vehicles.Where(v =>
                         v.Vin.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                         v.LicensePlate.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        v.Color.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        v.Model.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        v.Model.ModelName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        v.Color.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
                     ).ToList();
                 }
 
@@ -97,12 +95,12 @@ namespace EVServiceCenter.Application.Service
                 var vehicle = new Vehicle
                 {
                     CustomerId = request.CustomerId,
-                    ModelId = request.ModelId,
                     Vin = request.Vin.Trim().ToUpper(),
                     LicensePlate = request.LicensePlate.Trim().ToUpper(),
                     Color = request.Color.Trim(),
                     CurrentMileage = request.CurrentMileage,
                     LastServiceDate = request.LastServiceDate,
+                    PurchaseDate = request.PurchaseDate,
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -163,16 +161,14 @@ namespace EVServiceCenter.Application.Service
                 if (vehicle == null)
                     throw new ArgumentException("Xe không tồn tại.");
 
-                // Validate request
+                // Validate request (các điều kiện khác)
                 await ValidateUpdateVehicleRequestAsync(request, vehicleId);
 
                 // Update vehicle
-                vehicle.ModelId = request.ModelId;
-                vehicle.Vin = request.Vin.Trim().ToUpper();
-                vehicle.LicensePlate = request.LicensePlate.Trim().ToUpper();
                 vehicle.Color = request.Color.Trim();
                 vehicle.CurrentMileage = request.CurrentMileage;
                 vehicle.LastServiceDate = request.LastServiceDate;
+                vehicle.PurchaseDate = request.PurchaseDate;
 
                 await _vehicleRepository.UpdateVehicleAsync(vehicle);
 
@@ -195,20 +191,15 @@ namespace EVServiceCenter.Application.Service
             {
                 VehicleId = vehicle.VehicleId,
                 CustomerId = vehicle.CustomerId,
-                ModelId = vehicle.ModelId,
                 Vin = vehicle.Vin,
                 LicensePlate = vehicle.LicensePlate,
                 Color = vehicle.Color,
                 CurrentMileage = vehicle.CurrentMileage,
                 LastServiceDate = vehicle.LastServiceDate,
+                PurchaseDate = vehicle.PurchaseDate,
                 CreatedAt = vehicle.CreatedAt,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
-                CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? vehicle.Customer?.NormalizedPhone,
-                ModelBrand = vehicle.Model?.Brand,
-                ModelName = vehicle.Model?.ModelName,
-                ModelYear = vehicle.Model?.Year ?? 0,
-                BatteryCapacity = vehicle.Model?.BatteryCapacity,
-                Range = vehicle.Model?.Range
+                CustomerPhone = vehicle.Customer?.User?.PhoneNumber
             };
         }
 
@@ -221,12 +212,6 @@ namespace EVServiceCenter.Application.Service
             if (customer == null)
             {
                 errors.Add("Khách hàng không tồn tại.");
-            }
-
-            // Validate model exists (basic validation - ModelId should be > 0)
-            if (request.ModelId <= 0)
-            {
-                errors.Add("Model xe không hợp lệ. Vui lòng chọn model hợp lệ.");
             }
 
             // Check for duplicate VIN
@@ -248,21 +233,74 @@ namespace EVServiceCenter.Application.Service
         private async Task ValidateUpdateVehicleRequestAsync(UpdateVehicleRequest request, int vehicleId)
         {
             var errors = new List<string>();
-
-            // Check for duplicate VIN
-            if (!await _vehicleRepository.IsVinUniqueAsync(request.Vin.Trim().ToUpper(), vehicleId))
-            {
-                errors.Add("VIN này đã tồn tại. Vui lòng chọn VIN khác.");
-            }
-
-            // Check for duplicate license plate
-            if (!await _vehicleRepository.IsLicensePlateUniqueAsync(request.LicensePlate.Trim().ToUpper(), vehicleId))
-            {
-                errors.Add("Biển số xe này đã tồn tại. Vui lòng chọn biển số khác.");
-            }
+            // Không còn kiểm tra biển số khi cập nhật
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
+        }
+
+        // New methods implementation
+        public async Task<CustomerResponse> GetCustomerByVehicleIdAsync(int vehicleId)
+        {
+            try
+            {
+                var vehicle = await _vehicleRepository.GetVehicleByIdAsync(vehicleId);
+                if (vehicle == null)
+                    throw new ArgumentException("Xe không tồn tại.");
+
+                var customer = await _customerRepository.GetCustomerByIdAsync(vehicle.CustomerId);
+                if (customer == null)
+                    throw new ArgumentException("Khách hàng không tồn tại.");
+
+                return new CustomerResponse
+                {
+                    CustomerId = customer.CustomerId,
+                    UserId = customer.UserId,
+                    IsGuest = customer.UserId == null,
+                    UserFullName = customer.User?.FullName ?? "Khách vãng lai",
+                    UserEmail = customer.User?.Email,
+                    UserPhoneNumber = customer.User?.PhoneNumber,
+                    VehicleCount = 1 // We know this customer has at least this vehicle
+                };
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy thông tin khách hàng: {ex.Message}");
+            }
+        }
+
+
+        public async Task<VehicleResponse> GetVehicleByVinOrLicensePlateAsync(string vinOrLicensePlate)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(vinOrLicensePlate))
+                    throw new ArgumentException("VIN hoặc biển số xe không được để trống.");
+
+                var vehicles = await _vehicleRepository.GetAllVehiclesAsync();
+                var normalizedSearch = vinOrLicensePlate.Trim().ToUpper();
+
+                var vehicle = vehicles.FirstOrDefault(v => 
+                    v.Vin.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    v.LicensePlate.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase));
+
+                if (vehicle == null)
+                    throw new ArgumentException("Không tìm thấy xe với VIN hoặc biển số này.");
+
+                return MapToVehicleResponse(vehicle);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi tìm xe: {ex.Message}");
+            }
         }
     }
 }

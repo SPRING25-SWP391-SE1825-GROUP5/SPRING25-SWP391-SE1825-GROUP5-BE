@@ -1,0 +1,51 @@
+{
+  "uuid": "d9d185bb-80a9-4624-96df-4b905f68cc29",
+  "historyId": "42e9bb69d1e5aade4f138f75e405e1ee",
+  "testCaseId": "23f29584e184e13c104a5648beaf4e86",
+  "fullName": "EVServiceCenter.Tests:EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests.BookingController_Should_Have_Update_Status_Method()",
+  "labels": [
+    {
+      "name": "thread",
+      "value": ".NET Long Running Task"
+    },
+    {
+      "name": "host",
+      "value": "DESKTOP-BEP8CMU"
+    },
+    {
+      "name": "language",
+      "value": "C#"
+    },
+    {
+      "name": "framework",
+      "value": "xUnit.net"
+    },
+    {
+      "name": "testClass",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests"
+    },
+    {
+      "name": "testMethod",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests.BookingController_Should_Have_Update_Status_Method"
+    },
+    {
+      "name": "package",
+      "value": "EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests"
+    }
+  ],
+  "links": [],
+  "name": "EVServiceCenter.Tests.Integration.Controllers.BookingControllerTests.BookingController_Should_Have_Update_Status_Method",
+  "status": "passed",
+  "statusDetails": {
+    "known": false,
+    "muted": false,
+    "flaky": false,
+    "message": ""
+  },
+  "stage": "finished",
+  "steps": [],
+  "attachments": [],
+  "parameters": [],
+  "start": 1759546169467,
+  "stop": 1759546169469
+}

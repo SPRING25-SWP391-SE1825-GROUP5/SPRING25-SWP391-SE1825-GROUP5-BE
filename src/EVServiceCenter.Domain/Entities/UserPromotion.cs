@@ -11,7 +11,12 @@ public partial class UserPromotion
 
     public int PromotionId { get; set; }
 
-    public int? InvoiceId { get; set; }
+    public int? BookingId { get; set; }
+
+    public int? OrderId { get; set; }
+
+    // Optional link to a specific service (e.g., booking service)
+    public int? ServiceId { get; set; }
 
     public DateTime UsedAt { get; set; }
 
@@ -21,7 +26,11 @@ public partial class UserPromotion
 
     public virtual Customer Customer { get; set; }
 
-    public virtual Invoice Invoice { get; set; }
+    public virtual Booking Booking { get; set; }
+
+    public virtual Order Order { get; set; }
 
     public virtual Promotion Promotion { get; set; }
+
+    public virtual Service Service { get; set; }
 }

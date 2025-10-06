@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace EVServiceCenter.Domain.Entities;
@@ -7,17 +7,18 @@ public partial class VehicleModel
 {
     public int ModelId { get; set; }
 
-    public string Brand { get; set; }
+    public string ModelName { get; set; } = null!;
 
-    public string ModelName { get; set; }
+    public string Brand { get; set; } = null!;
 
-    public int Year { get; set; }
+    // Removed specs: BatteryCapacity, MaxRange, MaxSpeed, ChargingTime, Weight, Price, Year
 
-    public decimal? BatteryCapacity { get; set; }
+    public bool IsActive { get; set; } = true;
 
-    public int? Range { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
-    public DateTime CreatedAt { get; set; }
-
+    // Navigation properties
     public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
+
+    public virtual ICollection<VehicleModelPart> VehicleModelParts { get; set; } = new List<VehicleModelPart>();
 }

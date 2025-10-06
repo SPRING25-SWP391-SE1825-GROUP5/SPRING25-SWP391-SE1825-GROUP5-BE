@@ -9,7 +9,7 @@ public partial class MaintenanceReminder
 
     public int VehicleId { get; set; }
 
-    public string ServiceType { get; set; }
+    public int? ServiceId { get; set; }
 
     public int? DueMileage { get; set; }
 
@@ -22,4 +22,6 @@ public partial class MaintenanceReminder
     public DateTime CreatedAt { get; set; }
 
     public virtual Vehicle Vehicle { get; set; }
+
+    public virtual Service? Service { get; set; }
 }

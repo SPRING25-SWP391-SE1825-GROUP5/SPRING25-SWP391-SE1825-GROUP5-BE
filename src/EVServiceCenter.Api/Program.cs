@@ -13,10 +13,12 @@ using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
 using EVServiceCenter.Domain.Configurations;
 using EVServiceCenter.Application.Service;
+using EVServiceCenter.Api.HostedServices;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Infrastructure.Repositories;
 using EVServiceCenter.Domain.IRepositories;
+using EVServiceCenter.Domain.Configurations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -27,6 +29,10 @@ using EVServiceCenter.Api.Middleware;
 using Microsoft.AspNetCore.Http;
 using Microsoft.OpenApi.Models;
 using System.IO;
+using EVServiceCenter.Application.Configurations;
+using EVServiceCenter.Application.Interfaces;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Caching.SqlServer;
 
 
 // ============================================================================
@@ -50,8 +56,18 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 // CORE SERVICES REGISTRATION
 // ============================================================================
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
+builder.Services.Configure<BookingRealtimeOptions>(builder.Configuration.GetSection("BookingRealtime"));
+// Cache configuration
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient<PaymentService>();
+builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
+builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection("GuestSession"));
+builder.Services.AddSingleton<EVServiceCenter.Application.Interfaces.IHoldStore, EVServiceCenter.Application.Service.InMemoryHoldStore>();
+builder.Services.AddScoped<ISettingsService, EVServiceCenter.Application.Service.SettingsService>();
+builder.Services.AddScoped<EVServiceCenter.Domain.Interfaces.ISystemSettingRepository, EVServiceCenter.Infrastructure.Repositories.SystemSettingRepository>();
+
 
 
 // ============================================================================
@@ -64,6 +80,7 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
+builder.Services.AddScoped<ILoginLockoutService, LoginLockoutService>();
 
 // Communication Services
 builder.Services.AddScoped<IEmailService, EmailService>();
@@ -71,7 +88,6 @@ builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 
 // Business Services
 builder.Services.AddScoped<ICenterService, CenterService>();
-builder.Services.AddScoped<IServiceCategoryService, ServiceCategoryService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ITechnicianService, TechnicianService>();
@@ -81,8 +97,23 @@ builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IPartService, PartService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddScoped<IBookingHistoryService, BookingHistoryService>();
+builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
+builder.Services.AddScoped<GuestBookingService>();
+builder.Services.AddScoped<ISkillService, SkillService>();
+// Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
+// CenterScheduleService removed
+builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
 
+// E-commerce services
+builder.Services.AddScoped<IOrderService, OrderService>();
+// Wishlist removed
+// removed: ProductReviewService deprecated
+
+// Vehicle Model Services
+builder.Services.AddScoped<IVehicleModelService, VehicleModelService>();
+builder.Services.AddScoped<IVehicleModelPartService, VehicleModelPartService>();
 
 // ============================================================================
 // REPOSITORY REGISTRATION
@@ -96,7 +127,6 @@ builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
 
 // Business Logic Repositories
 builder.Services.AddScoped<ICenterRepository, CenterRepository>();
-builder.Services.AddScoped<IServiceCategoryRepository, ServiceCategoryRepository>();
 builder.Services.AddScoped<IServiceRepository, ServiceRepository>();
 builder.Services.AddScoped<ITimeSlotRepository, TimeSlotRepository>();
 builder.Services.AddScoped<ITechnicianRepository, TechnicianRepository>();
@@ -106,8 +136,29 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IPartRepository, PartRepository>();
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
+builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+builder.Services.AddScoped<IMaintenancePolicyRepository, MaintenancePolicyRepository>();
+builder.Services.AddScoped<IServicePartRepository, ServicePartRepository>();
+builder.Services.AddScoped<IWorkOrderPartRepository, WorkOrderPartRepository>();
+builder.Services.AddScoped<IMaintenanceChecklistRepository, MaintenanceChecklistRepository>();
+builder.Services.AddScoped<IMaintenanceChecklistResultRepository, MaintenanceChecklistResultRepository>();
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
+// CenterScheduleRepository removed
+builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
+builder.Services.AddScoped<ISkillRepository, SkillRepository>();
+
+// Vehicle Model Repositories
+builder.Services.AddScoped<IVehicleModelRepository, VehicleModelRepository>();
+builder.Services.AddScoped<IVehicleModelPartRepository, VehicleModelPartRepository>();
+
+// E-commerce repositories
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+// Wishlist repository removed
+// removed: ProductReviewRepository deprecated
+builder.Services.AddHostedService<BookingPendingCancellationService>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");
@@ -207,9 +258,11 @@ builder.Services.AddAuthorization(options =>
 // CORS CONFIGURATION
 // ============================================================================
 
+
+// Thêm CORS policy cụ thể cho ASP.NET Core
 builder.Services.AddCors(options =>
 {
-    // Default policy - Allow all origins (Development)
+    // Default policy - Allow all origins (chỉ dành cho Development)
     options.AddDefaultPolicy(policy =>
     {
         policy.AllowAnyOrigin()
@@ -217,7 +270,9 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 
-    // Allow all policy (Alternative)
+
+    // Policy cho phép tất cả (Alternative cho Development)
+
     options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
@@ -225,19 +280,39 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 
-    // Hoặc cấu hình cụ thể cho production
+    // Cấu hình cụ thể cho Production (Recommended)
     options.AddPolicy("AllowSpecificOrigins", policy =>
     {
         policy.WithOrigins(
-                "http://localhost:3000",    // React dev server
-                "http://localhost:5173",    // Vite dev server
-                "https://your-frontend-domain.com" // Production domain
+                  "http://localhost:3000",    // React dev server
+                  "http://localhost:5173",    // Vite dev server
+                  "https://localhost:3000",   // HTTPS localhost
+                  "https://your-frontend-domain.com" // Production domain
               )
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials(); // Quan trọng cho JWT/Authentication
+    });
+
+    // Policy chỉ cho localhost (Development với credentials)
+    options.AddPolicy("AllowLocalhost", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
     });
+
+    // Policy bảo mật cao cho Production
+    options.AddPolicy("ProductionPolicy", policy =>
+    {
+        policy.WithOrigins("https://your-production-domain.com")
+              .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+              .WithHeaders("Content-Type", "Authorization", "X-Requested-With")
+              .AllowCredentials();
+    });
 });
+
 
 
 // ============================================================================
@@ -292,6 +367,12 @@ builder.Services.AddSwaggerGen(c =>
 // ============================================================================
 var app = builder.Build();
 
+// Detailed errors and developer exception page for easier debugging in Development
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+
 // ============================================================================
 // PORT CONFIGURATION (Production/Deployment)
 // ============================================================================
@@ -301,11 +382,15 @@ if (!string.IsNullOrWhiteSpace(port))
     app.Urls.Add($"http://*:{port}");
 }
 
+// Forwarded headers để chạy đúng sau proxy (Render)
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 // ============================================================================
 // MIDDLEWARE PIPELINE CONFIGURATION
 // ============================================================================
-// Note: Order of middleware is important!
-
 // Swagger UI - API Documentation
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -315,31 +400,26 @@ app.UseSwaggerUI(c =>
     c.DocumentTitle = "EVServiceCenter API Documentation";
 });
 
-// Enable CORS - Must be before UseHttpsRedirection()
-app.UseCors(); // Uses default policy (AllowAnyOrigin)
+app.UseCors(); // default policy
 
-// HTTPS Redirection
+// Enable HTTPS redirect for security
 app.UseHttpsRedirection();
 
-
-
-// Static Files - For serving uploaded files, images, etc.
 app.UseStaticFiles();
 
-// Global Exception Handling
-app.UseExceptionHandler("/error");
 
-
-// Authentication - Must come before Authorization
 app.UseAuthentication();
-app.UseAuthenticationErrorHandling(); // Custom JWT error handling
+app.UseAuthenticationErrorHandling();
 app.UseAuthorization();
 
-// Map API Controllers
+// Guest session cookie middleware
+app.UseMiddleware<EVServiceCenter.Api.Middleware.GuestSessionMiddleware>();
+
+// Health endpoints cho Render
+// removed public health and root endpoints per request
+
 app.MapControllers();
+app.MapHub<EVServiceCenter.Api.BookingHub>("/hubs/booking");
 
 
-// ============================================================================
-// APPLICATION STARTUP
-// ============================================================================
 app.Run();

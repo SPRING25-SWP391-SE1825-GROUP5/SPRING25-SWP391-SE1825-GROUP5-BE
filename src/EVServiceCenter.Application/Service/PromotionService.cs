@@ -21,6 +21,65 @@ namespace EVServiceCenter.Application.Service
             _customerRepository = customerRepository;
         }
 
+        public async Task<int> MarkUsedByOrderAsync(int orderId)
+        {
+            var items = await _promotionRepository.GetUserPromotionsByOrderAsync(orderId);
+            var count = 0;
+            foreach (var up in items)
+            {
+                if (!string.Equals(up.Status, "USED", StringComparison.OrdinalIgnoreCase))
+                {
+                    up.Status = "USED";
+                    up.UsedAt = DateTime.UtcNow;
+                    await _promotionRepository.UpdateUserPromotionAsync(up);
+                    // increase promotion usage
+                    var promo = await _promotionRepository.GetPromotionByIdAsync(up.PromotionId);
+                    if (promo != null)
+                    {
+                        promo.UsageCount = promo.UsageCount + 1;
+                        await _promotionRepository.UpdatePromotionAsync(promo);
+                    }
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public async Task<int> MarkUsedByBookingAsync(int bookingId)
+        {
+            var items = await _promotionRepository.GetUserPromotionsByBookingAsync(bookingId);
+            var count = 0;
+            foreach (var up in items)
+            {
+                if (!string.Equals(up.Status, "USED", StringComparison.OrdinalIgnoreCase))
+                {
+                    up.Status = "USED";
+                    up.UsedAt = DateTime.UtcNow;
+                    await _promotionRepository.UpdateUserPromotionAsync(up);
+                    var promo = await _promotionRepository.GetPromotionByIdAsync(up.PromotionId);
+                    if (promo != null)
+                    {
+                        promo.UsageCount = promo.UsageCount + 1;
+                        await _promotionRepository.UpdatePromotionAsync(promo);
+                    }
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public async Task<int> RemoveByBookingAsync(int bookingId)
+        {
+            var items = await _promotionRepository.GetUserPromotionsByBookingAsync(bookingId);
+            var count = 0;
+            foreach (var up in items)
+            {
+                var removed = await _promotionRepository.DeleteUserPromotionByBookingAndCodeAsync(bookingId, up.Promotion?.Code);
+                if (removed) count++;
+            }
+            return count;
+        }
+
         public async Task<PromotionListResponse> GetAllPromotionsAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string status = null, string promotionType = null)
         {
             try
@@ -41,10 +100,7 @@ namespace EVServiceCenter.Application.Service
                     promotions = promotions.Where(p => p.Status == status.ToUpper()).ToList();
                 }
 
-                if (!string.IsNullOrWhiteSpace(promotionType))
-                {
-                    promotions = promotions.Where(p => p.PromotionType == promotionType.ToUpper()).ToList();
-                }
+                // PromotionType removed
 
                 // Pagination
                 var totalCount = promotions.Count;
@@ -129,9 +185,8 @@ namespace EVServiceCenter.Application.Service
                     Status = request.Status.ToUpper(),
                     UsageLimit = request.UsageLimit,
                     UsageCount = 0,
-                    UserLimit = request.UserLimit,
-                    PromotionType = request.PromotionType.ToUpper(),
-                    ApplyFor = request.ApplyFor.ToUpper(),
+                    
+                    
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -174,9 +229,8 @@ namespace EVServiceCenter.Application.Service
                 promotion.MaxDiscount = request.MaxDiscount;
                 promotion.Status = request.Status.ToUpper();
                 promotion.UsageLimit = request.UsageLimit;
-                promotion.UserLimit = request.UserLimit;
-                promotion.PromotionType = request.PromotionType.ToUpper();
-                promotion.ApplyFor = request.ApplyFor.ToUpper();
+                
+                
                 promotion.UpdatedAt = DateTime.UtcNow;
 
                 await _promotionRepository.UpdatePromotionAsync(promotion);
@@ -291,17 +345,7 @@ namespace EVServiceCenter.Application.Service
                     };
                 }
 
-                // Check apply for
-                if (promotion.ApplyFor != "ALL" && promotion.ApplyFor != request.OrderType.ToUpper())
-                {
-                    return new PromotionValidationResponse
-                    {
-                        IsValid = false,
-                        Message = $"Mã khuyến mãi chỉ áp dụng cho {promotion.ApplyFor}.",
-                        DiscountAmount = 0,
-                        FinalAmount = request.OrderAmount
-                    };
-                }
+                // ApplyFor removed: scope is inferred by where the promotion is linked (booking/order)
 
                 // Calculate discount amount
                 decimal discountAmount = 0;
@@ -410,9 +454,8 @@ namespace EVServiceCenter.Application.Service
                 UpdatedAt = promotion.UpdatedAt,
                 UsageLimit = promotion.UsageLimit,
                 UsageCount = promotion.UsageCount,
-                UserLimit = promotion.UserLimit,
-                PromotionType = promotion.PromotionType,
-                ApplyFor = promotion.ApplyFor,
+                
+                
                 IsActive = isActive,
                 IsExpired = isExpired,
                 IsUsageLimitReached = isUsageLimitReached,

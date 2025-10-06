@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
 
@@ -8,16 +9,17 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<List<Booking>> GetAllBookingsAsync();
         Task<Booking> GetBookingByIdAsync(int bookingId);
-        Task<Booking> GetBookingByCodeAsync(string bookingCode);
         Task<Booking> CreateBookingAsync(Booking booking);
         Task UpdateBookingAsync(Booking booking);
         Task<bool> BookingExistsAsync(int bookingId);
-        Task<bool> IsBookingCodeUniqueAsync(string bookingCode, int? excludeBookingId = null);
-        Task<List<BookingService>> GetBookingServicesAsync(int bookingId);
-        Task<List<BookingTimeSlot>> GetBookingTimeSlotsAsync(int bookingId);
-        Task AddBookingServicesAsync(List<BookingService> bookingServices);
-        Task AddBookingTimeSlotsAsync(List<BookingTimeSlot> bookingTimeSlots);
-        Task RemoveBookingServicesAsync(int bookingId);
-        Task RemoveBookingTimeSlotsAsync(int bookingId);
+        Task<List<Booking>> GetByTechnicianAndDateAsync(int technicianId, DateOnly date);
+        // BookingServices removed in single-service model
+        Task<List<Booking>> GetAllForAutoCancelAsync();
+        Task<List<Booking>> GetBookingsByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10, 
+            string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+            string sortBy = "createdAt", string sortOrder = "desc");
+        Task<int> CountBookingsByCustomerIdAsync(int customerId, string? status = null, 
+            DateTime? fromDate = null, DateTime? toDate = null);
+        Task<Booking?> GetBookingWithDetailsByIdAsync(int bookingId);
     }
 }

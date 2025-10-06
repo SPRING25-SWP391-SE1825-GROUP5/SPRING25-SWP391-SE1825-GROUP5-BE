@@ -11,9 +11,6 @@ namespace EVServiceCenter.Application.Models.Responses
         public string UserPhoneNumber { get; set; }
         public int CenterId { get; set; }
         public string CenterName { get; set; }
-        public string StaffCode { get; set; }
-        public string Position { get; set; }
-        public DateOnly HireDate { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
     }

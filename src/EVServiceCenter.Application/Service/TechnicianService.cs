@@ -14,11 +14,76 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly ITechnicianRepository _technicianRepository;
         private readonly ITimeSlotRepository _timeSlotRepository;
+        private readonly IBookingRepository _bookingRepository;
 
-        public TechnicianService(ITechnicianRepository technicianRepository, ITimeSlotRepository timeSlotRepository)
+        public TechnicianService(ITechnicianRepository technicianRepository, ITimeSlotRepository timeSlotRepository, IBookingRepository bookingRepository)
         {
             _technicianRepository = technicianRepository;
             _timeSlotRepository = timeSlotRepository;
+            _bookingRepository = bookingRepository;
+        }
+        public async Task UpsertSkillsAsync(int technicianId, UpsertTechnicianSkillsRequest request)
+        {
+            if (technicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
+            if (request == null || request.Items == null || request.Items.Count == 0)
+                throw new ArgumentException("Danh sách kỹ năng không được rỗng");
+
+            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
+            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
+
+            var skills = request.Items.Select(i => new TechnicianSkill
+            {
+                TechnicianId = technicianId,
+                SkillId = i.SkillId,
+                Notes = i.Notes
+            });
+
+            await _technicianRepository.UpsertSkillsAsync(technicianId, skills);
+        }
+
+        public async Task RemoveSkillAsync(int technicianId, int skillId)
+        {
+            if (technicianId <= 0 || skillId <= 0)
+                throw new ArgumentException("Thông tin không hợp lệ");
+            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
+            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
+            await _technicianRepository.RemoveSkillAsync(technicianId, skillId);
+        }
+        public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date)
+        {
+            var result = new TechnicianBookingsResponse
+            {
+                TechnicianId = technicianId,
+                Date = date,
+                Bookings = new List<TechnicianBookingItem>()
+            };
+
+            var bookings = await _bookingRepository.GetByTechnicianAndDateAsync(technicianId, date);
+            foreach (var b in bookings)
+            {
+                var wo = b.WorkOrders?.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+                result.Bookings.Add(new TechnicianBookingItem
+                {
+                    BookingId = b.BookingId,
+                    BookingCode = null,
+                    Status = b.Status,
+                    ServiceId = b.ServiceId,
+                    ServiceName = b.Service?.ServiceName ?? "N/A",
+                    CenterId = b.CenterId,
+                    CenterName = b.Center?.CenterName ?? "N/A",
+                    SlotId = b.SlotId,
+                    SlotTime = b.Slot?.SlotTime.ToString() ?? "N/A",
+                    CustomerName = b.Customer?.User?.FullName ?? "N/A",
+                    CustomerPhone = b.Customer?.User?.PhoneNumber,
+                    VehiclePlate = b.Vehicle?.LicensePlate,
+                    WorkOrderId = wo?.WorkOrderId,
+                    WorkOrderStatus = wo?.Status,
+                    WorkStartTime = null,
+                    WorkEndTime = null
+                });
+            }
+
+            return result;
         }
 
         public async Task<TechnicianListResponse> GetAllTechniciansAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? centerId = null)
@@ -32,8 +97,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     technicians = technicians.Where(t =>
                         t.User.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        t.TechnicianCode.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        t.Specialization.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        t.Position.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
                     ).ToList();
                 }
 
@@ -103,15 +167,13 @@ namespace EVServiceCenter.Application.Service
                 {
                     // var existingAvailability = availability.FirstOrDefault(a => a.SlotId == slot.SlotId);
                     
-                    return new TechnicianTimeSlotAvailability
+                    return new TimeSlotAvailability
                     {
                         SlotId = slot.SlotId,
                         SlotTime = slot.SlotTime.ToString(),
                         SlotLabel = slot.SlotLabel,
                         IsAvailable = true, // existingAvailability?.IsAvailable ?? false,
-                        IsBooked = false, // existingAvailability?.IsBooked ?? false,
-                        BookingId = null, // existingAvailability?.BookingId,
-                        Notes = null // existingAvailability?.Notes
+                        AvailableTechnicians = new List<TechnicianAvailability>()
                     };
                 }).ToList();
 
@@ -119,9 +181,8 @@ namespace EVServiceCenter.Application.Service
                 {
                     TechnicianId = technician.TechnicianId,
                     TechnicianName = technician.User.FullName,
-                    TechnicianCode = technician.TechnicianCode,
-                    Date = date,
-                    TimeSlots = timeSlotAvailability
+                    Date = date.ToDateTime(TimeOnly.MinValue),
+                    AvailableSlots = timeSlotAvailability
                 };
             }
             catch (ArgumentException)
@@ -157,10 +218,9 @@ namespace EVServiceCenter.Application.Service
                 var technicianTimeSlots = request.TimeSlots.Select(ts => new TechnicianTimeSlot
                 {
                     TechnicianId = technicianId,
-                    WorkDate = request.WorkDate,
+                    WorkDate = request.WorkDate.ToDateTime(TimeOnly.MinValue),
                     SlotId = ts.SlotId,
                     IsAvailable = ts.IsAvailable,
-                    IsBooked = false, // Reset booking status when updating availability
                     BookingId = null,
                     Notes = ts.Notes,
                     CreatedAt = DateTime.UtcNow
@@ -188,9 +248,7 @@ namespace EVServiceCenter.Application.Service
                 TechnicianId = technician.TechnicianId,
                 UserId = technician.UserId,
                 CenterId = technician.CenterId,
-                TechnicianCode = technician.TechnicianCode,
-                Specialization = technician.Specialization,
-                ExperienceYears = technician.ExperienceYears,
+                Position = technician.Position,
                 IsActive = technician.IsActive,
                 CreatedAt = technician.CreatedAt,
                 UserFullName = technician.User?.FullName,

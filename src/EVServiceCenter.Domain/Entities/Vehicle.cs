@@ -9,8 +9,6 @@ public partial class Vehicle
 
     public int CustomerId { get; set; }
 
-    public int ModelId { get; set; }
-
     public string Vin { get; set; }
 
     public string LicensePlate { get; set; }
@@ -19,15 +17,21 @@ public partial class Vehicle
 
     public int CurrentMileage { get; set; }
 
+    public DateOnly? PurchaseDate { get; set; }
+
     public DateOnly? LastServiceDate { get; set; }
 
+    public DateOnly? NextServiceDue { get; set; }
+
     public DateTime CreatedAt { get; set; }
+
+    public int? ModelId { get; set; }
 
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
     public virtual Customer Customer { get; set; }
 
-    public virtual ICollection<MaintenanceReminder> MaintenanceReminders { get; set; } = new List<MaintenanceReminder>();
+    public virtual VehicleModel? VehicleModel { get; set; }
 
-    public virtual VehicleModel Model { get; set; }
+    public virtual ICollection<MaintenanceReminder> MaintenanceReminders { get; set; } = new List<MaintenanceReminder>();
 }

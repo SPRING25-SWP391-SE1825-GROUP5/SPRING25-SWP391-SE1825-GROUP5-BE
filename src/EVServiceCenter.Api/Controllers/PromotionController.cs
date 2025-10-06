@@ -416,6 +416,25 @@ namespace EVServiceCenter.WebAPI.Controllers
             var promo = await _promotionRepo.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
             if (promo == null) return NotFound(new { success = false, message = "Mã khuyến mãi không tồn tại" });
 
+            // Không cho lưu nếu khách đã có bản ghi cho mã này ở trạng thái APPLIED/USED
+            var existingForCustomer = await _promotionRepo.GetUserPromotionsByCustomerAsync(customerId);
+            var existed = existingForCustomer.FirstOrDefault(x => x.Promotion?.PromotionId == promo.PromotionId);
+            if (existed != null && (string.Equals(existed.Status, "APPLIED", StringComparison.OrdinalIgnoreCase) || string.Equals(existed.Status, "USED", StringComparison.OrdinalIgnoreCase)))
+            {
+                return BadRequest(new { success = false, message = "Mã này đã được áp dụng/đã sử dụng, không thể lưu lại." });
+            }
+
+            // Không cho lưu nếu promotion không còn hiệu lực: Inactive, chưa hiệu lực, đã hết hạn, hoặc hết lượt
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var isInactive = !string.Equals(promo.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase);
+            var notStarted = promo.StartDate > today;
+            var expired = promo.EndDate.HasValue && promo.EndDate.Value < today;
+            var usageExceeded = promo.UsageLimit.HasValue && promo.UsageCount >= promo.UsageLimit.Value;
+            if (isInactive || notStarted || expired || usageExceeded)
+            {
+                return BadRequest(new { success = false, message = "Mã khuyến mãi không còn hiệu lực để lưu." });
+            }
+
             // Lưu vào UserPromotions ở trạng thái SAVED (chưa áp dụng booking/order)
             var up = new EVServiceCenter.Domain.Entities.UserPromotion
             {

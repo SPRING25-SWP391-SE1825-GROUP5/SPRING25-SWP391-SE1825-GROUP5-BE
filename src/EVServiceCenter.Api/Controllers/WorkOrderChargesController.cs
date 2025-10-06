@@ -63,6 +63,29 @@ public class WorkOrderChargesController : ControllerBase
             return Ok(new { workOrderId, subtotalParts = subtotal, serviceFee = 0m, discount = 0m, tax = 0m, total = subtotal, items });
         }
 
+        [HttpGet("/api/workorders/{workOrderId:int}/invoice")]
+        public async Task<IActionResult> GetInvoice(int workOrderId)
+        {
+            var wo = await _workOrderRepo.GetByIdAsync(workOrderId);
+            if (wo == null) return NotFound(new { success = false, message = "WorkOrder không tồn tại" });
+            // Dùng bookingId để lấy invoice gần nhất cho booking này
+            var invoice = await _invoiceRepo.GetByBookingIdAsync(wo.BookingId);
+            if (invoice == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho WO" });
+            return Ok(new { success = true, data = new { invoice.InvoiceId, invoice.Status, invoice.CreatedAt } });
+        }
+
+        [HttpGet("/api/workorders/{workOrderId:int}/payments")]
+        public async Task<IActionResult> GetPayments(int workOrderId)
+        {
+            var wo = await _workOrderRepo.GetByIdAsync(workOrderId);
+            if (wo == null) return NotFound(new { success = false, message = "WorkOrder không tồn tại" });
+            var invoice = await _invoiceRepo.GetByBookingIdAsync(wo.BookingId);
+            if (invoice == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho WO" });
+            var list = await _paymentRepo.GetByInvoiceIdAsync(invoice.InvoiceId, null, null, null, null);
+            var resp = list.Select(p => new { p.PaymentId, p.PaymentCode, p.PaymentMethod, p.Amount, p.Status, p.PaidAt, p.CreatedAt });
+            return Ok(new { success = true, data = resp });
+        }
+
 
         [HttpPost("link")]
         public async Task<IActionResult> CreatePaymentLink(int workOrderId)

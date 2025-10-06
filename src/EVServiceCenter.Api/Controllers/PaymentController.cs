@@ -57,7 +57,7 @@ public class PaymentController : ControllerBase
 		return Content(html, "text/html; charset=utf-8");
 	}
 
-    public class CreateOfflinePaymentForBookingRequest
+    public class PaymentOfflineRequest
     {
         public int Amount { get; set; }
         public int PaidByUserId { get; set; }
@@ -67,7 +67,7 @@ public class PaymentController : ControllerBase
     // Ghi nhận thanh toán offline cho booking: tự đảm bảo invoice tồn tại
     [HttpPost("booking/{bookingId:int}/payments/offline")]
     [Authorize]
-    public async Task<IActionResult> CreateOfflineForBooking([FromRoute] int bookingId, [FromBody] CreateOfflinePaymentForBookingRequest req)
+    public async Task<IActionResult> CreateOfflineForBooking([FromRoute] int bookingId, [FromBody] PaymentOfflineRequest req)
     {
         if (req == null || req.Amount <= 0 || req.PaidByUserId <= 0)
         {
@@ -133,6 +133,23 @@ public class PaymentController : ControllerBase
 	{
 		var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
 		return Ok(new { orderCode, updated = ok });
+	}
+
+	[HttpGet("return")]
+	[AllowAnonymous]
+	public async Task<IActionResult> Return([FromQuery] string orderCode, [FromQuery] string status = null, [FromQuery] string code = null, [FromQuery] bool cancel = false)
+	{
+		var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
+		return Ok(new { success = ok, message = ok ? "Payment success processed" : "Payment not confirmed", orderCode, status, code, cancel });
+	}
+
+	[HttpGet("cancel")]
+	[AllowAnonymous]
+	public async Task<IActionResult> Cancel([FromQuery] string orderCode, [FromQuery] string status = null, [FromQuery] string code = null, [FromQuery] bool cancel = true)
+	{
+		// For cancel route, still call confirm to fetch status and let service no-op if not paid
+		var _ = await _paymentService.ConfirmPaymentAsync(orderCode);
+		return Ok(new { success = true, message = "Payment cancelled", orderCode, status, code, cancel });
 	}
 }
 

@@ -12,6 +12,9 @@ public interface ISettingsService
 
     Task<GuestSessionSettingsDto> GetGuestSessionAsync();
     Task UpdateGuestSessionAsync(UpdateGuestSessionSettingsRequest request);
+
+    Task<MaintenanceReminderSettingsDto> GetMaintenanceReminderAsync();
+    Task UpdateMaintenanceReminderAsync(UpdateMaintenanceReminderSettingsRequest request);
 }
 
 public class BookingRealtimeSettingsDto
@@ -54,6 +57,20 @@ public class UpdateGuestSessionSettingsRequest
     public bool SecureOnly { get; set; }
     public string SameSite { get; set; }
     public string Path { get; set; }
+}
+
+public class MaintenanceReminderSettingsDto
+{
+    public int UpcomingDays { get; set; }
+    public int DispatchHourLocal { get; set; }
+    public string TimeZoneId { get; set; }
+}
+
+public class UpdateMaintenanceReminderSettingsRequest
+{
+    public int UpcomingDays { get; set; }
+    public int DispatchHourLocal { get; set; }
+    public string TimeZoneId { get; set; }
 }
 
 

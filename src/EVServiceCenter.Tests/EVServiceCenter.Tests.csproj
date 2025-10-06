@@ -35,5 +35,6 @@
     <ProjectReference Include="..\EVServiceCenter.Application\EVServiceCenter.Application.csproj" />
     <ProjectReference Include="..\EVServiceCenter.Infrastructure\EVServiceCenter.Infrastructure.csproj" />
     <ProjectReference Include="..\EVServiceCenter.Domain\EVServiceCenter.Domain.csproj" />
+    <ProjectReference Include="..\EVServiceCenter.Api\EVServiceCenter.Api.csproj" />
   </ItemGroup>
 </Project>

@@ -145,6 +145,24 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, message = "Cập nhật GuestSession thành công" });
         }
 
+        // ------------------- Admin Config: MaintenanceReminder -------------------
+        [HttpGet("maintenance-reminder")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> GetMaintenanceReminder()
+        {
+            var config = await _settingsService.GetMaintenanceReminderAsync();
+            return Ok(new { success = true, data = config });
+        }
+
+        [HttpPut("maintenance-reminder")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> UpdateMaintenanceReminder([FromBody] EVServiceCenter.Application.Interfaces.UpdateMaintenanceReminderSettingsRequest request)
+        {
+            if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ" });
+            await _settingsService.UpdateMaintenanceReminderAsync(request);
+            return Ok(new { success = true, message = "Cập nhật MaintenanceReminder thành công" });
+        }
+
         /// <summary>
         /// Kiểm tra trạng thái lockout của một email
         /// </summary>

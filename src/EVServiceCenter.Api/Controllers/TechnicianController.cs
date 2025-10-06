@@ -16,11 +16,13 @@ namespace EVServiceCenter.WebAPI.Controllers
     {
         private readonly ITechnicianService _technicianService;
         private readonly ITimeSlotService _timeSlotService;
+        private readonly IBookingService _bookingService;
 
-        public TechnicianController(ITechnicianService technicianService, ITimeSlotService timeSlotService)
+        public TechnicianController(ITechnicianService technicianService, ITimeSlotService timeSlotService, IBookingService bookingService)
         {
             _technicianService = technicianService;
             _timeSlotService = timeSlotService;
+            _bookingService = bookingService;
         }
 
         /// <summary>
@@ -150,6 +152,65 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message = "Lỗi hệ thống: " + ex.Message 
                 });
             }
+        }
+
+        /// <summary>
+        /// Khả dụng của kỹ thuật viên theo dịch vụ trong 1 ngày (lọc theo center + service)
+        /// </summary>
+        [HttpGet("{technicianId}/availability-by-service")]
+        public async Task<IActionResult> GetTechnicianAvailabilityByService(
+            int technicianId,
+            [FromQuery] int centerId,
+            [FromQuery] string date,
+            [FromQuery] int serviceId)
+        {
+            if (technicianId <= 0 || centerId <= 0 || serviceId <= 0)
+                return BadRequest(new { success = false, message = "Thiếu tham số hoặc không hợp lệ" });
+            if (!DateOnly.TryParse(date, out var d))
+                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
+
+            var availability = await _bookingService.GetAvailabilityAsync(centerId, d, new System.Collections.Generic.List<int> { serviceId });
+            var slots = availability?.TimeSlots ?? new System.Collections.Generic.List<EVServiceCenter.Application.Models.Responses.TimeSlotAvailability>();
+            var availableSlotIds = slots
+                .Where(ts => ts.IsAvailable && ts.AvailableTechnicians.Any(t => t.TechnicianId == technicianId && t.IsAvailable))
+                .Select(ts => ts.SlotId)
+                .ToList();
+
+            return Ok(new { success = true, data = new { technicianId, centerId, serviceId, date = d, slotIds = availableSlotIds } });
+        }
+
+        /// <summary>
+        /// Khả dụng của kỹ thuật viên theo trung tâm trong 1 ngày (gom theo technician)
+        /// </summary>
+        [HttpGet("centers/{centerId}/technicians/availability")]
+        public async Task<IActionResult> GetCenterTechniciansAvailability(
+            int centerId,
+            [FromQuery] string date,
+            [FromQuery] int serviceId)
+        {
+            if (centerId <= 0 || serviceId <= 0)
+                return BadRequest(new { success = false, message = "Thiếu tham số hoặc không hợp lệ" });
+            if (!DateOnly.TryParse(date, out var d))
+                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
+
+            var availability = await _bookingService.GetAvailabilityAsync(centerId, d, new System.Collections.Generic.List<int> { serviceId });
+            var slots = availability?.TimeSlots ?? new System.Collections.Generic.List<EVServiceCenter.Application.Models.Responses.TimeSlotAvailability>();
+
+            var dict = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
+            foreach (var ts in slots.Where(s => s.IsAvailable))
+            {
+                foreach (var tech in ts.AvailableTechnicians.Where(t => t.IsAvailable))
+                {
+                    if (!dict.TryGetValue(tech.TechnicianId, out var list))
+                    {
+                        list = new System.Collections.Generic.List<int>();
+                        dict[tech.TechnicianId] = list;
+                    }
+                    list.Add(ts.SlotId);
+                }
+            }
+
+            return Ok(new { success = true, data = new { centerId, serviceId, date = d, technicians = dict } });
         }
 
         /// <summary>

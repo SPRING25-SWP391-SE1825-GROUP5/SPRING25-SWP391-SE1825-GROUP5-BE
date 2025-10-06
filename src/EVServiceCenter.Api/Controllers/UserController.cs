@@ -290,56 +290,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Gán vai trò cho người dùng (chỉ Admin)
-        /// </summary>
-        /// <param name="request">Thông tin gán vai trò</param>
-        /// <returns>Kết quả gán vai trò</returns>
-        [HttpPatch("assign-role")]
-        [Authorize(Roles = "ADMIN")]
-        public async Task<IActionResult> AssignUserRole([FromBody] AssignUserRoleRequest request)
-        {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = errors });
-                }
-
-                // Không cho phép thay đổi vai trò của chính mình
-                if (IsCurrentUser(request.UserId))
-                    return BadRequest(new { success = false, message = "Không thể thay đổi vai trò của chính mình" });
-
-                var result = await _userService.AssignUserRoleAsync(request.UserId, request.Role);
-                
-                if (result)
-                {
-                    return Ok(new { 
-                        success = true, 
-                        message = $"Đã gán vai trò {request.Role} cho người dùng thành công" 
-                    });
-                }
-                else
-                {
-                    return StatusCode(500, new { 
-                        success = false, 
-                        message = "Không thể gán vai trò cho người dùng" 
-                    });
-                }
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
+        
 
         #region Helper Methods
 

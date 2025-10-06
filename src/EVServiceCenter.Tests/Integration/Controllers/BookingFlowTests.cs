@@ -13,6 +13,9 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
+using EVServiceCenter.Domain.Interfaces;
+using EVServiceCenter.Application.Configurations;
+using System.Net.Http;
 
 namespace EVServiceCenter.Tests.Integration.Controllers;
 
@@ -26,7 +29,56 @@ public class BookingFlowTests
     {
         var hubMock = new Mock<IHubContext<BookingHub>>(MockBehavior.Loose);
         var opts = Options.Create(new BookingRealtimeOptions { HoldTtlMinutes = 1 });
-        return new BookingController(bookingService, historyService, holdStore, hubMock.Object, opts, guestService);
+        // Repos required by controller
+        var invoiceRepo = Mock.Of<IInvoiceRepository>();
+        var paymentRepo = Mock.Of<IPaymentRepository>();
+        var bookingRepo = Mock.Of<IBookingRepository>();
+        var workOrderRepo = Mock.Of<IWorkOrderRepository>();
+        var technicianRepo = Mock.Of<ITechnicianRepository>();
+
+        // Minimal PaymentService deps
+        var payOsOpts = Options.Create(new PayOsOptions
+        {
+            BaseUrl = "https://example.com",
+            ClientId = "client",
+            ApiKey = "key",
+            ChecksumKey = "secret",
+            DescriptionMaxLength = 255,
+            MinAmount = 1000
+        });
+
+        var paymentService = new PaymentService(
+            new HttpClient(),
+            payOsOpts,
+            bookingRepo,
+            workOrderRepo,
+            Mock.Of<IOrderRepository>(),
+            invoiceRepo,
+            paymentRepo,
+            technicianRepo,
+            Mock.Of<IEmailService>(),
+            Mock.Of<IServicePartRepository>(),
+            Mock.Of<IWorkOrderPartRepository>(),
+            Mock.Of<IMaintenanceChecklistRepository>(),
+            Mock.Of<IMaintenanceChecklistResultRepository>(),
+            holdStore,
+            Mock.Of<IPromotionService>()
+        );
+
+        return new BookingController(
+            bookingService,
+            historyService,
+            holdStore,
+            hubMock.Object,
+            opts,
+            guestService,
+            paymentService,
+            invoiceRepo,
+            paymentRepo,
+            bookingRepo,
+            workOrderRepo,
+            technicianRepo
+        );
     }
 
     [Fact]

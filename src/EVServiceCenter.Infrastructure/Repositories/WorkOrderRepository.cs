@@ -86,7 +86,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<System.Collections.Generic.List<WorkOrder>> GetByTechnicianAsync(int technicianId, System.DateTime? from, System.DateTime? to, string status)
         {
-            return await _db.WorkOrders.Where(w => w.TechnicianId == technicianId)
+            return await _db.WorkOrders.Where(w => w.TechnicianId.HasValue && w.TechnicianId == technicianId)
                 .Where(w => string.IsNullOrEmpty(status) || w.Status == status)
                 .Where(w => !from.HasValue || w.CreatedAt >= from)
                 .Where(w => !to.HasValue || w.CreatedAt <= to)
@@ -134,6 +134,18 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Where(w => w.VehicleId == vehicleId && w.Status == "COMPLETED")
                 .OrderByDescending(w => w.UpdatedAt)
                 .FirstOrDefaultAsync();
+        }
+
+        public async Task<bool> TechnicianHasActiveWorkOrderAsync(int technicianId, int? excludeWorkOrderId = null)
+        {
+            var activeStatuses = new[] { "NOT_STARTED", "IN_PROGRESS" };
+            var query = _db.WorkOrders.AsQueryable()
+                .Where(w => w.TechnicianId == technicianId && activeStatuses.Contains(w.Status));
+            if (excludeWorkOrderId.HasValue && excludeWorkOrderId.Value > 0)
+            {
+                query = query.Where(w => w.WorkOrderId != excludeWorkOrderId.Value);
+            }
+            return await query.AnyAsync();
         }
     }
 }

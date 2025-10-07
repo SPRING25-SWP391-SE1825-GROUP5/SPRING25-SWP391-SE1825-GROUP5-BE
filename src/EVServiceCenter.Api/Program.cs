@@ -108,6 +108,7 @@ builder.Services.AddScoped<IChecklistPartService, ChecklistPartService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 // CenterScheduleService removed
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
+builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
 
 // E-commerce services
 builder.Services.AddScoped<IOrderService, OrderService>();
@@ -153,6 +154,7 @@ builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
 // CenterScheduleRepository removed
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
 builder.Services.AddScoped<ISkillRepository, SkillRepository>();
+builder.Services.AddScoped<IServiceRequiredSkillRepository, ServiceRequiredSkillRepository>();
 
 // Vehicle Model Repositories
 builder.Services.AddScoped<IVehicleModelRepository, VehicleModelRepository>();

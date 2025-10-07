@@ -9,7 +9,7 @@ public partial class WorkOrder
 
     public int BookingId { get; set; }
 
-    public int TechnicianId { get; set; }
+    public int? TechnicianId { get; set; }
 
     public int? CustomerId { get; set; }
 

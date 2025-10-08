@@ -7,7 +7,6 @@ using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
-using EVServiceCenter.Application.Models.Responses;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -434,6 +433,45 @@ namespace EVServiceCenter.Application.Service
             return result.OrderBy(r => r.WorkDate).ThenBy(r => r.TechnicianId).ThenBy(r => r.SlotId).ToList();
         }
 
+        public async Task<List<TechnicianDailyScheduleResponse>> GetTechnicianDailyScheduleAsync(int technicianId, DateTime startDate, DateTime endDate)
+        {
+            if (technicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
+            if (startDate.Date > endDate.Date) throw new ArgumentException("Khoảng thời gian không hợp lệ");
+
+            var technician = await _technicianRepository.GetTechnicianByIdAsync(technicianId);
+            if (technician == null || !technician.IsActive) throw new InvalidOperationException("Kỹ thuật viên không tồn tại hoặc không hoạt động");
+
+            var result = new List<TechnicianDailyScheduleResponse>();
+            var currentDate = startDate.Date;
+            
+            while (currentDate <= endDate.Date)
+            {
+                var daySlots = await _technicianTimeSlotRepository.GetTechnicianTimeSlotsByTechnicianAndDateAsync(technicianId, currentDate);
+                
+                var dailySchedule = new TechnicianDailyScheduleResponse
+                {
+                    TechnicianId = technicianId,
+                    TechnicianName = technician.User?.FullName ?? "N/A",
+                    WorkDate = currentDate,
+                    DayOfWeek = GetDayOfWeekVietnamese(currentDate.DayOfWeek),
+                    TimeSlots = daySlots.Select(slot => new TimeSlotStatus
+                    {
+                        SlotId = slot.SlotId,
+                        SlotTime = slot.Slot?.SlotTime.ToString() ?? "N/A",
+                        SlotLabel = slot.Slot?.SlotLabel ?? "N/A",
+                        IsAvailable = slot.IsAvailable,
+                        Notes = slot.Notes,
+                        TechnicianSlotId = slot.TechnicianSlotId
+                    }).OrderBy(ts => ts.SlotId).ToList()
+                };
+                
+                result.Add(dailySchedule);
+                currentDate = currentDate.AddDays(1);
+            }
+
+            return result;
+        }
+
         
 
         private TechnicianTimeSlotResponse MapToTechnicianTimeSlotResponse(TechnicianTimeSlot timeSlot)
@@ -449,6 +487,21 @@ namespace EVServiceCenter.Application.Service
                 IsAvailable = timeSlot.IsAvailable,
                 Notes = timeSlot.Notes,
                 CreatedAt = timeSlot.CreatedAt
+            };
+        }
+
+        private string GetDayOfWeekVietnamese(DayOfWeek dayOfWeek)
+        {
+            return dayOfWeek switch
+            {
+                DayOfWeek.Monday => "Thứ 2",
+                DayOfWeek.Tuesday => "Thứ 3",
+                DayOfWeek.Wednesday => "Thứ 4",
+                DayOfWeek.Thursday => "Thứ 5",
+                DayOfWeek.Friday => "Thứ 6",
+                DayOfWeek.Saturday => "Thứ 7",
+                DayOfWeek.Sunday => "Chủ nhật",
+                _ => "Không xác định"
             };
         }
     }

@@ -39,6 +39,8 @@ public partial class EVDbContext : DbContext
 
     public  DbSet<MaintenanceChecklist> MaintenanceChecklists { get; set; }
 
+    public  DbSet<MaintenanceChecklistItem> MaintenanceChecklistItems { get; set; }
+
     public  DbSet<MaintenanceChecklistResult> MaintenanceChecklistResults { get; set; }
 
     public  DbSet<MaintenanceReminder> MaintenanceReminders { get; set; }
@@ -321,7 +323,19 @@ public partial class EVDbContext : DbContext
                 .HasConstraintName("FK_MaintenancePolicies_Services");
         });
 
-        // MaintenanceChecklistItems removed
+        modelBuilder.Entity<MaintenanceChecklistItem>(entity =>
+        {
+            entity.HasKey(e => e.ItemId);
+            entity.ToTable("MaintenanceChecklistItems", "dbo");
+
+            entity.Property(e => e.ItemId).HasColumnName("ItemID");
+            entity.Property(e => e.ItemName)
+                .IsRequired()
+                .HasMaxLength(200);
+            entity.Property(e => e.Description)
+                .IsRequired()
+                .HasMaxLength(500);
+        });
 
         modelBuilder.Entity<MaintenanceChecklistResult>(entity =>
         {

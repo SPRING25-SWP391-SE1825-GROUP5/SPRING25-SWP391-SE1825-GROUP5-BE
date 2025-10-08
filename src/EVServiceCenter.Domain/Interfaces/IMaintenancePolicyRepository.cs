@@ -6,9 +6,14 @@ namespace EVServiceCenter.Domain.Interfaces
 {
     public interface IMaintenancePolicyRepository
     {
-        Task<List<MaintenancePolicy>> GetByServiceIdAsync(int serviceId);
+        Task<List<MaintenancePolicy>> GetAllPoliciesAsync();
+        Task<MaintenancePolicy> GetPolicyByIdAsync(int policyId);
+        Task<List<MaintenancePolicy>> GetActivePoliciesAsync();
+        Task<List<MaintenancePolicy>> GetPoliciesByServiceIdAsync(int serviceId);
         Task<List<MaintenancePolicy>> GetActiveByServiceIdAsync(int serviceId);
+        Task<MaintenancePolicy> CreatePolicyAsync(MaintenancePolicy policy);
+        Task UpdatePolicyAsync(MaintenancePolicy policy);
+        Task DeletePolicyAsync(int policyId);
+        Task<bool> PolicyExistsAsync(int policyId);
     }
 }
-
-

@@ -18,7 +18,6 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Infrastructure.Repositories;
 using EVServiceCenter.Domain.IRepositories;
-using EVServiceCenter.Domain.Configurations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -30,7 +29,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.OpenApi.Models;
 using System.IO;
 using EVServiceCenter.Application.Configurations;
-using EVServiceCenter.Application.Interfaces;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Caching.SqlServer;
 
@@ -103,10 +101,14 @@ builder.Services.AddScoped<IBookingHistoryService, BookingHistoryService>();
 builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
 builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
 builder.Services.AddScoped<ISkillService, SkillService>();
+builder.Services.AddScoped<IMaintenancePolicyService, MaintenancePolicyService>();
+builder.Services.AddScoped<IMaintenanceChecklistItemService, MaintenanceChecklistItemService>();
+builder.Services.AddScoped<IChecklistPartService, ChecklistPartService>();
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 // CenterScheduleService removed
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
+builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
 
 // E-commerce services
 builder.Services.AddScoped<IOrderService, OrderService>();
@@ -144,6 +146,7 @@ builder.Services.AddScoped<IMaintenancePolicyRepository, MaintenancePolicyReposi
 builder.Services.AddScoped<IServicePartRepository, ServicePartRepository>();
 builder.Services.AddScoped<IWorkOrderPartRepository, WorkOrderPartRepository>();
 builder.Services.AddScoped<IMaintenanceChecklistRepository, MaintenanceChecklistRepository>();
+builder.Services.AddScoped<IMaintenanceChecklistItemRepository, MaintenanceChecklistItemRepository>();
 builder.Services.AddScoped<IMaintenanceChecklistResultRepository, MaintenanceChecklistResultRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
@@ -151,6 +154,7 @@ builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
 // CenterScheduleRepository removed
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
 builder.Services.AddScoped<ISkillRepository, SkillRepository>();
+builder.Services.AddScoped<IServiceRequiredSkillRepository, ServiceRequiredSkillRepository>();
 
 // Vehicle Model Repositories
 builder.Services.AddScoped<IVehicleModelRepository, VehicleModelRepository>();

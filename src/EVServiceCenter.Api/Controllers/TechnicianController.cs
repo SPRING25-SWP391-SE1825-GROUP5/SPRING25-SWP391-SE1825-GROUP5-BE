@@ -365,6 +365,36 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return StatusCode(500, new { success = false, message = ex.Message });
             }
         }
+
+        /// <summary>
+        /// Lấy danh sách kỹ năng của technician
+        /// </summary>
+        /// <param name="technicianId">ID của technician</param>
+        /// <returns>Danh sách kỹ năng</returns>
+        [HttpGet("{technicianId}/skills")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> GetTechnicianSkills(int technicianId)
+        {
+            try
+            {
+                var skills = await _technicianService.GetTechnicianSkillsAsync(technicianId);
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = "Lấy danh sách kỹ năng technician thành công",
+                    data = skills, 
+                    total = skills.Count 
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
     }
 
 }

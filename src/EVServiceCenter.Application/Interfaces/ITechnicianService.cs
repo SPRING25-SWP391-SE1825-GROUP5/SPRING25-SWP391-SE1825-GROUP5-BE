@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
@@ -14,5 +15,6 @@ namespace EVServiceCenter.Application.Interfaces
         Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date);
         Task UpsertSkillsAsync(int technicianId, UpsertTechnicianSkillsRequest request);
         Task RemoveSkillAsync(int technicianId, int skillId);
+        Task<List<TechnicianSkillResponse>> GetTechnicianSkillsAsync(int technicianId);
     }
 }

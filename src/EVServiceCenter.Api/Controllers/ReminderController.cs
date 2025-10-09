@@ -191,6 +191,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true });
         }
 
+
         // Dispatch reminders by list or auto by config UpcomingDays
         public class DispatchRequest { public int[] ReminderIds { get; set; } public bool Auto { get; set; } = false; public int? UpcomingDays { get; set; } }
         [HttpPost("dispatch")]

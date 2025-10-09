@@ -123,6 +123,171 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         /// <summary>
+        /// Lấy danh sách nhắc nhở bảo dưỡng xe của khách hàng
+        /// </summary>
+        /// <param name="request">Thông tin lọc và phân trang</param>
+        /// <returns>Danh sách reminders của khách hàng</returns>
+        [HttpPost("get-customer-vehicle-service-reminders")]
+        [Authorize]
+        public async Task<IActionResult> GetCustomerVehicleServiceReminders([FromBody] GetCustomerVehicleServiceRemindersRequest request)
+        {
+            try
+            {
+                // Kiểm tra customer có tồn tại không
+                var customer = await _vehicleRepository.GetAllVehiclesAsync();
+                var customerVehicle = customer.FirstOrDefault(v => v.CustomerId == request.CustomerId);
+                if (customerVehicle == null)
+                {
+                    return NotFound(new
+                    {
+                        success = false,
+                        message = "Không tìm thấy khách hàng với ID đã cho"
+                    });
+                }
+
+                // Lấy danh sách vehicles của customer
+                var customerVehicles = customer.Where(v => v.CustomerId == request.CustomerId).ToList();
+                var vehicleIds = customerVehicles.Select(v => v.VehicleId).ToList();
+
+                // Nếu có filter theo vehicleId cụ thể
+                if (request.VehicleId.HasValue)
+                {
+                    if (!vehicleIds.Contains(request.VehicleId.Value))
+                    {
+                        return BadRequest(new
+                        {
+                            success = false,
+                            message = "Xe không thuộc về khách hàng này"
+                        });
+                    }
+                    vehicleIds = new List<int> { request.VehicleId.Value };
+                }
+
+                // Lấy reminders
+                var reminders = new List<MaintenanceReminder>();
+                foreach (var vehicleId in vehicleIds)
+                {
+                    var vehicleReminders = await _repo.QueryAsync(request.CustomerId, vehicleId, null, request.FromDate, request.ToDate);
+                    reminders.AddRange(vehicleReminders);
+                }
+
+                // Filter theo serviceId nếu có
+                if (request.ServiceId.HasValue)
+                {
+                    reminders = reminders.Where(r => r.ServiceId == request.ServiceId.Value).ToList();
+                }
+
+                // Filter theo IsCompleted nếu có
+                if (request.IsCompleted.HasValue)
+                {
+                    reminders = reminders.Where(r => r.IsCompleted == request.IsCompleted.Value).ToList();
+                }
+
+                // Tính toán status và days/miles until due
+                var now = DateTime.UtcNow.Date;
+                var processedReminders = reminders.Select(r =>
+                {
+                    var vehicle = customerVehicles.FirstOrDefault(v => v.VehicleId == r.VehicleId);
+                    var service = _serviceService.GetServiceByIdAsync(r.ServiceId ?? 0).Result;
+
+                    var status = "PENDING";
+                    var daysUntilDue = (int?)null;
+                    var milesUntilDue = (int?)null;
+
+                    if (r.IsCompleted)
+                    {
+                        status = "COMPLETED";
+                    }
+                    else if (r.DueDate.HasValue && r.DueDate.Value < DateOnly.FromDateTime(now))
+                    {
+                        status = "OVERDUE";
+                    }
+                    else
+                    {
+                        if (r.DueDate.HasValue)
+                        {
+                            daysUntilDue = (r.DueDate.Value.ToDateTime(TimeOnly.MinValue) - now).Days;
+                        }
+                        // Note: MilesUntilDue would need current vehicle mileage, which isn't available in the current entity
+                    }
+
+                    return new CustomerVehicleServiceReminder
+                    {
+                        ReminderId = r.ReminderId,
+                        VehicleId = r.VehicleId,
+                        VehicleLicensePlate = vehicle?.LicensePlate ?? "N/A",
+                        VehicleVin = vehicle?.Vin ?? "N/A",
+                        VehicleModel = vehicle?.VehicleModel?.ModelName ?? "N/A",
+                        ServiceId = r.ServiceId ?? 0,
+                        ServiceName = service?.ServiceName ?? "N/A",
+                        ServiceDescription = service?.Description,
+                        DueDate = r.DueDate?.ToString("yyyy-MM-dd"),
+                        DueMileage = r.DueMileage,
+                        IsCompleted = r.IsCompleted,
+                        CompletedAt = r.CompletedAt,
+                        CreatedAt = r.CreatedAt,
+                        Status = status,
+                        DaysUntilDue = daysUntilDue,
+                        MilesUntilDue = milesUntilDue
+                    };
+                }).ToList();
+
+                // Sorting
+                switch (request.SortBy.ToLower())
+                {
+                    case "duedate":
+                        processedReminders = request.SortDirection.ToLower() == "desc"
+                            ? processedReminders.OrderByDescending(r => r.DueDate).ToList()
+                            : processedReminders.OrderBy(r => r.DueDate).ToList();
+                        break;
+                    case "createdat":
+                        processedReminders = request.SortDirection.ToLower() == "desc"
+                            ? processedReminders.OrderByDescending(r => r.CreatedAt).ToList()
+                            : processedReminders.OrderBy(r => r.CreatedAt).ToList();
+                        break;
+                    case "status":
+                        processedReminders = request.SortDirection.ToLower() == "desc"
+                            ? processedReminders.OrderByDescending(r => r.Status).ToList()
+                            : processedReminders.OrderBy(r => r.Status).ToList();
+                        break;
+                    default:
+                        processedReminders = processedReminders.OrderBy(r => r.DueDate).ToList();
+                        break;
+                }
+
+                // Pagination
+                var totalCount = processedReminders.Count;
+                var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
+                var pagedReminders = processedReminders
+                    .Skip((request.Page - 1) * request.PageSize)
+                    .Take(request.PageSize)
+                    .ToList();
+
+                return Ok(new GetCustomerVehicleServiceRemindersResponse
+                {
+                    Success = true,
+                    Message = "Lấy danh sách nhắc nhở bảo dưỡng xe thành công",
+                    CustomerId = request.CustomerId,
+                    CustomerName = customerVehicle.Customer?.User?.FullName ?? "N/A",
+                    TotalCount = totalCount,
+                    Page = request.Page,
+                    PageSize = request.PageSize,
+                    TotalPages = totalPages,
+                    Reminders = pagedReminders
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi khi lấy danh sách nhắc nhở bảo dưỡng xe",
+                    error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
         /// Gửi thông báo nhắc nhở bảo dưỡng xe cho khách hàng
         /// </summary>
         /// <param name="req">Thông tin yêu cầu gửi thông báo</param>

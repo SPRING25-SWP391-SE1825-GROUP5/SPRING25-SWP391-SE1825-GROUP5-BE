@@ -318,17 +318,23 @@
    - Authorization: Required (Roles: ADMIN, STAFF)
    - Features: Tạo nhiều reminders cùng lúc, validation xe và service
 
-2. **POST** `/api/maintenance-reminders/send-vehicle-maintenance-alerts`
+2. **POST** `/api/maintenance-reminders/get-customer-vehicle-service-reminders`
+   - Lấy danh sách nhắc nhở bảo dưỡng xe của khách hàng
+   - Body: GetCustomerVehicleServiceRemindersRequest
+   - Authorization: Required
+   - Features: Filtering, sorting, pagination, status calculation
+
+3. **POST** `/api/maintenance-reminders/send-vehicle-maintenance-alerts`
    - Gửi thông báo nhắc nhở bảo dưỡng xe cho khách hàng
    - Body: SendVehicleMaintenanceAlertsRequest
    - Authorization: Required (Roles: ADMIN, STAFF)
    - Features: Gửi email với template HTML đẹp mắt, hỗ trợ SMS (placeholder)
 
-3. **GET** `/api/maintenance-reminders/upcoming`
+4. **GET** `/api/maintenance-reminders/upcoming`
    - Lấy danh sách reminders sắp đến hạn
    - Query: customerId, vehicleId, upcomingDays
    - Authorization: Required
 
-4. **POST** `/api/maintenance-reminders/{reminderId}/send-test-email`
+5. **POST** `/api/maintenance-reminders/{reminderId}/send-test-email`
    - Gửi email test cho một reminder cụ thể
    - Authorization: Required (Roles: ADMIN, STAFF)

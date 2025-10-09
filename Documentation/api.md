@@ -312,17 +312,23 @@
 
 ### Endpoints
 
-1. **POST** `/api/maintenance-reminders/send-vehicle-maintenance-alerts`
+1. **POST** `/api/maintenance-reminders/create-vehicle-service-reminders`
+   - Tạo nhắc nhở bảo dưỡng xe cho một xe cụ thể
+   - Body: CreateVehicleServiceRemindersRequest
+   - Authorization: Required (Roles: ADMIN, STAFF)
+   - Features: Tạo nhiều reminders cùng lúc, validation xe và service
+
+2. **POST** `/api/maintenance-reminders/send-vehicle-maintenance-alerts`
    - Gửi thông báo nhắc nhở bảo dưỡng xe cho khách hàng
    - Body: SendVehicleMaintenanceAlertsRequest
    - Authorization: Required (Roles: ADMIN, STAFF)
    - Features: Gửi email với template HTML đẹp mắt, hỗ trợ SMS (placeholder)
 
-2. **GET** `/api/maintenance-reminders/upcoming`
+3. **GET** `/api/maintenance-reminders/upcoming`
    - Lấy danh sách reminders sắp đến hạn
    - Query: customerId, vehicleId, upcomingDays
    - Authorization: Required
 
-3. **POST** `/api/maintenance-reminders/{reminderId}/send-test-email`
+4. **POST** `/api/maintenance-reminders/{reminderId}/send-test-email`
    - Gửi email test cho một reminder cụ thể
    - Authorization: Required (Roles: ADMIN, STAFF)

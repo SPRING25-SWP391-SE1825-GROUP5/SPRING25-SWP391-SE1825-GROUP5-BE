@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EVServiceCenter.Domain.Interfaces;
+using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Configurations;
 using EVServiceCenter.Application.Models.Requests;
@@ -19,12 +21,105 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IMaintenanceReminderRepository _repo;
         private readonly IEmailService _email;
         private readonly MaintenanceReminderOptions _options;
+        private readonly IVehicleRepository _vehicleRepository;
+        private readonly IServiceService _serviceService;
 
-        public MaintenanceReminderController(IMaintenanceReminderRepository repo, IEmailService email, IOptions<MaintenanceReminderOptions> options)
+        public MaintenanceReminderController(
+            IMaintenanceReminderRepository repo, 
+            IEmailService email, 
+            IOptions<MaintenanceReminderOptions> options,
+            IVehicleRepository vehicleRepository,
+            IServiceService serviceService)
         {
             _repo = repo;
             _email = email;
             _options = options.Value;
+            _vehicleRepository = vehicleRepository;
+            _serviceService = serviceService;
+        }
+
+        /// <summary>
+        /// Tạo nhắc nhở bảo dưỡng xe cho một xe cụ thể
+        /// </summary>
+        /// <param name="request">Thông tin tạo nhắc nhở</param>
+        /// <returns>Kết quả tạo nhắc nhở</returns>
+        [HttpPost("create-vehicle-service-reminders")]
+        [Authorize(Roles = "ADMIN,STAFF")]
+        public async Task<IActionResult> CreateVehicleServiceReminders([FromBody] CreateVehicleServiceRemindersRequest request)
+        {
+            try
+            {
+                // Kiểm tra xe có tồn tại không
+                var vehicle = await _vehicleRepository.GetVehicleByIdAsync(request.VehicleId);
+                if (vehicle == null)
+                {
+                    return NotFound(new
+                    {
+                        success = false,
+                        message = "Không tìm thấy xe với ID đã cho"
+                    });
+                }
+
+                var createdReminders = new List<CreatedVehicleServiceReminder>();
+
+                foreach (var reminderItem in request.Reminders)
+                {
+                    // Kiểm tra service có tồn tại không
+                    var service = await _serviceService.GetServiceByIdAsync(reminderItem.ServiceId);
+                    if (service == null)
+                    {
+                        return BadRequest(new
+                        {
+                            success = false,
+                            message = $"Không tìm thấy dịch vụ với ID: {reminderItem.ServiceId}"
+                        });
+                    }
+
+                    // Tạo reminder mới
+                    var reminder = new MaintenanceReminder
+                    {
+                        VehicleId = request.VehicleId,
+                        ServiceId = reminderItem.ServiceId,
+                        DueDate = reminderItem.DueDate,
+                        DueMileage = reminderItem.DueMileage,
+                        IsCompleted = false,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    var createdReminder = await _repo.CreateAsync(reminder);
+
+                    createdReminders.Add(new CreatedVehicleServiceReminder
+                    {
+                        ReminderId = createdReminder.ReminderId,
+                        VehicleId = createdReminder.VehicleId,
+                        ServiceId = createdReminder.ServiceId ?? 0,
+                        ServiceName = service.ServiceName,
+                        DueDate = createdReminder.DueDate?.ToString("yyyy-MM-dd"),
+                        DueMileage = createdReminder.DueMileage,
+                        IsCompleted = createdReminder.IsCompleted,
+                        CreatedAt = createdReminder.CreatedAt
+                    });
+                }
+
+                return Ok(new CreateVehicleServiceRemindersResponse
+                {
+                    Success = true,
+                    Message = "Tạo nhắc nhở bảo dưỡng xe thành công",
+                    VehicleId = request.VehicleId,
+                    VehicleLicensePlate = vehicle.LicensePlate,
+                    CreatedRemindersCount = createdReminders.Count,
+                    CreatedReminders = createdReminders
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi khi tạo nhắc nhở bảo dưỡng xe",
+                    error = ex.Message
+                });
+            }
         }
 
         /// <summary>

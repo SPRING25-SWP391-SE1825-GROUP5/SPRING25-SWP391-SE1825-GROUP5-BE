@@ -294,11 +294,13 @@ builder.Services.AddCors(options =>
                   "http://localhost:3000",    // React dev server
                   "http://localhost:5173",    // Vite dev server
                   "https://localhost:3000",   // HTTPS localhost
+                  "https://localhost:5173",   // HTTPS Vite dev server
                   "https://your-frontend-domain.com" // Production domain
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials(); // Quan trọng cho JWT/Authentication
+              .AllowCredentials() // Quan trọng cho JWT/Authentication
+              .SetIsOriginAllowedToAllowWildcardSubdomains(); // Hỗ trợ Google OAuth
     });
 
     // Policy chỉ cho localhost (Development với credentials)
@@ -407,7 +409,7 @@ app.UseSwaggerUI(c =>
     c.DocumentTitle = "EVServiceCenter API Documentation";
 });
 
-app.UseCors(); // default policy
+app.UseCors("AllowSpecificOrigins"); // Use specific policy for better Google OAuth support
 
 // Enable HTTPS redirect for security
 app.UseHttpsRedirection();

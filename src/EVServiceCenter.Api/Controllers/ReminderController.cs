@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Configurations;
+using EVServiceCenter.Application.Models.Requests;
 using Microsoft.Extensions.Options;
+using System.Linq;
 
 namespace EVServiceCenter.Api.Controllers
 {
@@ -22,6 +24,52 @@ namespace EVServiceCenter.Api.Controllers
             _repo = repo;
             _email = email;
             _options = options.Value;
+        }
+
+
+        [HttpPost("vehicles/{vehicleId:int}/set")]
+        [Authorize]
+        public async Task<IActionResult> SetVehicleReminders(int vehicleId, [FromBody] SetVehicleRemindersRequest req)
+        {
+            if (vehicleId <= 0) return BadRequest(new { success = false, message = "vehicleId không hợp lệ" });
+            var items = req?.Items ?? new System.Collections.Generic.List<SetVehicleReminderItem>();
+            if (items.Count == 0) return BadRequest(new { success = false, message = "Danh sách reminders trống" });
+
+            var created = new System.Collections.Generic.List<EVServiceCenter.Domain.Entities.MaintenanceReminder>();
+            foreach (var it in items)
+            {
+                var entity = new EVServiceCenter.Domain.Entities.MaintenanceReminder
+                {
+                    VehicleId = vehicleId,
+                    ServiceId = it.ServiceId,
+                    DueDate = it.DueDate.HasValue ? DateOnly.FromDateTime(it.DueDate.Value) : null,
+                    DueMileage = it.DueMileage,
+                    IsCompleted = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+                var r = await _repo.CreateAsync(entity);
+                created.Add(r);
+            }
+
+            return Ok(new { success = true, vehicleId, added = created.Count, data = created.Select(x => new { x.ReminderId, x.ServiceId, x.DueDate, x.DueMileage }) });
+        }
+
+        // Get alert reminders (upcoming/past-due) for a specific vehicle
+        [HttpGet("vehicles/{vehicleId:int}/alerts")]
+        [Authorize]
+        public async Task<IActionResult> GetVehicleAlerts(int vehicleId)
+        {
+            if (vehicleId <= 0) return BadRequest(new { success = false, message = "vehicleId không hợp lệ" });
+            var now = DateTime.UtcNow.Date;
+            var until = now.AddDays(_options.UpcomingDays);
+            // Lấy tất cả reminders PENDING của vehicle, rồi lọc theo DueDate đến hạn trong cửa sổ cảnh báo
+            var pending = await _repo.QueryAsync(null, vehicleId, "PENDING", null, null);
+            var alerts = pending
+                .Where(r => r.DueDate.HasValue && r.DueDate.Value.ToDateTime(TimeOnly.MinValue) <= until)
+                .OrderBy(r => r.DueDate)
+                .ToList();
+
+            return Ok(new { success = true, config = new { _options.UpcomingDays }, vehicleId, count = alerts.Count, data = alerts });
         }
 
         [HttpGet]
@@ -142,6 +190,7 @@ namespace EVServiceCenter.Api.Controllers
             }
             return Ok(new { success = true });
         }
+
 
         // Dispatch reminders by list or auto by config UpcomingDays
         public class DispatchRequest { public int[] ReminderIds { get; set; } public bool Auto { get; set; } = false; public int? UpcomingDays { get; set; } }

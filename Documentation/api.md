@@ -247,3 +247,100 @@
    - Cập nhật tồn kho (chỉ ADMIN)
    - Body: UpdateInventoryRequest
    - Authorization: Required (Policy: AdminOnly)
+
+## Reminder Controller (`api/reminders`)
+
+### Endpoints
+
+1. **POST** `/api/reminders/vehicles/{vehicleId}/set`
+   - Thiết lập nhắc nhở bảo dưỡng cho xe cụ thể
+   - Body: SetVehicleRemindersRequest
+   - Authorization: Required
+
+3. **GET** `/api/reminders/vehicles/{vehicleId}/alerts`
+   - Lấy danh sách cảnh báo nhắc nhở cho xe
+   - Authorization: Required
+
+4. **GET** `/api/reminders`
+   - Lấy danh sách tất cả reminders với bộ lọc
+   - Query: customerId, vehicleId, status, from, to
+   - Authorization: Required
+
+5. **POST** `/api/reminders`
+   - Tạo reminder mới
+   - Body: CreateReminderRequest
+   - Authorization: Required
+
+6. **GET** `/api/reminders/{id}`
+   - Lấy thông tin reminder theo ID
+   - Authorization: Required
+
+7. **PUT** `/api/reminders/{id}`
+   - Cập nhật thông tin reminder
+   - Body: UpdateReminderRequest
+   - Authorization: Required
+
+8. **PATCH** `/api/reminders/{id}/complete`
+   - Đánh dấu reminder đã hoàn thành
+   - Authorization: Required
+
+9. **PATCH** `/api/reminders/{id}/snooze`
+   - Hoãn reminder
+   - Body: SnoozeRequest
+   - Authorization: Required
+
+10. **GET** `/api/reminders/upcoming`
+    - Lấy danh sách reminders sắp đến hạn
+    - Query: customerId
+    - Authorization: Required
+
+11. **POST** `/api/reminders/appointments/dispatch`
+    - Gửi nhắc nhở cuộc hẹn
+    - Body: AppointmentDispatchRequest
+    - Authorization: Required (Roles: ADMIN, STAFF)
+
+12. **POST** `/api/reminders/{id}/send-test`
+    - Gửi email test cho reminder
+    - Authorization: Required
+
+13. **POST** `/api/reminders/dispatch`
+    - Gửi nhắc nhở theo danh sách hoặc tự động
+    - Body: DispatchRequest
+    - Authorization: Required (Roles: ADMIN, STAFF)
+
+## Maintenance Reminder Controller (`api/maintenance-reminders`)
+
+### Endpoints
+
+1. **POST** `/api/maintenance-reminders/create-vehicle-service-reminders`
+   - Tạo nhắc nhở bảo dưỡng xe cho một xe cụ thể
+   - Body: CreateVehicleServiceRemindersRequest
+   - Authorization: Required (Roles: ADMIN, STAFF)
+   - Features: Tạo nhiều reminders cùng lúc, validation xe và service
+
+2. **POST** `/api/maintenance-reminders/get-customer-vehicle-service-reminders`
+   - Lấy danh sách nhắc nhở bảo dưỡng xe của khách hàng
+   - Body: GetCustomerVehicleServiceRemindersRequest
+   - Authorization: Required
+   - Features: Filtering, sorting, pagination, status calculation
+
+3. **POST** `/api/maintenance-reminders/send-reminder-before-appointment`
+   - Gửi nhắc nhở trước lịch hẹn
+   - Body: SendReminderBeforeAppointmentRequest
+   - Authorization: Required (Roles: ADMIN, STAFF)
+   - Features: Email template đẹp, hỗ trợ SMS, custom message
+
+4. **POST** `/api/maintenance-reminders/send-vehicle-maintenance-alerts`
+   - Gửi thông báo nhắc nhở bảo dưỡng xe cho khách hàng
+   - Body: SendVehicleMaintenanceAlertsRequest
+   - Authorization: Required (Roles: ADMIN, STAFF)
+   - Features: Gửi email với template HTML đẹp mắt, hỗ trợ SMS (placeholder)
+
+5. **GET** `/api/maintenance-reminders/upcoming`
+   - Lấy danh sách reminders sắp đến hạn
+   - Query: customerId, vehicleId, upcomingDays
+   - Authorization: Required
+
+6. **POST** `/api/maintenance-reminders/{reminderId}/send-test-email`
+   - Gửi email test cho một reminder cụ thể
+   - Authorization: Required (Roles: ADMIN, STAFF)

@@ -17,5 +17,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<bool> IsUserAlreadyTechnicianAsync(int userId);
         Task UpsertSkillsAsync(int technicianId, IEnumerable<TechnicianSkill> skills);
         Task RemoveSkillAsync(int technicianId, int skillId);
+        Task<List<TechnicianSkill>> GetTechnicianSkillsAsync(int technicianId);
     }
 }

@@ -596,8 +596,14 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
-                var data = await _technicianTimeSlotService.GetTechnicianScheduleAsync(technicianId, startDate, endDate);
-                return Ok(new { success = true, data, total = data.Count });
+                var data = await _technicianTimeSlotService.GetTechnicianDailyScheduleAsync(technicianId, startDate, endDate);
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = "Lấy lịch làm việc technician thành công",
+                    data, 
+                    total = data.Count 
+                });
             }
             catch (ArgumentException ex)
             {

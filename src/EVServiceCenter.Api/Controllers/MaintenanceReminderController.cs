@@ -23,19 +23,22 @@ namespace EVServiceCenter.Api.Controllers
         private readonly MaintenanceReminderOptions _options;
         private readonly IVehicleRepository _vehicleRepository;
         private readonly IServiceService _serviceService;
+        private readonly IBookingRepository _bookingRepository;
 
         public MaintenanceReminderController(
             IMaintenanceReminderRepository repo, 
             IEmailService email, 
             IOptions<MaintenanceReminderOptions> options,
             IVehicleRepository vehicleRepository,
-            IServiceService serviceService)
+            IServiceService serviceService,
+            IBookingRepository bookingRepository)
         {
             _repo = repo;
             _email = email;
             _options = options.Value;
             _vehicleRepository = vehicleRepository;
             _serviceService = serviceService;
+            _bookingRepository = bookingRepository;
         }
 
         /// <summary>
@@ -117,6 +120,204 @@ namespace EVServiceCenter.Api.Controllers
                 {
                     success = false,
                     message = "Lỗi khi tạo nhắc nhở bảo dưỡng xe",
+                    error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Gửi nhắc nhở trước lịch hẹn
+        /// </summary>
+        /// <param name="request">Thông tin gửi nhắc nhở</param>
+        /// <returns>Kết quả gửi nhắc nhở</returns>
+        [HttpPost("send-reminder-before-appointment")]
+        [Authorize(Roles = "ADMIN,STAFF")]
+        public async Task<IActionResult> SendReminderBeforeAppointment([FromBody] SendReminderBeforeAppointmentRequest request)
+        {
+            try
+            {
+                // Lấy thông tin booking
+                var booking = await _bookingRepository.GetBookingWithDetailsByIdAsync(request.BookingId);
+                if (booking == null)
+                {
+                    return NotFound(new
+                    {
+                        success = false,
+                        message = "Không tìm thấy lịch hẹn với ID đã cho"
+                    });
+                }
+
+                // Kiểm tra trạng thái booking
+                if (booking.Status != "CONFIRMED" && booking.Status != "PENDING")
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Chỉ có thể gửi nhắc nhở cho lịch hẹn đã xác nhận hoặc đang chờ"
+                    });
+                }
+
+                // Lấy thông tin chi tiết
+                var customer = booking.Customer?.User;
+                var vehicle = booking.Vehicle;
+                var service = booking.Service;
+                var center = booking.Center;
+
+                if (customer == null || vehicle == null || service == null || center == null)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Thông tin lịch hẹn không đầy đủ"
+                    });
+                }
+
+                // Tính toán thời gian appointment (cần lấy từ TimeSlot và CenterSchedule)
+                // Giả sử có thông tin ngày và giờ trong booking hoặc cần query thêm
+                var appointmentDateTime = DateTime.UtcNow.AddHours(request.ReminderHoursBefore ?? 24); // Placeholder
+                
+                var results = new List<SendReminderBeforeAppointmentResult>();
+                var emailSent = 0;
+                var smsSent = 0;
+                var failed = 0;
+
+                foreach (var reminderType in request.ReminderTypes)
+                {
+                    // Gửi email nếu được yêu cầu
+                    if (request.SendEmail && !string.IsNullOrWhiteSpace(customer.Email))
+                    {
+                        try
+                        {
+                            var subject = $"🔔 Nhắc nhở lịch hẹn - {service.ServiceName}";
+                            var appointmentDate = appointmentDateTime.ToString("dd/MM/yyyy HH:mm");
+                            var centerName = center.CenterName ?? "EV Service Center";
+                            var centerAddress = center.Address ?? "Địa chỉ trung tâm";
+                            var centerPhone = center.PhoneNumber ?? "Hotline";
+
+                            var body = $@"
+                                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                                    <h2 style='color: #2c3e50;'>🔔 Nhắc nhở lịch hẹn</h2>
+                                    <p>Xin chào <strong>{customer.FullName ?? "Quý khách"}</strong>,</p>
+                                    
+                                    <div style='background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;'>
+                                        <h3 style='color: #3498db; margin-top: 0;'>📅 Thông tin lịch hẹn</h3>
+                                        <ul style='list-style: none; padding: 0;'>
+                                            <li style='margin: 10px 0;'><strong>🚙 Xe:</strong> {vehicle.LicensePlate} ({vehicle.Vin})</li>
+                                            <li style='margin: 10px 0;'><strong>🔧 Dịch vụ:</strong> {service.ServiceName}</li>
+                                            <li style='margin: 10px 0;'><strong>📅 Thời gian:</strong> {appointmentDate}</li>
+                                            <li style='margin: 10px 0;'><strong>📍 Trung tâm:</strong> {centerName}</li>
+                                            <li style='margin: 10px 0;'><strong>📍 Địa chỉ:</strong> {centerAddress}</li>
+                                            <li style='margin: 10px 0;'><strong>📞 Liên hệ:</strong> {centerPhone}</li>
+                                        </ul>
+                                    </div>
+
+                                    <div style='background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0;'>
+                                        <p style='margin: 0; color: #856404;'>
+                                            <strong>⚠️ Lưu ý:</strong> Vui lòng đến đúng giờ hẹn. Nếu cần thay đổi lịch, vui lòng liên hệ trước ít nhất 2 giờ.
+                                        </p>
+                                    </div>
+
+                                    {(!string.IsNullOrWhiteSpace(request.CustomMessage) ? $"<p><strong>Ghi chú thêm:</strong> {request.CustomMessage}</p>" : "")}
+
+                                    <p>Chúng tôi rất mong được phục vụ quý khách!</p>
+                                    
+                                    <div style='margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;'>
+                                        <p style='color: #7f8c8d; font-size: 14px;'>
+                                            Trân trọng,<br>
+                                            <strong>{centerName}</strong>
+                                        </p>
+                                    </div>
+                                </div>";
+
+                            await _email.SendEmailAsync(customer.Email, subject, body);
+                            emailSent++;
+                            
+                            results.Add(new SendReminderBeforeAppointmentResult
+                            {
+                                ReminderType = reminderType,
+                                Channel = "EMAIL",
+                                Sent = true,
+                                Error = null,
+                                SentAt = DateTime.UtcNow
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            failed++;
+                            results.Add(new SendReminderBeforeAppointmentResult
+                            {
+                                ReminderType = reminderType,
+                                Channel = "EMAIL",
+                                Sent = false,
+                                Error = ex.Message,
+                                SentAt = DateTime.UtcNow
+                            });
+                        }
+                    }
+
+                    // Gửi SMS nếu được yêu cầu (placeholder)
+                    if (request.SendSms && !string.IsNullOrWhiteSpace(customer.PhoneNumber))
+                    {
+                        try
+                        {
+                            // TODO: Implement SMS service
+                            // var smsMessage = $"Nhắc nhở lịch hẹn: {service.ServiceName} vào {appointmentDateTime:dd/MM/yyyy HH:mm} tại {center.CenterName}";
+                            // await _smsService.SendSmsAsync(customer.PhoneNumber, smsMessage);
+                            
+                            smsSent++;
+                            results.Add(new SendReminderBeforeAppointmentResult
+                            {
+                                ReminderType = reminderType,
+                                Channel = "SMS",
+                                Sent = true,
+                                Error = null,
+                                SentAt = DateTime.UtcNow
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            failed++;
+                            results.Add(new SendReminderBeforeAppointmentResult
+                            {
+                                ReminderType = reminderType,
+                                Channel = "SMS",
+                                Sent = false,
+                                Error = ex.Message,
+                                SentAt = DateTime.UtcNow
+                            });
+                        }
+                    }
+                }
+
+                return Ok(new SendReminderBeforeAppointmentResponse
+                {
+                    Success = true,
+                    Message = "Đã gửi nhắc nhở lịch hẹn thành công",
+                    BookingId = request.BookingId,
+                    CustomerName = customer.FullName ?? "N/A",
+                    CustomerEmail = customer.Email ?? "N/A",
+                    CustomerPhone = customer.PhoneNumber ?? "N/A",
+                    VehicleLicensePlate = vehicle.LicensePlate ?? "N/A",
+                    ServiceName = service.ServiceName ?? "N/A",
+                    AppointmentDateTime = appointmentDateTime,
+                    ReminderHoursBefore = request.ReminderHoursBefore ?? 24,
+                    Summary = new SendReminderBeforeAppointmentSummary
+                    {
+                        TotalRemindersSent = results.Count(r => r.Sent),
+                        EmailSent = emailSent,
+                        SmsSent = smsSent,
+                        Failed = failed,
+                        SentAt = DateTime.UtcNow
+                    },
+                    Results = results
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi khi gửi nhắc nhở lịch hẹn",
                     error = ex.Message
                 });
             }

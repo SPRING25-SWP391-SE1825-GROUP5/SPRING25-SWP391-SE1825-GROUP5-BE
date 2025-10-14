@@ -124,5 +124,14 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 await _context.SaveChangesAsync();
             }
         }
+
+        public async Task<List<TechnicianSkill>> GetTechnicianSkillsAsync(int technicianId)
+        {
+            return await _context.TechnicianSkills
+                .Include(ts => ts.Technician)
+                .Include(ts => ts.Skill)
+                .Where(ts => ts.TechnicianId == technicianId)
+                .ToListAsync();
+        }
     }
 }

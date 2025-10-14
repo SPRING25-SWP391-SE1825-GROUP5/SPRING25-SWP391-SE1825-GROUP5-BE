@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Application.Interfaces;
 
 namespace EVServiceCenter.Api.Controllers
 {
@@ -22,8 +23,9 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IWorkOrderPartRepository _workOrderPartRepo;
         private readonly IMaintenanceChecklistRepository _checkRepo;
         private readonly IMaintenanceChecklistResultRepository _checkResultRepo;
+        private readonly IWorkOrderService _workOrderService;
 
-        public WorkOrderController(IWorkOrderRepository workOrderRepository, IBookingRepository bookingRepository, ITechnicianRepository technicianRepository, IServicePartRepository servicePartRepository, IMaintenanceChecklistRepository checkRepo, IMaintenanceChecklistResultRepository checkResultRepo, IServiceRequiredSkillRepository requiredSkillRepo, ITechnicianTimeSlotRepository timeSlotRepo, IWorkOrderPartRepository workOrderPartRepo)
+        public WorkOrderController(IWorkOrderRepository workOrderRepository, IBookingRepository bookingRepository, ITechnicianRepository technicianRepository, IServicePartRepository servicePartRepository, IMaintenanceChecklistRepository checkRepo, IMaintenanceChecklistResultRepository checkResultRepo, IServiceRequiredSkillRepository requiredSkillRepo, ITechnicianTimeSlotRepository timeSlotRepo, IWorkOrderPartRepository workOrderPartRepo, IWorkOrderService workOrderService)
         {
             _workOrderRepository = workOrderRepository;
             _bookingRepository = bookingRepository;
@@ -34,6 +36,7 @@ namespace EVServiceCenter.Api.Controllers
             _requiredSkillRepo = requiredSkillRepo;
             _timeSlotRepo = timeSlotRepo;
             _workOrderPartRepo = workOrderPartRepo;
+            _workOrderService = workOrderService;
         }
 
         // GET api/workorders?page=&size=&status=&centerId=&technicianId=&customerId=&vehicleId=&serviceId=&from=&to=&sort=
@@ -82,8 +85,28 @@ namespace EVServiceCenter.Api.Controllers
         [Authorize]
         public async Task<IActionResult> ByTechnician(int technicianId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string status = null)
         {
-            var list = await _workOrderRepository.GetByTechnicianAsync(technicianId, from, to, status);
-            return Ok(new { success = true, data = list });
+            try
+            {
+                var list = await _workOrderService.GetByTechnicianAsync(technicianId, from, to, status);
+                // Project to avoid circular references in JSON
+                var data = list.Select(wo => new {
+                    wo.WorkOrderId,
+                    wo.BookingId,
+                    wo.Status,
+                    wo.CreatedAt,
+                    wo.UpdatedAt,
+                    wo.CenterId,
+                    wo.CustomerId,
+                    wo.VehicleId,
+                    wo.ServiceId,
+                    technician = new { id = wo.TechnicianId, name = wo.Technician?.User?.FullName }
+                });
+                return Ok(new { success = true, data });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
 
         [HttpGet("/api/customers/{customerId:int}/workorders")]
@@ -424,6 +447,30 @@ namespace EVServiceCenter.Api.Controllers
             wo.UpdatedAt = DateTime.UtcNow;
             await _workOrderRepository.UpdateAsync(wo);
             return Ok(new { success = true, message = "Đã thêm ghi chú", data = wo });
+        }
+
+        public class AssignTechnicianBody { public int TechnicianId { get; set; } }
+
+        [HttpPost("{id:int}/assign-technician")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> AssignTechnician(int id, [FromBody] AssignTechnicianBody request)
+        {
+            if (request == null || request.TechnicianId <= 0)
+                return BadRequest(new { success = false, message = "TechnicianId không hợp lệ" });
+
+            try
+            {
+                var updated = await _workOrderService.AssignTechnicianAsync(id, request.TechnicianId);
+                return Ok(new { success = true, message = "Gán kỹ thuật viên thành công", data = new { updated.WorkOrderId, updated.TechnicianId, technicianName = updated.Technician?.User?.FullName } });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
     }
 }

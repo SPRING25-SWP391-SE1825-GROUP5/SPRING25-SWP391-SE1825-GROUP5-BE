@@ -19,6 +19,7 @@ public partial class EVDbContext : DbContext
     public DbSet<InventoryPart> InventoryParts { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
     public DbSet<MaintenanceChecklist> MaintenanceChecklists { get; set; }
+    public DbSet<MaintenanceChecklistItem> MaintenanceChecklistItems { get; set; }
     public DbSet<MaintenanceChecklistResult> MaintenanceChecklistResults { get; set; }
     public DbSet<MaintenancePolicy> MaintenancePolicies { get; set; }
     public DbSet<MaintenanceReminder> MaintenanceReminders { get; set; }
@@ -71,6 +72,7 @@ public partial class EVDbContext : DbContext
         ConfigureInventoryPart(modelBuilder);
         ConfigureInvoice(modelBuilder);
         ConfigureMaintenanceChecklist(modelBuilder);
+        ConfigureMaintenanceChecklistItem(modelBuilder);
         ConfigureMaintenancePolicy(modelBuilder);
         ConfigureMaintenanceChecklistResult(modelBuilder);
         ConfigureServicePart(modelBuilder);
@@ -306,6 +308,23 @@ public partial class EVDbContext : DbContext
             entity.HasOne(e => e.Service)
                 .WithMany()
                 .HasForeignKey(e => e.ServiceId);
+        });
+    }
+
+    private static void ConfigureMaintenanceChecklistItem(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MaintenanceChecklistItem>(entity =>
+        {
+            entity.HasKey(e => e.ItemId);
+            entity.ToTable("MaintenanceChecklistItems", "dbo");
+
+            entity.Property(e => e.ItemId).HasColumnName("ItemID");
+            entity.Property(e => e.ItemName)
+                .IsRequired()
+                .HasMaxLength(200);
+            entity.Property(e => e.Description)
+                .IsRequired()
+                .HasMaxLength(500);
         });
     }
 

@@ -17,5 +17,8 @@ public interface ITechnicianTimeSlotService
     Task<List<TechnicianTimeSlotResponse>> GetTechnicianTimeSlotsByDateAsync(DateTime date);
     Task<TechnicianTimeSlotResponse> UpdateTechnicianTimeSlotAsync(int id, UpdateTechnicianTimeSlotRequest request);
     Task<bool> DeleteTechnicianTimeSlotAsync(int id);
-    Task<List<TechnicianAvailabilityResponse>> GetTechnicianAvailabilityAsync(int technicianId, DateTime startDate, DateTime endDate);
+    Task<List<TechnicianAvailabilityResponse>> GetTechnicianAvailabilityAsync(int centerId, DateTime startDate, DateTime endDate);
+    Task<List<TechnicianTimeSlotResponse>> GetTechnicianScheduleAsync(int technicianId, DateTime startDate, DateTime endDate);
+    Task<List<TechnicianDailyScheduleResponse>> GetTechnicianDailyScheduleAsync(int technicianId, DateTime startDate, DateTime endDate);
+    Task<List<TechnicianTimeSlotResponse>> GetCenterTechnicianScheduleAsync(int centerId, DateTime startDate, DateTime endDate);
 }

@@ -49,6 +49,33 @@ namespace EVServiceCenter.Application.Service
             if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
             await _technicianRepository.RemoveSkillAsync(technicianId, skillId);
         }
+
+        public async Task<List<TechnicianSkillResponse>> GetTechnicianSkillsAsync(int technicianId)
+        {
+            // Validate input
+            if (technicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
+
+            // Ensure technician exists
+            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
+            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
+
+            // Ensure technician is active
+            var technician = await _technicianRepository.GetTechnicianByIdAsync(technicianId);
+            if (technician == null || !technician.IsActive)
+                throw new InvalidOperationException("Kỹ thuật viên không hoạt động");
+
+            // Fetch and map skills
+            var technicianSkills = await _technicianRepository.GetTechnicianSkillsAsync(technicianId);
+            return technicianSkills.Select(ts => new TechnicianSkillResponse
+            {
+                TechnicianId = ts.TechnicianId,
+                TechnicianName = ts.Technician?.User?.FullName ?? "N/A",
+                SkillId = ts.SkillId,
+                SkillName = ts.Skill?.Name ?? "N/A",
+                SkillDescription = ts.Skill?.Description ?? "N/A",
+                Notes = ts.Notes
+            }).ToList();
+        }
         public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date)
         {
             var result = new TechnicianBookingsResponse

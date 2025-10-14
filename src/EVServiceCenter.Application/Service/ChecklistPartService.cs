@@ -129,26 +129,8 @@ namespace EVServiceCenter.Application.Service
                 if (service == null)
                     throw new ArgumentException("Dịch vụ không tồn tại.");
 
-                var response = new List<ServicePartResponse>(); // build from template in future
-                foreach (var servicePart in new List<ServicePart>())
-                {
-                    var part = await _partService.GetPartByIdAsync(0);
-                    if (part != null)
-                    {
-                        response.Add(new ServicePartResponse
-                        {
-                            ServiceId = servicePart.ServiceId,
-                            PartId = part.PartId,
-                            PartName = part.PartName,
-                            PartNumber = part.PartNumber,
-                            Brand = part.Brand,
-                            Price = part.Price,
-                            ImageUrl = part.ImageUrl
-                        });
-                    }
-                }
-
-                return response;
+                // ServiceParts removed: return empty list for now (template-based flow will populate elsewhere)
+                return new List<ServicePartResponse>();
             }
             catch (ArgumentException)
             {

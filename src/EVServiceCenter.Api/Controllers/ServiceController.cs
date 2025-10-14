@@ -289,7 +289,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 {
                     partId = x.PartId,
                     partName = x.Part?.PartName,
-                    notes = x.Notes
+                    // Notes removed from ServicePart
                 });
                 
                 return Ok(new { 
@@ -324,7 +324,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var toSave = (request.Parts ?? new List<ServicePartsReplaceRequest.Item>())
                     .DistinctBy(p => p.PartId)
-                    .Select(p => new ServicePart { ServiceId = serviceId, PartId = p.PartId, Notes = p.Notes });
+                    .Select(p => new ServicePart { ServiceId = serviceId, PartId = p.PartId });
 
                 await _servicePartRepo.ReplaceForServiceAsync(serviceId, toSave);
                 
@@ -363,7 +363,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 await _servicePartRepo.AddAsync(new ServicePart { 
                     ServiceId = serviceId, 
                     PartId = request.PartId, 
-                    Notes = request.Notes 
+                    // Notes removed from ServicePart 
                 });
                 
                 return Ok(new { 
@@ -398,7 +398,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (partId <= 0)
                     return BadRequest(new { success = false, message = "ID phụ tùng không hợp lệ" });
 
-                await _servicePartRepo.DeleteAsync(serviceId, partId);
+                await _servicePartRepo.DeleteByServiceAndPartAsync(serviceId, partId);
                 
                 return Ok(new { 
                     success = true, 

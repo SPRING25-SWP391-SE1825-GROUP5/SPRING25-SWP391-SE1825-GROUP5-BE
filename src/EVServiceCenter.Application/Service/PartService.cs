@@ -166,7 +166,7 @@ namespace EVServiceCenter.Application.Service
                     Description = sp.Service?.Description,
                     BasePrice = sp.Service?.BasePrice ?? 0,
                     IsActive = sp.Service?.IsActive ?? false,
-                    Notes = sp.Notes,
+                    // Notes removed from ServicePart
                     CreatedAt = sp.Service?.CreatedAt ?? DateTime.MinValue
                 }).ToList();
 

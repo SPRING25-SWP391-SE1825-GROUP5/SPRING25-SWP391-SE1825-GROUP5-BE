@@ -105,7 +105,6 @@ builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
 builder.Services.AddScoped<ISkillService, SkillService>();
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
-// CenterScheduleService removed
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
 
 // E-commerce services
@@ -124,7 +123,7 @@ builder.Services.AddScoped<IVehicleModelPartService, VehicleModelPartService>();
 // Authentication & User Repositories
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
-builder.Services.AddScoped<IOtpRepository, OtpRepository>();
+// IOtpRepository consolidated into IOtpCodeRepository
 builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
 
 // Business Logic Repositories
@@ -147,8 +146,7 @@ builder.Services.AddScoped<IMaintenanceChecklistRepository, MaintenanceChecklist
 builder.Services.AddScoped<IMaintenanceChecklistResultRepository, MaintenanceChecklistResultRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
-builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
-// CenterScheduleRepository removed
+// IOtpCodeRepository already registered above
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
 builder.Services.AddScoped<ISkillRepository, SkillRepository>();
 

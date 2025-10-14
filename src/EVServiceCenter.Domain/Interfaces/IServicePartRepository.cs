@@ -10,7 +10,8 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<List<ServicePart>> GetByPartIdAsync(int partId);
         Task ReplaceForServiceAsync(int serviceId, IEnumerable<ServicePart> items);
         Task AddAsync(ServicePart item);
-        Task DeleteAsync(int serviceId, int partId);
+        Task DeleteAsync(int servicePartId);
+        Task DeleteByServiceAndPartAsync(int serviceId, int partId);
     }
 }
 

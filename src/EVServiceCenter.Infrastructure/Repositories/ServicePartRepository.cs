@@ -49,7 +49,17 @@ namespace EVServiceCenter.Infrastructure.Repositories
             await _db.SaveChangesAsync();
         }
 
-        public async Task DeleteAsync(int serviceId, int partId)
+        public async Task DeleteAsync(int servicePartId)
+        {
+            var entity = await _db.ServiceParts.FirstOrDefaultAsync(x => x.ServicePartId == servicePartId);
+            if (entity != null)
+            {
+                _db.ServiceParts.Remove(entity);
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task DeleteByServiceAndPartAsync(int serviceId, int partId)
         {
             var entity = await _db.ServiceParts.FirstOrDefaultAsync(x => x.ServiceId == serviceId && x.PartId == partId);
             if (entity != null)

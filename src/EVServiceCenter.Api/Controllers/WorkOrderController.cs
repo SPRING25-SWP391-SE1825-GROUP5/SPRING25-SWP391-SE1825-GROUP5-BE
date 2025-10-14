@@ -340,7 +340,7 @@ namespace EVServiceCenter.Api.Controllers
                         {
                             ChecklistId = checklist.ChecklistId,
                             PartId = sp.PartId,
-                            Description = sp.Notes ?? sp.Part?.PartName,
+                            Description = sp.Part?.PartName ?? $"Part {sp.PartId}",
                             Result = null,
                             Comment = null
                         });

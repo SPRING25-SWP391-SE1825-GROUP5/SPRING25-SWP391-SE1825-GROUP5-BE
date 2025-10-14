@@ -289,8 +289,6 @@ public class PaymentService
 				invoice = await _invoiceRepository.CreateMinimalAsync(invoice);
 				Console.WriteLine($"[DEBUG] Invoice created with ID: {invoice.InvoiceId}");
 				
-				// Tạo InvoiceItems từ BookingServices
-                // InvoiceItems removed – link invoice to a single OrderItem if applicable elsewhere
 			}
 			else
 			{
@@ -340,7 +338,7 @@ public class PaymentService
                         {
                             ChecklistId = checklist.ChecklistId,
                             PartId = sp.PartId,
-                            Description = sp.Notes ?? sp.Part?.PartName ?? $"Part {sp.PartId}",
+                            Description = sp.Part?.PartName ?? $"Part {sp.PartId}",
                             Result = null,
                             Comment = null
                         });
@@ -435,7 +433,6 @@ public class PaymentService
 		return true;
 	}
 
-// InvoiceItems removed – helper deleted
 
     private async Task SeedEmptyPartIfNoneAsync(Domain.Entities.WorkOrder workOrder)
     {

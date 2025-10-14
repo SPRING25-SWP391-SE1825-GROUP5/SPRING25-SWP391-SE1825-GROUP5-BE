@@ -141,7 +141,7 @@ public class WorkOrderPartsController : ControllerBase
                 {
                     if (servicePartIds.Count == 0 || servicePartIds.Contains(mp.PartId))
                     {
-                        list.Add(new { partId = mp.PartId, vehicleModelPartId = mp.Id, notes = mp.CompatibilityNotes });
+                        list.Add(new { partId = mp.PartId, vehicleModelPartId = mp.Id, isCompatible = mp.IsCompatible });
                     }
                 }
             }

@@ -188,33 +188,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// </summary>
         /// <param name="id">ID phụ tùng</param>
         /// <returns>Danh sách dịch vụ tương thích</returns>
-        [HttpGet("{id}/services")]
-        public async Task<IActionResult> GetServicesByPartId(int id)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID phụ tùng không hợp lệ" });
-
-                var services = await _partService.GetServicesByPartIdAsync(id);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Lấy danh sách dịch vụ tương thích thành công",
-                    data = services
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
+        // Removed: GET /{id}/services (ServiceParts dependency)
     }
 }

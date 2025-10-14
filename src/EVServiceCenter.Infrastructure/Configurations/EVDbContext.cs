@@ -21,7 +21,7 @@ public partial class EVDbContext : DbContext
     public DbSet<MaintenanceChecklist> MaintenanceChecklists { get; set; }
     public DbSet<MaintenanceChecklistItem> MaintenanceChecklistItems { get; set; }
     public DbSet<MaintenanceChecklistResult> MaintenanceChecklistResults { get; set; }
-    public DbSet<MaintenancePolicy> MaintenancePolicies { get; set; }
+    
     public DbSet<MaintenanceReminder> MaintenanceReminders { get; set; }
     public DbSet<Message> Messages { get; set; }
     public DbSet<MessageRead> MessageReads { get; set; }
@@ -73,7 +73,7 @@ public partial class EVDbContext : DbContext
         ConfigureInvoice(modelBuilder);
         ConfigureMaintenanceChecklist(modelBuilder);
         ConfigureMaintenanceChecklistItem(modelBuilder);
-        ConfigureMaintenancePolicy(modelBuilder);
+        
         ConfigureMaintenanceChecklistResult(modelBuilder);
         ConfigureServicePart(modelBuilder);
         ConfigureMaintenanceReminder(modelBuilder);
@@ -295,21 +295,7 @@ public partial class EVDbContext : DbContext
         });
     }
 
-    private static void ConfigureMaintenancePolicy(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<MaintenancePolicy>(entity =>
-        {
-            entity.HasKey(e => e.PolicyId);
-            entity.ToTable("MaintenancePolicies", "dbo");
-
-            entity.Property(e => e.PolicyId).HasColumnName("PolicyID");
-            entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
-
-            entity.HasOne(e => e.Service)
-                .WithMany()
-                .HasForeignKey(e => e.ServiceId);
-        });
-    }
+    
 
     private static void ConfigureMaintenanceChecklistItem(ModelBuilder modelBuilder)
     {

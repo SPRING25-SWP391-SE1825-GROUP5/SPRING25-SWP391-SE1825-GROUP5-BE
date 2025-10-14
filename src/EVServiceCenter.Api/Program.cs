@@ -101,7 +101,7 @@ builder.Services.AddScoped<IBookingHistoryService, BookingHistoryService>();
 builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
 builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
 builder.Services.AddScoped<ISkillService, SkillService>();
-builder.Services.AddScoped<IMaintenancePolicyService, MaintenancePolicyService>();
+// Removed: MaintenancePolicyService no longer used
 builder.Services.AddScoped<IMaintenanceChecklistItemService, MaintenanceChecklistItemService>();
 builder.Services.AddScoped<IChecklistPartService, ChecklistPartService>();
 // Payment service removed from DI per requirement
@@ -141,7 +141,7 @@ builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
-builder.Services.AddScoped<IMaintenancePolicyRepository, MaintenancePolicyRepository>();
+// Removed: MaintenancePolicyRepository no longer used
 builder.Services.AddScoped<IServicePartRepository, ServicePartRepository>();
 builder.Services.AddScoped<IWorkOrderPartRepository, WorkOrderPartRepository>();
 builder.Services.AddScoped<IMaintenanceChecklistRepository, MaintenanceChecklistRepository>();

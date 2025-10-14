@@ -72,8 +72,7 @@ namespace EVServiceCenter.Application.Service
                 TechnicianName = ts.Technician?.User?.FullName ?? "N/A",
                 SkillId = ts.SkillId,
                 SkillName = ts.Skill?.Name ?? "N/A",
-                SkillDescription = ts.Skill?.Description ?? "N/A",
-                Notes = ts.Notes
+                SkillDescription = ts.Skill?.Description ?? "N/A"
             }).ToList();
         }
         public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date)

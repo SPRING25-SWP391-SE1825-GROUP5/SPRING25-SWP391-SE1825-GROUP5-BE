@@ -35,7 +35,9 @@ public partial class EVDbContext : DbContext
     public DbSet<Service> Services { get; set; }
     public DbSet<ServiceCenter> ServiceCenters { get; set; }
     public DbSet<ServiceCredit> ServiceCredits { get; set; }
-    public DbSet<ServicePart> ServiceParts { get; set; }
+    public DbSet<ServiceChecklistTemplate> ServiceChecklistTemplates { get; set; }
+    public DbSet<ServiceChecklistTemplateItem> ServiceChecklistTemplateItems { get; set; }
+    // Removed: DbSet<ServicePart> ServiceParts
     public DbSet<ServiceRequiredSkill> ServiceRequiredSkills { get; set; }
     public DbSet<Skill> Skills { get; set; }
     public DbSet<Staff> Staff { get; set; }
@@ -75,7 +77,9 @@ public partial class EVDbContext : DbContext
         ConfigureMaintenanceChecklistItem(modelBuilder);
         
         ConfigureMaintenanceChecklistResult(modelBuilder);
-        ConfigureServicePart(modelBuilder);
+        ConfigureServiceChecklistTemplate(modelBuilder);
+        ConfigureServiceChecklistTemplateItem(modelBuilder);
+        // Removed: ConfigureServicePart(modelBuilder);
         ConfigureMaintenanceReminder(modelBuilder);
         ConfigureNotification(modelBuilder);
         ConfigureOtpcode(modelBuilder);
@@ -279,7 +283,7 @@ public partial class EVDbContext : DbContext
 
             entity.Property(e => e.ChecklistId).HasColumnName("ChecklistID");
             entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
-            entity.Property(e => e.VehicleModelPartId).HasColumnName("VehicleModelPartID");
+            entity.Property(e => e.TemplateId).HasColumnName("TemplateId");
             entity.Property(e => e.Notes).HasMaxLength(500);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
 
@@ -288,10 +292,7 @@ public partial class EVDbContext : DbContext
                 .HasForeignKey(d => d.WorkOrderId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
 
-            entity.HasOne(d => d.VehicleModelPart)
-                .WithMany()
-                .HasForeignKey(d => d.VehicleModelPartId)
-                .OnDelete(DeleteBehavior.SetNull);
+            // TemplateId is enforced at DB level; no CLR navigation configured here
         });
     }
 
@@ -311,6 +312,50 @@ public partial class EVDbContext : DbContext
             entity.Property(e => e.Description)
                 .IsRequired()
                 .HasMaxLength(500);
+        });
+    }
+
+    private static void ConfigureServiceChecklistTemplate(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ServiceChecklistTemplate>(entity =>
+        {
+            entity.HasKey(e => e.TemplateId);
+            entity.ToTable("ServiceChecklistTemplates", "dbo");
+
+            entity.Property(e => e.TemplateId).HasColumnName("TemplateId");
+            entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
+            entity.Property(e => e.TemplateName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
+
+            entity.HasOne<Service>()
+                .WithMany()
+                .HasForeignKey(e => e.ServiceId);
+        });
+    }
+
+    private static void ConfigureServiceChecklistTemplateItem(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ServiceChecklistTemplateItem>(entity =>
+        {
+            entity.HasKey(e => e.ItemId);
+            entity.ToTable("ServiceChecklistTemplateItems", "dbo");
+
+            entity.Property(e => e.ItemId).HasColumnName("ItemId");
+            entity.Property(e => e.TemplateId).HasColumnName("TemplateId");
+            entity.Property(e => e.PartId).HasColumnName("PartId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
+
+            entity.HasIndex(e => new { e.TemplateId, e.PartId }).IsUnique();
+
+            entity.HasOne<ServiceChecklistTemplate>()
+                .WithMany()
+                .HasForeignKey(e => e.TemplateId);
+
+            entity.HasOne<Part>()
+                .WithMany()
+                .HasForeignKey(e => e.PartId);
         });
     }
 
@@ -340,28 +385,7 @@ public partial class EVDbContext : DbContext
         });
     }
 
-    private static void ConfigureServicePart(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<ServicePart>(entity =>
-        {
-            entity.HasKey(e => e.ServicePartId);
-            entity.ToTable("ServiceParts", "dbo");
-
-            entity.HasIndex(e => new { e.ServiceId, e.PartId }).IsUnique();
-
-            entity.Property(e => e.ServicePartId).HasColumnName("ServicePartID");
-            entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
-            entity.Property(e => e.PartId).HasColumnName("PartID");
-
-            entity.HasOne(e => e.Service)
-                .WithMany()
-                .HasForeignKey(e => e.ServiceId);
-
-            entity.HasOne(e => e.Part)
-                .WithMany()
-                .HasForeignKey(e => e.PartId);
-        });
-    }
+    // Removed: ConfigureServicePart
 
     private static void ConfigureMaintenanceReminder(ModelBuilder modelBuilder)
     {

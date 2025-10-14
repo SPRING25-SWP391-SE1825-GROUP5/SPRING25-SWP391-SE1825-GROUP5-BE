@@ -18,12 +18,11 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class ServiceController : ControllerBase
     {
         private readonly IServiceService _serviceService;
-        private readonly IServicePartRepository _servicePartRepo;
+        // Removed: IServicePartRepository _servicePartRepo;
 
-        public ServiceController(IServiceService serviceService, IServicePartRepository servicePartRepo)
+        public ServiceController(IServiceService serviceService)
         {
             _serviceService = serviceService;
-            _servicePartRepo = servicePartRepo;
         }
 
         /// <summary>
@@ -269,43 +268,14 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        // ========== SERVICE PARTS MANAGEMENT ==========
+        // ========== SERVICE PARTS MANAGEMENT (Removed) ==========
 
         /// <summary>
         /// Lấy danh sách phụ tùng của dịch vụ
         /// </summary>
         /// <param name="serviceId">ID dịch vụ</param>
         /// <returns>Danh sách phụ tùng</returns>
-        [HttpGet("{serviceId}/parts")]
-        public async Task<IActionResult> GetServiceParts(int serviceId)
-        {
-            try
-            {
-                if (serviceId <= 0)
-                    return BadRequest(new { success = false, message = "ID dịch vụ không hợp lệ" });
-
-                var items = await _servicePartRepo.GetByServiceIdAsync(serviceId);
-                var result = items.Select(x => new
-                {
-                    partId = x.PartId,
-                    partName = x.Part?.PartName,
-                    // Notes removed from ServicePart
-                });
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Lấy danh sách phụ tùng dịch vụ thành công",
-                    data = result 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
+        // Endpoints for managing parts per service have been removed.
 
         /// <summary>
         /// Thay thế toàn bộ phụ tùng của dịch vụ
@@ -313,34 +283,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="serviceId">ID dịch vụ</param>
         /// <param name="request">Danh sách phụ tùng mới</param>
         /// <returns>Kết quả thay thế</returns>
-        [HttpPut("{serviceId}/parts")]
-        [Authorize(Policy = "StaffOrAdmin")] // Chỉ Staff và Admin mới được quản lý phụ tùng
-        public async Task<IActionResult> ReplaceServiceParts(int serviceId, [FromBody] ServicePartsReplaceRequest request)
-        {
-            try
-            {
-                if (serviceId <= 0)
-                    return BadRequest(new { success = false, message = "ID dịch vụ không hợp lệ" });
-
-                var toSave = (request.Parts ?? new List<ServicePartsReplaceRequest.Item>())
-                    .DistinctBy(p => p.PartId)
-                    .Select(p => new ServicePart { ServiceId = serviceId, PartId = p.PartId });
-
-                await _servicePartRepo.ReplaceForServiceAsync(serviceId, toSave);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Thay thế phụ tùng dịch vụ thành công" 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
+        // ReplaceServiceParts removed
 
         /// <summary>
         /// Thêm phụ tùng vào dịch vụ
@@ -348,37 +291,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="serviceId">ID dịch vụ</param>
         /// <param name="request">Thông tin phụ tùng</param>
         /// <returns>Kết quả thêm</returns>
-        [HttpPost("{serviceId}/parts")]
-        [Authorize(Policy = "StaffOrAdmin")] // Chỉ Staff và Admin mới được quản lý phụ tùng
-        public async Task<IActionResult> AddServicePart(int serviceId, [FromBody] ServicePartAddRequest request)
-        {
-            try
-            {
-                if (serviceId <= 0)
-                    return BadRequest(new { success = false, message = "ID dịch vụ không hợp lệ" });
-
-                if (request.PartId <= 0)
-                    return BadRequest(new { success = false, message = "ID phụ tùng không hợp lệ" });
-
-                await _servicePartRepo.AddAsync(new ServicePart { 
-                    ServiceId = serviceId, 
-                    PartId = request.PartId, 
-                    // Notes removed from ServicePart 
-                });
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Thêm phụ tùng vào dịch vụ thành công" 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
+        // AddServicePart removed
 
         /// <summary>
         /// Xóa phụ tùng khỏi dịch vụ
@@ -386,50 +299,10 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="serviceId">ID dịch vụ</param>
         /// <param name="partId">ID phụ tùng</param>
         /// <returns>Kết quả xóa</returns>
-        [HttpDelete("{serviceId}/parts/{partId}")]
-        [Authorize(Policy = "StaffOrAdmin")] // Chỉ Staff và Admin mới được quản lý phụ tùng
-        public async Task<IActionResult> DeleteServicePart(int serviceId, int partId)
-        {
-            try
-            {
-                if (serviceId <= 0)
-                    return BadRequest(new { success = false, message = "ID dịch vụ không hợp lệ" });
-
-                if (partId <= 0)
-                    return BadRequest(new { success = false, message = "ID phụ tùng không hợp lệ" });
-
-                await _servicePartRepo.DeleteByServiceAndPartAsync(serviceId, partId);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Xóa phụ tùng khỏi dịch vụ thành công" 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
+        // DeleteServicePart removed
 
         // ========== REQUEST MODELS ==========
 
-        public class ServicePartsReplaceRequest
-        {
-            public List<Item> Parts { get; set; }
-            public class Item
-            {
-                public int PartId { get; set; }
-                public string Notes { get; set; }
-            }
-        }
-
-        public class ServicePartAddRequest 
-        { 
-            public int PartId { get; set; } 
-            public string Notes { get; set; } 
-        }
+        // Request models removed
     }
 }

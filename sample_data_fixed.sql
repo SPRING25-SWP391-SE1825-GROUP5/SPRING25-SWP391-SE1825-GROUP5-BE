@@ -548,47 +548,7 @@ VALUES
 (18, 29, 1, GETDATE()); -- Dây cáp điện 16AWG
 GO
 
--- =====================================================
--- 19. SERVICE PARTS (Depends on Services, Parts)
--- =====================================================
-INSERT INTO [dbo].[ServiceParts] ([ServiceID], [PartID])
-VALUES 
--- Bảo dưỡng định kỳ (ServiceID=1) - Các phụ tùng cần kiểm tra thường xuyên
-(1, 25),  -- Cảm biến tốc độ
-(1, 26),  -- Cảm biến nhiệt độ pin
-(1, 27),  -- Cảm biến dòng điện
-(1, 29),  -- Dây cáp điện 16AWG
-(1, 30),  -- Công tắc chính
-(1, 31),  -- Cầu chì 30A
-
--- Thay pin (ServiceID=2) - Các loại pin
-(2, 1),   -- Pin Lithium-ion 48V 20Ah
-(2, 2),   -- Pin Lithium-ion 60V 30Ah
-(2, 3),   -- Pin Lithium-ion 72V 40Ah
-(2, 4),   -- Ắc quy chì 12V 7Ah
-
--- Sửa chữa động cơ (ServiceID=3) - Động cơ và truyền động
-(3, 5),   -- Động cơ điện 48V 1000W
-(3, 6),   -- Động cơ điện 60V 1500W
-(3, 7),   -- Động cơ điện 72V 2000W
-(3, 8),   -- Bộ truyền động xích
-
--- Kiểm tra an toàn (ServiceID=4) - Hệ thống phanh và an toàn
-(4, 13),  -- Phanh đĩa trước 220mm
-(4, 14),  -- Phanh đĩa sau 180mm
-(4, 15),  -- Má phanh đĩa
-(4, 16),  -- Dầu phanh DOT4
-(4, 21),  -- Đèn pha LED 12V
-(4, 22),  -- Đèn hậu LED
-(4, 23),  -- Xi nhan LED
-(4, 24),  -- Còi điện 12V
-
--- Cập nhật phần mềm (ServiceID=5) - Bộ điều khiển và ECU
-(5, 9),   -- Bộ điều khiển 48V 30A
-(5, 10),  -- Bộ điều khiển 60V 40A
-(5, 11),  -- Bộ điều khiển 72V 50A
-(5, 12);  -- ECU điều khiển trung tâm
-GO
+-- 19. SERVICE PARTS removed (replaced by checklist templates)
 
 -- =====================================================
 -- 20. SERVICE REQUIRED SKILLS (Depends on Services, Skills)

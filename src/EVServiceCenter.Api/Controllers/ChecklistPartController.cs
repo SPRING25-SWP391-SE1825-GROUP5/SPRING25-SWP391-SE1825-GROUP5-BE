@@ -11,7 +11,7 @@ namespace EVServiceCenter.Api.Controllers
     [Route("api/checklist-parts")]
     public class ChecklistPartController : ControllerBase
     {
-        private readonly IChecklistPartService _checklistPartService;
+        private readonly IChecklistPartService _checklistPartService; // May be deprecated if ServiceParts removed
 
         public ChecklistPartController(IChecklistPartService checklistPartService)
         {

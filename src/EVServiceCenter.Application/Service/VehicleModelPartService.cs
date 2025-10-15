@@ -42,7 +42,7 @@ public class VehicleModelPartService : IVehicleModelPartService
                 ModelId = modelPart.ModelId,
                 PartId = modelPart.PartId,
                 IsCompatible = modelPart.IsCompatible,
-                CompatibilityNotes = modelPart.CompatibilityNotes,
+                // CompatibilityNotes removed - using IsCompatible boolean instead
                 CreatedAt = modelPart.CreatedAt,
                 ModelName = model?.ModelName,
                 Brand = model?.Brand,
@@ -72,7 +72,7 @@ public class VehicleModelPartService : IVehicleModelPartService
                 ModelId = modelPart.ModelId,
                 PartId = modelPart.PartId,
                 IsCompatible = modelPart.IsCompatible,
-                CompatibilityNotes = modelPart.CompatibilityNotes,
+                // CompatibilityNotes removed - using IsCompatible boolean instead
                 CreatedAt = modelPart.CreatedAt,
                 ModelName = model?.ModelName,
                 Brand = model?.Brand,
@@ -108,7 +108,7 @@ public class VehicleModelPartService : IVehicleModelPartService
             ModelId = request.ModelId,
             PartId = request.PartId,
             IsCompatible = request.IsCompatible,
-            CompatibilityNotes = request.CompatibilityNotes,
+            // CompatibilityNotes removed - using IsCompatible boolean instead
             CreatedAt = DateTime.Now
         };
 
@@ -120,7 +120,7 @@ public class VehicleModelPartService : IVehicleModelPartService
             ModelId = createdModelPart.ModelId,
             PartId = createdModelPart.PartId,
             IsCompatible = createdModelPart.IsCompatible,
-            CompatibilityNotes = createdModelPart.CompatibilityNotes,
+            // CompatibilityNotes removed - using IsCompatible boolean instead
             CreatedAt = createdModelPart.CreatedAt,
             ModelName = model.ModelName,
             Brand = model.Brand,
@@ -139,8 +139,7 @@ public class VehicleModelPartService : IVehicleModelPartService
 
         if (request.IsCompatible.HasValue)
             modelPart.IsCompatible = request.IsCompatible.Value;
-        if (request.CompatibilityNotes != null)
-            modelPart.CompatibilityNotes = request.CompatibilityNotes;
+        // CompatibilityNotes removed - using IsCompatible boolean instead
 
         var updatedModelPart = await _vehicleModelPartRepository.UpdateAsync(modelPart);
 
@@ -153,7 +152,7 @@ public class VehicleModelPartService : IVehicleModelPartService
             ModelId = updatedModelPart.ModelId,
             PartId = updatedModelPart.PartId,
             IsCompatible = updatedModelPart.IsCompatible,
-            CompatibilityNotes = updatedModelPart.CompatibilityNotes,
+            // CompatibilityNotes removed - using IsCompatible boolean instead
             CreatedAt = updatedModelPart.CreatedAt,
             ModelName = model?.ModelName,
             Brand = model?.Brand,
@@ -200,7 +199,7 @@ public class VehicleModelPartService : IVehicleModelPartService
                 ModelId = modelPart.ModelId,
                 PartId = modelPart.PartId,
                 IsCompatible = modelPart.IsCompatible,
-                CompatibilityNotes = modelPart.CompatibilityNotes,
+                // CompatibilityNotes removed - using IsCompatible boolean instead
                 CreatedAt = modelPart.CreatedAt,
                 ModelName = model?.ModelName,
                 Brand = model?.Brand,
@@ -230,7 +229,7 @@ public class VehicleModelPartService : IVehicleModelPartService
                 ModelId = modelPart.ModelId,
                 PartId = modelPart.PartId,
                 IsCompatible = modelPart.IsCompatible,
-                CompatibilityNotes = modelPart.CompatibilityNotes,
+                // CompatibilityNotes removed - using IsCompatible boolean instead
                 CreatedAt = modelPart.CreatedAt,
                 ModelName = model?.ModelName,
                 Brand = model?.Brand,

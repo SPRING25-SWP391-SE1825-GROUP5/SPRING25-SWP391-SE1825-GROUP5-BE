@@ -101,12 +101,11 @@ builder.Services.AddScoped<IBookingHistoryService, BookingHistoryService>();
 builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
 builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
 builder.Services.AddScoped<ISkillService, SkillService>();
-builder.Services.AddScoped<IMaintenancePolicyService, MaintenancePolicyService>();
+// Removed: MaintenancePolicyService no longer used
 builder.Services.AddScoped<IMaintenanceChecklistItemService, MaintenanceChecklistItemService>();
-builder.Services.AddScoped<IChecklistPartService, ChecklistPartService>();
+// Note: ChecklistPartService may be deprecated if not needed without ServiceParts
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
-// CenterScheduleService removed
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
 builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
 
@@ -126,7 +125,7 @@ builder.Services.AddScoped<IVehicleModelPartService, VehicleModelPartService>();
 // Authentication & User Repositories
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
-builder.Services.AddScoped<IOtpRepository, OtpRepository>();
+// IOtpRepository consolidated into IOtpCodeRepository
 builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
 
 // Business Logic Repositories
@@ -142,16 +141,15 @@ builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
-builder.Services.AddScoped<IMaintenancePolicyRepository, MaintenancePolicyRepository>();
-builder.Services.AddScoped<IServicePartRepository, ServicePartRepository>();
+// Removed: MaintenancePolicyRepository no longer used
+// Removed: IServicePartRepository registration (ServiceParts deprecated)
 builder.Services.AddScoped<IWorkOrderPartRepository, WorkOrderPartRepository>();
 builder.Services.AddScoped<IMaintenanceChecklistRepository, MaintenanceChecklistRepository>();
 builder.Services.AddScoped<IMaintenanceChecklistItemRepository, MaintenanceChecklistItemRepository>();
 builder.Services.AddScoped<IMaintenanceChecklistResultRepository, MaintenanceChecklistResultRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
-builder.Services.AddScoped<IOtpCodeRepository, OtpCodeRepository>();
-// CenterScheduleRepository removed
+// IOtpCodeRepository already registered above
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
 builder.Services.AddScoped<ISkillRepository, SkillRepository>();
 builder.Services.AddScoped<IServiceRequiredSkillRepository, ServiceRequiredSkillRepository>();
@@ -294,11 +292,13 @@ builder.Services.AddCors(options =>
                   "http://localhost:3000",    // React dev server
                   "http://localhost:5173",    // Vite dev server
                   "https://localhost:3000",   // HTTPS localhost
+                  "https://localhost:5173",   // HTTPS Vite dev server
                   "https://your-frontend-domain.com" // Production domain
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials(); // Quan trọng cho JWT/Authentication
+              .AllowCredentials() // Quan trọng cho JWT/Authentication
+              .SetIsOriginAllowedToAllowWildcardSubdomains(); // Hỗ trợ Google OAuth
     });
 
     // Policy chỉ cho localhost (Development với credentials)
@@ -407,7 +407,7 @@ app.UseSwaggerUI(c =>
     c.DocumentTitle = "EVServiceCenter API Documentation";
 });
 
-app.UseCors(); // default policy
+app.UseCors("AllowSpecificOrigins"); // Use specific policy for better Google OAuth support
 
 // Enable HTTPS redirect for security
 app.UseHttpsRedirection();

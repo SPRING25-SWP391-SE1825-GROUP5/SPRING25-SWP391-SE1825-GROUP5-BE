@@ -3,15 +3,15 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Entities;
-using EVServiceCenter.Domain.IRepositories;
+using EVServiceCenter.Domain.Interfaces;
 
 namespace EVServiceCenter.Application.Service
 {
     public class OtpService : IOtpService
     {
-        private readonly IOtpRepository _otpRepository;
+        private readonly IOtpCodeRepository _otpRepository;
 
-        public OtpService(IOtpRepository otpRepository)
+        public OtpService(IOtpCodeRepository otpRepository)
         {
             _otpRepository = otpRepository;
         }

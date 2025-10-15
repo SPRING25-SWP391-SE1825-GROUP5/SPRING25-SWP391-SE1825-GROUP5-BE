@@ -13,12 +13,11 @@ namespace EVServiceCenter.Application.Service
     public class PartService : IPartService
     {
         private readonly IPartRepository _partRepository;
-        private readonly IServicePartRepository _servicePartRepository;
+        // Removed: IServicePartRepository _servicePartRepository;
 
-        public PartService(IPartRepository partRepository, IServicePartRepository servicePartRepository)
+        public PartService(IPartRepository partRepository)
         {
             _partRepository = partRepository;
-            _servicePartRepository = servicePartRepository;
         }
 
         public async Task<PartListResponse> GetAllPartsAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, bool? isActive = null)
@@ -147,40 +146,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<List<ServiceCompatibilityResponse>> GetServicesByPartIdAsync(int partId)
-        {
-            try
-            {
-                // Verify part exists
-                var part = await _partRepository.GetPartByIdAsync(partId);
-                if (part == null)
-                    throw new ArgumentException("Phụ tùng không tồn tại.");
-
-                // Get service parts relationships
-                var serviceParts = await _servicePartRepository.GetByPartIdAsync(partId);
-                
-                var result = serviceParts.Select(sp => new ServiceCompatibilityResponse
-                {
-                    ServiceId = sp.ServiceId,
-                    ServiceName = sp.Service?.ServiceName ?? "N/A",
-                    Description = sp.Service?.Description,
-                    BasePrice = sp.Service?.BasePrice ?? 0,
-                    IsActive = sp.Service?.IsActive ?? false,
-                    Notes = sp.Notes,
-                    CreatedAt = sp.Service?.CreatedAt ?? DateTime.MinValue
-                }).ToList();
-
-                return result;
-            }
-            catch (ArgumentException)
-            {
-                throw; // Rethrow validation errors
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Lỗi khi lấy danh sách dịch vụ tương thích: {ex.Message}");
-            }
-        }
+        // Removed: GetServicesByPartIdAsync (ServiceParts dependency dropped)
 
         private PartResponse MapToPartResponse(Part part)
         {

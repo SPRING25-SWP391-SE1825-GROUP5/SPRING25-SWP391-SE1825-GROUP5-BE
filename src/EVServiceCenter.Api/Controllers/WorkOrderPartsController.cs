@@ -13,10 +13,11 @@ namespace EVServiceCenter.Api.Controllers
 public class WorkOrderPartsController : ControllerBase
     {
         private readonly IWorkOrderPartRepository _repo;
+        private readonly IServicePartRepository _serviceParts;
         private readonly IVehicleModelPartRepository _modelParts;
         private readonly IPartRepository _partRepo;
         private readonly IWorkOrderRepository _woRepo;
-        public WorkOrderPartsController(IWorkOrderPartRepository repo, IVehicleModelPartRepository modelParts, IPartRepository partRepo, IWorkOrderRepository woRepo) { _repo = repo; _modelParts = modelParts; _partRepo = partRepo; _woRepo = woRepo; }
+        public WorkOrderPartsController(IWorkOrderPartRepository repo, IServicePartRepository serviceParts, IVehicleModelPartRepository modelParts, IPartRepository partRepo, IWorkOrderRepository woRepo) { _repo = repo; _serviceParts = serviceParts; _modelParts = modelParts; _partRepo = partRepo; _woRepo = woRepo; }
 
         [HttpGet]
         public async Task<IActionResult> Get(int workOrderId)
@@ -128,14 +129,25 @@ public class WorkOrderPartsController : ControllerBase
         {
             var list = new System.Collections.Generic.List<object>();
             var servicePartIds = new System.Collections.Generic.HashSet<int>();
-            // ServiceParts removed: only suggest by model compatibility when provided
+            if (serviceId.HasValue && serviceId.Value > 0)
+            {
+                var sps = await _serviceParts.GetByServiceIdAsync(serviceId.Value);
+                foreach (var sp in sps) servicePartIds.Add(sp.PartId);
+            }
             if (modelId.HasValue && modelId.Value > 0)
             {
                 var compatibles = await _modelParts.GetCompatiblePartsByModelIdAsync(modelId.Value);
                 foreach (var mp in compatibles)
                 {
-                    list.Add(new { partId = mp.PartId, vehicleModelPartId = mp.Id, isCompatible = mp.IsCompatible });
+                    if (servicePartIds.Count == 0 || servicePartIds.Contains(mp.PartId))
+                    {
+                        list.Add(new { partId = mp.PartId, vehicleModelPartId = mp.Id, notes = mp.CompatibilityNotes });
+                    }
                 }
+            }
+            else
+            {
+                foreach (var pid in servicePartIds) list.Add(new { partId = pid });
             }
             return Ok(new { success = true, data = list });
         }

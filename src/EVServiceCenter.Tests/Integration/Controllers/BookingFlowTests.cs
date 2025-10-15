@@ -57,6 +57,7 @@ public class BookingFlowTests
             paymentRepo,
             technicianRepo,
             Mock.Of<IEmailService>(),
+            Mock.Of<IServicePartRepository>(),
             Mock.Of<IWorkOrderPartRepository>(),
             Mock.Of<IMaintenanceChecklistRepository>(),
             Mock.Of<IMaintenanceChecklistResultRepository>(),

@@ -17,7 +17,7 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IWorkOrderRepository _workOrderRepository;
         private readonly IBookingRepository _bookingRepository;
         private readonly ITechnicianRepository _technicianRepository;
-        // Removed: IServicePartRepository _servicePartRepository;
+        private readonly IServicePartRepository _servicePartRepository;
         private readonly IServiceRequiredSkillRepository _requiredSkillRepo;
         private readonly ITechnicianTimeSlotRepository _timeSlotRepo;
         private readonly IWorkOrderPartRepository _workOrderPartRepo;
@@ -25,11 +25,12 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IMaintenanceChecklistResultRepository _checkResultRepo;
         private readonly IWorkOrderService _workOrderService;
 
-        public WorkOrderController(IWorkOrderRepository workOrderRepository, IBookingRepository bookingRepository, ITechnicianRepository technicianRepository, IMaintenanceChecklistRepository checkRepo, IMaintenanceChecklistResultRepository checkResultRepo, IServiceRequiredSkillRepository requiredSkillRepo, ITechnicianTimeSlotRepository timeSlotRepo, IWorkOrderPartRepository workOrderPartRepo, IWorkOrderService workOrderService)
+        public WorkOrderController(IWorkOrderRepository workOrderRepository, IBookingRepository bookingRepository, ITechnicianRepository technicianRepository, IServicePartRepository servicePartRepository, IMaintenanceChecklistRepository checkRepo, IMaintenanceChecklistResultRepository checkResultRepo, IServiceRequiredSkillRepository requiredSkillRepo, ITechnicianTimeSlotRepository timeSlotRepo, IWorkOrderPartRepository workOrderPartRepo, IWorkOrderService workOrderService)
         {
             _workOrderRepository = workOrderRepository;
             _bookingRepository = bookingRepository;
             _technicianRepository = technicianRepository;
+            _servicePartRepository = servicePartRepository;
             _checkRepo = checkRepo;
             _checkResultRepo = checkResultRepo;
             _requiredSkillRepo = requiredSkillRepo;
@@ -320,7 +321,7 @@ namespace EVServiceCenter.Api.Controllers
                 });
             }
 
-            // Auto-init checklist (template-based flow)
+            // Auto-init checklist + clone service parts (quantity=0, unitCost=0)
             try
             {
                 if (created.ServiceId.HasValue)
@@ -334,7 +335,33 @@ namespace EVServiceCenter.Api.Controllers
                             CreatedAt = DateTime.UtcNow,
                             Notes = null
                         });
-                        // TODO: generate results from ServiceChecklistTemplateItems instead of ServiceParts
+                        var serviceParts = await _servicePartRepository.GetByServiceIdAsync(created.ServiceId.Value);
+                        var results = serviceParts.Select(sp => new MaintenanceChecklistResult
+                        {
+                            ChecklistId = checklist.ChecklistId,
+                            PartId = sp.PartId,
+                            Description = sp.Notes ?? sp.Part?.PartName,
+                            Result = null,
+                            Comment = null
+                        });
+                        await _checkResultRepo.UpsertManyAsync(results);
+
+                        // Clone WorkOrderParts suggestions (qty=0, unitCost=0) if none exist
+                        var existingWop = await _workOrderPartRepo.GetByWorkOrderIdAsync(created.WorkOrderId);
+                        var existingPartIds = existingWop.Select(e => e.PartId).ToHashSet();
+                        foreach (var sp in serviceParts)
+                        {
+                            if (!existingPartIds.Contains(sp.PartId))
+                            {
+                                await _workOrderPartRepo.AddAsync(new WorkOrderPart
+                                {
+                                    WorkOrderId = created.WorkOrderId,
+                                    PartId = sp.PartId,
+                                    QuantityUsed = 0,
+                                    UnitCost = 0
+                                });
+                            }
+                        }
                     }
                 }
             }

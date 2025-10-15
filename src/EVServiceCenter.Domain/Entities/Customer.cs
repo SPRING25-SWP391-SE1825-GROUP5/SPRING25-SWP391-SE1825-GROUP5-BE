@@ -31,6 +31,4 @@ public partial class Customer
     
 
     public virtual ICollection<Feedback> Feedbacks { get; set; } = new List<Feedback>();
-
-    public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
 }

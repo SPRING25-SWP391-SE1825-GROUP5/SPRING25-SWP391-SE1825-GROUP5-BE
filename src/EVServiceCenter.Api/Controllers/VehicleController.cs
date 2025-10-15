@@ -17,13 +17,14 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly IVehicleService _vehicleService;
         private readonly EVServiceCenter.Domain.Interfaces.IVehicleRepository _vehicleRepository;
         private readonly EVServiceCenter.Domain.Interfaces.IWorkOrderRepository _workOrderRepository;
-        
+        private readonly EVServiceCenter.Domain.Interfaces.IMaintenancePolicyRepository _policyRepository;
 
-        public VehicleController(IVehicleService vehicleService, EVServiceCenter.Domain.Interfaces.IVehicleRepository vehicleRepository, EVServiceCenter.Domain.Interfaces.IWorkOrderRepository workOrderRepository)
+        public VehicleController(IVehicleService vehicleService, EVServiceCenter.Domain.Interfaces.IVehicleRepository vehicleRepository, EVServiceCenter.Domain.Interfaces.IWorkOrderRepository workOrderRepository, EVServiceCenter.Domain.Interfaces.IMaintenancePolicyRepository policyRepository)
         {
             _vehicleService = vehicleService;
             _vehicleRepository = vehicleRepository;
             _workOrderRepository = workOrderRepository;
+            _policyRepository = policyRepository;
         }
 
         /// <summary>
@@ -110,12 +111,35 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return Ok(new { success = true, message = "Chưa xác định được dịch vụ để tính chu kỳ", data = new { vehicleId, next = (object)null } });
                 }
 
-                // Policy feature removed
-                if (true)
+                var policies = await _policyRepository.GetActiveByServiceIdAsync(effectiveServiceId.Value);
+                var policy = policies?.FirstOrDefault();
+                if (policy == null)
                 {
-                    return Ok(new { success = true, message = "Chưa cấu hình chính sách bảo trì (đã loại bỏ)", data = new { vehicleId, serviceId = effectiveServiceId } });
+                    return Ok(new { success = true, message = "Chưa cấu hình policy cho dịch vụ", data = new { vehicleId, serviceId = effectiveServiceId } });
                 }
-                
+
+                DateTime? nextDateByMonths = null;
+                if (policy.IntervalMonths > 0 && lastDate.HasValue)
+                {
+                    nextDateByMonths = lastDate.Value.AddMonths(policy.IntervalMonths);
+                }
+                int? dueMileage = null;
+                int? remainingKm = null;
+                if (policy.IntervalKm > 0 && lastMileage.HasValue)
+                {
+                    dueMileage = lastMileage.Value + policy.IntervalKm;
+                    remainingKm = dueMileage - vehicle.CurrentMileage;
+                }
+
+                var dto = new
+                {
+                    vehicleId,
+                    serviceId = effectiveServiceId,
+                    lastService = new { date = lastDate, mileage = lastMileage },
+                    policy = new { policy.IntervalMonths, policy.IntervalKm },
+                    next = new { nextDateByMonths, dueMileage, remainingKm }
+                };
+                return Ok(new { success = true, data = dto });
             }
             catch (Exception ex)
             {

@@ -12,6 +12,8 @@ public partial class VehicleModelPart
 
     public bool IsCompatible { get; set; } = true;
 
+    public string? CompatibilityNotes { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     // Navigation properties

@@ -21,7 +21,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IVehicleRepository _vehicleRepository;
         // CenterSchedule removed
         private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
-        private readonly IMaintenancePolicyRepository _maintenancePolicyRepository;
+        
 
         public BookingService(
             IBookingRepository bookingRepository,
@@ -32,8 +32,7 @@ namespace EVServiceCenter.Application.Service
             ICustomerRepository customerRepository,
             IVehicleRepository vehicleRepository,
             
-            ITechnicianTimeSlotRepository technicianTimeSlotRepository,
-            IMaintenancePolicyRepository maintenancePolicyRepository)
+            ITechnicianTimeSlotRepository technicianTimeSlotRepository)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -44,7 +43,6 @@ namespace EVServiceCenter.Application.Service
             _vehicleRepository = vehicleRepository;
             
             _technicianTimeSlotRepository = technicianTimeSlotRepository;
-            _maintenancePolicyRepository = maintenancePolicyRepository;
         }
 
         public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int> serviceIds = null)
@@ -545,27 +543,7 @@ namespace EVServiceCenter.Application.Service
                     errors.Add("ServiceId không hợp lệ.");
                 else if (vehicle != null)
             {
-                // Validate against maintenance policies: require either mileage >= IntervalKm OR months >= IntervalMonths
-                var purchaseMonths = vehicle.PurchaseDate.HasValue ? ((DateOnly.FromDateTime(DateTime.UtcNow).Year - vehicle.PurchaseDate.Value.Year) * 12 + (DateOnly.FromDateTime(DateTime.UtcNow).Month - vehicle.PurchaseDate.Value.Month)) : (int?)null;
-
-                var svcId = request.ServiceId;
-                {
-                    var policies = await _maintenancePolicyRepository.GetActiveByServiceIdAsync(svcId);
-                    if (policies != null && policies.Any())
-                    {
-                        // Choose the strictest minimal requirement (min thresholds)
-                        var minKm = policies.Min(p => p.IntervalKm);
-                        var minMonths = policies.Min(p => p.IntervalMonths);
-
-                        var mileageOk = vehicle.CurrentMileage >= minKm;
-                        var monthsOk = purchaseMonths.HasValue && purchaseMonths.Value >= minMonths;
-
-                        if (!mileageOk && !monthsOk)
-                        {
-                            errors.Add($"Xe chưa đạt điều kiện cho dịch vụ {svcId}: yêu cầu tối thiểu {minKm} km hoặc {minMonths} tháng.");
-                        }
-                    }
-                }
+                // Đã loại bỏ kiểm tra theo MaintenancePolicy
             }
 
             if (errors.Any())

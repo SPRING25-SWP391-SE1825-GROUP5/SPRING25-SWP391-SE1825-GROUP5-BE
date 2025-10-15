@@ -4,6 +4,7 @@ namespace EVServiceCenter.Domain.Entities;
 
 public class ServiceRequiredSkill
 {
+    public int ServiceRequiredSkillId { get; set; }
     public int ServiceId { get; set; }
     public int SkillId { get; set; }
 

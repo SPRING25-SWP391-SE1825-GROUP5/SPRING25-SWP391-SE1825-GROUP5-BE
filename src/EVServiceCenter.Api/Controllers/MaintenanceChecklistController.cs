@@ -14,16 +14,18 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IMaintenanceChecklistRepository _checkRepo;
         private readonly IMaintenanceChecklistResultRepository _resultRepo;
         private readonly IWorkOrderRepository _workOrderRepo;
-        // Removed: IServicePartRepository _servicePartRepo;
+        private readonly IServicePartRepository _servicePartRepo;
 
         public MaintenanceChecklistController(
             IMaintenanceChecklistRepository checkRepo,
             IMaintenanceChecklistResultRepository resultRepo,
-            IWorkOrderRepository workOrderRepo)
+            IWorkOrderRepository workOrderRepo,
+            IServicePartRepository servicePartRepo)
         {
             _checkRepo = checkRepo;
             _resultRepo = resultRepo;
             _workOrderRepo = workOrderRepo;
+            _servicePartRepo = servicePartRepo;
         }
 
         // POST /api/workorders/{id}/checklist/init
@@ -43,7 +45,17 @@ namespace EVServiceCenter.Api.Controllers
                 Notes = null
             });
 
-            // Template-based flow: results sẽ được sinh từ ServiceChecklistTemplateItems ở bước riêng
+            // Init từ ServiceParts: mỗi Part là một mục kiểm tra
+            var serviceParts = await _servicePartRepo.GetByServiceIdAsync(workOrder.Booking?.ServiceId ?? 0);
+            var results = serviceParts.Select(sp => new MaintenanceChecklistResult
+            {
+                ChecklistId = checklist.ChecklistId,
+                PartId = sp.PartId,
+                Description = sp.Notes ?? sp.Part?.PartName,
+                Result = null,
+                Comment = null
+            });
+            await _resultRepo.UpsertManyAsync(results);
 
             return Ok(new { success = true, checklistId = checklist.ChecklistId });
         }

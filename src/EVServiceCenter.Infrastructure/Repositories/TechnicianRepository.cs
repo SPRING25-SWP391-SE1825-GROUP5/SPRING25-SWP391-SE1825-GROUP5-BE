@@ -101,12 +101,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     {
                         TechnicianId = technicianId,
                         SkillId = s.SkillId,
-                        // Notes removed from TechnicianSkill
+                        Notes = s.Notes
                     });
                 }
                 else
                 {
-                    // Notes removed from TechnicianSkill
+                    found.Notes = s.Notes;
                     _context.TechnicianSkills.Update(found);
                 }
             }

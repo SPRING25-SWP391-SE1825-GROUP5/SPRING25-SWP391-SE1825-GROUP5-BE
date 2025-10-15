@@ -9,7 +9,7 @@ public partial class MaintenanceChecklist
 
     public int WorkOrderId { get; set; }
 
-    public int TemplateId { get; set; }
+    public int? VehicleModelPartId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
@@ -18,4 +18,6 @@ public partial class MaintenanceChecklist
     public virtual ICollection<MaintenanceChecklistResult> MaintenanceChecklistResults { get; set; } = new List<MaintenanceChecklistResult>();
 
     public virtual WorkOrder WorkOrder { get; set; }
+
+    public virtual VehicleModelPart? VehicleModelPart { get; set; }
 }

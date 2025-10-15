@@ -199,6 +199,7 @@ public class WorkOrderChargesController : ControllerBase
             };
             invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
 
+            // InvoiceItems removed – no detailed lines created
 
             var payment = (Domain.Entities.Payment)null;
             if (payment == null)

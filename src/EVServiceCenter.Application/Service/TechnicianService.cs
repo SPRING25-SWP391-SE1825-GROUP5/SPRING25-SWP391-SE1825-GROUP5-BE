@@ -35,7 +35,7 @@ namespace EVServiceCenter.Application.Service
             {
                 TechnicianId = technicianId,
                 SkillId = i.SkillId,
-                // Notes removed from TechnicianSkill
+                Notes = i.Notes
             });
 
             await _technicianRepository.UpsertSkillsAsync(technicianId, skills);
@@ -72,7 +72,8 @@ namespace EVServiceCenter.Application.Service
                 TechnicianName = ts.Technician?.User?.FullName ?? "N/A",
                 SkillId = ts.SkillId,
                 SkillName = ts.Skill?.Name ?? "N/A",
-                SkillDescription = ts.Skill?.Description ?? "N/A"
+                SkillDescription = ts.Skill?.Description ?? "N/A",
+                Notes = ts.Notes
             }).ToList();
         }
         public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date)
@@ -248,7 +249,7 @@ namespace EVServiceCenter.Application.Service
                     SlotId = ts.SlotId,
                     IsAvailable = ts.IsAvailable,
                     BookingId = null,
-                    // Notes removed from TechnicianSkill
+                    Notes = ts.Notes,
                     CreatedAt = DateTime.UtcNow
                 }).ToList();
 

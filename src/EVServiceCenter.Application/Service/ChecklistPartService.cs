@@ -12,14 +12,16 @@ namespace EVServiceCenter.Application.Service
 {
     public class ChecklistPartService : IChecklistPartService
     {
-        // Removed: IServicePartRepository _servicePartRepository;
+        private readonly IServicePartRepository _servicePartRepository;
         private readonly IServiceService _serviceService;
         private readonly IPartService _partService;
 
         public ChecklistPartService(
+            IServicePartRepository servicePartRepository,
             IServiceService serviceService,
             IPartService partService)
         {
+            _servicePartRepository = servicePartRepository;
             _serviceService = serviceService;
             _partService = partService;
         }
@@ -35,7 +37,7 @@ namespace EVServiceCenter.Application.Service
 
                 var addedParts = new List<ServicePartResponse>();
 
-                // Add each part to service (deprecated flow) – no-op since ServiceParts removed
+                // Add each part to service
                 foreach (var partData in request.Parts)
                 {
                     // Validate part exists
@@ -43,7 +45,16 @@ namespace EVServiceCenter.Application.Service
                     if (part == null)
                         throw new ArgumentException($"Part với ID {partData.PartId} không tồn tại.");
 
-                    // No persistence to ServiceParts – consider mapping via template instead
+                    // Create ServicePart entity
+                    var servicePart = new ServicePart
+                    {
+                        ServiceId = request.ServiceId,
+                        PartId = partData.PartId,
+                        Notes = partData.Notes
+                    };
+
+                    // Add to repository
+                    await _servicePartRepository.AddAsync(servicePart);
 
                     // Add to response
                     addedParts.Add(new ServicePartResponse
@@ -54,7 +65,8 @@ namespace EVServiceCenter.Application.Service
                         PartNumber = part.PartNumber,
                         Brand = part.Brand,
                         Price = part.Price,
-                        ImageUrl = part.ImageUrl
+                        ImageUrl = part.ImageUrl,
+                        Notes = partData.Notes
                     });
                 }
 
@@ -85,14 +97,14 @@ namespace EVServiceCenter.Application.Service
                 if (service == null)
                     throw new ArgumentException("Dịch vụ không tồn tại.");
 
-                var removedPartIds = new List<int>(); // no-op
+                var removedPartIds = new List<int>();
 
                 // Remove each part from service
                 foreach (var partId in request.PartIds)
                 {
                     try
                     {
-                        // No deletion since ServiceParts removed
+                        await _servicePartRepository.DeleteAsync(request.ServiceId, partId);
                         removedPartIds.Add(partId);
                     }
                     catch (Exception ex)
@@ -129,8 +141,29 @@ namespace EVServiceCenter.Application.Service
                 if (service == null)
                     throw new ArgumentException("Dịch vụ không tồn tại.");
 
-                // ServiceParts removed: return empty list for now (template-based flow will populate elsewhere)
-                return new List<ServicePartResponse>();
+                var serviceParts = await _servicePartRepository.GetByServiceIdAsync(serviceId);
+                var response = new List<ServicePartResponse>();
+
+                foreach (var servicePart in serviceParts)
+                {
+                    var part = await _partService.GetPartByIdAsync(servicePart.PartId);
+                    if (part != null)
+                    {
+                        response.Add(new ServicePartResponse
+                        {
+                            ServiceId = servicePart.ServiceId,
+                            PartId = part.PartId,
+                            PartName = part.PartName,
+                            PartNumber = part.PartNumber,
+                            Brand = part.Brand,
+                            Price = part.Price,
+                            ImageUrl = part.ImageUrl,
+                            Notes = servicePart.Notes
+                        });
+                    }
+                }
+
+                return response;
             }
             catch (ArgumentException)
             {

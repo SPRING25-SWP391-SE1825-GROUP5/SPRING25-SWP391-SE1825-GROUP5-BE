@@ -30,11 +30,12 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="searchTerm">Từ khóa tìm kiếm (mã phụ tùng, tên, thương hiệu, tên trung tâm)</param>
         /// <returns>Danh sách tồn kho</returns>
         [HttpGet]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetInventories(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
             [FromQuery] int? centerId = null,
-            [FromQuery] string searchTerm = null)
+            [FromQuery] string? searchTerm = null)
         {
             try
             {
@@ -60,12 +61,12 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         /// <summary>
-        /// Tạo tồn kho mới (chỉ Staff/Admin)
+        /// Tạo tồn kho mới (chỉ MANAGER)
         /// </summary>
         /// <param name="request">Thông tin tồn kho mới</param>
         /// <returns>Thông tin tồn kho đã tạo</returns>
         [HttpPost]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Roles = "MANAGER")]
         public async Task<IActionResult> CreateInventory([FromBody] CreateInventoryRequest request)
         {
             try
@@ -102,11 +103,44 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         /// <summary>
+        /// Lấy danh sách phụ tùng (parts) thuộc một inventory
+        /// </summary>
+        /// <param name="inventoryId">ID tồn kho</param>
+        /// <returns>Danh sách phụ tùng của tồn kho</returns>
+        [HttpGet("{inventoryId}/parts")]
+        public async Task<IActionResult> GetInventoryParts(int inventoryId)
+        {
+            try
+            {
+                if (inventoryId <= 0)
+                    return BadRequest(new { success = false, message = "ID tồn kho không hợp lệ" });
+
+                var inventory = await _inventoryService.GetInventoryByIdAsync(inventoryId);
+                var parts = inventory.InventoryParts;
+
+                return Ok(new {
+                    success = true,
+                    message = "Lấy danh sách phụ tùng của tồn kho thành công",
+                    data = parts
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Lấy thông tin tồn kho theo ID
         /// </summary>
         /// <param name="id">ID tồn kho</param>
         /// <returns>Thông tin tồn kho</returns>
         [HttpGet("{id}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetInventoryById(int id)
         {
             try
@@ -136,47 +170,32 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         /// <summary>
-        /// Lấy danh sách tồn kho theo trung tâm
+        /// Lấy tồn kho theo trung tâm (1 trung tâm = 1 kho)
         /// </summary>
         /// <param name="centerId">ID trung tâm</param>
         /// <param name="pageNumber">Số trang (mặc định: 1)</param>
         /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
         /// <param name="searchTerm">Từ khóa tìm kiếm</param>
         /// <returns>Danh sách tồn kho của trung tâm</returns>
-        [HttpGet("center/{centerId}")]
-        public async Task<IActionResult> GetInventoryByCenter(
-            int centerId,
-            [FromQuery] int pageNumber = 1,
-            [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null)
+        [HttpGet("by-center/{centerId}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
+        public async Task<IActionResult> GetInventoryByCenter(int centerId)
         {
             try
             {
                 if (centerId <= 0)
                     return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
 
-                // Validate pagination parameters
-                if (pageNumber < 1) pageNumber = 1;
-                if (pageSize < 1 || pageSize > 100) pageSize = 10;
-
-                var result = await _inventoryService.GetInventoriesByCenterAsync(centerId, pageNumber, pageSize, searchTerm);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Lấy danh sách tồn kho theo trung tâm thành công",
-                    data = result
-                });
+                var inventory = await _inventoryService.GetInventoryByCenterIdAsync(centerId);
+                return Ok(new { success = true, message = "Lấy tồn kho theo trung tâm thành công", data = inventory });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = ex.Message });
+                return NotFound(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
             }
         }
 
@@ -218,7 +237,7 @@ namespace EVServiceCenter.Api.Controllers
         public async Task<IActionResult> GetCentersAvailability(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 50,
-            [FromQuery] string searchTerm = null)
+            [FromQuery] string? searchTerm = null)
         {
             try
             {

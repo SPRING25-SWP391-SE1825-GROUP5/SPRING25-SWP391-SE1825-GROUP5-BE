@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
@@ -31,7 +31,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
-                    .SelectMany(x => x.Value.Errors)
+                    .SelectMany(x => x.Value?.Errors ?? new Microsoft.AspNetCore.Mvc.ModelBinding.ModelErrorCollection())
                     .Select(x => x.ErrorMessage)
                     .ToList();
                 
@@ -65,7 +65,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new 
                 { 
                     success = false,
-                    message = "Lỗi validation",
+                    message = "L?i validation",
                     errors = new[] { argEx.Message }
                 });
             }
@@ -75,15 +75,15 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new 
                 { 
                     success = false,
-                    message = "Lỗi dữ liệu",
+                    message = "L?i d? li?u",
                     errors = new[] { invEx.Message }
                 });
             }
             catch (Exception ex)
             {
                 // Log the actual error for debugging
-                Console.WriteLine($"Registration error: {ex}");
-                
+                // Registration error occurred
+
                 // Parse specific database errors
                 var errorMessage = "Lỗi hệ thống";
                 
@@ -93,11 +93,11 @@ namespace EVServiceCenter.WebAPI.Controllers
                 }
                 else if (ex.Message.Contains("UQ_Users_Email") || ex.Message.Contains("Email already exists"))
                 {
-                    errorMessage = "Email này đã được sử dụng. Vui lòng sử dụng email khác.";
+                    errorMessage = "Email này đã được sử dụng. Vui lòng dùng email khác.";
                 }
                 else if (ex.Message.Contains("UQ_Users_PhoneNumber") || ex.Message.Contains("Phone number already exists"))
                 {
-                    errorMessage = "Số điện thoại này đã được sử dụng. Vui lòng sử dụng số khác.";
+                    errorMessage = "Số điện thoại này đã được sử dụng. Vui lòng dùng số khác.";
                 }
                 else if (ex.Message.Contains("CHECK constraint"))
                 {
@@ -126,9 +126,24 @@ namespace EVServiceCenter.WebAPI.Controllers
         [HttpPost("verify-otp")]
         public async Task<IActionResult> VerifyOtp([FromQuery] string email, [FromQuery] string otp)
         {
-            var ok = await _authService.VerifyOtpAsync(email, otp);
-            return ok ? Ok(new { message = "Xác minh thành công" })
-                      : BadRequest(new { message = "OTP không hợp lệ hoặc đã hết hạn" });
+            try
+            {
+                var ok = await _authService.VerifyOtpAsync(email, otp);
+                return ok ? Ok(new { success = true, message = "Xác minh thành công" })
+                          : BadRequest(new { success = false, message = "OTP không hợp lệ hoặc đã hết hạn" });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (System.Net.Mail.SmtpException ex)
+            {
+                return BadRequest(new { success = false, message = "Gửi email thất bại. Vui lòng kiểm tra địa chỉ email và thử lại.", errors = new[] { ex.Message } });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
         }
 
         [HttpPost("login")]
@@ -138,7 +153,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
-                    .SelectMany(x => x.Value.Errors)
+                    .SelectMany(x => x.Value?.Errors ?? new Microsoft.AspNetCore.Mvc.ModelBinding.ModelErrorCollection())
                     .Select(x => x.ErrorMessage)
                     .ToList();
                 
@@ -160,7 +175,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message += ". Khuyến nghị: Hãy xác thực email để bảo mật tài khoản tốt hơn.";
                 }
 
-                // Tạo response phù hợp với FE
+                // T?o response ph� h?p v?i FE
                 var response = new
                 {
                     success = true,
@@ -170,7 +185,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         token = result.AccessToken,
                         user = new
                         {
-                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
+                            id = result.UserId,  // Th�m field 'id' d? FE c� th? s? d?ng
                             userId = result.UserId,
                             email = result.Email ?? "",
                             fullName = result.FullName,
@@ -201,13 +216,13 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Login error: {ex}");
+                // Login error occurred
                 
                 return StatusCode(500, new 
                 { 
                     success = false,
                     message = "Có lỗi xảy ra trong quá trình đăng nhập. Vui lòng thử lại sau.",
-                    errors = new[] { "Lỗi hệ thống" }
+                    errors = new[] { ex.Message }
                 });
             }
         }
@@ -241,7 +256,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
-                    .SelectMany(x => x.Value.Errors)
+                    .SelectMany(x => x.Value?.Errors ?? new Microsoft.AspNetCore.Mvc.ModelBinding.ModelErrorCollection())
                     .Select(x => x.ErrorMessage)
                     .ToList();
                 
@@ -280,13 +295,13 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Email verification error: {ex}");
+                // Email verification error occurred
                 
                 return StatusCode(500, new 
                 { 
                     success = false,
                     message = "Có lỗi xảy ra trong quá trình xác thực email. Vui lòng thử lại sau.",
-                    errors = new[] { "Lỗi hệ thống" }
+                    errors = new[] { ex.Message }
                 });
             }
         }
@@ -294,11 +309,11 @@ namespace EVServiceCenter.WebAPI.Controllers
         [HttpPost("resend-verification")]
         public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request)
         {
-            // Kiểm tra ModelState validation
+            // Ki?m tra ModelState validation
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
-                    .SelectMany(x => x.Value.Errors)
+                    .SelectMany(x => x.Value?.Errors ?? new Microsoft.AspNetCore.Mvc.ModelBinding.ModelErrorCollection())
                     .Select(x => x.ErrorMessage)
                     .ToList();
                 
@@ -330,19 +345,19 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new 
                 { 
                     success = false,
-                    message = "Lỗi validation",
+                    message = "L?i validation",
                     errors = new[] { argEx.Message }
                 });
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Resend verification error: {ex}");
+                // Resend verification error occurred
                 
                 return StatusCode(500, new 
                 { 
                     success = false,
-                    message = "Có lỗi xảy ra trong quá trình gửi lại mã xác thực. Vui lòng thử lại sau.",
-                    errors = new[] { "Lỗi hệ thống" }
+                    message = "C� l?i x?y ra trong qu� tr�nh g?i l?i m� x�c th?c. Vui l�ng th? l?i sau.",
+                    errors = new[] { ex.Message }
                 });
             }
         }
@@ -369,7 +384,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = "Lỗi validation", errors = new[] { ex.Message } });
+                return BadRequest(new { success = false, message = "Lỗi xác thực", errors = new[] { ex.Message } });
             }
             catch (Exception ex)
             {
@@ -408,7 +423,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Đăng xuất - xóa refresh token
+        /// �ang xu?t - x�a refresh token
         /// </summary>
         [HttpPost("logout")]
         [Authorize]
@@ -428,7 +443,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = "Lỗi validation", errors = new[] { ex.Message } });
+                return BadRequest(new { success = false, message = "Lỗi xác thực", errors = new[] { ex.Message } });
             }
             catch (Exception ex)
             {
@@ -437,7 +452,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Lấy thông tin profile của user hiện tại
+        /// L?y th�ng tin profile c?a user hi?n t?i
         /// </summary>
         [HttpGet("profile")]
         [Authorize]
@@ -453,11 +468,11 @@ namespace EVServiceCenter.WebAPI.Controllers
                 }
 
                 var result = await _authService.GetUserProfileAsync(userId);
-                return Ok(new { success = true, message = "Lấy thông tin profile thành công", data = result });
+                return Ok(new { success = true, message = "L?y th�ng tin profile th�nh c�ng", data = result });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = "Lỗi validation", errors = new[] { ex.Message } });
+                return BadRequest(new { success = false, message = "L?i validation", errors = new[] { ex.Message } });
             }
             catch (Exception ex)
             {
@@ -466,7 +481,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Cập nhật thông tin profile của user hiện tại (không cho đổi email/phone)
+        /// C?p nh?t th�ng tin profile c?a user hi?n t?i (kh�ng cho d?i email/phone)
         /// </summary>
         [HttpPut("profile")]
         [Authorize]
@@ -504,7 +519,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Đổi mật khẩu cho user hiện tại
+        /// �?i m?t kh?u cho user hi?n t?i
         /// </summary>
         [HttpPost("change-password")]
         [Authorize]
@@ -542,7 +557,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Upload avatar cho user hiện tại
+        /// Upload avatar cho user hi?n t?i
         /// </summary>
         [HttpPost("upload-avatar")]
         [Authorize(Policy = "AuthenticatedUser")]
@@ -557,10 +572,10 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return Unauthorized(new { success = false, message = "Token không hợp lệ hoặc đã hết hạn." });
                 }
 
-                // Upload ảnh lên Cloudinary
+                // Upload ?nh ln Cloudinary
                 var avatarUrl = await _cloudinaryService.UploadImageAsync(file, "ev-service/avatars");
 
-                // Cập nhật avatar URL trong database
+                // C?p nh?t avatar URL trong database
                 await _authService.UpdateUserAvatarAsync(userId, avatarUrl);
 
                 return Ok(new { 
@@ -591,10 +606,10 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Đăng nhập bằng Google
+        ///ang nh?p b?ng Google
         /// </summary>
-        /// <param name="request">Google login request với token</param>
-        /// <returns>JWT token và thông tin user</returns>
+        /// <param name="request">Google login request v?i token</param>
+        /// <returns>JWT token v thng tin user</returns>
         [HttpPost("login-google")]
         public async Task<IActionResult> LoginWithGoogle([FromBody] GoogleLoginRequest request)
         {
@@ -608,17 +623,17 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var result = await _authService.LoginWithGoogleAsync(request);
                 
-                // Tạo response phù hợp với FE
+                // T?o response ph h?p v?i FE
                 var response = new
                 {
                     success = true,
-                    message = "Đăng nhập với Google thành công",
+                    message = "ang nh?p v?i Google thnh cng",
                     data = new
                     {
                         token = result.AccessToken,
                         user = new
                         {
-                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
+                            id = result.UserId,  // Thm field 'id' d? FE c th? s? d?ng
                             userId = result.UserId,
                             email = result.Email ?? "",
                             fullName = result.FullName,

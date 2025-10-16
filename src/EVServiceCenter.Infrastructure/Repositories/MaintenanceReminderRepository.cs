@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +52,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             await _db.SaveChangesAsync();
         }
 
-        public async Task<MaintenanceReminder> GetByIdAsync(int id)
+        public async Task<MaintenanceReminder?> GetByIdAsync(int id)
         {
             return await _db.MaintenanceReminders.FirstOrDefaultAsync(r => r.ReminderId == id);
         }

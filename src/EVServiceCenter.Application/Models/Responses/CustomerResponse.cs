@@ -11,9 +11,9 @@ namespace EVServiceCenter.Application.Models.Responses
         
         
         // Related data
-        public string UserFullName { get; set; }
-        public string UserEmail { get; set; }
-        public string UserPhoneNumber { get; set; }
+        public required string UserFullName { get; set; }
+        public required string UserEmail { get; set; }
+        public required string UserPhoneNumber { get; set; }
         public int VehicleCount { get; set; }
     }
 }

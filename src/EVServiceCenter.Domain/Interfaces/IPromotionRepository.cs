@@ -7,8 +7,8 @@ namespace EVServiceCenter.Domain.Interfaces
     public interface IPromotionRepository
     {
         Task<List<Promotion>> GetAllPromotionsAsync();
-        Task<Promotion> GetPromotionByIdAsync(int promotionId);
-        Task<Promotion> GetPromotionByCodeAsync(string code);
+        Task<Promotion?> GetPromotionByIdAsync(int promotionId);
+        Task<Promotion?> GetPromotionByCodeAsync(string code);
         Task<Promotion> CreatePromotionAsync(Promotion promotion);
         Task UpdatePromotionAsync(Promotion promotion);
         Task DeletePromotionAsync(int promotionId);

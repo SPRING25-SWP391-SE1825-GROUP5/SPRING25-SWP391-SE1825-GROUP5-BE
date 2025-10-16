@@ -153,8 +153,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             [FromQuery] int? centerId = null,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
-            [FromQuery] string position = null,
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? position = null,
             [FromQuery] bool? isActive = null)
         {
             try
@@ -382,7 +382,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        public class CreateTechnicianFromUserRequest { public int UserId { get; set; } public int CenterId { get; set; } public string Position { get; set; } }
+        public class CreateTechnicianFromUserRequest { public int UserId { get; set; } public int CenterId { get; set; } public string Position { get; set; } = string.Empty; }
 
         /// <summary>
         /// Lấy danh sách kỹ thuật viên theo trung tâm
@@ -399,8 +399,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             [FromQuery] int centerId,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
-            [FromQuery] string specialization = null,
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? specialization = null,
             [FromQuery] bool? isActive = null)
         {
             try

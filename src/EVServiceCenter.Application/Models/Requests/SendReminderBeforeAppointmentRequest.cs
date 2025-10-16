@@ -17,6 +17,6 @@ namespace EVServiceCenter.Application.Models.Requests
 
         public string? CustomMessage { get; set; }
 
-        public List<string> ReminderTypes { get; set; } = new List<string> { "APPOINTMENT_REMINDER" }; // APPOINTMENT_REMINDER, MAINTENANCE_REMINDER, etc.
+        public required List<string> ReminderTypes { get; set; } = new List<string> { "APPOINTMENT_REMINDER" }; // APPOINTMENT_REMINDER, MAINTENANCE_REMINDER, etc.
     }
 }

@@ -130,7 +130,9 @@ namespace EVServiceCenter.Application.Service
             if (existingByEmail != null)
                 throw new ArgumentException("Email đã tồn tại");
 
-            // Phone uniqueness now validated against Users.PhoneNumber only
+            var existingByPhone = await _accountRepository.GetAccountByPhoneNumberAsync(normalizedPhone);
+            if (existingByPhone != null)
+                throw new ArgumentException("Số điện thoại đã tồn tại");
 
             // Generate secure random password (>=8, upper/lower/digit/special)
             var tempPassword = GenerateSecurePassword(12);
@@ -161,10 +163,8 @@ namespace EVServiceCenter.Application.Service
 
             var created = await _customerRepository.CreateCustomerAsync(customer);
 
-            // Send email with temporary password
-            var subject = "Tài khoản khách hàng tại EV Service Center";
-            var body = $"Xin chào {user.FullName},\n\nTài khoản của bạn đã được tạo.\nEmail: {user.Email}\nMật khẩu tạm: {tempPassword}\n\nVui lòng đăng nhập và đổi mật khẩu ngay trong phần tài khoản.\n\nTrân trọng.";
-            await _emailService.SendEmailAsync(user.Email, subject, body);
+            // Gửi email chào mừng kèm mật khẩu tạm
+            await _emailService.SendWelcomeCustomerWithPasswordAsync(user.Email, user.FullName, tempPassword);
 
             return MapToCustomerResponse(created);
         }
@@ -206,14 +206,14 @@ namespace EVServiceCenter.Application.Service
                 CustomerId = customer.CustomerId,
                 UserId = customer.UserId,
                 IsGuest = customer.IsGuest,
-                UserFullName = customer.User?.FullName,
-                UserEmail = customer.User?.Email,
-                UserPhoneNumber = customer.User?.PhoneNumber,
+                UserFullName = customer.User?.FullName ?? string.Empty,
+                UserEmail = customer.User?.Email ?? string.Empty,
+                UserPhoneNumber = customer.User?.PhoneNumber ?? string.Empty,
                 VehicleCount = customer.Vehicles?.Count ?? 0
             };
         }
 
-        private async Task ValidateCreateCustomerRequestAsync(CreateCustomerRequest request)
+        private Task ValidateCreateCustomerRequestAsync(CreateCustomerRequest request)
         {
             var errors = new List<string>();
 
@@ -221,9 +221,11 @@ namespace EVServiceCenter.Application.Service
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
+            
+            return Task.CompletedTask;
         }
 
-        private async Task ValidateUpdateCustomerRequestAsync(UpdateCustomerRequest request, int customerId)
+        private Task ValidateUpdateCustomerRequestAsync(UpdateCustomerRequest request, int customerId)
         {
             var errors = new List<string>();
 
@@ -231,6 +233,8 @@ namespace EVServiceCenter.Application.Service
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
+            
+            return Task.CompletedTask;
         }
 
         private string NormalizePhoneNumber(string phoneNumber)

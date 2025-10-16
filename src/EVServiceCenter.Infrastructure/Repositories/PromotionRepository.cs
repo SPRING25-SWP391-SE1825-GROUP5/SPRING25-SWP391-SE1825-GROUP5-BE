@@ -1,7 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +25,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<Promotion> GetPromotionByIdAsync(int promotionId)
+        public async Task<Promotion?> GetPromotionByIdAsync(int promotionId)
         {
             // Không Include UserPromotions để tránh sinh cột InvoiceId từ shadow FK
             return await _context.Promotions
@@ -32,7 +33,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(p => p.PromotionId == promotionId);
         }
 
-        public async Task<Promotion> GetPromotionByCodeAsync(string code)
+        public async Task<Promotion?> GetPromotionByCodeAsync(string code)
         {
             return await _context.Promotions
                 .AsNoTracking()
@@ -175,12 +176,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
             {
                 userPromotion.Status = string.IsNullOrWhiteSpace(userPromotion.Status) ? "SAVED" : userPromotion.Status;
                 userPromotion.DiscountAmount = userPromotion.DiscountAmount;
-                userPromotion.UsedAt = userPromotion.UsedAt == null ? System.DateTime.UtcNow : userPromotion.UsedAt;
+                userPromotion.UsedAt = userPromotion.UsedAt == default(DateTime) ? System.DateTime.UtcNow : userPromotion.UsedAt;
             }
             else
             {
                 userPromotion.Status = "APPLIED";
-                if (userPromotion.UsedAt == null) userPromotion.UsedAt = System.DateTime.UtcNow;
+                if (userPromotion.UsedAt == default(DateTime)) userPromotion.UsedAt = System.DateTime.UtcNow;
             }
 
             _context.UserPromotions.Add(userPromotion);

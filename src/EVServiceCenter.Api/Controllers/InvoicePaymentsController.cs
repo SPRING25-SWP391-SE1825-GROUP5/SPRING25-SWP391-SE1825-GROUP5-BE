@@ -31,7 +31,7 @@ public class InvoicePaymentsController : ControllerBase
     {
         public int Amount { get; set; }
         public int PaidByUserId { get; set; }
-        public string Note { get; set; }
+        public string Note { get; set; } = string.Empty;
     }
 
     [HttpPost("offline")]
@@ -58,7 +58,7 @@ public class InvoicePaymentsController : ControllerBase
             Status = "PAID",
             PaidAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
-            PaidByUserId = req.PaidByUserId,
+            PaidByUserID = req.PaidByUserId,
         };
 
         payment = await _paymentRepo.CreateAsync(payment);
@@ -69,13 +69,13 @@ public class InvoicePaymentsController : ControllerBase
             status = payment.Status,
             amount = payment.Amount,
             paymentMethod = payment.PaymentMethod,
-            paidByUserId = payment.PaidByUserId
+            paidByUserId = payment.PaidByUserID
         });
     }
 
     [HttpGet]
     [Authorize]
-    public async Task<IActionResult> List([FromRoute] int invoiceId, [FromQuery] string status = null, [FromQuery] string method = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    public async Task<IActionResult> List([FromRoute] int invoiceId, [FromQuery] string? status = null, [FromQuery] string? method = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         var invoice = await _invoiceRepo.GetByIdAsync(invoiceId);
         if (invoice == null)
@@ -90,7 +90,7 @@ public class InvoicePaymentsController : ControllerBase
             status = p.Status,
             paymentMethod = p.PaymentMethod,
             amount = p.Amount,
-            paidByUserId = p.PaidByUserId,
+            paidByUserId = p.PaidByUserID,
             createdAt = p.CreatedAt,
             paidAt = p.PaidAt
         });

@@ -10,6 +10,6 @@ namespace EVServiceCenter.Application.Models.Requests
 
         [Required(ErrorMessage = "Vai trò là bắt buộc")]
         [RegularExpression(@"^(ADMIN|STAFF|TECHNICIAN|CUSTOMER)$", ErrorMessage = "Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER")]
-        public string Role { get; set; }
+        public required string Role { get; set; }
     }
 }

@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -21,6 +22,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IVehicleRepository _vehicleRepository;
         // CenterSchedule removed
         private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
+        private readonly ILogger<BookingService> _logger;
         
 
         public BookingService(
@@ -31,8 +33,8 @@ namespace EVServiceCenter.Application.Service
             ITechnicianRepository technicianRepository,
             ICustomerRepository customerRepository,
             IVehicleRepository vehicleRepository,
-            
-            ITechnicianTimeSlotRepository technicianTimeSlotRepository)
+            ITechnicianTimeSlotRepository technicianTimeSlotRepository,
+            ILogger<BookingService> logger)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -43,9 +45,10 @@ namespace EVServiceCenter.Application.Service
             _vehicleRepository = vehicleRepository;
             
             _technicianTimeSlotRepository = technicianTimeSlotRepository;
+            _logger = logger;
         }
 
-        public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int> serviceIds = null)
+        public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int>? serviceIds = null)
         {
             try
             {
@@ -120,7 +123,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<AvailableTimesResponse> GetAvailableTimesAsync(int centerId, DateOnly date, int? technicianId = null, List<int> serviceIds = null)
+        public async Task<AvailableTimesResponse> GetAvailableTimesAsync(int centerId, DateOnly date, int? technicianId = null, List<int>? serviceIds = null)
         {
             try
             {
@@ -222,7 +225,7 @@ namespace EVServiceCenter.Application.Service
                     Date = date,
                     TechnicianId = technicianId,
                     TechnicianName = technicianId.HasValue ? 
-                        centerTechnicians.FirstOrDefault(t => t.TechnicianId == technicianId.Value)?.User?.FullName ?? "N/A" : null,
+                        centerTechnicians.FirstOrDefault(t => t.TechnicianId == technicianId.Value)?.User?.FullName ?? "N/A" : string.Empty,
                     AvailableTimeSlots = availableTimeSlots.OrderBy(ts => ts.SlotTime).ToList(),
                     AvailableServices = availableServices.Select(s => new ServiceInfo
                     {
@@ -347,24 +350,24 @@ namespace EVServiceCenter.Application.Service
 
                 // Save booking
                 var createdBooking = await _bookingRepository.CreateBookingAsync(booking);
-                Console.WriteLine($"[DEBUG] Booking {createdBooking.BookingId} created with status: {createdBooking.Status}");
+                _logger.LogDebug("Booking {BookingId} created with status: {Status}", createdBooking.BookingId, createdBooking.Status);
 
                 // Reserve selected technician slot
                 try
                 {
                     var reserved = await _technicianTimeSlotRepository.ReserveSlotAsync(selectedTechnicianId!.Value, request.BookingDate.ToDateTime(TimeOnly.MinValue), request.SlotId, createdBooking.BookingId);
-                    Console.WriteLine($"[DEBUG] Reserve slot: {(reserved ? "OK" : "FAILED")}, tech={selectedTechnicianId}, slot={request.SlotId}");
+                    _logger.LogDebug("Reserve slot: {Result}, tech={TechnicianId}, slot={SlotId}", reserved ? "OK" : "FAILED", selectedTechnicianId, request.SlotId);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[WARN] Reserve slot failed: {ex.Message}");
+                    _logger.LogWarning("Reserve slot failed: {Error}", ex.Message);
                 }
 
                 // Không còn thêm vào BookingServices trong mô hình 1 dịch vụ
 
                 // Sử dụng booking vừa tạo thay vì query lại từ database để tránh race condition
                 var response = await MapToBookingResponseAsync(createdBooking);
-                Console.WriteLine($"[DEBUG] Booking {createdBooking.BookingId} response status: {response.Status}");
+                _logger.LogDebug("Booking {BookingId} response status: {Status}", createdBooking.BookingId, response.Status);
                 return response;
             }
             catch (ArgumentException)
@@ -407,7 +410,7 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException("Đặt lịch không tồn tại.");
 
                 // Validate status transition
-                ValidateStatusTransition(booking.Status, request.Status);
+                ValidateStatusTransition(booking.Status ?? string.Empty, request.Status);
 
                 // Update booking status
                 booking.Status = request.Status.ToUpper();
@@ -449,7 +452,7 @@ namespace EVServiceCenter.Application.Service
             // Load related data if not already loaded
             if (booking.Customer == null)
             {
-                booking = await _bookingRepository.GetBookingByIdAsync(booking.BookingId);
+                booking = await _bookingRepository.GetBookingByIdAsync(booking.BookingId) ?? booking;
             }
 
             // Determine matched schedule for display
@@ -473,9 +476,9 @@ namespace EVServiceCenter.Application.Service
                 CenterScheduleDate = scheduleDate,
                 CenterScheduleDayOfWeek = scheduleDow,
 
-                Status = booking.Status,
+                Status = booking.Status ?? string.Empty,
                 TotalCost = booking.TotalCost,
-                SpecialRequests = booking.SpecialRequests,
+                SpecialRequests = booking.SpecialRequests ?? string.Empty,
                 CreatedAt = booking.CreatedAt,
                 UpdatedAt = booking.UpdatedAt,
                 // Single-slot model

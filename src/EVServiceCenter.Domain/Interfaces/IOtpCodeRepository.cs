@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,37 +10,37 @@ namespace EVServiceCenter.Domain.Interfaces
     public interface IOtpCodeRepository
     {
         /// <summary>
-        /// Tạo OTP mới
+        /// T?o OTP m?i
         /// </summary>
         Task CreateOtpAsync(Otpcode otp);
 
         /// <summary>
-        /// Lấy OTP hợp lệ
+        /// L?y OTP h?p l?
         /// </summary>
-        Task<Otpcode> GetValidOtpAsync(int userId, string otpCode, string otpType);
+        Task<Otpcode?> GetValidOtpAsync(int userId, string otpCode, string otpType);
 
         /// <summary>
-        /// Lấy OTP cuối cùng của user
+        /// L?y OTP cu?i c�ng c?a user
         /// </summary>
-        Task<Otpcode> GetLastOtpAsync(int userId, string otpType);
+        Task<Otpcode?> GetLastOtpAsync(int userId, string otpType);
 
         /// <summary>
-        /// Đánh dấu OTP đã sử dụng
+        /// ��nh d?u OTP d� s? d?ng
         /// </summary>
         Task MarkOtpAsUsedAsync(int otpId);
 
         /// <summary>
-        /// Đánh dấu OTP hết hạn
+        /// ��nh d?u OTP h?t h?n
         /// </summary>
         Task MarkOtpAsExpiredAsync(int otpId);
 
         /// <summary>
-        /// Vô hiệu hóa tất cả OTP cũ của user
+        /// V� hi?u h�a t?t c? OTP cu c?a user
         /// </summary>
         Task InvalidateUserOtpAsync(int userId, string otpType);
 
         /// <summary>
-        /// Tăng số lần thử
+        /// Tang s? l?n th?
         /// </summary>
         Task IncrementAttemptCountAsync(int userId, string otpCode, string otpType);
 

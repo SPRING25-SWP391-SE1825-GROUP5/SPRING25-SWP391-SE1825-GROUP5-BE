@@ -4,7 +4,7 @@ namespace EVServiceCenter.Application.Models.Responses
 {
     public class InventoryListResponse
     {
-        public List<InventoryResponse> Inventories { get; set; }
+        public required List<InventoryResponse> Inventories { get; set; }
         public int PageNumber { get; set; }
         public int PageSize { get; set; }
         public int TotalPages { get; set; }

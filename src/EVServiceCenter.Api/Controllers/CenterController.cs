@@ -11,11 +11,10 @@ namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "StaffOrAdmin")] // Chỉ STAFF và ADMIN mới có quyền truy cập (riêng nearby sẽ cho phép ẩn danh)
     public class CenterController : ControllerBase
     {
         private readonly ICenterService _centerService;
-        private static System.Collections.Generic.List<(int centerId, double lat, double lng)> _geoCache;
+        private static System.Collections.Generic.List<(int centerId, double lat, double lng)>? _geoCache;
 
         public CenterController(ICenterService centerService)
         {
@@ -31,11 +30,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="city">Lọc theo thành phố</param>
         /// <returns>Danh sách trung tâm</returns>
         [HttpGet]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetAllCenters(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
-            [FromQuery] string city = null)
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? city = null)
         {
             try
             {
@@ -127,11 +127,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="city">Lọc theo thành phố</param>
         /// <returns>Danh sách trung tâm đang hoạt động</returns>
         [HttpGet("active")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetActiveCenters(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
-            [FromQuery] string city = null)
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? city = null)
         {
             try
             {
@@ -162,6 +163,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="id">ID trung tâm</param>
         /// <returns>Thông tin trung tâm</returns>
         [HttpGet("{id}")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetCenterById(int id)
         {
             try
@@ -196,6 +198,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="request">Thông tin trung tâm mới</param>
         /// <returns>Thông tin trung tâm đã tạo</returns>
         [HttpPost]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> CreateCenter([FromBody] CreateCenterRequest request)
         {
             try
@@ -238,6 +241,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="request">Thông tin cập nhật</param>
         /// <returns>Thông tin trung tâm đã cập nhật</returns>
         [HttpPut("{id}")]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> UpdateCenter(int id, [FromBody] UpdateCenterRequest request)
         {
             try

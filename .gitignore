@@ -24,6 +24,16 @@ tests/*/logs/
 *.trx
 *.coverage
 *.coveragexml
+
+# Allure Test Reports
+allure-report/
+allure-results/
+allureConfig.json
+
+# Test artifacts
+**/TestResults/
+**/test-results/
+**/test-reports/
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
@@ -377,3 +387,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# MCP Server files (development tools)
+McpServer.cs
+EVServiceCenter.McpServer.csproj

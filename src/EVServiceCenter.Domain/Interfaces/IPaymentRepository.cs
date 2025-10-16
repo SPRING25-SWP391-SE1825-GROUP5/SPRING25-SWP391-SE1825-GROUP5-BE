@@ -11,7 +11,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<Payment> CreateAsync(Payment payment);
         Task UpdateAsync(Payment payment);
         Task<int> CountByInvoiceIdAsync(int invoiceId);
-        Task<List<Payment>> GetByInvoiceIdAsync(int invoiceId, string status = null, string method = null, DateTime? from = null, DateTime? to = null);
+        Task<List<Payment>> GetByInvoiceIdAsync(int invoiceId, string? status = null, string? method = null, DateTime? from = null, DateTime? to = null);
     }
 }
 

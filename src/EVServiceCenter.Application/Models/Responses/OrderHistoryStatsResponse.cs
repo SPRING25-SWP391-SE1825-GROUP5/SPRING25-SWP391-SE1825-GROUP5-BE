@@ -10,7 +10,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public decimal AverageOrderValue { get; set; }
         public FavoriteProduct FavoriteProduct { get; set; } = null!;
         public OrderRecentActivity RecentActivity { get; set; } = null!;
-        public string Period { get; set; } = null!;
+        public required string Period { get; set; } = null!;
     }
 
     public class OrderStatusBreakdown
@@ -26,7 +26,7 @@ namespace EVServiceCenter.Application.Models.Responses
     public class FavoriteProduct
     {
         public int ProductId { get; set; }
-        public string ProductName { get; set; } = null!;
+        public required string ProductName { get; set; } = null!;
         public int Count { get; set; }
     }
 

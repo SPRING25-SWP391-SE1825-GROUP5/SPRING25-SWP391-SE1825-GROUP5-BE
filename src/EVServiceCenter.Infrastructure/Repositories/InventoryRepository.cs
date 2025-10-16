@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +28,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<Inventory> GetInventoryByIdAsync(int inventoryId)
+        public async Task<Inventory?> GetInventoryByIdAsync(int inventoryId)
         {
             return await _context.Inventories
                 .Include(i => i.Center)
@@ -37,7 +37,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(i => i.InventoryId == inventoryId);
         }
 
-        public async Task<Inventory> GetInventoryByCenterIdAsync(int centerId)
+        public async Task<Inventory?> GetInventoryByCenterIdAsync(int centerId)
         {
             return await _context.Inventories
                 .Include(i => i.Center)
@@ -75,7 +75,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<InventoryPart> GetInventoryPartByInventoryAndPartAsync(int inventoryId, int partId)
+        public async Task<InventoryPart?> GetInventoryPartByInventoryAndPartAsync(int inventoryId, int partId)
         {
             return await _context.InventoryParts
                 .Include(ip => ip.Part)
@@ -114,13 +114,13 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         // Validation methods
-        public async Task<ServiceCenter> GetCenterByIdAsync(int centerId)
+        public async Task<ServiceCenter?> GetCenterByIdAsync(int centerId)
         {
             return await _context.ServiceCenters
                 .FirstOrDefaultAsync(c => c.CenterId == centerId);
         }
 
-        public async Task<Part> GetPartByIdAsync(int partId)
+        public async Task<Part?> GetPartByIdAsync(int partId)
         {
             return await _context.Parts
                 .FirstOrDefaultAsync(p => p.PartId == partId);

@@ -172,7 +172,7 @@ namespace EVServiceCenter.Application.Service
             };
         }
 
-        private async Task<OrderHistoryResponse> MapToOrderHistoryResponse(Order order)
+        private Task<OrderHistoryResponse> MapToOrderHistoryResponse(Order order)
         {
             var response = new OrderHistoryResponse
             {
@@ -182,11 +182,13 @@ namespace EVServiceCenter.Application.Service
                 Status = order.Status,
                 TotalAmount = order.OrderItems?.Sum(oi => oi.Quantity * oi.UnitPrice) ?? 0m,
                 Notes = order.Notes,
+                Items = new List<OrderItemInfo>(),
+                Timeline = new List<OrderStatusTimelineInfo>(),
                 ShippingAddress = new ShippingAddressInfo
                 {
                     FullName = "Customer", // This would need to be extracted from shipping address
-                    PhoneNumber = order.Customer?.User?.PhoneNumber,
-                    Address = order.Customer?.User?.Address
+                    PhoneNumber = order.Customer?.User?.PhoneNumber ?? string.Empty,
+                    Address = order.Customer?.User?.Address ?? string.Empty
                 },
                 CreatedAt = order.CreatedAt,
                 UpdatedAt = order.UpdatedAt
@@ -224,7 +226,7 @@ namespace EVServiceCenter.Application.Service
             // Generate timeline from status history
             response.Timeline = GenerateStatusTimeline(order);
 
-            return response;
+            return Task.FromResult(response);
         }
 
         private List<OrderStatusTimelineInfo> GenerateStatusTimeline(Order order)

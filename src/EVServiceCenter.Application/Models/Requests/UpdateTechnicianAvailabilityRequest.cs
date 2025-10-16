@@ -10,7 +10,7 @@ namespace EVServiceCenter.Application.Models.Requests
         public DateOnly WorkDate { get; set; }
 
         [Required(ErrorMessage = "Danh sách time slots là bắt buộc")]
-        public List<TimeSlotAvailabilityUpdate> TimeSlots { get; set; }
+        public required List<TimeSlotAvailabilityUpdate> TimeSlots { get; set; }
     }
 
     public class TimeSlotAvailabilityUpdate
@@ -22,6 +22,6 @@ namespace EVServiceCenter.Application.Models.Requests
         public bool IsAvailable { get; set; }
 
         [StringLength(500, ErrorMessage = "Ghi chú không được vượt quá 500 ký tự")]
-        public string Notes { get; set; }
+        public required string Notes { get; set; }
     }
 }

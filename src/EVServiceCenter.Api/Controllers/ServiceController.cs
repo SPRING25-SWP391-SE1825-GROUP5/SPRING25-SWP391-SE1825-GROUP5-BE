@@ -37,7 +37,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> GetAllServices(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
+            [FromQuery] string? searchTerm = null,
             [FromQuery] int? categoryId = null)
         {
             try
@@ -75,7 +75,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> GetActiveServices(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
+            [FromQuery] string? searchTerm = null,
             [FromQuery] int? categoryId = null)
         {
             try

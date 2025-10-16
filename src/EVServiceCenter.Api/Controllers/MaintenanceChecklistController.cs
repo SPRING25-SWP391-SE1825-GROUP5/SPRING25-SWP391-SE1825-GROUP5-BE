@@ -68,7 +68,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, checklistId = checklist.ChecklistId, items = data });
         }
 
-        public class UpdateItemRequest { public string Description { get; set; } public string Result { get; set; } public string Note { get; set; } }
+        public class UpdateItemRequest { public string Description { get; set; } = string.Empty; public string Result { get; set; } = string.Empty; public string Note { get; set; } = string.Empty; }
 
         // PUT /api/workorders/{id}/checklist/{resultId}
         [HttpPut("{resultId:int}")]
@@ -88,7 +88,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true });
         }
 
-        public class BulkRequest { public System.Collections.Generic.List<BulkItem> Items { get; set; } public class BulkItem { public int? ResultId { get; set; } public string Description { get; set; } public string Result { get; set; } public string Note { get; set; } } }
+        public class BulkRequest { public System.Collections.Generic.List<BulkItem> Items { get; set; } = new(); public class BulkItem { public int? ResultId { get; set; } public string Description { get; set; } = string.Empty; public string Result { get; set; } = string.Empty; public string Note { get; set; } = string.Empty; } }
 
         // PUT /api/workorders/{id}/checklist
         [HttpPut]

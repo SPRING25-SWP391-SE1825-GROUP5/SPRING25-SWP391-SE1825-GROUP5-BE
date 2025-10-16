@@ -22,8 +22,8 @@ namespace EVServiceCenter.Application.Models.Requests
 
         public int PageSize { get; set; } = 10;
 
-        public string SortBy { get; set; } = "DueDate";
+        public required string SortBy { get; set; } = "DueDate";
 
-        public string SortDirection { get; set; } = "asc"; // asc, desc
+        public required string SortDirection { get; set; } = "asc"; // asc, desc
     }
 }

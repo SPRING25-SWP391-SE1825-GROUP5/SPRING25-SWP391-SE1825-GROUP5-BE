@@ -36,7 +36,7 @@ namespace EVServiceCenter.Application.Models.Requests
         public required string Address { get; set; }
 
         [RegularExpression(@"^(ADMIN|STAFF|TECHNICIAN|CUSTOMER)$", ErrorMessage = "Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER")]
-        public string Role { get; set; } = "CUSTOMER";
+        public required string Role { get; set; } = "CUSTOMER";
 
         public bool IsActive { get; set; } = true;
         public bool EmailVerified { get; set; } = false;

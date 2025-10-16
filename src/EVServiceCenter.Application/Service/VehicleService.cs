@@ -21,7 +21,7 @@ namespace EVServiceCenter.Application.Service
             _customerRepository = customerRepository;
         }
 
-        public async Task<VehicleListResponse> GetVehiclesAsync(int pageNumber = 1, int pageSize = 10, int? customerId = null, string searchTerm = null)
+        public async Task<VehicleListResponse> GetVehiclesAsync(int pageNumber = 1, int pageSize = 10, int? customerId = null, string? searchTerm = null)
         {
             try
             {
@@ -199,7 +199,7 @@ namespace EVServiceCenter.Application.Service
                 PurchaseDate = vehicle.PurchaseDate,
                 CreatedAt = vehicle.CreatedAt,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
-                CustomerPhone = vehicle.Customer?.User?.PhoneNumber
+                CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? string.Empty
             };
         }
 
@@ -230,13 +230,15 @@ namespace EVServiceCenter.Application.Service
                 throw new ArgumentException(string.Join(" ", errors));
         }
 
-        private async Task ValidateUpdateVehicleRequestAsync(UpdateVehicleRequest request, int vehicleId)
+        private Task ValidateUpdateVehicleRequestAsync(UpdateVehicleRequest request, int vehicleId)
         {
             var errors = new List<string>();
             // Không còn kiểm tra biển số khi cập nhật
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
+            
+            return Task.CompletedTask;
         }
 
         // New methods implementation
@@ -258,8 +260,8 @@ namespace EVServiceCenter.Application.Service
                     UserId = customer.UserId,
                     IsGuest = customer.UserId == null,
                     UserFullName = customer.User?.FullName ?? "Khách vãng lai",
-                    UserEmail = customer.User?.Email,
-                    UserPhoneNumber = customer.User?.PhoneNumber,
+                    UserEmail = customer.User?.Email ?? string.Empty,
+                    UserPhoneNumber = customer.User?.PhoneNumber ?? string.Empty,
                     VehicleCount = 1 // We know this customer has at least this vehicle
                 };
             }

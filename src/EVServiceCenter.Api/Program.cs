@@ -11,7 +11,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Application.Service;
 using EVServiceCenter.Api.HostedServices;
 using EVServiceCenter.Application.Interfaces;
@@ -31,6 +31,7 @@ using System.IO;
 using EVServiceCenter.Application.Configurations;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Caching.SqlServer;
+using EVServiceCenter.Api;
 
 
 // ============================================================================
@@ -84,6 +85,7 @@ builder.Services.AddScoped<ILoginLockoutService, LoginLockoutService>();
 
 // Communication Services
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IEmailTemplateRenderer, FileEmailTemplateRenderer>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 
 // Business Services
@@ -102,7 +104,7 @@ builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
 builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
 builder.Services.AddScoped<ISkillService, SkillService>();
 // Removed: MaintenancePolicyService no longer used
-builder.Services.AddScoped<IMaintenanceChecklistItemService, MaintenanceChecklistItemService>();
+// Removed: IMaintenanceChecklistItemService
 // Note: ChecklistPartService may be deprecated if not needed without ServiceParts
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
@@ -145,7 +147,7 @@ builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 // Removed: IServicePartRepository registration (ServiceParts deprecated)
 builder.Services.AddScoped<IWorkOrderPartRepository, WorkOrderPartRepository>();
 builder.Services.AddScoped<IMaintenanceChecklistRepository, MaintenanceChecklistRepository>();
-builder.Services.AddScoped<IMaintenanceChecklistItemRepository, MaintenanceChecklistItemRepository>();
+// Removed: IMaintenanceChecklistItemRepository
 builder.Services.AddScoped<IMaintenanceChecklistResultRepository, MaintenanceChecklistResultRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
@@ -186,7 +188,7 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = issuer,
         ValidAudience = audience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? string.Empty)),
         ClockSkew = TimeSpan.Zero // Không cho phép sai lệch thời gian
     };
 
@@ -413,12 +415,18 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 
-app.UseAuthentication();
-app.UseAuthenticationErrorHandling();
-app.UseAuthorization();
+// Global Exception Handling - MUST be first
+app.UseGlobalExceptionHandling();
+
+// JSON Error Handling - for model binding errors
+app.UseJsonErrorHandling();
 
 // Guest session cookie middleware
 app.UseMiddleware<EVServiceCenter.Api.Middleware.GuestSessionMiddleware>();
+
+// Authentication & Authorization
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Health endpoints cho Render
 // removed public health and root endpoints per request

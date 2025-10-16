@@ -33,7 +33,7 @@ public class WorkOrderPartsController : ControllerBase
             return Ok(new { success = true, data = result });
         }
 
-        public class AddRequest { public int PartId { get; set; } public int Quantity { get; set; } public decimal UnitPrice { get; set; } public string Note { get; set; } }
+        public class AddRequest { public int PartId { get; set; } public int Quantity { get; set; } public decimal UnitPrice { get; set; } public string? Note { get; set; } }
 
         [HttpPost]
         public async Task<IActionResult> Add(int workOrderId, [FromBody] AddRequest req)
@@ -99,7 +99,7 @@ public class WorkOrderPartsController : ControllerBase
         }
 
         public class WorkOrderPartBulkItem { public int PartId { get; set; } public int Quantity { get; set; } public decimal UnitPrice { get; set; } }
-        public class WorkOrderPartBulkRequest { public System.Collections.Generic.List<WorkOrderPartBulkItem> Items { get; set; } }
+        public class WorkOrderPartBulkRequest { public System.Collections.Generic.List<WorkOrderPartBulkItem> Items { get; set; } = new(); }
 
         [HttpPost("bulk")]
         public async Task<IActionResult> UpsertBulk(int workOrderId, [FromBody] WorkOrderPartBulkRequest req)

@@ -6,9 +6,9 @@ namespace EVServiceCenter.Application.Models.Responses
     {
         public int VehicleId { get; set; }
         public int CustomerId { get; set; }
-        public string Vin { get; set; }
-        public string LicensePlate { get; set; }
-        public string Color { get; set; }
+        public required string Vin { get; set; }
+        public required string LicensePlate { get; set; }
+        public required string Color { get; set; }
         public int CurrentMileage { get; set; }
         public DateOnly? LastServiceDate { get; set; }
         public DateOnly? PurchaseDate { get; set; }
@@ -16,7 +16,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public DateTime CreatedAt { get; set; }
         
         // Related data
-        public string CustomerName { get; set; }
-        public string CustomerPhone { get; set; }
+        public required string CustomerName { get; set; }
+        public required string CustomerPhone { get; set; }
     }
 }

@@ -19,7 +19,7 @@ namespace EVServiceCenter.Application.Service
             _serviceRepository = serviceRepository;
         }
 
-        public async Task<ServiceListResponse> GetAllServicesAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? categoryId = null)
+        public async Task<ServiceListResponse> GetAllServicesAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, int? categoryId = null)
         {
             try
             {
@@ -76,7 +76,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<ServiceListResponse> GetActiveServicesAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? categoryId = null)
+        public async Task<ServiceListResponse> GetActiveServicesAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, int? categoryId = null)
         {
             try
             {
@@ -121,8 +121,8 @@ namespace EVServiceCenter.Application.Service
                 var service = new Domain.Entities.Service
                 {
                     ServiceName = request.ServiceName.Trim(),
-                    Description = !string.IsNullOrWhiteSpace(request.Description) ? request.Description.Trim() : null,
-                    BasePrice = request.Price,
+                    Description = !string.IsNullOrWhiteSpace(request.Description) ? request.Description.Trim() : string.Empty,
+                    BasePrice = request.BasePrice,
                     IsActive = request.IsActive,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -151,8 +151,8 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException("Dịch vụ không tồn tại.");
 
                 existingService.ServiceName = request.ServiceName.Trim();
-                existingService.Description = !string.IsNullOrWhiteSpace(request.Description) ? request.Description.Trim() : null;
-                existingService.BasePrice = request.Price;
+                existingService.Description = !string.IsNullOrWhiteSpace(request.Description) ? request.Description.Trim() : string.Empty;
+                existingService.BasePrice = request.BasePrice;
                 existingService.IsActive = request.IsActive;
 
                 await _serviceRepository.UpdateServiceAsync(existingService);

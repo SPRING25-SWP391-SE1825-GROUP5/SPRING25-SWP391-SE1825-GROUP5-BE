@@ -20,7 +20,7 @@ public interface ISettingsService
 public class BookingRealtimeSettingsDto
 {
     public int HoldTtlMinutes { get; set; }
-    public string HubPath { get; set; }
+    public required string HubPath { get; set; }
 }
 
 public class PayOsSettingsDto
@@ -31,17 +31,17 @@ public class PayOsSettingsDto
 
 public class GuestSessionSettingsDto
 {
-    public string CookieName { get; set; }
+    public required string CookieName { get; set; }
     public int TtlMinutes { get; set; }
     public bool SecureOnly { get; set; }
-    public string SameSite { get; set; }
-    public string Path { get; set; }
+    public required string SameSite { get; set; }
+    public required string Path { get; set; }
 }
 
 public class UpdateBookingRealtimeRequest
 {
     public int HoldTtlMinutes { get; set; }
-    public string HubPath { get; set; }
+    public required string HubPath { get; set; }
 }
 
 public class UpdatePayOsSettingsRequest
@@ -52,25 +52,25 @@ public class UpdatePayOsSettingsRequest
 
 public class UpdateGuestSessionSettingsRequest
 {
-    public string CookieName { get; set; }
+    public required string CookieName { get; set; }
     public int TtlMinutes { get; set; }
     public bool SecureOnly { get; set; }
-    public string SameSite { get; set; }
-    public string Path { get; set; }
+    public required string SameSite { get; set; }
+    public required string Path { get; set; }
 }
 
 public class MaintenanceReminderSettingsDto
 {
     public int UpcomingDays { get; set; }
     public int DispatchHourLocal { get; set; }
-    public string TimeZoneId { get; set; }
+    public required string TimeZoneId { get; set; }
 }
 
 public class UpdateMaintenanceReminderSettingsRequest
 {
     public int UpcomingDays { get; set; }
     public int DispatchHourLocal { get; set; }
-    public string TimeZoneId { get; set; }
+    public required string TimeZoneId { get; set; }
 }
 
 

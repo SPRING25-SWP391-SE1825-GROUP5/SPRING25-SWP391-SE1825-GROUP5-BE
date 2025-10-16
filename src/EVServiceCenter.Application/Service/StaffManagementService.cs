@@ -86,7 +86,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<StaffListResponse> GetStaffByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string searchTerm = null, string position = null, bool? isActive = null)
+        public async Task<StaffListResponse> GetStaffByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null)
         {
             try
             {
@@ -98,7 +98,7 @@ namespace EVServiceCenter.Application.Service
                 // Get all staff for the center
                 var allStaff = await _staffRepository.GetStaffByCenterIdAsync(centerId);
 
-                return await ProcessStaffListAsync(allStaff, pageNumber, pageSize, searchTerm, position, isActive);
+                return await ProcessStaffListAsync(allStaff, pageNumber, pageSize, searchTerm ?? string.Empty, position ?? string.Empty, isActive);
             }
             catch (ArgumentException)
             {
@@ -110,14 +110,14 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<StaffListResponse> GetAllStaffAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string position = null, bool? isActive = null)
+        public async Task<StaffListResponse> GetAllStaffAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null)
         {
             try
             {
                 // Get all staff
                 var allStaff = await _staffRepository.GetAllStaffAsync();
 
-                return await ProcessStaffListAsync(allStaff, pageNumber, pageSize, searchTerm, position, isActive);
+                return await ProcessStaffListAsync(allStaff, pageNumber, pageSize, searchTerm ?? string.Empty, position ?? string.Empty, isActive);
             }
             catch (Exception ex)
             {
@@ -296,7 +296,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<TechnicianListResponse> GetTechniciansByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string searchTerm = null, string specialization = null, bool? isActive = null)
+        public async Task<TechnicianListResponse> GetTechniciansByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? specialization = null, bool? isActive = null)
         {
             try
             {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,5 +13,6 @@ namespace EVServiceCenter.Application.Interfaces
         Task SendWelcomeEmailAsync(string toEmail, string fullName);
         Task SendResetPasswordEmailAsync(string toEmail, string fullName, string otpCode);
         Task SendEmailWithAttachmentAsync(string to, string subject, string body, string attachmentName, byte[] attachmentContent, string contentType = "application/pdf");
+        Task SendWelcomeCustomerWithPasswordAsync(string toEmail, string fullName, string tempPassword);
     }
 }

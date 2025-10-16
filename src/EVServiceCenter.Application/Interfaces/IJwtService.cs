@@ -9,7 +9,7 @@ namespace EVServiceCenter.Application.Interfaces
     {
         string GenerateAccessToken(User user);
         string GenerateRefreshToken();
-        ClaimsPrincipal ValidateToken(string token);
+        ClaimsPrincipal? ValidateToken(string token);
         DateTime GetTokenExpiration();
         int GetTokenExpirationInSeconds();
     }

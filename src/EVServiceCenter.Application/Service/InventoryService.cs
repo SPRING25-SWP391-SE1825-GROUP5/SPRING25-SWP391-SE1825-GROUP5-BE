@@ -19,7 +19,7 @@ namespace EVServiceCenter.Application.Service
             _inventoryRepository = inventoryRepository;
         }
 
-        public async Task<InventoryListResponse> GetInventoriesAsync(int pageNumber = 1, int pageSize = 10, int? centerId = null, string searchTerm = null)
+        public async Task<InventoryListResponse> GetInventoriesAsync(int pageNumber = 1, int pageSize = 10, int? centerId = null, string? searchTerm = null)
         {
             try
             {
@@ -65,59 +65,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<InventoryListResponse> GetInventoriesByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string searchTerm = null)
-        {
-            try
-            {
-                var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
-
-                if (inventory == null)
-                {
-                    return new InventoryListResponse
-                    {
-                        Inventories = new List<InventoryResponse>(),
-                        PageNumber = pageNumber,
-                        PageSize = pageSize,
-                        TotalPages = 0,
-                        TotalCount = 0
-                    };
-                }
-
-                var inventoryParts = inventory.InventoryParts.AsQueryable();
-
-                // Filter by search term on parts
-                if (!string.IsNullOrWhiteSpace(searchTerm))
-                {
-                    inventoryParts = inventoryParts.Where(ip =>
-                        ip.Part.PartNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        ip.Part.PartName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        ip.Part.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
-                    );
-                }
-
-                var totalCount = inventoryParts.Count();
-                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-                var paginatedInventoryParts = inventoryParts.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
-
-                var inventoryResponses = new List<InventoryResponse>
-                {
-                    MapToInventoryResponse(inventory, paginatedInventoryParts)
-                };
-
-                return new InventoryListResponse
-                {
-                    Inventories = inventoryResponses,
-                    PageNumber = pageNumber,
-                    PageSize = pageSize,
-                    TotalPages = totalPages,
-                    TotalCount = totalCount
-                };
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Lỗi khi lấy danh sách tồn kho theo trung tâm: {ex.Message}");
-            }
-        }
+        // Removed GetInventoriesByCenterAsync: each center has exactly one inventory now
 
         public async Task<InventoryResponse> GetInventoryByIdAsync(int inventoryId)
         {
@@ -136,6 +84,26 @@ namespace EVServiceCenter.Application.Service
             catch (Exception ex)
             {
                 throw new Exception($"Lỗi khi lấy thông tin tồn kho: {ex.Message}");
+            }
+        }
+
+        public async Task<InventoryResponse> GetInventoryByCenterIdAsync(int centerId)
+        {
+            try
+            {
+                var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+                if (inventory == null)
+                    throw new ArgumentException("Trung tâm chưa có kho.");
+
+                return MapToInventoryResponse(inventory);
+            }
+            catch (ArgumentException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy tồn kho theo trung tâm: {ex.Message}");
             }
         }
 
@@ -357,7 +325,7 @@ namespace EVServiceCenter.Application.Service
                         IsLowStock = g.Sum(x => x.CurrentStock) <= g.Sum(x => x.MinimumStock),
                         IsOutOfStock = g.Sum(x => x.CurrentStock) == 0,
                         UnitPrice = g.FirstOrDefault()?.Part?.Price ?? 0,
-                        Unit = null,
+                        Rating = g.FirstOrDefault()?.Part?.Rating,
                         LastUpdated = g.Max(x => x.LastUpdated)
                     })
                     .ToList();
@@ -389,7 +357,7 @@ namespace EVServiceCenter.Application.Service
                         IsLowStock = g.Sum(x => x.CurrentStock) <= g.Sum(x => x.MinimumStock),
                         IsOutOfStock = g.Sum(x => x.CurrentStock) == 0,
                         UnitPrice = g.FirstOrDefault()?.Part?.Price ?? 0,
-                        Unit = null,
+                        Rating = g.FirstOrDefault()?.Part?.Rating,
                         LastUpdated = g.Max(x => x.LastUpdated)
                     })
                     .Where(r => r.TotalStock > 0)
@@ -406,7 +374,7 @@ namespace EVServiceCenter.Application.Service
         // MAPPERS
         // ====================================================================================================
 
-        private InventoryResponse MapToInventoryResponse(Inventory inventory, IEnumerable<InventoryPart> inventoryParts = null)
+        private InventoryResponse MapToInventoryResponse(Inventory inventory, IEnumerable<InventoryPart>? inventoryParts = null)
         {
             inventoryParts ??= inventory.InventoryParts;
 
@@ -432,7 +400,6 @@ namespace EVServiceCenter.Application.Service
                 PartName = inventoryPart.Part?.PartName ?? "N/A",
                 Brand = inventoryPart.Part?.Brand ?? "N/A",
                 UnitPrice = inventoryPart.Part?.Price ?? 0,
-                Unit = null, // Assuming Unit is not directly on Part or InventoryPart for now
                 CurrentStock = inventoryPart.CurrentStock,
                 MinimumStock = inventoryPart.MinimumStock,
                 LastUpdated = inventoryPart.LastUpdated,

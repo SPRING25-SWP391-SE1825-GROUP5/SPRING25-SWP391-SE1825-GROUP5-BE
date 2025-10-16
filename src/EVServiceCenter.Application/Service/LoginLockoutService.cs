@@ -41,7 +41,7 @@ namespace EVServiceCenter.Application.Service
             var dataDir = Path.GetDirectoryName(_dataFilePath);
             if (!Directory.Exists(dataDir))
             {
-                Directory.CreateDirectory(dataDir);
+                Directory.CreateDirectory(dataDir ?? string.Empty);
             }
         }
 
@@ -220,11 +220,11 @@ namespace EVServiceCenter.Application.Service
             return null;
         }
 
-        public async Task<LoginLockoutConfigResponse> GetConfigAsync()
+        public Task<LoginLockoutConfigResponse> GetConfigAsync()
         {
             // Thử lấy từ memory cache trước
             var cachedConfig = _memoryCache.Get<LoginLockoutConfigResponse>(CONFIG_CACHE_KEY);
-            if (cachedConfig != null) return cachedConfig;
+            if (cachedConfig != null) return Task.FromResult(cachedConfig);
 
             // Nếu không có trong cache, tạo từ configuration
             var config = new LoginLockoutConfigResponse
@@ -238,10 +238,10 @@ namespace EVServiceCenter.Application.Service
 
             // Lưu vào memory cache
             _memoryCache.Set(CONFIG_CACHE_KEY, config, TimeSpan.FromHours(1));
-            return config;
+            return Task.FromResult(config);
         }
 
-        public async Task UpdateConfigAsync(LoginLockoutConfigRequest request)
+        public Task UpdateConfigAsync(LoginLockoutConfigRequest request)
         {
             var config = new LoginLockoutConfigResponse
             {
@@ -255,6 +255,7 @@ namespace EVServiceCenter.Application.Service
             // Cập nhật memory cache
             _memoryCache.Remove(CONFIG_CACHE_KEY);
             _memoryCache.Set(CONFIG_CACHE_KEY, config, TimeSpan.FromHours(1));
+            return Task.CompletedTask;
         }
     }
 

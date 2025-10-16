@@ -31,7 +31,11 @@ namespace EVServiceCenter.Application.Service
 
         public async Task<CreateTechnicianTimeSlotResponse> CreateTechnicianTimeSlotAsync(CreateTechnicianTimeSlotRequest request)
         {
-            var response = new CreateTechnicianTimeSlotResponse();
+            var response = new CreateTechnicianTimeSlotResponse
+            {
+                Message = string.Empty,
+                Errors = new List<string>()
+            };
 
             try
             {
@@ -74,7 +78,12 @@ namespace EVServiceCenter.Application.Service
 
         public async Task<CreateWeeklyTechnicianTimeSlotResponse> CreateWeeklyTechnicianTimeSlotAsync(CreateWeeklyTechnicianTimeSlotRequest request)
         {
-            var response = new CreateWeeklyTechnicianTimeSlotResponse();
+            var response = new CreateWeeklyTechnicianTimeSlotResponse
+            {
+                Message = string.Empty,
+                CreatedTimeSlots = new List<TechnicianTimeSlotResponse>(),
+                Errors = new List<string>()
+            };
 
             try
             {
@@ -126,7 +135,12 @@ namespace EVServiceCenter.Application.Service
 
         public async Task<CreateAllTechniciansTimeSlotResponse> CreateAllTechniciansTimeSlotAsync(CreateAllTechniciansTimeSlotRequest request)
         {
-            var response = new CreateAllTechniciansTimeSlotResponse();
+            var response = new CreateAllTechniciansTimeSlotResponse
+            {
+                Message = string.Empty,
+                TechnicianTimeSlots = new List<TechnicianTimeSlotSummary>(),
+                Errors = new List<string>()
+            };
 
             try
             {
@@ -200,7 +214,12 @@ namespace EVServiceCenter.Application.Service
 
         public async Task<CreateAllTechniciansWeeklyTimeSlotResponse> CreateAllTechniciansWeeklyTimeSlotAsync(CreateAllTechniciansWeeklyTimeSlotRequest request)
         {
-            var response = new CreateAllTechniciansWeeklyTimeSlotResponse();
+            var response = new CreateAllTechniciansWeeklyTimeSlotResponse
+            {
+                Message = string.Empty,
+                TechnicianTimeSlots = new List<TechnicianWeeklyTimeSlotSummary>(),
+                Errors = new List<string>()
+            };
 
             try
             {
@@ -372,7 +391,9 @@ namespace EVServiceCenter.Application.Service
                                 new TechnicianAvailability
                                 {
                                     TechnicianId = technician.TechnicianId,
-                                    TechnicianName = technician.User?.FullName ?? "N/A"
+                                    TechnicianName = technician.User?.FullName ?? "N/A",
+                                    IsAvailable = true,
+                                    Status = "Available"
                                 }
                             }
                         };

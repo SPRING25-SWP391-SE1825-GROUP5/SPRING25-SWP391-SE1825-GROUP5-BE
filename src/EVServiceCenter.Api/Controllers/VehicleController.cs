@@ -39,7 +39,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
             [FromQuery] int? customerId = null,
-            [FromQuery] string searchTerm = null)
+            [FromQuery] string? searchTerm = null)
         {
             try
             {
@@ -107,7 +107,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 if (!effectiveServiceId.HasValue)
                 {
-                    return Ok(new { success = true, message = "Chưa xác định được dịch vụ để tính chu kỳ", data = new { vehicleId, next = (object)null } });
+                    return Ok(new { success = true, message = "Chưa xác định được dịch vụ để tính chu kỳ", data = new { vehicleId, next = (object?)null } });
                 }
 
                 // Policy feature removed

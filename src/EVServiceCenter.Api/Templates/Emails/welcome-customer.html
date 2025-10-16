@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Service Center - Tài khoản khách hàng</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; background-color: #f8f9fa; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .header { background: #a5ed94; color: #1f2937; padding: 28px 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 26px; font-weight: 700; }
+        .content { padding: 28px; }
+        .content h2 { margin-top: 0; font-size: 22px; }
+        .box { background: #eefbea; border: 1px solid #c7f2bb; border-radius: 10px; padding: 16px; }
+        .label { color: #374151; font-weight: 600; }
+        .footer { background-color: #f8f9fa; padding: 18px; text-align: center; font-size: 12px; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Tài khoản khách hàng tại EV Service Center</h1>
+        </div>
+        <div class="content">
+            <h2>Xin chào {{fullName}},</h2>
+            <p>Tài khoản của bạn đã được tạo.</p>
+            <div class="box">
+                <div><span class="label">Mật khẩu tạm:</span> {{tempPassword}}</div>
+            </div>
+            <p>Vui lòng đăng nhập và đổi mật khẩu ngay trong phần tài khoản.</p>
+            <p>Nếu cần hỗ trợ, liên hệ: {{supportPhone}}. Truy cập: {{baseUrl}}</p>
+        </div>
+        <div class="footer">
+            © {{year}} EV Service Center
+        </div>
+    </div>
+</body>
+</html>
+

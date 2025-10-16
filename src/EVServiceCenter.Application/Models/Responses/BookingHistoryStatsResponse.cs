@@ -11,7 +11,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public FavoriteService FavoriteService { get; set; } = null!;
         public FavoriteCenter FavoriteCenter { get; set; } = null!;
         public RecentActivity RecentActivity { get; set; } = null!;
-        public string Period { get; set; } = null!;
+        public required string Period { get; set; } = null!;
     }
 
     public class StatusBreakdown
@@ -26,14 +26,14 @@ namespace EVServiceCenter.Application.Models.Responses
     public class FavoriteService
     {
         public int ServiceId { get; set; }
-        public string ServiceName { get; set; } = null!;
+        public required string ServiceName { get; set; } = null!;
         public int Count { get; set; }
     }
 
     public class FavoriteCenter
     {
         public int CenterId { get; set; }
-        public string CenterName { get; set; } = null!;
+        public required string CenterName { get; set; } = null!;
         public int Count { get; set; }
     }
 

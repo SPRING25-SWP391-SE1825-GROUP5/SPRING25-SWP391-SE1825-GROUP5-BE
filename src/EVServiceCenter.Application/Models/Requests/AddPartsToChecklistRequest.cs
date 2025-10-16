@@ -11,7 +11,7 @@ namespace EVServiceCenter.Application.Models.Requests
 
         [Required(ErrorMessage = "Danh sách Parts là bắt buộc")]
         [MinLength(1, ErrorMessage = "Phải có ít nhất 1 Part")]
-        public List<PartData> Parts { get; set; } = new List<PartData>();
+        public required List<PartData> Parts { get; set; } = new List<PartData>();
 
         public class PartData
         {

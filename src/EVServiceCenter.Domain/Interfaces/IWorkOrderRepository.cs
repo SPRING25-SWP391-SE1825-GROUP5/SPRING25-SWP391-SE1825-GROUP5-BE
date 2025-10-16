@@ -16,7 +16,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<System.Collections.Generic.List<WorkOrder>> GetByCustomerAsync(int customerId, System.DateTime? from, System.DateTime? to, string status);
         Task<System.Collections.Generic.List<WorkOrder>> GetByCustomerVehicleAsync(int customerId, int vehicleId, System.DateTime? from, System.DateTime? to, string status);
         Task<object> GetStatisticsAsync(int? centerId, System.DateTime? from, System.DateTime? to, string groupBy);
-        Task<WorkOrder> GetLastCompletedByVehicleAsync(int vehicleId);
+        Task<WorkOrder?> GetLastCompletedByVehicleAsync(int vehicleId);
         Task<bool> TechnicianHasActiveWorkOrderAsync(int technicianId, int? excludeWorkOrderId = null);
     }
 }

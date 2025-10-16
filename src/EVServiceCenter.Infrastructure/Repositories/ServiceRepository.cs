@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +24,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<Service> GetServiceByIdAsync(int serviceId)
+        public async Task<Service?> GetServiceByIdAsync(int serviceId)
         {
             return await _context.Services
                 .FirstOrDefaultAsync(s => s.ServiceId == serviceId);

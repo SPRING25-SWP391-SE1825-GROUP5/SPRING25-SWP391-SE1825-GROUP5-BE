@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +33,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return user!;
         }
 
-        public async Task<User> GetUserByIdAsync(int userId)
+        public async Task<User?> GetUserByIdAsync(int userId)
         {
             return await _context.Users.FindAsync(userId);
         }

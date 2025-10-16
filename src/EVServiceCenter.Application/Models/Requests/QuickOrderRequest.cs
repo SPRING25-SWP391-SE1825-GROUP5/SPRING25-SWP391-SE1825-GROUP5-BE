@@ -11,7 +11,7 @@ public class QuickOrderRequest
 
 	[Required]
 	[MinLength(1, ErrorMessage = "Danh sách sản phẩm không được rỗng")]
-	public List<QuickOrderItemRequest> Items { get; set; } = new();
+	public required List<QuickOrderItemRequest> Items { get; set; } = new();
 
 	public string? Notes { get; set; }
 

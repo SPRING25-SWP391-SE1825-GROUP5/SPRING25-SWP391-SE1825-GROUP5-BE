@@ -16,7 +16,7 @@ public class UpsertTechnicianSkillsRequest
 {
 	[Required]
 	[MinLength(1, ErrorMessage = "Danh sách kỹ năng không được rỗng")]
-	public List<UpsertTechnicianSkillItem> Items { get; set; } = new();
+	public required List<UpsertTechnicianSkillItem> Items { get; set; } = new();
 }
 
 

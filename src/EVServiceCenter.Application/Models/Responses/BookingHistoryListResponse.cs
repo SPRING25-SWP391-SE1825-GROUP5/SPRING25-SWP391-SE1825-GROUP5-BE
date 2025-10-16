@@ -5,7 +5,7 @@ namespace EVServiceCenter.Application.Models.Responses
 {
     public class BookingHistoryListResponse
     {
-        public List<BookingHistorySummary> Bookings { get; set; } = new List<BookingHistorySummary>();
+        public required List<BookingHistorySummary> Bookings { get; set; } = new List<BookingHistorySummary>();
         public PaginationInfo Pagination { get; set; } = null!;
         public FilterInfo Filters { get; set; } = null!;
     }
@@ -13,12 +13,12 @@ namespace EVServiceCenter.Application.Models.Responses
     public class BookingHistorySummary
     {
         public int BookingId { get; set; }
-        public string BookingCode { get; set; } = null!;
+        public required string BookingCode { get; set; } = null!;
         public DateOnly BookingDate { get; set; }
-        public string Status { get; set; } = null!;
-        public string CenterName { get; set; } = null!;
+        public required string Status { get; set; } = null!;
+        public required string CenterName { get; set; } = null!;
         public VehicleSummary VehicleInfo { get; set; } = null!;
-        public string ServiceName { get; set; } = null!;
+        public required string ServiceName { get; set; } = null!;
         public string? TechnicianName { get; set; }
         public decimal TotalCost { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -26,7 +26,7 @@ namespace EVServiceCenter.Application.Models.Responses
 
     public class VehicleSummary
     {
-        public string LicensePlate { get; set; } = null!;
+        public required string LicensePlate { get; set; } = null!;
         public string? ModelName { get; set; }
     }
 
@@ -45,7 +45,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public string? Status { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
-        public string SortBy { get; set; } = null!;
-        public string SortOrder { get; set; } = null!;
+        public required string SortBy { get; set; } = null!;
+        public required string SortOrder { get; set; } = null!;
     }
 }

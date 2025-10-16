@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -24,13 +24,13 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<Part> GetPartByIdAsync(int partId)
+        public async Task<Part?> GetPartByIdAsync(int partId)
         {
             return await _context.Parts
                 .FirstOrDefaultAsync(p => p.PartId == partId);
         }
 
-        public async Task<Part> GetPartLiteByIdAsync(int partId)
+        public async Task<Part?> GetPartLiteByIdAsync(int partId)
         {
             // Chỉ lấy các trường cần thiết để tránh Null đọc phải ở các navigation không cần
             return await _context.Parts

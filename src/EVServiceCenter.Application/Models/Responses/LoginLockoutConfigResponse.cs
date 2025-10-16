@@ -6,7 +6,7 @@ namespace EVServiceCenter.Application.Models.Responses
     {
         public int MaxFailedAttempts { get; set; }
         public int LockoutDurationMinutes { get; set; }
-        public string CacheKeyPrefix { get; set; } = string.Empty;
+        public required string CacheKeyPrefix { get; set; } = string.Empty;
         public bool Enabled { get; set; }
         public DateTime LastUpdated { get; set; }
     }

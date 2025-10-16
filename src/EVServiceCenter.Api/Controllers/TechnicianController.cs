@@ -37,7 +37,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> GetAllTechnicians(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
+            [FromQuery] string? searchTerm = null,
             [FromQuery] int? centerId = null)
         {
             try

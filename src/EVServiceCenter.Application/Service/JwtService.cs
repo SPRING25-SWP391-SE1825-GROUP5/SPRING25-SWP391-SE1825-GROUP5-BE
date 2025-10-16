@@ -66,7 +66,7 @@ namespace EVServiceCenter.Application.Service
             return Convert.ToBase64String(randomNumber);
         }
 
-        public ClaimsPrincipal ValidateToken(string token)
+        public ClaimsPrincipal? ValidateToken(string token)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_secretKey);

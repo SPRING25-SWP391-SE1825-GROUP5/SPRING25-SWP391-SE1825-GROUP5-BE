@@ -4,7 +4,7 @@ namespace EVServiceCenter.Application.Models.Responses
 {
     public class PromotionListResponse
     {
-        public List<PromotionResponse> Promotions { get; set; }
+        public required List<PromotionResponse> Promotions { get; set; }
         public int PageNumber { get; set; }
         public int PageSize { get; set; }
         public int TotalPages { get; set; }

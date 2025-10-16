@@ -43,7 +43,7 @@ public class PaymentController : ControllerBase
 	// Cho phép anonymous vì PayOS gọi từ trình duyệt người dùng
 	[AllowAnonymous]
 	[HttpGet("/payment/result")]
-	public async Task<IActionResult> PaymentResult([FromQuery] string orderCode, [FromQuery] string status = null, [FromQuery] string code = null, [FromQuery] string desc = null)
+	public async Task<IActionResult> PaymentResult([FromQuery] string orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] string? desc = null)
 	{
 		if (string.IsNullOrWhiteSpace(orderCode))
 		{
@@ -61,7 +61,7 @@ public class PaymentController : ControllerBase
     {
         public int Amount { get; set; }
         public int PaidByUserId { get; set; }
-        public string Note { get; set; }
+        public string Note { get; set; } = string.Empty;
     }
 
     // Ghi nhận thanh toán offline cho booking: tự đảm bảo invoice tồn tại
@@ -120,11 +120,11 @@ public class PaymentController : ControllerBase
             Status = "PAID",
             PaidAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
-            PaidByUserId = req.PaidByUserId,
+            PaidByUserID = req.PaidByUserId,
         };
 
         payment = await _paymentRepo.CreateAsync(payment);
-        return Ok(new { paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, status = payment.Status, amount = payment.Amount, paymentMethod = payment.PaymentMethod, paidByUserId = payment.PaidByUserId });
+        return Ok(new { paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, status = payment.Status, amount = payment.Amount, paymentMethod = payment.PaymentMethod, paidByUserId = payment.PaidByUserID });
     }
 
 	// (Tuỳ chọn) Kiểm tra trạng thái theo orderCode nếu FE cần hỏi lại
@@ -137,7 +137,7 @@ public class PaymentController : ControllerBase
 
 	[HttpGet("return")]
 	[AllowAnonymous]
-	public async Task<IActionResult> Return([FromQuery] string orderCode, [FromQuery] string status = null, [FromQuery] string code = null, [FromQuery] bool cancel = false)
+	public async Task<IActionResult> Return([FromQuery] string orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = false)
 	{
 		var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
 		return Ok(new { success = ok, message = ok ? "Payment success processed" : "Payment not confirmed", orderCode, status, code, cancel });
@@ -145,7 +145,7 @@ public class PaymentController : ControllerBase
 
 	[HttpGet("cancel")]
 	[AllowAnonymous]
-	public async Task<IActionResult> Cancel([FromQuery] string orderCode, [FromQuery] string status = null, [FromQuery] string code = null, [FromQuery] bool cancel = true)
+	public async Task<IActionResult> Cancel([FromQuery] string orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = true)
 	{
 		// For cancel route, still call confirm to fetch status and let service no-op if not paid
 		var _ = await _paymentService.ConfirmPaymentAsync(orderCode);

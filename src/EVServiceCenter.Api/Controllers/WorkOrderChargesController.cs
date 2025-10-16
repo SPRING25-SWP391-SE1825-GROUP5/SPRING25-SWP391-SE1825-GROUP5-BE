@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -6,10 +7,12 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Configurations;
+using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Api.Controllers
 {
@@ -24,6 +27,7 @@ public class WorkOrderChargesController : ControllerBase
         private readonly HttpClient _httpClient;
         private readonly EVServiceCenter.Application.Interfaces.IEmailService _email;
         private readonly PayOsOptions _payos;
+        private readonly ILogger<WorkOrderChargesController> _logger;
 
         public WorkOrderChargesController(
             IWorkOrderRepository workOrderRepo,
@@ -31,7 +35,8 @@ public class WorkOrderChargesController : ControllerBase
             IPaymentRepository paymentRepo,
             IOptions<PayOsOptions> payos,
             HttpClient httpClient,
-            EVServiceCenter.Application.Interfaces.IEmailService email)
+            EVServiceCenter.Application.Interfaces.IEmailService email,
+            ILogger<WorkOrderChargesController> logger)
         {
             _workOrderRepo = workOrderRepo;
             _invoiceRepo = invoiceRepo;
@@ -39,6 +44,7 @@ public class WorkOrderChargesController : ControllerBase
             _httpClient = httpClient;
             _payos = payos.Value;
             _email = email;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -94,15 +100,16 @@ public class WorkOrderChargesController : ControllerBase
             if (wo == null) return NotFound(new { success = false, message = "WorkOrder không tồn tại" });
 
             var parts = wo.WorkOrderParts ?? new System.Collections.Generic.List<Domain.Entities.WorkOrderPart>();
-            Console.WriteLine($"[DEBUG] WorkOrder {workOrderId} has {parts.Count} WorkOrderParts");
+            _logger.LogDebug("WorkOrder {WorkOrderId} has {PartsCount} WorkOrderParts", workOrderId, parts.Count);
             
             foreach (var part in parts)
             {
-                Console.WriteLine($"[DEBUG] Part {part.PartId}: UnitCost={part.UnitCost}, Quantity={part.QuantityUsed}, Total={part.UnitCost * part.QuantityUsed}");
+                _logger.LogDebug("Part {PartId}: UnitCost={UnitCost}, Quantity={Quantity}, Total={Total}", 
+                    part.PartId, part.UnitCost, part.QuantityUsed, part.UnitCost * part.QuantityUsed);
             }
 
             var total = parts.Sum(p => p.UnitCost * p.QuantityUsed);
-            Console.WriteLine($"[DEBUG] Total calculated: {total}");
+            _logger.LogDebug("Total calculated: {Total}", total);
             
             if (total <= 0) return BadRequest(new { success = false, message = "Không có chi phí phát sinh", debug = new { partsCount = parts.Count, total = total } });
 
@@ -122,7 +129,7 @@ public class WorkOrderChargesController : ControllerBase
                 orderCode,
                 amount,
                 description,
-                items = wo.WorkOrderParts
+                items = (wo.WorkOrderParts?.ToList() ?? new List<WorkOrderPart>())
                     .Where(p => p.QuantityUsed > 0 && p.UnitCost > 0) // Filter out invalid items
                     .Select(p => new { name = p.Part?.PartName ?? $"Part {p.PartId}", quantity = p.QuantityUsed, price = (int)Math.Round(p.UnitCost) }),
                 returnUrl,
@@ -141,7 +148,7 @@ public class WorkOrderChargesController : ControllerBase
             response.EnsureSuccessStatusCode();
             var json = JsonDocument.Parse(responseText).RootElement;
             
-            Console.WriteLine($"[DEBUG] PayOS Response: {responseText}");
+            _logger.LogDebug("PayOS Response: {ResponseText}", responseText);
             
             if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
                 dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
@@ -200,7 +207,7 @@ public class WorkOrderChargesController : ControllerBase
             invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
 
 
-            var payment = (Domain.Entities.Payment)null;
+            var payment = (Domain.Entities.Payment?)null;
             if (payment == null)
             {
                 payment = new Domain.Entities.Payment
@@ -236,7 +243,7 @@ public class WorkOrderChargesController : ControllerBase
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[WARN] Send invoice email failed: {ex.Message}");
+                _logger.LogWarning("Send invoice email failed: {Error}", ex.Message);
             }
 
             return Ok(new { success = true, invoiceId = invoice.InvoiceId, status = "PAID" });
@@ -246,7 +253,7 @@ public class WorkOrderChargesController : ControllerBase
         {
             public int Amount { get; set; }
             public int PaidByUserId { get; set; }
-            public string Note { get; set; }
+            public string Note { get; set; } = string.Empty;
         }
 
         [HttpPost("offline")]
@@ -286,7 +293,7 @@ public class WorkOrderChargesController : ControllerBase
                 Status = "PAID",
                 PaidAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
-                PaidByUserId = req.PaidByUserId,
+                PaidByUserID = req.PaidByUserId,
             };
             await _paymentRepo.CreateAsync(payment);
 

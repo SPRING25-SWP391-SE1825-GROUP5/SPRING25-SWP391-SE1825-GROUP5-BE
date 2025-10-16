@@ -51,7 +51,7 @@ namespace EVServiceCenter.Application.Models.Requests
 
         [Required(ErrorMessage = "Danh sách ngày trong tuần là bắt buộc")]
         [MinLength(1, ErrorMessage = "Phải chọn ít nhất 1 ngày trong tuần")]
-        public List<byte> DaysOfWeek { get; set; } = new List<byte>();
+        public required List<byte> DaysOfWeek { get; set; } = new List<byte>();
 
         // Validation method
         public bool IsValid()

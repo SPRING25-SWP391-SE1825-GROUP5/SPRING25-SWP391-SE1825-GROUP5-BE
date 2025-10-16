@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenter.Infrastructure.Repositories;

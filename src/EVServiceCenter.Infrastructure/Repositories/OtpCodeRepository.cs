@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +19,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         /// <summary>
-        /// Tạo OTP mới
+        /// T?o OTP m?i
         /// </summary>
         public async Task CreateOtpAsync(Otpcode otp)
         {
@@ -28,9 +28,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         /// <summary>
-        /// Lấy OTP hợp lệ
+        /// L?y OTP h?p l?
         /// </summary>
-        public async Task<Otpcode> GetValidOtpAsync(int userId, string otpCode, string otpType)
+        public async Task<Otpcode?> GetValidOtpAsync(int userId, string otpCode, string otpType)
         {
             return await _context.Otpcodes
                 .FirstOrDefaultAsync(o => o.UserId == userId 
@@ -41,9 +41,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         /// <summary>
-        /// Lấy OTP cuối cùng của user
+        /// L?y OTP cu?i c�ng c?a user
         /// </summary>
-        public async Task<Otpcode> GetLastOtpAsync(int userId, string otpType)
+        public async Task<Otpcode?> GetLastOtpAsync(int userId, string otpType)
         {
             return await _context.Otpcodes
                 .Where(o => o.UserId == userId && o.Otptype == otpType)
@@ -52,7 +52,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         /// <summary>
-        /// Đánh dấu OTP đã sử dụng
+        /// ��nh d?u OTP d� s? d?ng
         /// </summary>
         public async Task MarkOtpAsUsedAsync(int otpId)
         {
@@ -67,7 +67,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         /// <summary>
-        /// Đánh dấu OTP hết hạn
+        /// ��nh d?u OTP h?t h?n
         /// </summary>
         public async Task MarkOtpAsExpiredAsync(int otpId)
         {
@@ -81,7 +81,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         /// <summary>
-        /// Vô hiệu hóa tất cả OTP cũ của user
+        /// V� hi?u h�a t?t c? OTP cu c?a user
         /// </summary>
         public async Task InvalidateUserOtpAsync(int userId, string otpType)
         {
@@ -105,7 +105,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         /// <summary>
-        /// Tăng số lần thử
+        /// Tang s? l?n th?
         /// </summary>
         public async Task IncrementAttemptCountAsync(int userId, string otpCode, string otpType)
         {

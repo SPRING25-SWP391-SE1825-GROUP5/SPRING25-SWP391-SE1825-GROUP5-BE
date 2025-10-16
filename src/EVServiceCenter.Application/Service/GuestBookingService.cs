@@ -74,7 +74,7 @@ public class GuestBookingService : IGuestBookingService
         }
 
         // Upsert vehicle (prefer by license plate, else VIN)
-        Vehicle vehicle = null;
+        Vehicle? vehicle = null;
         if (!string.IsNullOrWhiteSpace(request.LicensePlate))
         {
             var all = await _vehicleRepository.GetAllVehiclesAsync();
@@ -159,8 +159,8 @@ public class GuestBookingService : IGuestBookingService
         return new GuestBookingResponse
         {
             BookingId = booking.BookingId,
-            BookingCode = null,
-            CheckoutUrl = checkoutUrl
+            BookingCode = string.Empty,
+            CheckoutUrl = checkoutUrl ?? string.Empty
         };
     }
 

@@ -20,7 +20,7 @@ namespace EVServiceCenter.Application.Service
             _partRepository = partRepository;
         }
 
-        public async Task<PartListResponse> GetAllPartsAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, bool? isActive = null)
+        public async Task<PartListResponse> GetAllPartsAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, bool? isActive = null)
         {
             try
             {
@@ -72,8 +72,8 @@ namespace EVServiceCenter.Application.Service
 
                 // Không cho phép đổi PartNumber khi update
                 // Chỉ cập nhật các trường còn lại
-                part.PartName = request.PartName?.Trim();
-                part.Brand = request.Brand?.Trim();
+                part.PartName = request.PartName?.Trim() ?? string.Empty;
+                part.Brand = request.Brand?.Trim() ?? string.Empty;
                 part.Price = request.UnitPrice;
                 part.ImageUrl = request.ImageUrl?.Trim();
                 part.IsActive = request.IsActive;
@@ -159,7 +159,8 @@ namespace EVServiceCenter.Application.Service
                 Price = part.Price,
                 ImageUrl = part.ImageUrl,
                 IsActive = part.IsActive,
-                CreatedAt = part.CreatedAt
+                CreatedAt = part.CreatedAt,
+                Rating = part.Rating
             };
         }
 

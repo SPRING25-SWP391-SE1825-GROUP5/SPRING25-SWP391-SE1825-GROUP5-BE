@@ -10,7 +10,7 @@ namespace EVServiceCenter.Application.Models.Requests
         public int VehicleId { get; set; }
 
         [Required]
-        public List<CreateVehicleServiceReminderItem> Reminders { get; set; } = new List<CreateVehicleServiceReminderItem>();
+        public required List<CreateVehicleServiceReminderItem> Reminders { get; set; } = new List<CreateVehicleServiceReminderItem>();
     }
 
     public class CreateVehicleServiceReminderItem

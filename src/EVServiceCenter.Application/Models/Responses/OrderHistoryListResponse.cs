@@ -5,7 +5,7 @@ namespace EVServiceCenter.Application.Models.Responses
 {
     public class OrderHistoryListResponse
     {
-        public List<OrderHistorySummary> Orders { get; set; } = new List<OrderHistorySummary>();
+        public required List<OrderHistorySummary> Orders { get; set; } = new List<OrderHistorySummary>();
         public OrderPaginationInfo Pagination { get; set; } = null!;
         public OrderFilterInfo Filters { get; set; } = null!;
     }
@@ -13,9 +13,9 @@ namespace EVServiceCenter.Application.Models.Responses
     public class OrderHistorySummary
     {
         public int OrderId { get; set; }
-        public string OrderNumber { get; set; } = null!;
+        public required string OrderNumber { get; set; } = null!;
         public DateTime OrderDate { get; set; }
-        public string Status { get; set; } = null!;
+        public required string Status { get; set; } = null!;
         public decimal TotalAmount { get; set; }
         public int ItemCount { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -36,7 +36,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public string? Status { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
-        public string SortBy { get; set; } = null!;
-        public string SortOrder { get; set; } = null!;
+        public required string SortBy { get; set; } = null!;
+        public required string SortOrder { get; set; } = null!;
     }
 }

@@ -1,5 +1,5 @@
-﻿using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using System.Threading.Tasks;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.IRepositories;
 using Microsoft.EntityFrameworkCore;

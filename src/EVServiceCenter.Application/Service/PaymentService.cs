@@ -10,6 +10,7 @@ using EVServiceCenter.Application.Configurations;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Globalization;
 
@@ -30,10 +31,11 @@ public class PaymentService
     private readonly IMaintenanceChecklistRepository _checklistRepository;
     private readonly IMaintenanceChecklistResultRepository _checklistResultRepository;
     private readonly IPromotionService _promotionService;
+    private readonly ILogger<PaymentService> _logger;
 
     private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, ILogger<PaymentService> logger)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -49,9 +51,10 @@ public class PaymentService
         _checklistResultRepository = checklistResultRepository;
         _holdStore = holdStore;
         _promotionService = promotionService;
+        _logger = logger;
         }
 
-	public async Task<string> CreateBookingPaymentLinkAsync(int bookingId)
+	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId)
 	{
 		var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
@@ -108,7 +111,7 @@ public class PaymentService
         throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
     }
 
-    public async Task<string> CreateOrderPaymentLinkAsync(int orderId)
+    public async Task<string?> CreateOrderPaymentLinkAsync(int orderId)
     {
         var order = await _orderRepository.GetByIdAsync(orderId);
         if (order == null) throw new InvalidOperationException("Đơn hàng không tồn tại");
@@ -179,7 +182,7 @@ public class PaymentService
 	{
 		if (string.IsNullOrWhiteSpace(orderCode)) return false;
 
-		Console.WriteLine($"[DEBUG] ConfirmPaymentAsync called with orderCode: {orderCode}");
+		_logger.LogDebug("ConfirmPaymentAsync called with orderCode: {OrderCode}", orderCode);
 
 		var getUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
 		using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(getUrl));
@@ -191,9 +194,9 @@ public class PaymentService
 		var json = await response.Content.ReadFromJsonAsync<JsonElement>();
 		var status = json.GetProperty("data").GetProperty("status").GetString();
 		
-		Console.WriteLine($"[DEBUG] PayOS status for orderCode {orderCode}: {status}");
+		_logger.LogDebug("PayOS status for orderCode {OrderCode}: {Status}", orderCode, status);
 
-		Domain.Entities.Booking booking = null;
+		Domain.Entities.Booking? booking = null;
 		if (int.TryParse(orderCode, out var bookingIdFromOrder))
 		{
 			booking = await _bookingRepository.GetBookingByIdAsync(bookingIdFromOrder);
@@ -202,8 +205,8 @@ public class PaymentService
 		if (status == "PAID")
 		{
 			// Xử lý đơn giản: cập nhật invoice/payment...
-			return true;
-		}
+		return true;
+	}
 
 		return false;
 	}

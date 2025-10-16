@@ -22,7 +22,7 @@ public partial class Payment
 
     public string PaymentMethod { get; set; } = "PAYOS";
 
-    public int? PaidByUserId { get; set; }
+    public int? PaidByUserID { get; set; }
 
     public virtual Invoice Invoice { get; set; }
 }

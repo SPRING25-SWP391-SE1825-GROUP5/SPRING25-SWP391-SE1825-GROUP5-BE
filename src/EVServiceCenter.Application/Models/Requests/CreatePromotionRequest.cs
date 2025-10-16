@@ -7,11 +7,11 @@ namespace EVServiceCenter.Application.Models.Requests
     {
         [Required(ErrorMessage = "Mã khuyến mãi là bắt buộc")]
         [StringLength(50, MinimumLength = 3, ErrorMessage = "Mã khuyến mãi phải từ 3 đến 50 ký tự")]
-        public string Code { get; set; }
+        public required string Code { get; set; }
 
         [Required(ErrorMessage = "Mô tả là bắt buộc")]
         [StringLength(500, MinimumLength = 10, ErrorMessage = "Mô tả phải từ 10 đến 500 ký tự")]
-        public string Description { get; set; }
+        public required string Description { get; set; }
 
         [Required(ErrorMessage = "Giá trị giảm giá là bắt buộc")]
         [Range(0.01, double.MaxValue, ErrorMessage = "Giá trị giảm giá phải là số lớn hơn 0")]
@@ -19,7 +19,7 @@ namespace EVServiceCenter.Application.Models.Requests
 
         [Required(ErrorMessage = "Loại giảm giá là bắt buộc")]
         [RegularExpression("^(PERCENTAGE|FIXED)$", ErrorMessage = "Loại giảm giá phải là PERCENTAGE hoặc FIXED")]
-        public string DiscountType { get; set; }
+        public required string DiscountType { get; set; }
 
         [Range(0, double.MaxValue, ErrorMessage = "Số tiền đơn hàng tối thiểu phải là số lớn hơn hoặc bằng 0")]
         public decimal? MinOrderAmount { get; set; }
@@ -36,7 +36,7 @@ namespace EVServiceCenter.Application.Models.Requests
 
         [Required(ErrorMessage = "Trạng thái là bắt buộc")]
         [RegularExpression("^(ACTIVE|INACTIVE|EXPIRED)$", ErrorMessage = "Trạng thái phải là ACTIVE, INACTIVE hoặc EXPIRED")]
-        public string Status { get; set; }
+        public required string Status { get; set; }
 
         [Range(1, int.MaxValue, ErrorMessage = "Giới hạn sử dụng phải là số nguyên lớn hơn 0")]
         public int? UsageLimit { get; set; }

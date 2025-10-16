@@ -7,7 +7,7 @@ namespace EVServiceCenter.Application.Models.Requests
     public class SetVehicleRemindersRequest
     {
         [Required]
-        public List<SetVehicleReminderItem> Items { get; set; } = new List<SetVehicleReminderItem>();
+        public required List<SetVehicleReminderItem> Items { get; set; } = new List<SetVehicleReminderItem>();
     }
 
     public class SetVehicleReminderItem

@@ -60,9 +60,9 @@ public class OrderController : ControllerBase
         {
             return BadRequest(new { success = false, message = ex.Message });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = "Lỗi khi lấy danh sách item" });
+            return BadRequest(new { success = false, message = "Lỗi khi lấy danh sách item: " + ex.Message });
         }
     }
 
@@ -199,7 +199,7 @@ public class OrderController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = "Lỗi khi cập nhật trạng thái đơn hàng" });
+            return BadRequest(new { success = false, message = "Lỗi khi cập nhật trạng thái đơn hàng: " + ex.Message });
         }
     }
 
@@ -220,7 +220,7 @@ public class OrderController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = "Lỗi khi xóa đơn hàng" });
+            return BadRequest(new { success = false, message = "Lỗi khi xóa đơn hàng: " + ex.Message });
         }
     }
 }

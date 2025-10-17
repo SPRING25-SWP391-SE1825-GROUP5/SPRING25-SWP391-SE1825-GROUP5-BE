@@ -211,7 +211,7 @@ public class OrderService : IOrderService
             Notes = order.Notes,
             CreatedAt = order.CreatedAt,
             UpdatedAt = order.UpdatedAt,
-            OrderItems = order.OrderItems.Select(oi => new OrderItemResponse
+            OrderItems = (order.OrderItems ?? new List<OrderItem>()).Select(oi => new OrderItemResponse
             {
                 OrderItemId = oi.OrderItemId,
                 PartId = oi.PartId,

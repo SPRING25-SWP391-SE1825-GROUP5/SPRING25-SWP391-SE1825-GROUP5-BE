@@ -36,7 +36,7 @@ namespace EVServiceCenter.Application.Service
             _otpService = otpService;
         }
 
-        public async Task<UserListResponse> GetAllUsersAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string role = null)
+        public async Task<UserListResponse> GetAllUsersAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? role = null)
         {
             try
             {
@@ -47,14 +47,14 @@ namespace EVServiceCenter.Application.Service
                 {
                     users = users.Where(u => 
                         u.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        u.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        u.PhoneNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        (u.Email?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                        (u.PhoneNumber?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
                     ).ToList();
                 }
 
                 if (!string.IsNullOrWhiteSpace(role))
                 {
-                    users = users.Where(u => u.Role.Equals(role, StringComparison.OrdinalIgnoreCase)).ToList();
+                    users = users.Where(u => (u.Role ?? string.Empty).Equals(role, StringComparison.OrdinalIgnoreCase)).ToList();
                 }
 
                 // Calculate pagination
@@ -468,12 +468,12 @@ namespace EVServiceCenter.Application.Service
                 UserId = user.UserId,
                 Email = user.Email,
                 FullName = user.FullName,
-                PhoneNumber = user.PhoneNumber,
+                PhoneNumber = user.PhoneNumber ?? string.Empty,
                 DateOfBirth = user.DateOfBirth,
-                Address = user.Address,
-                Gender = user.Gender,
-                AvatarUrl = user.AvatarUrl,
-                Role = user.Role,
+                Address = user.Address ?? string.Empty,
+                Gender = user.Gender ?? string.Empty,
+                AvatarUrl = user.AvatarUrl ?? string.Empty,
+                Role = user.Role ?? string.Empty,
                 IsActive = user.IsActive,
                 EmailVerified = user.EmailVerified,
                 CreatedAt = user.CreatedAt,

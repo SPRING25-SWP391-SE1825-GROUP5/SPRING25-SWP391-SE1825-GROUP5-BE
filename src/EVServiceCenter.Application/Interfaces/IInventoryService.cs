@@ -8,9 +8,10 @@ namespace EVServiceCenter.Application.Interfaces
     public interface IInventoryService
     {
         // Inventory management
-        Task<InventoryListResponse> GetInventoriesAsync(int pageNumber = 1, int pageSize = 10, int? centerId = null, string searchTerm = null);
-        Task<InventoryListResponse> GetInventoriesByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string searchTerm = null);
+        Task<InventoryListResponse> GetInventoriesAsync(int pageNumber = 1, int pageSize = 10, int? centerId = null, string? searchTerm = null);
+        // Removed list-by-center: 1 center = 1 inventory
         Task<InventoryResponse> GetInventoryByIdAsync(int inventoryId);
+        Task<InventoryResponse> GetInventoryByCenterIdAsync(int centerId);
         Task<InventoryResponse> CreateInventoryAsync(CreateInventoryRequest request);
         
         // InventoryPart management

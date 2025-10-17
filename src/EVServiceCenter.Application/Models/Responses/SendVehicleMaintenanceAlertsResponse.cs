@@ -5,9 +5,9 @@ namespace EVServiceCenter.Application.Models.Responses
     public class SendVehicleMaintenanceAlertsResponse
     {
         public bool Success { get; set; }
-        public string Message { get; set; } = string.Empty;
+        public required string Message { get; set; } = string.Empty;
         public SendVehicleMaintenanceAlertsSummary Summary { get; set; } = new();
-        public List<SendVehicleMaintenanceAlertsResult> Results { get; set; } = new();
+        public required List<SendVehicleMaintenanceAlertsResult> Results { get; set; } = new();
     }
 
     public class SendVehicleMaintenanceAlertsSummary

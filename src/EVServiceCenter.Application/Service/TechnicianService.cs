@@ -91,19 +91,19 @@ namespace EVServiceCenter.Application.Service
                 result.Bookings.Add(new TechnicianBookingItem
                 {
                     BookingId = b.BookingId,
-                    BookingCode = null,
-                    Status = b.Status,
+                    BookingCode = string.Empty,
+                    Status = b.Status ?? string.Empty,
                     ServiceId = b.ServiceId,
-                    ServiceName = b.Service?.ServiceName ?? "N/A",
+                    ServiceName = b.Service?.ServiceName ?? string.Empty,
                     CenterId = b.CenterId,
                     CenterName = b.Center?.CenterName ?? "N/A",
                     SlotId = b.SlotId,
                     SlotTime = b.Slot?.SlotTime.ToString() ?? "N/A",
                     CustomerName = b.Customer?.User?.FullName ?? "N/A",
-                    CustomerPhone = b.Customer?.User?.PhoneNumber,
-                    VehiclePlate = b.Vehicle?.LicensePlate,
-                    WorkOrderId = wo?.WorkOrderId,
-                    WorkOrderStatus = wo?.Status,
+                    CustomerPhone = b.Customer?.User?.PhoneNumber ?? string.Empty,
+                    VehiclePlate = b.Vehicle?.LicensePlate ?? string.Empty,
+                    WorkOrderId = wo?.WorkOrderId ?? 0,
+                    WorkOrderStatus = wo?.Status ?? string.Empty,
                     WorkStartTime = null,
                     WorkEndTime = null
                 });
@@ -112,7 +112,7 @@ namespace EVServiceCenter.Application.Service
             return result;
         }
 
-        public async Task<TechnicianListResponse> GetAllTechniciansAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? centerId = null)
+        public async Task<TechnicianListResponse> GetAllTechniciansAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, int? centerId = null)
         {
             try
             {
@@ -277,10 +277,10 @@ namespace EVServiceCenter.Application.Service
                 Position = technician.Position,
                 IsActive = technician.IsActive,
                 CreatedAt = technician.CreatedAt,
-                UserFullName = technician.User?.FullName,
-                UserEmail = technician.User?.Email,
-                UserPhoneNumber = technician.User?.PhoneNumber,
-                CenterName = technician.Center?.CenterName,
+                UserFullName = technician.User?.FullName ?? string.Empty,
+                UserEmail = technician.User?.Email ?? string.Empty,
+                UserPhoneNumber = technician.User?.PhoneNumber ?? string.Empty,
+                CenterName = technician.Center?.CenterName ?? string.Empty,
                 // CenterCity = technician.Center?.City
             };
         }

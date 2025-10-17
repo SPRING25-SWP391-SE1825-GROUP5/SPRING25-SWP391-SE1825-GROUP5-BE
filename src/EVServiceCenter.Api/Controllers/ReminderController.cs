@@ -74,9 +74,9 @@ namespace EVServiceCenter.Api.Controllers
 
         [HttpGet]
         [Authorize]
-        public async Task<IActionResult> List([FromQuery] int? customerId = null, [FromQuery] int? vehicleId = null, [FromQuery] string status = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+        public async Task<IActionResult> List([FromQuery] int? customerId = null, [FromQuery] int? vehicleId = null, [FromQuery] string? status = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
         {
-            var items = await _repo.QueryAsync(customerId, vehicleId, status, from, to);
+            var items = await _repo.QueryAsync(customerId, vehicleId, status ?? string.Empty, from, to);
             return Ok(new { success = true, data = items });
         }
 
@@ -142,7 +142,7 @@ namespace EVServiceCenter.Api.Controllers
             var r = await _repo.GetByIdAsync(id);
             if (r == null) return NotFound(new { success = false, message = "Không tìm thấy reminder" });
             if (!r.DueDate.HasValue) return BadRequest(new { success = false, message = "Reminder chưa có DueDate" });
-            var days = (req?.Days ?? 0) > 0 ? req.Days : _options.UpcomingDays;
+            var days = (req?.Days ?? 0) > 0 ? (req?.Days ?? 0) : _options.UpcomingDays;
             r.DueDate = r.DueDate.Value.AddDays(days);
             await _repo.UpdateAsync(r);
             return Ok(new { success = true, data = r });
@@ -193,7 +193,7 @@ namespace EVServiceCenter.Api.Controllers
 
 
         // Dispatch reminders by list or auto by config UpcomingDays
-        public class DispatchRequest { public int[] ReminderIds { get; set; } public bool Auto { get; set; } = false; public int? UpcomingDays { get; set; } }
+        public class DispatchRequest { public int[] ReminderIds { get; set; } = Array.Empty<int>(); public bool Auto { get; set; } = false; public int? UpcomingDays { get; set; } }
         [HttpPost("dispatch")]
         [Authorize(Roles = "ADMIN,STAFF")]
         public async Task<IActionResult> Dispatch([FromBody] DispatchRequest req)

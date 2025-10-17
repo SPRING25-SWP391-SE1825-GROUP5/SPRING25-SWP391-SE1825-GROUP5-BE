@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Configurations;
 using EVServiceCenter.Domain.Interfaces;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -41,7 +41,7 @@ namespace EVServiceCenter.Api.HostedServices
 
                     // Lấy tối đa 1000 bản ghi APPLIED đã quá hạn mỗi vòng
                     var ups = await db.UserPromotions
-                        .Where(up => up.Status == "APPLIED" && up.UsedAt != null && up.UsedAt < threshold)
+                        .Where(up => up.Status == "APPLIED" && up.UsedAt != default(DateTime) && up.UsedAt < threshold)
                         .OrderBy(up => up.UsedAt)
                         .Take(1000)
                         .ToListAsync(stoppingToken);

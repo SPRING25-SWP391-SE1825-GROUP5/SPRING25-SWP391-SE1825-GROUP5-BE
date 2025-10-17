@@ -20,7 +20,7 @@ namespace EVServiceCenter.Application.Service
             _centerRepository = centerRepository;
         }
 
-        public async Task<CenterListResponse> GetAllCentersAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string city = null)
+        public async Task<CenterListResponse> GetAllCentersAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? city = null)
         {
             try
             {
@@ -60,7 +60,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<CenterListResponse> GetActiveCentersAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string city = null)
+        public async Task<CenterListResponse> GetActiveCentersAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? city = null)
         {
             try
             {
@@ -127,6 +127,19 @@ namespace EVServiceCenter.Application.Service
                 // Validate request
                 await ValidateCreateCenterRequestAsync(request);
 
+                // Duplicate name/phone check (case-insensitive, normalized)
+                var existingCenters = await _centerRepository.GetAllCentersAsync();
+                var normalizedNewName = request.CenterName.Trim();
+                if (existingCenters.Any(c => string.Equals(c.CenterName.Trim(), normalizedNewName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new ArgumentException("Tên trung tâm đã tồn tại. Vui lòng dùng tên khác.");
+                }
+                var normalizedPhone = NormalizePhone(request.PhoneNumber);
+                if (existingCenters.Any(c => NormalizePhone(c.PhoneNumber) == normalizedPhone))
+                {
+                    throw new ArgumentException("Số điện thoại đã tồn tại. Vui lòng dùng số khác.");
+                }
+
                 // Create center entity
                 var center = new ServiceCenter
                 {
@@ -165,9 +178,26 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException("Trung tâm không tồn tại.");
 
                 // Update center properties
-                center.CenterName = request.CenterName.Trim();
+                var newName = request.CenterName.Trim();
+                if (!string.Equals(center.CenterName.Trim(), newName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var all = await _centerRepository.GetAllCentersAsync();
+                    if (all.Any(c => c.CenterId != center.CenterId && string.Equals(c.CenterName.Trim(), newName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        throw new ArgumentException("Tên trung tâm đã tồn tại. Vui lòng dùng tên khác.");
+                    }
+                }
+                center.CenterName = newName;
                 center.Address = request.Address.Trim();
-                center.PhoneNumber = request.PhoneNumber.Trim();
+                var newPhone = NormalizePhone(request.PhoneNumber);
+                {
+                    var all = await _centerRepository.GetAllCentersAsync();
+                    if (all.Any(c => c.CenterId != center.CenterId && NormalizePhone(c.PhoneNumber) == newPhone))
+                    {
+                        throw new ArgumentException("Số điện thoại đã tồn tại. Vui lòng dùng số khác.");
+                    }
+                }
+                center.PhoneNumber = newPhone;
                 center.IsActive = request.IsActive;
 
                 // Save changes
@@ -205,7 +235,7 @@ namespace EVServiceCenter.Application.Service
 
         private CenterResponse MapToCenterResponse(ServiceCenter center)
         {
-            return new CenterResponse
+                return new CenterResponse
             {
                 CenterId = center.CenterId,
                 CenterName = center.CenterName,
@@ -252,6 +282,11 @@ namespace EVServiceCenter.Application.Service
             phoneNumber = phoneNumber.Replace(" ", "");
             var phoneRegex = new Regex(@"^0\d{9}$");
             return phoneRegex.IsMatch(phoneNumber);
+        }
+
+        private string NormalizePhone(string phone)
+        {
+            return (phone ?? string.Empty).Replace(" ", "");
         }
 
         private bool IsValidEmail(string email)

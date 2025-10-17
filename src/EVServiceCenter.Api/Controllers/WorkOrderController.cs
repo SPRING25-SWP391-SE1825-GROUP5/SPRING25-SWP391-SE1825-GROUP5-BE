@@ -41,12 +41,12 @@ namespace EVServiceCenter.Api.Controllers
         // GET api/workorders?page=&size=&status=&centerId=&technicianId=&customerId=&vehicleId=&serviceId=&from=&to=&sort=
         [HttpGet]
         [Authorize]
-        public async Task<IActionResult> Query([FromQuery] int page = 1, [FromQuery] int size = 20, [FromQuery] string status = null,
+        public async Task<IActionResult> Query([FromQuery] int page = 1, [FromQuery] int size = 20, [FromQuery] string? status = null,
             [FromQuery] int? centerId = null, [FromQuery] int? technicianId = null, [FromQuery] int? customerId = null, [FromQuery] int? vehicleId = null,
             [FromQuery] int? serviceId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string sort = "createdAt_desc")
         {
             if (page <= 0) page = 1; if (size <= 0 || size > 100) size = 20;
-            var (items, total) = await _workOrderRepository.QueryAsync(centerId, technicianId, customerId, vehicleId, serviceId, status, from, to, page, size, sort, includeRelations: true);
+            var (items, total) = await _workOrderRepository.QueryAsync(centerId, technicianId, customerId, vehicleId, serviceId, status ?? string.Empty, from, to, page, size, sort, includeRelations: true);
             var data = items.Select(wo => new {
                 wo.WorkOrderId, wo.BookingId, wo.Status, wo.CreatedAt, wo.UpdatedAt,
                 technician = new { id = wo.TechnicianId, name = wo.Technician?.User?.FullName },
@@ -74,19 +74,19 @@ namespace EVServiceCenter.Api.Controllers
 
         [HttpGet("/api/centers/{centerId:int}/workorders")]
         [Authorize]
-        public async Task<IActionResult> ByCenter(int centerId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string status = null)
+        public async Task<IActionResult> ByCenter(int centerId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string? status = null)
         {
-            var list = await _workOrderRepository.GetByCenterAsync(centerId, from, to, status);
+            var list = await _workOrderRepository.GetByCenterAsync(centerId, from, to, status ?? string.Empty);
             return Ok(new { success = true, data = list });
         }
 
         [HttpGet("/api/technicians/{technicianId:int}/workorders")]
         [Authorize]
-        public async Task<IActionResult> ByTechnician(int technicianId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string status = null)
+        public async Task<IActionResult> ByTechnician(int technicianId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string? status = null)
         {
             try
             {
-                var list = await _workOrderService.GetByTechnicianAsync(technicianId, from, to, status);
+                var list = await _workOrderService.GetByTechnicianAsync(technicianId, from, to, status ?? string.Empty);
                 // Project to avoid circular references in JSON
                 var data = list.Select(wo => new {
                     wo.WorkOrderId,
@@ -110,9 +110,9 @@ namespace EVServiceCenter.Api.Controllers
 
         [HttpGet("/api/customers/{customerId:int}/workorders")]
         [Authorize]
-        public async Task<IActionResult> ByCustomer(int customerId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string status = null)
+        public async Task<IActionResult> ByCustomer(int customerId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string? status = null)
         {
-            var list = await _workOrderRepository.GetByCustomerAsync(customerId, from, to, status);
+            var list = await _workOrderRepository.GetByCustomerAsync(customerId, from, to, status ?? string.Empty);
             return Ok(new { success = true, data = list });
         }
 
@@ -150,9 +150,9 @@ namespace EVServiceCenter.Api.Controllers
 
         [HttpGet("/api/customers/{customerId:int}/vehicles/{vehicleId:int}/workorders")]
         [Authorize]
-        public async Task<IActionResult> ByCustomerVehicle(int customerId, int vehicleId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string status = null)
+        public async Task<IActionResult> ByCustomerVehicle(int customerId, int vehicleId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string? status = null)
         {
-            var list = await _workOrderRepository.GetByCustomerVehicleAsync(customerId, vehicleId, from, to, status);
+            var list = await _workOrderRepository.GetByCustomerVehicleAsync(customerId, vehicleId, from, to, status ?? string.Empty);
             return Ok(new { success = true, data = list });
         }
 
@@ -202,7 +202,7 @@ namespace EVServiceCenter.Api.Controllers
                 return NotFound(new { success = false, message = "Không tìm thấy work order cho booking này" });
 
             if (wo.TechnicianId <= 0 || wo.Technician == null)
-                return Ok(new { success = true, data = (object)null, message = "Chưa được gán kỹ thuật viên" });
+                return Ok(new { success = true, data = (object?)null, message = "Chưa được gán kỹ thuật viên" });
 
             var data = new
             {
@@ -371,7 +371,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, message = "Đã hoàn tất work order", data = wo });
         }
 
-        public class UpdateWorkOrderStatusRequest { public string Status { get; set; } }
+        public class UpdateWorkOrderStatusRequest { public string Status { get; set; } = string.Empty; }
 
         [HttpPut("{id:int}/status")]
         [Authorize(Policy = "TechnicianOrAdmin")]
@@ -408,7 +408,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, message = "Đã hủy work order", data = new { wo.WorkOrderId, wo.Status } });
         }
 
-        public class WorkOrderNoteRequest { public string Text { get; set; } public string ImageUrl { get; set; } }
+        public class WorkOrderNoteRequest { public string Text { get; set; } = string.Empty; public string ImageUrl { get; set; } = string.Empty; }
 
         [HttpPost("{id}/notes")]
         [Authorize(Policy = "TechnicianOrAdmin")]

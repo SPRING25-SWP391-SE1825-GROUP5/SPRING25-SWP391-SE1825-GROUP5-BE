@@ -192,6 +192,8 @@ namespace EVServiceCenter.Application.Service
                 BookingCode = "",
                 BookingDate = DateOnly.FromDateTime(booking.CreatedAt),
                 Status = booking.Status ?? "",
+                PartsUsed = new List<PartUsedInfo>(),
+                Timeline = new List<StatusTimelineInfo>(),
                 CenterInfo = new CenterInfo
                 {
                     CenterId = booking.CenterId,

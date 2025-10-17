@@ -368,7 +368,7 @@ namespace EVServiceCenter.Api.Controllers
                 var reminders = new List<MaintenanceReminder>();
                 foreach (var vehicleId in vehicleIds)
                 {
-                    var vehicleReminders = await _repo.QueryAsync(request.CustomerId, vehicleId, null, request.FromDate, request.ToDate);
+                    var vehicleReminders = await _repo.QueryAsync(request.CustomerId, vehicleId, string.Empty, request.FromDate, request.ToDate);
                     reminders.AddRange(vehicleReminders);
                 }
 

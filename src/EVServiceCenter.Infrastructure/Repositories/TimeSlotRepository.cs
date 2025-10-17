@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +32,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<TimeSlot> GetByIdAsync(int slotId)
+        public async Task<TimeSlot?> GetByIdAsync(int slotId)
         {
             return await _context.TimeSlots.FirstOrDefaultAsync(ts => ts.SlotId == slotId);
         }

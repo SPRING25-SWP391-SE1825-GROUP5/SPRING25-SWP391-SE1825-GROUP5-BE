@@ -4,9 +4,9 @@ namespace EVServiceCenter.Domain.Entities;
 
 public class ServiceChecklistTemplateItem
 {
-    public int ItemId { get; set; }
-    public int TemplateId { get; set; }
-    public int PartId { get; set; }
+    public int ItemID { get; set; }
+    public int TemplateID { get; set; }
+    public int PartID { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

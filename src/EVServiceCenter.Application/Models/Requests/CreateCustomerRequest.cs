@@ -7,7 +7,7 @@ namespace EVServiceCenter.Application.Models.Requests
     {
         [Required(ErrorMessage = "Số điện thoại là bắt buộc")]
         [RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải bắt đầu bằng 0 và có đúng 10 số")]
-        public string PhoneNumber { get; set; }
+        public required string PhoneNumber { get; set; }
 
         
 

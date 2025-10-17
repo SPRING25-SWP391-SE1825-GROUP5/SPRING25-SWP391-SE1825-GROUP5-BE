@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +26,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<Technician> GetTechnicianByIdAsync(int technicianId)
+        public async Task<Technician?> GetTechnicianByIdAsync(int technicianId)
         {
             return await _context.Technicians
                 .Include(t => t.User)
@@ -34,7 +34,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(t => t.TechnicianId == technicianId);
         }
 
-        public async Task<Technician> GetTechnicianByUserIdAsync(int userId)
+        public async Task<Technician?> GetTechnicianByUserIdAsync(int userId)
         {
             return await _context.Technicians
                 .Include(t => t.User)

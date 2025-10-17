@@ -14,7 +14,7 @@ namespace EVServiceCenter.Application.Models.Requests
 
         [Required]
         [StringLength(50, ErrorMessage = "CacheKeyPrefix không được quá 50 ký tự")]
-        public string CacheKeyPrefix { get; set; } = string.Empty;
+        public required string CacheKeyPrefix { get; set; } = string.Empty;
 
         [Required]
         public bool Enabled { get; set; }

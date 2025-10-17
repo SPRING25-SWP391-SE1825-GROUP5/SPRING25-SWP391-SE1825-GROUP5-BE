@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +17,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             _context = context;
         }
 
-        public async Task<Customer> GetCustomerByUserIdAsync(int userId)
+        public async Task<Customer?> GetCustomerByUserIdAsync(int userId)
         {
             return await _context.Customers
                 .Include(c => c.User)
@@ -25,7 +25,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(c => c.UserId == userId);
         }
 
-        public async Task<Customer> GetCustomerByIdAsync(int customerId)
+        public async Task<Customer?> GetCustomerByIdAsync(int customerId)
         {
             return await _context.Customers
                 .Include(c => c.User)
@@ -33,7 +33,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(c => c.CustomerId == customerId);
         }
 
-        public async Task<Customer> GetGuestByEmailOrPhoneAsync(string email, string normalizedPhone)
+        public async Task<Customer?> GetGuestByEmailOrPhoneAsync(string email, string normalizedPhone)
         {
             var query = _context.Customers
                 .Include(c => c.User)

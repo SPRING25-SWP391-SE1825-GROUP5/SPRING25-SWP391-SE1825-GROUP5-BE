@@ -10,7 +10,7 @@ namespace EVServiceCenter.Application.Models.Requests
 
         [Required(ErrorMessage = "Nhãn slot là bắt buộc")]
         [StringLength(50, MinimumLength = 2, ErrorMessage = "Nhãn slot phải từ 2-50 ký tự")]
-        public string SlotLabel { get; set; }
+        public required string SlotLabel { get; set; }
 
         public bool IsActive { get; set; } = true;
     }
@@ -22,7 +22,7 @@ namespace EVServiceCenter.Application.Models.Requests
 
         [Required(ErrorMessage = "Nhãn slot là bắt buộc")]
         [StringLength(50, MinimumLength = 2, ErrorMessage = "Nhãn slot phải từ 2-50 ký tự")]
-        public string SlotLabel { get; set; }
+        public required string SlotLabel { get; set; }
 
         public bool IsActive { get; set; } = true;
     }

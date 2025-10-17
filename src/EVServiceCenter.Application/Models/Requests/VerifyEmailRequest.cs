@@ -10,6 +10,6 @@ namespace EVServiceCenter.Application.Models.Requests
         [Required(ErrorMessage = "Mã OTP là bắt buộc")]
         [StringLength(6, MinimumLength = 6, ErrorMessage = "Mã OTP phải có đúng 6 chữ số")]
         [RegularExpression(@"^\d{6}$", ErrorMessage = "Mã OTP phải là 6 chữ số")]
-        public string OtpCode { get; set; }
+        public required string OtpCode { get; set; }
     }
 }

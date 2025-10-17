@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -33,16 +33,14 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     .OrderByDescending(b => b.CreatedAt)
                     .ToListAsync();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log the detailed error for debugging
-                Console.WriteLine($"Error in GetAllBookingsAsync: {ex.Message}");
-                Console.WriteLine($"Inner Exception: {ex.InnerException?.Message}");
+                // Error in GetAllBookingsAsync - rethrowing exception
                 throw;
             }
         }
 
-        public async Task<Booking> GetBookingByIdAsync(int bookingId)
+        public async Task<Booking?> GetBookingByIdAsync(int bookingId)
         {
             return await _context.Bookings
                 .Include(b => b.Customer)

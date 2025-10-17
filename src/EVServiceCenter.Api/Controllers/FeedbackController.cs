@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,9 +15,9 @@ namespace EVServiceCenter.Api.Controllers;
 [Route("api/[controller]")]
 public class FeedbackController : ControllerBase
 {
-    private readonly EVDbContext _db;
+    private readonly EVServiceCenter.Infrastructure.Configurations.EVDbContext _db;
     private readonly ICustomerRepository _customerRepository;
-    public FeedbackController(EVDbContext db, ICustomerRepository customerRepository) { _db = db; _customerRepository = customerRepository; }
+    public FeedbackController(EVServiceCenter.Infrastructure.Configurations.EVDbContext db, ICustomerRepository customerRepository) { _db = db; _customerRepository = customerRepository; }
 
     // Generic POST /api/Feedback endpoint removed: use specific endpoints below
 

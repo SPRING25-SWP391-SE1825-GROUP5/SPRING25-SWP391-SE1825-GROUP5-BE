@@ -95,10 +95,10 @@ namespace EVServiceCenter.Application.Service
                         // No deletion since ServiceParts removed
                         removedPartIds.Add(partId);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         // Log warning but continue with other parts
-                        Console.WriteLine($"Warning: Could not remove part {partId}: {ex.Message}");
+                        // Warning: Could not remove part - continuing with other parts
                     }
                 }
 

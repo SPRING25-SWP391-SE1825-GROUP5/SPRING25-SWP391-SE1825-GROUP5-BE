@@ -7,7 +7,7 @@ namespace EVServiceCenter.Domain.Interfaces
     public interface IVehicleRepository
     {
         Task<List<Vehicle>> GetAllVehiclesAsync();
-        Task<Vehicle> GetVehicleByIdAsync(int vehicleId);
+        Task<Vehicle?> GetVehicleByIdAsync(int vehicleId);
         Task<Vehicle> CreateVehicleAsync(Vehicle vehicle);
         Task UpdateVehicleAsync(Vehicle vehicle);
         Task DeleteVehicleAsync(int vehicleId);

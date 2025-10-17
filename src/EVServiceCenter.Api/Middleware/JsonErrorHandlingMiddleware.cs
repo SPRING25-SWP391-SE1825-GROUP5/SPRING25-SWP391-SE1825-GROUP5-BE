@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using System;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace EVServiceCenter.Api.Middleware
 {
@@ -27,51 +28,69 @@ namespace EVServiceCenter.Api.Middleware
             catch (JsonException jsonEx)
             {
                 _logger.LogWarning(jsonEx, "JSON deserialization error occurred");
-                
-                var friendlyError = ConvertJsonErrorToFriendlyMessage(jsonEx.Message);
-                
-                context.Response.StatusCode = 400;
-                context.Response.ContentType = "application/json";
-                
-                var errorResponse = new
-                {
-                    success = false,
-                    message = "Dữ liệu không hợp lệ",
-                    errors = new[] { friendlyError }
-                };
-                
-                var jsonResponse = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                });
-                
-                await context.Response.WriteAsync(jsonResponse);
+                await HandleJsonErrorAsync(context, jsonEx);
             }
-            catch (Exception ex) when (ex.Message.Contains("invalid end of a number") || 
-                                       ex.Message.Contains("Expected a delimiter") ||
-                                       ex.Message.Contains("Expected a number"))
+            catch (Exception ex) when (IsModelBindingError(ex))
             {
                 _logger.LogWarning(ex, "Model binding error occurred");
-                
-                var friendlyError = ConvertJsonErrorToFriendlyMessage(ex.Message);
-                
-                context.Response.StatusCode = 400;
-                context.Response.ContentType = "application/json";
-                
-                var errorResponse = new
-                {
-                    success = false,
-                    message = "Dữ liệu không hợp lệ",
-                    errors = new[] { friendlyError }
-                };
-                
-                var jsonResponse = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                });
-                
-                await context.Response.WriteAsync(jsonResponse);
+                await HandleModelBindingErrorAsync(context, ex);
             }
+        }
+
+        private static bool IsModelBindingError(Exception ex)
+        {
+            return ex.Message.Contains("invalid end of a number") ||
+                   ex.Message.Contains("Expected a delimiter") ||
+                   ex.Message.Contains("Expected a number") ||
+                   ex.Message.Contains("Expected a boolean") ||
+                   ex.Message.Contains("Expected a string") ||
+                   ex.Message.Contains("The JSON value could not be converted");
+        }
+
+        private async Task HandleJsonErrorAsync(HttpContext context, JsonException jsonEx)
+        {
+            var friendlyError = ConvertJsonErrorToFriendlyMessage(jsonEx.Message);
+            
+            context.Response.StatusCode = 400;
+            context.Response.ContentType = "application/json";
+            
+            var errorResponse = new
+            {
+                success = false,
+                message = "Dữ liệu JSON không hợp lệ",
+                errors = new[] { friendlyError },
+                timestamp = DateTime.UtcNow
+            };
+            
+            var jsonResponse = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+            
+            await context.Response.WriteAsync(jsonResponse);
+        }
+
+        private async Task HandleModelBindingErrorAsync(HttpContext context, Exception ex)
+        {
+            var friendlyError = ConvertJsonErrorToFriendlyMessage(ex.Message);
+            
+            context.Response.StatusCode = 400;
+            context.Response.ContentType = "application/json";
+            
+            var errorResponse = new
+            {
+                success = false,
+                message = "Dữ liệu không hợp lệ",
+                errors = new[] { friendlyError },
+                timestamp = DateTime.UtcNow
+            };
+            
+            var jsonResponse = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+            
+            await context.Response.WriteAsync(jsonResponse);
         }
 
         private string ConvertJsonErrorToFriendlyMessage(string errorMessage)

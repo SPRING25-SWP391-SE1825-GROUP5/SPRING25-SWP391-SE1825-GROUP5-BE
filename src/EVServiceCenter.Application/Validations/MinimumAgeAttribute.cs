@@ -10,10 +10,9 @@ namespace EVServiceCenter.Application.Validations
         public MinimumAgeAttribute(int minimumAge)
         {
             _minimumAge = minimumAge;
-            ErrorMessage = $"Phải đủ {_minimumAge} tuổi trở lên";
         }
 
-        public override bool IsValid(object value)
+        public override bool IsValid(object? value)
         {
             if (value is DateOnly dateOfBirth)
             {
@@ -41,7 +40,10 @@ namespace EVServiceCenter.Application.Validations
 
         public override string FormatErrorMessage(string name)
         {
-            return $"Phải đủ {_minimumAge} tuổi trở lên để đăng ký tài khoản";
+            // Nếu attribute đặt ErrorMessage riêng, ưu tiên dùng; nếu không, trả về thông điệp chung.
+            return string.IsNullOrWhiteSpace(ErrorMessage)
+                ? $"Phải đủ {_minimumAge} tuổi trở lên"
+                : ErrorMessage!;
         }
     }
 }

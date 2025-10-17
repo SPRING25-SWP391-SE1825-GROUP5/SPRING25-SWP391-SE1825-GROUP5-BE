@@ -60,7 +60,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> GetAvailability(
             [FromQuery] int centerId,
             [FromQuery] string date,
-            [FromQuery] string serviceIds = null)
+            [FromQuery] string? serviceIds = null)
         {
             try
             {
@@ -158,7 +158,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             [FromQuery] int centerId,
             [FromQuery] string date,
             [FromQuery] int? technicianId = null,
-            [FromQuery] string serviceIds = null)
+            [FromQuery] string? serviceIds = null)
         {
             try
             {
@@ -266,7 +266,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        public class UpdateBookingStatusRequest { public string Status { get; set; } }
+        public class UpdateBookingStatusRequest { public string Status { get; set; } = string.Empty; }
 
         [HttpPut("{id:int}/status")]
         public async Task<IActionResult> ChangeStatus(int id, [FromBody] UpdateBookingStatusRequest request)
@@ -473,7 +473,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             [FromRoute] int customerId,
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string status = null,
+            [FromQuery] string? status = null,
             [FromQuery] DateTime? fromDate = null,
             [FromQuery] DateTime? toDate = null,
             [FromQuery] string sortBy = "bookingDate",
@@ -534,7 +534,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             public int Amount { get; set; }
             public int PaidByUserId { get; set; }
-            public string Note { get; set; }
+            public string Note { get; set; } = string.Empty;
         }
 
         [HttpPost("{bookingId:int}/invoice/offline")]
@@ -587,7 +587,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 Status = "PAID",
                 PaidAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
-                PaidByUserId = req.PaidByUserId
+                PaidByUserID = req.PaidByUserId
             });
 
             return Ok(new { success = true, paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, amount = payment.Amount });

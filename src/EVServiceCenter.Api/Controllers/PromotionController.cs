@@ -45,9 +45,9 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> GetAllPromotions(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
-            [FromQuery] string status = null,
-            [FromQuery] string promotionType = null)
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? status = null,
+            [FromQuery] string? promotionType = null)
         {
             try
             {
@@ -73,7 +73,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         // ===== APPLY/REMOVE/LIST for BOOKINGS and ORDERS (unified under PromotionController) =====
-        public class BookingApplyPromotionRequest { public string Code { get; set; } }
+        public class BookingApplyPromotionRequest { public string? Code { get; set; } }
 
         [HttpPost("bookings/{bookingId:int}/apply")]
         public async Task<IActionResult> ApplyForBooking(int bookingId, [FromBody] BookingApplyPromotionRequest request)
@@ -157,7 +157,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             return Ok(new { success = true, data = result });
         }
 
-        public class OrderApplyPromotionRequest { public string Code { get; set; } }
+        public class OrderApplyPromotionRequest { public string? Code { get; set; } }
 
         [HttpPost("orders/{orderId:int}/apply")]
         public async Task<IActionResult> ApplyForOrder(int orderId, [FromBody] OrderApplyPromotionRequest request)
@@ -404,7 +404,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             return Ok(new { success = true, data = result });
         }
 
-        public class SaveCustomerPromotionRequest { public string Code { get; set; } }
+        public class SaveCustomerPromotionRequest { public string Code { get; set; } = string.Empty; }
 
         [HttpPost("customers/{customerId:int}/promotions")]
         public async Task<IActionResult> SaveCustomerPromotion(int customerId, [FromBody] SaveCustomerPromotionRequest request)
@@ -552,8 +552,8 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> GetActivePromotions(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
-            [FromQuery] string promotionType = null)
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? promotionType = null)
         {
             try
             {

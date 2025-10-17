@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -128,7 +128,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return new { total, byStatus, byTechnician };
         }
 
-        public async Task<WorkOrder> GetLastCompletedByVehicleAsync(int vehicleId)
+        public async Task<WorkOrder?> GetLastCompletedByVehicleAsync(int vehicleId)
         {
             return await _db.WorkOrders
                 .Where(w => w.VehicleId == vehicleId && w.Status == "COMPLETED")

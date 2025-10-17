@@ -34,7 +34,7 @@ public class SkillService : ISkillService
 	{
 		if (await _skillRepository.NameExistsAsync(request.Name))
 			throw new System.ArgumentException("Tên kỹ năng đã tồn tại");
-		var s = new Skill { Name = request.Name.Trim(), Description = request.Description?.Trim() };
+		var s = new Skill { Name = request.Name.Trim(), Description = request.Description?.Trim() ?? string.Empty };
 		s = await _skillRepository.AddAsync(s);
 		return Map(s);
 	}
@@ -45,7 +45,7 @@ public class SkillService : ISkillService
 		if (await _skillRepository.NameExistsAsync(request.Name.Trim(), skillId))
 			throw new System.ArgumentException("Tên kỹ năng đã tồn tại");
 		s.Name = request.Name.Trim();
-		s.Description = request.Description?.Trim();
+		s.Description = request.Description?.Trim() ?? string.Empty;
 		await _skillRepository.UpdateAsync(s);
 		return Map(s);
 	}

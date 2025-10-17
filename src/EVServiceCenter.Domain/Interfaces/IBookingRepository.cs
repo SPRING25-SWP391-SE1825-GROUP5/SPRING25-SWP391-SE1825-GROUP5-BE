@@ -8,7 +8,7 @@ namespace EVServiceCenter.Domain.Interfaces
     public interface IBookingRepository
     {
         Task<List<Booking>> GetAllBookingsAsync();
-        Task<Booking> GetBookingByIdAsync(int bookingId);
+        Task<Booking?> GetBookingByIdAsync(int bookingId);
         Task<Booking> CreateBookingAsync(Booking booking);
         Task UpdateBookingAsync(Booking booking);
         Task<bool> BookingExistsAsync(int bookingId);

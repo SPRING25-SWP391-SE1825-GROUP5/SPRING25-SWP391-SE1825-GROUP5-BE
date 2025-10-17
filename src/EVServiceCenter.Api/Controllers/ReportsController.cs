@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,15 +14,15 @@ namespace EVServiceCenter.Api.Controllers
 	[Authorize]
 	public class ReportsController : ControllerBase
 	{
-		private readonly EVDbContext _db;
-		public ReportsController(EVDbContext db)
+		private readonly EVServiceCenter.Infrastructure.Configurations.EVDbContext _db;
+		public ReportsController(EVServiceCenter.Infrastructure.Configurations.EVDbContext db)
 		{
 			_db = db;
 		}
 
 		// GET /api/reports/revenue?from=...&to=...&method=PAYOS|CASH
 		[HttpGet("revenue")]
-		public async Task<IActionResult> GetRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] string method = null)
+		public async Task<IActionResult> GetRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] string? method = null)
 		{
 			var q = _db.Payments.AsQueryable();
 			q = q.Where(p => p.Status == "PAID");
@@ -49,12 +49,12 @@ namespace EVServiceCenter.Api.Controllers
 			q = q.Where(p => p.Status == "PAID");
 			if (from.HasValue) q = q.Where(p => p.CreatedAt >= from.Value);
 			if (to.HasValue) q = q.Where(p => p.CreatedAt <= to.Value);
-			if (paidByUserId.HasValue) q = q.Where(p => p.PaidByUserId == paidByUserId.Value);
+			if (paidByUserId.HasValue) q = q.Where(p => p.PaidByUserID == paidByUserId.Value);
 
 			var total = await System.Threading.Tasks.Task.FromResult(q.Sum(p => (decimal)p.Amount));
 			var count = await System.Threading.Tasks.Task.FromResult(q.Count());
 			var byCashier = await System.Threading.Tasks.Task.FromResult(
-				q.GroupBy(p => p.PaidByUserId)
+				q.GroupBy(p => p.PaidByUserID)
 				.Select(g => new { paidByUserId = g.Key, total = (decimal)g.Sum(x => x.Amount), count = g.Count() })
 				.ToList());
 
@@ -91,17 +91,17 @@ namespace EVServiceCenter.Api.Controllers
 		public async Task<IActionResult> GetRevenueAggregate(
 			[FromQuery] DateTime fromDate,
 			[FromQuery] DateTime toDate,
-			[FromQuery] string source = "payments",
-			[FromQuery] string centerIds = null,
-			[FromQuery] string groupBy = null,
-			[FromQuery] string method = null)
+			[FromQuery] string? source = "payments",
+			[FromQuery] string? centerIds = null,
+			[FromQuery] string? groupBy = null,
+			[FromQuery] string? method = null)
 		{
 			if (toDate <= fromDate) return BadRequest(new { success = false, message = "to phải lớn hơn from" });
 
 			var wantGroupDate = (groupBy ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains("date", StringComparer.OrdinalIgnoreCase);
 			var wantGroupCenter = (groupBy ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains("center", StringComparer.OrdinalIgnoreCase);
 
-			HashSet<int> centerIdSet = null;
+			HashSet<int>? centerIdSet = null;
 			if (!string.IsNullOrWhiteSpace(centerIds))
 			{
 				centerIdSet = new HashSet<int>(centerIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -137,7 +137,7 @@ namespace EVServiceCenter.Api.Controllers
 				totalRevenue = list.Sum(x => (decimal)x.Amount);
 				totalCount = list.Count;
 
-				IEnumerable<object> enumerated = list.Select(x => new { date = x.PaidAt.Value.Date, centerId = x.centerId, amount = (decimal)x.Amount });
+				IEnumerable<object> enumerated = list.Select(x => new { date = x.PaidAt?.Date ?? DateTime.MinValue, centerId = x.centerId, amount = (decimal)x.Amount });
 
 				if (wantGroupDate && wantGroupCenter)
 				{
@@ -179,7 +179,7 @@ namespace EVServiceCenter.Api.Controllers
 				if (wantGroupDate)
 				{
 					series = list
-						.GroupBy(x => x.PaidAt.Value.Date)
+						.GroupBy(x => x.PaidAt?.Date ?? DateTime.MinValue)
 						.Select(g => (object)new { date = g.Key, revenue = g.Sum(v => (decimal)v.Amount) })
 						.OrderBy(x => ((dynamic)x).date)
 						.ToList();

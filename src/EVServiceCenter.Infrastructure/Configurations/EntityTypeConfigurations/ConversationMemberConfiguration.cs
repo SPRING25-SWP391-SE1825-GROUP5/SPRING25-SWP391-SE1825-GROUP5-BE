@@ -24,7 +24,7 @@ public sealed class ConversationMemberConfiguration : IEntityTypeConfiguration<C
         entity.Property(e => e.LastReadAt);
 
         entity.HasOne(d => d.Conversation)
-            .WithMany() // no navigation collection configured on Conversation
+            .WithMany(c => c.ConversationMembers)
             .HasForeignKey(d => d.ConversationId)
             .OnDelete(DeleteBehavior.Cascade);
 

@@ -169,6 +169,10 @@ builder.Services.AddScoped<ICustomerServiceCreditRepository, CustomerServiceCred
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 // Wishlist repository removed
 // removed: ProductReviewRepository deprecated
+
+// Chat repositories
+builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
+builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 

@@ -16,18 +16,21 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IConversationRepository _conversationRepository;
         private readonly IMessageRepository _messageRepository;
-        private readonly IAccountRepository _accountRepository;
+        private readonly IConversationMemberRepository _conversationMemberRepository;
+        private readonly IAuthRepository _authRepository;
         private readonly ILogger<ConversationService> _logger;
 
         public ConversationService(
             IConversationRepository conversationRepository,
             IMessageRepository messageRepository,
-            IAccountRepository accountRepository,
+            IConversationMemberRepository conversationMemberRepository,
+            IAuthRepository authRepository,
             ILogger<ConversationService> logger)
         {
             _conversationRepository = conversationRepository;
             _messageRepository = messageRepository;
-            _accountRepository = accountRepository;
+            _conversationMemberRepository = conversationMemberRepository;
+            _authRepository = authRepository;
             _logger = logger;
         }
 
@@ -56,8 +59,7 @@ namespace EVServiceCenter.Application.Service
                         LastReadAt = null
                     };
 
-                    // Note: We need to add ConversationMemberRepository for this
-                    // For now, we'll handle this in the next commit
+                    await _conversationMemberRepository.CreateConversationMemberAsync(member);
                 }
 
                 return await MapToConversationResponseAsync(createdConversation);
@@ -268,9 +270,7 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Note: This will be implemented when we add ConversationMemberRepository
-                await Task.CompletedTask;
-                return true;
+                return await _conversationMemberRepository.RemoveMemberFromConversationAsync(conversationId, userId, guestSessionId);
             }
             catch (Exception ex)
             {
@@ -283,9 +283,15 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Note: This will be implemented when we add ConversationMemberRepository
-                await Task.CompletedTask;
-                return new List<ConversationMemberResponse>();
+                var members = await _conversationMemberRepository.GetMembersByConversationIdAsync(conversationId);
+                var responses = new List<ConversationMemberResponse>();
+                
+                foreach (var member in members)
+                {
+                    responses.Add(await MapToConversationMemberResponseAsync(member));
+                }
+                
+                return responses;
             }
             catch (Exception ex)
             {
@@ -339,7 +345,8 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Note: This will be implemented when we add ConversationMemberRepository
+                await _conversationMemberRepository.UpdateMemberLastReadTimeAsync(conversationId, userId, guestSessionId);
+                
                 var conversation = await _conversationRepository.GetConversationByIdAsync(conversationId);
                 if (conversation == null)
                 {
@@ -405,8 +412,6 @@ namespace EVServiceCenter.Application.Service
 
         private async Task<ConversationMemberResponse> MapToConversationMemberResponseAsync(ConversationMember member)
         {
-            await Task.CompletedTask;
-            
             var response = new ConversationMemberResponse
             {
                 MemberId = member.MemberId,
@@ -418,11 +423,26 @@ namespace EVServiceCenter.Application.Service
             };
 
             // Get user information if available
-            if (member.UserId.HasValue && member.User != null)
+            if (member.UserId.HasValue)
             {
-                response.UserName = member.User.FullName;
-                response.UserEmail = member.User.Email;
-                // Add avatar field when available
+                // Try to get user info from navigation property first
+                if (member.User != null)
+                {
+                    response.UserName = member.User.FullName;
+                    response.UserEmail = member.User.Email;
+                    // Add avatar field when available
+                }
+                else
+                {
+                    // Fallback: load user from database
+                    var user = await _authRepository.GetUserByIdAsync(member.UserId.Value);
+                    if (user != null)
+                    {
+                        response.UserName = user.FullName;
+                        response.UserEmail = user.Email;
+                        // Add avatar field when available
+                    }
+                }
             }
 
             return response;

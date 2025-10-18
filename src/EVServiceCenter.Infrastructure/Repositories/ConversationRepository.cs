@@ -39,6 +39,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Conversations
                 .Include(c => c.LastMessage)
                 .Include(c => c.Messages)
+                .Include(c => c.ConversationMembers)
+                    .ThenInclude(cm => cm.User)
                 .FirstOrDefaultAsync(c => c.ConversationId == conversationId);
         }
 
@@ -65,6 +67,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Conversations
                 .Include(c => c.LastMessage)
                 .Include(c => c.Messages)
+                .Include(c => c.ConversationMembers)
+                    .ThenInclude(cm => cm.User) // Eager load User data for each member
                 .Where(c => c.ConversationMembers.Any(cm => cm.UserId == userId))
                 .OrderByDescending(c => c.LastMessageAt ?? c.CreatedAt)
                 .ToListAsync();
@@ -75,6 +79,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Conversations
                 .Include(c => c.LastMessage)
                 .Include(c => c.Messages)
+                .Include(c => c.ConversationMembers)
+                    .ThenInclude(cm => cm.User) // Eager load User data for each member
                 .Where(c => c.ConversationMembers.Any(cm => cm.GuestSessionId == guestSessionId))
                 .OrderByDescending(c => c.LastMessageAt ?? c.CreatedAt)
                 .ToListAsync();

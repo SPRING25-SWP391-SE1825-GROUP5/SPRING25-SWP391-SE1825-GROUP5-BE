@@ -177,6 +177,7 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 // Chat repositories
 builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
 builder.Services.AddScoped<IMessageRepository, MessageRepository>();
+builder.Services.AddScoped<IConversationMemberRepository, ConversationMemberRepository>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 

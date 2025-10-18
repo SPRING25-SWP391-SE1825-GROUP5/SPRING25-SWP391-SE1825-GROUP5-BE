@@ -208,23 +208,10 @@ namespace EVServiceCenter.Application.Service
         public async Task<LoginTokenResponse> LoginAsync(LoginRequest request)
         {
             User? user = null;
-            string email = string.Empty;
+            string email = request.Email;
 
-            // Kiểm tra xem input là email hay phone number
-            if (IsValidEmail(request.EmailOrPhone))
-            {
-                user = await _accountService.GetAccountByEmailAsync(request.EmailOrPhone);
-                email = request.EmailOrPhone;
-            }
-            else if (IsValidPhoneNumber(request.EmailOrPhone))
-            {
-                user = await _accountService.GetAccountByPhoneNumberAsync(request.EmailOrPhone);
-                email = user?.Email ?? string.Empty;
-            }
-            else
-            {
-                throw new ArgumentException("Vui lòng nhập email (@gmail.com) hoặc số điện thoại hợp lệ");
-            }
+            // Chỉ sử dụng email để đăng nhập
+            user = await _accountService.GetAccountByEmailAsync(email);
 
             // Kiểm tra lockout trước khi xử lý login
             if (!string.IsNullOrEmpty(email))
@@ -245,7 +232,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     await _loginLockoutService.RecordFailedAttemptAsync(email);
                 }
-                throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng");
+                throw new ArgumentException("Email hoặc mật khẩu không đúng");
             }
 
             // Note: Email verification is optional - users can login without verification
@@ -268,7 +255,7 @@ namespace EVServiceCenter.Application.Service
                 var remainingAttempts = await _loginLockoutService.GetRemainingAttemptsAsync(user.Email);
                 if (remainingAttempts > 0)
                 {
-                    throw new ArgumentException($"Email/số điện thoại hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
+                    throw new ArgumentException($"Email hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
                 }
                 else
                 {

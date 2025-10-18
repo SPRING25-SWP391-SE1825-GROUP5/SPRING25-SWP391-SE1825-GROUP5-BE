@@ -1,1 +1,14 @@
-{}
+{
+  "tienvo0511@gmail.com": {
+    "Email": "tienvo0511@gmail.com",
+    "FailedAttempts": 1,
+    "FirstFailedAttempt": "2025-10-18T11:58:56.1111465Z",
+    "LockoutUntil": null
+  },
+  "user@example.com": {
+    "Email": "user@example.com",
+    "FailedAttempts": 2,
+    "FirstFailedAttempt": "2025-10-18T12:04:11.4642957Z",
+    "LockoutUntil": null
+  }
+}

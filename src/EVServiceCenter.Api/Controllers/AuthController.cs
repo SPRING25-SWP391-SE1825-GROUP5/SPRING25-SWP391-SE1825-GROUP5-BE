@@ -65,7 +65,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new 
                 { 
                     success = false,
-                    message = "L?i validation",
+                    message = "Lỗi validation",
                     errors = new[] { argEx.Message }
                 });
             }
@@ -75,7 +75,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new 
                 { 
                     success = false,
-                    message = "L?i d? li?u",
+                    message = "Lỗi dữ liệu",
                     errors = new[] { invEx.Message }
                 });
             }
@@ -185,7 +185,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         token = result.AccessToken,
                         user = new
                         {
-                            id = result.UserId,  // Th�m field 'id' d? FE c� th? s? d?ng
+                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
                             userId = result.UserId,
                             email = result.Email ?? "",
                             fullName = result.FullName,
@@ -345,7 +345,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new 
                 { 
                     success = false,
-                    message = "L?i validation",
+                    message = "Lỗi validation",
                     errors = new[] { argEx.Message }
                 });
             }
@@ -356,7 +356,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return StatusCode(500, new 
                 { 
                     success = false,
-                    message = "C� l?i x?y ra trong qu� tr�nh g?i l?i m� x�c th?c. Vui l�ng th? l?i sau.",
+                    message = "Có lỗi xảy ra trong quá trình gửi lại mã xác thực. Vui lòng thử lại sau.",
                     errors = new[] { ex.Message }
                 });
             }
@@ -423,7 +423,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// �ang xu?t - x�a refresh token
+        /// Đăng xuất - xóa refresh token
         /// </summary>
         [HttpPost("logout")]
         [Authorize]
@@ -452,7 +452,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// L?y th�ng tin profile c?a user hi?n t?i
+        /// Lấy thông tin profile của user hiện tại
         /// </summary>
         [HttpGet("profile")]
         [Authorize]
@@ -468,11 +468,11 @@ namespace EVServiceCenter.WebAPI.Controllers
                 }
 
                 var result = await _authService.GetUserProfileAsync(userId);
-                return Ok(new { success = true, message = "L?y th�ng tin profile th�nh c�ng", data = result });
+                return Ok(new { success = true, message = "Lấy thông tin profile thành công", data = result });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = "L?i validation", errors = new[] { ex.Message } });
+                return BadRequest(new { success = false, message = "Lỗi validation", errors = new[] { ex.Message } });
             }
             catch (Exception ex)
             {
@@ -481,7 +481,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// C?p nh?t th�ng tin profile c?a user hi?n t?i (kh�ng cho d?i email/phone)
+        /// Cập nhật thông tin profile của user hiện tại (không cho đổi email/phone)
         /// </summary>
         [HttpPut("profile")]
         [Authorize]
@@ -519,7 +519,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// �?i m?t kh?u cho user hi?n t?i
+        /// Đổi mật khẩu cho user hiện tại
         /// </summary>
         [HttpPost("change-password")]
         [Authorize]
@@ -557,7 +557,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Upload avatar cho user hi?n t?i
+        /// Upload avatar cho user hiện tại
         /// </summary>
         [HttpPost("upload-avatar")]
         [Authorize(Policy = "AuthenticatedUser")]
@@ -572,10 +572,10 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return Unauthorized(new { success = false, message = "Token không hợp lệ hoặc đã hết hạn." });
                 }
 
-                // Upload ?nh ln Cloudinary
+                // Upload ảnh lên Cloudinary
                 var avatarUrl = await _cloudinaryService.UploadImageAsync(file, "ev-service/avatars");
 
-                // C?p nh?t avatar URL trong database
+                // Cập nhật avatar URL trong database
                 await _authService.UpdateUserAvatarAsync(userId, avatarUrl);
 
                 return Ok(new { 
@@ -606,10 +606,10 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        ///ang nh?p b?ng Google
+        /// Đăng nhập bằng Google
         /// </summary>
-        /// <param name="request">Google login request v?i token</param>
-        /// <returns>JWT token v thng tin user</returns>
+        /// <param name="request">Google login request với token</param>
+        /// <returns>JWT token và thông tin user</returns>
         [HttpPost("login-google")]
         public async Task<IActionResult> LoginWithGoogle([FromBody] GoogleLoginRequest request)
         {
@@ -623,17 +623,17 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var result = await _authService.LoginWithGoogleAsync(request);
                 
-                // T?o response ph h?p v?i FE
+                // Tạo response phù hợp với FE
                 var response = new
                 {
                     success = true,
-                    message = "ang nh?p v?i Google thnh cng",
+                    message = "Đăng nhập với Google thành công",
                     data = new
                     {
                         token = result.AccessToken,
                         user = new
                         {
-                            id = result.UserId,  // Thm field 'id' d? FE c th? s? d?ng
+                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
                             userId = result.UserId,
                             email = result.Email ?? "",
                             fullName = result.FullName,

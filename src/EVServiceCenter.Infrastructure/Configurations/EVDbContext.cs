@@ -27,19 +27,19 @@ public partial class EVDbContext : DbContext
     public DbSet<OrderItem> OrderItems { get; set; }
     public DbSet<Otpcode> Otpcodes { get; set; }
     public DbSet<Part> Parts { get; set; }
+    public DbSet<PartCategory> PartCategories { get; set; }
+    public DbSet<PartCategoryMap> PartCategoryMaps { get; set; }
     public DbSet<Payment> Payments { get; set; }
     public DbSet<Promotion> Promotions { get; set; }
     public DbSet<Service> Services { get; set; }
     public DbSet<ServiceCenter> ServiceCenters { get; set; }
     public DbSet<ServiceChecklistTemplate> ServiceChecklistTemplates { get; set; }
     public DbSet<ServiceChecklistTemplateItem> ServiceChecklistTemplateItems { get; set; }
-    public DbSet<ServiceCredit> ServiceCredits { get; set; }
-    public DbSet<ServiceRequiredSkill> ServiceRequiredSkills { get; set; }
-    public DbSet<Skill> Skills { get; set; }
+    public DbSet<ServicePackage> ServicePackages { get; set; }
+    public DbSet<CustomerServiceCredit> CustomerServiceCredits { get; set; }
     public DbSet<Staff> Staff { get; set; }
     public DbSet<SystemSetting> SystemSettings { get; set; }
     public DbSet<Technician> Technicians { get; set; }
-    public DbSet<TechnicianSkill> TechnicianSkills { get; set; }
     public DbSet<TechnicianTimeSlot> TechnicianTimeSlots { get; set; }
     public DbSet<TimeSlot> TimeSlots { get; set; }
     public DbSet<User> Users { get; set; }
@@ -47,7 +47,6 @@ public partial class EVDbContext : DbContext
     public DbSet<Vehicle> Vehicles { get; set; }
     public DbSet<VehicleModel> VehicleModels { get; set; }
     public DbSet<VehicleModelPart> VehicleModelParts { get; set; }
-    public DbSet<WorkOrder> WorkOrders { get; set; }
     public DbSet<WorkOrderPart> WorkOrderParts { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

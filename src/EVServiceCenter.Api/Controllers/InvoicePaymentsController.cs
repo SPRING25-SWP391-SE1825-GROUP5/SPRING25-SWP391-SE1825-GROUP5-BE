@@ -108,7 +108,6 @@ public class InvoicePaymentsController : ControllerBase
             invoiceId = i.InvoiceId,
             customerId = i.CustomerId,
             bookingId = i.BookingId,
-            workOrderId = i.WorkOrderId,
             orderId = i.OrderId,
             status = i.Status,
             email = i.Email,
@@ -128,7 +127,6 @@ public class InvoicePaymentsController : ControllerBase
             invoiceId = i.InvoiceId,
             customerId = i.CustomerId,
             bookingId = i.BookingId,
-            workOrderId = i.WorkOrderId,
             orderId = i.OrderId,
             status = i.Status,
             email = i.Email,
@@ -157,14 +155,7 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(new { success = true, data = inv });
     }
 
-    [HttpGet("/api/invoices/by-workorder/{workOrderId:int}")]
-    [Authorize]
-    public async Task<IActionResult> GetInvoiceByWorkOrder([FromRoute] int workOrderId)
-    {
-        var inv = await _invoiceRepo.GetByWorkOrderIdAsync(workOrderId);
-        if (inv == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho workorder" });
-        return Ok(new { success = true, data = inv });
-    }
+    // GetInvoiceByWorkOrder removed - WorkOrder functionality merged into Booking
 
     [HttpGet("/api/invoices/by-order/{orderId:int}")]
     [Authorize]

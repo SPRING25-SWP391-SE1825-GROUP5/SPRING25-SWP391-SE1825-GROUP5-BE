@@ -21,7 +21,7 @@ public class PaymentService
 	private readonly HttpClient _httpClient;
 	private readonly PayOsOptions _options;
     private readonly IBookingRepository _bookingRepository;
-    private readonly IWorkOrderRepository _workOrderRepository;
+    // WorkOrderRepository removed - functionality merged into BookingRepository
     private readonly IOrderRepository _orderRepository;
 	private readonly IInvoiceRepository _invoiceRepository;
 	private readonly IPaymentRepository _paymentRepository;
@@ -35,12 +35,12 @@ public class PaymentService
 
     private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, ILogger<PaymentService> logger)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, ILogger<PaymentService> logger)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
 		_bookingRepository = bookingRepository;
-		_workOrderRepository = workOrderRepository;
+		// WorkOrderRepository removed - functionality merged into BookingRepository
         _orderRepository = orderRepository;
 		_invoiceRepository = invoiceRepository;
 		_paymentRepository = paymentRepository;
@@ -60,7 +60,8 @@ public class PaymentService
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
 		if (booking.Status == "CANCELLED") throw new InvalidOperationException("Booking đã bị hủy");
 
-        var amount = (int)Math.Round((booking.TotalCost ?? 0m)); // VNĐ integer
+        // Booking.TotalCost removed: tạm lấy theo giá dịch vụ
+        var amount = (int)Math.Round((booking.Service?.BasePrice ?? 0m)); // VNĐ integer
         if (amount < _options.MinAmount) amount = _options.MinAmount;
 
 		var orderCode = booking.BookingId; // PayOS yêu cầu là số

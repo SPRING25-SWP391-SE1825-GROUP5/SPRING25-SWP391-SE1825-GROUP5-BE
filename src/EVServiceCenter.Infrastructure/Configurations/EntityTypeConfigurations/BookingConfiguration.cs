@@ -17,10 +17,15 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         entity.Property(e => e.SlotId).HasColumnName("SlotID");
         entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
         entity.Property(e => e.VehicleId).HasColumnName("VehicleID");
+        
+        // Fields migrated from WorkOrder
+        entity.Property(e => e.TechnicianId).HasColumnName("TechnicianID");
+        entity.Property(e => e.CurrentMileage).HasColumnName("CurrentMileage");
+        entity.Property(e => e.LicensePlate).HasColumnName("LicensePlate").HasMaxLength(20);
 
         entity.Property(e => e.SpecialRequests).HasMaxLength(500);
         entity.Property(e => e.Status).HasMaxLength(20).HasDefaultValue("PENDING");
-        entity.Property(e => e.TotalCost).HasColumnType("decimal(12, 2)");
+        // TotalCost removed
 
         entity.Property(e => e.CreatedAt)
             .HasPrecision(0)
@@ -47,6 +52,17 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         entity.HasOne(d => d.Vehicle)
             .WithMany(p => p.Bookings)
             .HasForeignKey(d => d.VehicleId)
+            .OnDelete(DeleteBehavior.ClientSetNull);
+
+        entity.HasOne(d => d.Service)
+            .WithMany() // Service doesn't have Bookings collection
+            .HasForeignKey(d => d.ServiceId)
+            .OnDelete(DeleteBehavior.ClientSetNull);
+
+        // Foreign key for Technician (nullable)
+        entity.HasOne(d => d.Technician)
+            .WithMany(p => p.Bookings)
+            .HasForeignKey(d => d.TechnicianId)
             .OnDelete(DeleteBehavior.ClientSetNull);
     }
 }

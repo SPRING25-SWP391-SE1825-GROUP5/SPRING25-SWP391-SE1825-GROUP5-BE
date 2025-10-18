@@ -8,7 +8,6 @@ public interface IVehicleModelRepository
 {
     Task<VehicleModel?> GetByIdAsync(int id);
     Task<IEnumerable<VehicleModel>> GetAllAsync();
-    Task<IEnumerable<VehicleModel>> GetByBrandAsync(string brand);
     Task<IEnumerable<VehicleModel>> GetActiveModelsAsync();
     Task<VehicleModel> CreateAsync(VehicleModel model);
     Task<VehicleModel> UpdateAsync(VehicleModel model);

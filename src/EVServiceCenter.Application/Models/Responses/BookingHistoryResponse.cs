@@ -39,7 +39,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public required string LicensePlate { get; set; } = null!;
         public required string Vin { get; set; } = null!;
         public string? ModelName { get; set; }
-        public string? Brand { get; set; }
+        // Brand removed from VehicleModel
         public int? Year { get; set; }
     }
 

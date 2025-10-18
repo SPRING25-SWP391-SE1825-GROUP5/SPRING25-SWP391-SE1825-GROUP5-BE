@@ -19,5 +19,4 @@ public partial class Service
 
     // Removed BookingServices collection in single-service model
 
-    public virtual ICollection<ServiceCredit> ServiceCredits { get; set; } = new List<ServiceCredit>();
 }

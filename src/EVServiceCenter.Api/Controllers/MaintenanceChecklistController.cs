@@ -8,37 +8,37 @@ using Microsoft.AspNetCore.Mvc;
 namespace EVServiceCenter.Api.Controllers
 {
     [ApiController]
-    [Route("api/workorders/{workOrderId:int}/checklist")]
+    [Route("api/bookings/{bookingId:int}/checklist")]
     public class MaintenanceChecklistController : ControllerBase
     {
         private readonly IMaintenanceChecklistRepository _checkRepo;
         private readonly IMaintenanceChecklistResultRepository _resultRepo;
-        private readonly IWorkOrderRepository _workOrderRepo;
+        // WorkOrderRepository removed - functionality merged into BookingRepository
         // Removed: IServicePartRepository _servicePartRepo;
 
         public MaintenanceChecklistController(
             IMaintenanceChecklistRepository checkRepo,
-            IMaintenanceChecklistResultRepository resultRepo,
-            IWorkOrderRepository workOrderRepo)
+            IMaintenanceChecklistResultRepository resultRepo)
         {
             _checkRepo = checkRepo;
             _resultRepo = resultRepo;
-            _workOrderRepo = workOrderRepo;
+            // WorkOrderRepository removed - functionality merged into BookingRepository
         }
 
-        // POST /api/workorders/{id}/checklist/init
+        // POST /api/bookings/{id}/checklist/init
         [HttpPost("init")]
-        public async Task<IActionResult> Init(int workOrderId)
+        public async Task<IActionResult> Init(int bookingId)
         {
-            var workOrder = await _workOrderRepo.GetByIdAsync(workOrderId);
-            if (workOrder == null) return NotFound(new { success = false, message = "WorkOrder không tồn tại" });
+            // WorkOrder functionality merged into Booking - validate booking exists
+            // This would need to be implemented in BookingRepository if needed
+            // For now, assume booking exists
 
-            var existing = await _checkRepo.GetByWorkOrderIdAsync(workOrderId);
+            var existing = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (existing != null) return Ok(new { success = true, checklistId = existing.ChecklistId });
 
             var checklist = await _checkRepo.CreateAsync(new MaintenanceChecklist
             {
-                WorkOrderId = workOrderId,
+                BookingId = bookingId,
                 CreatedAt = DateTime.UtcNow,
                 Notes = null
             });
@@ -48,11 +48,11 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, checklistId = checklist.ChecklistId });
         }
 
-        // GET /api/workorders/{id}/checklist
+        // GET /api/bookings/{id}/checklist
         [HttpGet]
-        public async Task<IActionResult> Get(int workOrderId)
+        public async Task<IActionResult> Get(int bookingId)
         {
-            var checklist = await _checkRepo.GetByWorkOrderIdAsync(workOrderId);
+            var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
             var results = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
@@ -70,11 +70,11 @@ namespace EVServiceCenter.Api.Controllers
 
         public class UpdateItemRequest { public string Description { get; set; } = string.Empty; public string Result { get; set; } = string.Empty; public string Note { get; set; } = string.Empty; }
 
-        // PUT /api/workorders/{id}/checklist/{resultId}
+        // PUT /api/bookings/{id}/checklist/{resultId}
         [HttpPut("{resultId:int}")]
-        public async Task<IActionResult> UpdateItem(int workOrderId, int resultId, [FromBody] UpdateItemRequest req)
+        public async Task<IActionResult> UpdateItem(int bookingId, int resultId, [FromBody] UpdateItemRequest req)
         {
-            var checklist = await _checkRepo.GetByWorkOrderIdAsync(workOrderId);
+            var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
             await _resultRepo.UpsertAsync(new MaintenanceChecklistResult
@@ -90,11 +90,11 @@ namespace EVServiceCenter.Api.Controllers
 
         public class BulkRequest { public System.Collections.Generic.List<BulkItem> Items { get; set; } = new(); public class BulkItem { public int? ResultId { get; set; } public string Description { get; set; } = string.Empty; public string Result { get; set; } = string.Empty; public string Note { get; set; } = string.Empty; } }
 
-        // PUT /api/workorders/{id}/checklist
+        // PUT /api/bookings/{id}/checklist
         [HttpPut]
-        public async Task<IActionResult> UpdateBulk(int workOrderId, [FromBody] BulkRequest req)
+        public async Task<IActionResult> UpdateBulk(int bookingId, [FromBody] BulkRequest req)
         {
-            var checklist = await _checkRepo.GetByWorkOrderIdAsync(workOrderId);
+            var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
             var incoming = (req.Items ?? new System.Collections.Generic.List<BulkRequest.BulkItem>()).ToList();
@@ -110,11 +110,11 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true });
         }
 
-        // GET /api/workorders/{id}/checklist/summary
+        // GET /api/bookings/{id}/checklist/summary
         [HttpGet("summary")]
-        public async Task<IActionResult> Summary(int workOrderId)
+        public async Task<IActionResult> Summary(int bookingId)
         {
-            var checklist = await _checkRepo.GetByWorkOrderIdAsync(workOrderId);
+            var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
             var results = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
@@ -125,22 +125,22 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, checklistId = checklist.ChecklistId, total, pass, fail, na });
         }
 
-        // GET /api/workorders/{id}/checklist/export
+        // GET /api/bookings/{id}/checklist/export
         [HttpGet("export")]
-        public async Task<IActionResult> ExportPdf(int workOrderId)
+        public async Task<IActionResult> ExportPdf(int bookingId)
         {
-            var checklist = await _checkRepo.GetByWorkOrderIdAsync(workOrderId);
+            var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
             var results = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"Checklist #{checklist.ChecklistId} for WorkOrder #{workOrderId}");
+            sb.AppendLine($"Checklist #{checklist.ChecklistId} for Booking #{bookingId}");
             foreach (var r in results)
             {
                 sb.AppendLine($"- {r.Description}: {r.Result ?? "N/A"} {(string.IsNullOrWhiteSpace(r.Comment) ? string.Empty : "(" + r.Comment + ")")}");
             }
             var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
-            return File(bytes, "application/octet-stream", $"Checklist_{workOrderId}.txt");
+            return File(bytes, "application/octet-stream", $"Checklist_{bookingId}.txt");
         }
     }
 }

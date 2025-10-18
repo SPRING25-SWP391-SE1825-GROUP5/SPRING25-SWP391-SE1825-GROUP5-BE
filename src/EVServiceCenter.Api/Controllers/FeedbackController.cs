@@ -48,7 +48,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = orderId,        // Từ path parameter
-            WorkOrderId = null,
+            BookingId = null,
             PartId = partId,          // Từ path parameter
             TechnicianId = null,
             Rating = (byte)request.Rating,
@@ -61,24 +61,24 @@ public class FeedbackController : ControllerBase
         return Ok(new { success = true, data = new { fb.FeedbackId } });
     }
 
-    [HttpPost("workorders/{workOrderId:int}/parts/{partId:int}")]
+    [HttpPost("bookings/{bookingId:int}/parts/{partId:int}")]
     [Authorize(Policy = "AuthenticatedUser")]
-    public async Task<IActionResult> CreateForWorkOrderPart(int workOrderId, int partId, [FromBody] CreateWorkOrderPartFeedbackRequest request)
+    public async Task<IActionResult> CreateForBookingPart(int bookingId, int partId, [FromBody] CreateWorkOrderPartFeedbackRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
-        // Validate work order and require completed status before allowing feedback
-        var workOrder = await _db.WorkOrders.AsNoTracking().FirstOrDefaultAsync(w => w.WorkOrderId == workOrderId);
-        if (workOrder == null) return BadRequest(new { success = false, message = $"workOrderId {workOrderId} không tồn tại" });
-        var woCompletedStatuses = new[] { "COMPLETED", "DONE", "FINISHED" };
-        if (string.IsNullOrWhiteSpace(workOrder.Status) || !woCompletedStatuses.Contains(workOrder.Status.ToUpper()))
+        // Validate booking and require completed status before allowing feedback
+        var booking = await _db.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.BookingId == bookingId);
+        if (booking == null) return BadRequest(new { success = false, message = $"bookingId {bookingId} không tồn tại" });
+        var completedStatuses = new[] { "COMPLETED", "DONE", "FINISHED" };
+        if (string.IsNullOrWhiteSpace(booking.Status) || !completedStatuses.Contains(booking.Status.ToUpper()))
         {
-            return BadRequest(new { success = false, message = "Chỉ được đánh giá sau khi work order đã hoàn thành" });
+            return BadRequest(new { success = false, message = "Chỉ được đánh giá sau khi booking đã hoàn thành" });
         }
         var partExists = await _db.Parts.AsNoTracking().AnyAsync(p => p.PartId == partId);
         if (!partExists) return BadRequest(new { success = false, message = $"partId {partId} không tồn tại" });
-        // Ensure part belongs to the work order
-        var partInWorkOrder = await _db.WorkOrderParts.AsNoTracking().AnyAsync(wop => wop.WorkOrderId == workOrderId && wop.PartId == partId);
-        if (!partInWorkOrder) return BadRequest(new { success = false, message = "Phụ tùng không thuộc work order này" });
+        // Ensure part belongs to the booking
+        var partInBooking = await _db.WorkOrderParts.AsNoTracking().AnyAsync(wop => wop.BookingId == bookingId && wop.PartId == partId);
+        if (!partInBooking) return BadRequest(new { success = false, message = "Phụ tùng không thuộc booking này" });
         var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
         if (customer == null) return BadRequest(new { success = false, message = $"customerId {request.CustomerId} không tồn tại" });
 
@@ -86,7 +86,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = null,
-            WorkOrderId = workOrderId,    // Từ path parameter
+            BookingId = bookingId,    // Từ path parameter
             PartId = partId,              // Từ path parameter
             TechnicianId = null,
             Rating = (byte)request.Rating,
@@ -99,25 +99,25 @@ public class FeedbackController : ControllerBase
         return Ok(new { success = true, data = new { fb.FeedbackId } });
     }
 
-    [HttpPost("workorders/{workOrderId:int}/technicians/{technicianId:int}")]
+    [HttpPost("bookings/{bookingId:int}/technicians/{technicianId:int}")]
     [Authorize(Policy = "AuthenticatedUser")]
-    public async Task<IActionResult> CreateForWorkOrderTechnician(int workOrderId, int technicianId, [FromBody] CreateWorkOrderTechnicianFeedbackRequest request)
+    public async Task<IActionResult> CreateForBookingTechnician(int bookingId, int technicianId, [FromBody] CreateWorkOrderTechnicianFeedbackRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
-        // Validate work order and require completed status before allowing feedback
-        var wo = await _db.WorkOrders.AsNoTracking().FirstOrDefaultAsync(w => w.WorkOrderId == workOrderId);
-        if (wo == null) return BadRequest(new { success = false, message = $"workOrderId {workOrderId} không tồn tại" });
-        var completedWoStatuses = new[] { "COMPLETED", "DONE", "FINISHED" };
-        if (string.IsNullOrWhiteSpace(wo.Status) || !completedWoStatuses.Contains(wo.Status.ToUpper()))
+        // Validate booking and require completed status before allowing feedback
+        var booking = await _db.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.BookingId == bookingId);
+        if (booking == null) return BadRequest(new { success = false, message = $"bookingId {bookingId} không tồn tại" });
+        var completedStatuses = new[] { "COMPLETED", "DONE", "FINISHED" };
+        if (string.IsNullOrWhiteSpace(booking.Status) || !completedStatuses.Contains(booking.Status.ToUpper()))
         {
-            return BadRequest(new { success = false, message = "Chỉ được đánh giá sau khi work order đã hoàn thành" });
+            return BadRequest(new { success = false, message = "Chỉ được đánh giá sau khi booking đã hoàn thành" });
         }
         var techExists = await _db.Technicians.AsNoTracking().AnyAsync(t => t.TechnicianId == technicianId);
         if (!techExists) return BadRequest(new { success = false, message = $"technicianId {technicianId} không tồn tại" });
-        // Ensure technician matches the work order
-        if (wo.TechnicianId != technicianId)
+        // Ensure technician matches the booking
+        if (booking.TechnicianId != technicianId)
         {
-            return BadRequest(new { success = false, message = "Kỹ thuật viên không phụ trách work order này" });
+            return BadRequest(new { success = false, message = "Kỹ thuật viên không phụ trách booking này" });
         }
         var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
         if (customer == null) return BadRequest(new { success = false, message = $"customerId {request.CustomerId} không tồn tại" });
@@ -126,7 +126,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = null,
-            WorkOrderId = workOrderId,        // Từ path parameter
+            BookingId = bookingId,        // Từ path parameter
             PartId = null,
             TechnicianId = technicianId,      // Từ path parameter
             Rating = (byte)request.Rating,
@@ -201,7 +201,7 @@ public class FeedbackController : ControllerBase
     public async Task<IActionResult> GetById(int feedbackId)
     {
         var fb = await _db.Feedbacks.AsNoTracking().Where(x => x.FeedbackId == feedbackId)
-            .Select(x => new { x.FeedbackId, x.CustomerId, x.PartId, x.TechnicianId, x.Rating, x.Comment, x.IsAnonymous, x.CreatedAt, x.OrderId, x.WorkOrderId })
+            .Select(x => new { x.FeedbackId, x.CustomerId, x.PartId, x.TechnicianId, x.Rating, x.Comment, x.IsAnonymous, x.CreatedAt, x.OrderId, x.BookingId })
             .FirstOrDefaultAsync();
         if (fb == null) return NotFound(new { success = false, message = "Feedback không tồn tại" });
         return Ok(new { success = true, data = fb });
@@ -251,6 +251,57 @@ public class FeedbackController : ControllerBase
         return Ok(new { success = true, data = new { avgRating = Math.Round(avg,2), count } });
     }
 
+    // ===== Public feedback (không yêu cầu mua hàng) =====
+    [HttpPost("parts/{partId:int}/public")]
+    [AllowAnonymous]
+    public async Task<IActionResult> PublicForPart(int partId, [FromBody] PublicPartFeedbackRequest request)
+    {
+        if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
+        var partExists = await _db.Parts.AsNoTracking().AnyAsync(p => p.PartId == partId);
+        if (!partExists) return BadRequest(new { success = false, message = $"partId {partId} không tồn tại" });
+
+        var fb = new Feedback
+        {
+            CustomerId = request.CustomerId,
+            OrderId = null,
+            BookingId = null,
+            PartId = partId,
+            TechnicianId = null,
+            Rating = (byte)request.Rating,
+            Comment = request.Comment?.Trim(),
+            IsAnonymous = request.IsAnonymous,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Feedbacks.Add(fb);
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true, data = new { fb.FeedbackId } });
+    }
+
+    [HttpPost("technicians/{technicianId:int}/public")]
+    [AllowAnonymous]
+    public async Task<IActionResult> PublicForTechnician(int technicianId, [FromBody] PublicTechnicianFeedbackRequest request)
+    {
+        if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
+        var techExists = await _db.Technicians.AsNoTracking().AnyAsync(t => t.TechnicianId == technicianId);
+        if (!techExists) return BadRequest(new { success = false, message = $"technicianId {technicianId} không tồn tại" });
+
+        var fb = new Feedback
+        {
+            CustomerId = request.CustomerId,
+            OrderId = null,
+            BookingId = null,
+            PartId = null,
+            TechnicianId = technicianId,
+            Rating = (byte)request.Rating,
+            Comment = request.Comment?.Trim(),
+            IsAnonymous = request.IsAnonymous,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.Feedbacks.Add(fb);
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true, data = new { fb.FeedbackId } });
+    }
+
     [HttpGet("orders/{orderId:int}")]
     [Authorize(Policy = "AuthenticatedUser")]
     public async Task<IActionResult> ListByOrder(int orderId)
@@ -262,11 +313,11 @@ public class FeedbackController : ControllerBase
         return Ok(new { success = true, data });
     }
 
-    [HttpGet("workorders/{workOrderId:int}")]
+    [HttpGet("bookings/{bookingId:int}")]
     [Authorize(Policy = "AuthenticatedUser")]
-    public async Task<IActionResult> ListByWorkOrder(int workOrderId)
+    public async Task<IActionResult> ListByBooking(int bookingId)
     {
-        var data = await _db.Feedbacks.AsNoTracking().Where(x => x.WorkOrderId == workOrderId)
+        var data = await _db.Feedbacks.AsNoTracking().Where(x => x.BookingId == bookingId)
             .OrderByDescending(x => x.CreatedAt)
             .Select(x => new { x.FeedbackId, x.Rating, x.Comment, x.IsAnonymous, x.CreatedAt, x.PartId, x.TechnicianId })
             .ToListAsync();

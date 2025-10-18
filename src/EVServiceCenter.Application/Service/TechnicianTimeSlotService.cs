@@ -15,18 +15,15 @@ namespace EVServiceCenter.Application.Service
         private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
         private readonly ITechnicianRepository _technicianRepository;
         private readonly ICenterRepository _centerRepository;
-        private readonly IServiceRequiredSkillRepository _requiredSkillRepo;
 
         public TechnicianTimeSlotService(
             ITechnicianTimeSlotRepository technicianTimeSlotRepository,
             ITechnicianRepository technicianRepository,
-            ICenterRepository centerRepository,
-            IServiceRequiredSkillRepository requiredSkillRepo)
+            ICenterRepository centerRepository)
         {
             _technicianTimeSlotRepository = technicianTimeSlotRepository;
             _technicianRepository = technicianRepository;
             _centerRepository = centerRepository;
-            _requiredSkillRepo = requiredSkillRepo;
         }
 
         public async Task<CreateTechnicianTimeSlotResponse> CreateTechnicianTimeSlotAsync(CreateTechnicianTimeSlotRequest request)

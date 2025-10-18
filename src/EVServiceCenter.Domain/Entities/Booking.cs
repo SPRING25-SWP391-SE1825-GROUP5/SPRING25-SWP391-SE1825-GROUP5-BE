@@ -20,7 +20,6 @@ public partial class Booking
 
     public string? Status { get; set; }
 
-    public decimal? TotalCost { get; set; }
 
     public string? SpecialRequests { get; set; }
 
@@ -33,6 +32,10 @@ public partial class Booking
     // One booking = one service (denormalized)
     public int ServiceId { get; set; }
 
+    // Fields migrated from WorkOrder
+    public int? TechnicianId { get; set; }
+    public int? CurrentMileage { get; set; }
+    public string? LicensePlate { get; set; }
 
     public virtual ServiceCenter Center { get; set; }
 
@@ -44,7 +47,7 @@ public partial class Booking
 
     public virtual Service Service { get; set; }
 
-    public virtual ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
+    public virtual Technician? Technician { get; set; }
 
     public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 }

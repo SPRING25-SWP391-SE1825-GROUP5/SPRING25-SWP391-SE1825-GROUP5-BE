@@ -162,7 +162,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="request">Thông tin người dùng mới (role phải là CUSTOMER, emailVerified phải là false)</param>
         /// <returns>Thông tin người dùng đã tạo + gửi OTP verification</returns>
         [HttpPost]
-        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
         {
             try

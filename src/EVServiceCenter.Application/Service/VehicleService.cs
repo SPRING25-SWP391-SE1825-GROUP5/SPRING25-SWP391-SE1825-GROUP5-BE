@@ -100,7 +100,6 @@ namespace EVServiceCenter.Application.Service
                     Color = request.Color.Trim(),
                     CurrentMileage = request.CurrentMileage,
                     LastServiceDate = request.LastServiceDate,
-                    PurchaseDate = request.PurchaseDate,
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -168,7 +167,6 @@ namespace EVServiceCenter.Application.Service
                 vehicle.Color = request.Color.Trim();
                 vehicle.CurrentMileage = request.CurrentMileage;
                 vehicle.LastServiceDate = request.LastServiceDate;
-                vehicle.PurchaseDate = request.PurchaseDate;
 
                 await _vehicleRepository.UpdateVehicleAsync(vehicle);
 
@@ -196,7 +194,6 @@ namespace EVServiceCenter.Application.Service
                 Color = vehicle.Color,
                 CurrentMileage = vehicle.CurrentMileage,
                 LastServiceDate = vehicle.LastServiceDate,
-                PurchaseDate = vehicle.PurchaseDate,
                 CreatedAt = vehicle.CreatedAt,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
                 CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? string.Empty

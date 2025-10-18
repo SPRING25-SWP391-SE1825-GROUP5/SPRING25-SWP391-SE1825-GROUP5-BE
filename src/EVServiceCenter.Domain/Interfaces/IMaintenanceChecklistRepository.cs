@@ -6,7 +6,7 @@ namespace EVServiceCenter.Domain.Interfaces
 {
     public interface IMaintenanceChecklistRepository
     {
-        Task<MaintenanceChecklist?> GetByWorkOrderIdAsync(int workOrderId);
+        Task<MaintenanceChecklist?> GetByBookingIdAsync(int bookingId);
         Task<MaintenanceChecklist> CreateAsync(MaintenanceChecklist checklist);
     }
 }

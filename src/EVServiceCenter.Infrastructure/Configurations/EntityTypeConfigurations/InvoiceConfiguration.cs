@@ -15,7 +15,7 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
 
         entity.Property(e => e.InvoiceId).HasColumnName("InvoiceID");
         entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
-        entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
+        // WorkOrderId removed - functionality merged into Booking
         entity.Property(e => e.OrderId).HasColumnName("OrderID");
 
         entity.Property(e => e.Email).HasMaxLength(255);
@@ -33,10 +33,7 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .WithMany(p => p.Invoices)
             .HasForeignKey(d => d.CustomerId);
 
-        entity.HasOne(d => d.WorkOrder)
-            .WithMany(p => p.Invoices)
-            .HasForeignKey(d => d.WorkOrderId)
-            .OnDelete(DeleteBehavior.ClientSetNull);
+        // WorkOrder relationship removed - functionality merged into Booking
 
         entity.HasOne(d => d.Order)
             .WithMany(p => p.Invoices)

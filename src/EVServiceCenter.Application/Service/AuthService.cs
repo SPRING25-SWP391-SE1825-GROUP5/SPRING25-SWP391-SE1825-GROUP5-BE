@@ -369,7 +369,7 @@ namespace EVServiceCenter.Application.Service
             {
                 var user = await _accountService.GetAccountByEmailAsync(email);
                 if (user == null)
-                throw new ArgumentException("Email không tồn tại trong hệ thống.");
+                    throw new ArgumentException("Email không tồn tại trong hệ thống.");
 
                 if (user.EmailVerified)
                     return "Email đã được xác thực. Không cần gửi lại mã.";

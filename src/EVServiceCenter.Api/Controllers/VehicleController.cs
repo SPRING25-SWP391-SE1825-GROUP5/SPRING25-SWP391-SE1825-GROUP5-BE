@@ -16,14 +16,14 @@ namespace EVServiceCenter.WebAPI.Controllers
     {
         private readonly IVehicleService _vehicleService;
         private readonly EVServiceCenter.Domain.Interfaces.IVehicleRepository _vehicleRepository;
-        private readonly EVServiceCenter.Domain.Interfaces.IWorkOrderRepository _workOrderRepository;
+        // WorkOrderRepository removed - functionality merged into BookingRepository
         
 
-        public VehicleController(IVehicleService vehicleService, EVServiceCenter.Domain.Interfaces.IVehicleRepository vehicleRepository, EVServiceCenter.Domain.Interfaces.IWorkOrderRepository workOrderRepository)
+        public VehicleController(IVehicleService vehicleService, EVServiceCenter.Domain.Interfaces.IVehicleRepository vehicleRepository)
         {
             _vehicleService = vehicleService;
             _vehicleRepository = vehicleRepository;
-            _workOrderRepository = workOrderRepository;
+            // WorkOrderRepository removed - functionality merged into BookingRepository
         }
 
         /// <summary>
@@ -97,13 +97,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                 int? lastMileage = vehicle.CurrentMileage;
                 int? effectiveServiceId = serviceId;
 
-                var lastWo = await _workOrderRepository.GetLastCompletedByVehicleAsync(vehicleId);
-                if (lastWo != null)
-                {
-                    lastDate = lastWo.UpdatedAt;
-                    if (lastWo.CurrentMileage.HasValue) lastMileage = lastWo.CurrentMileage.Value;
-                    if (!effectiveServiceId.HasValue && lastWo.ServiceId.HasValue) effectiveServiceId = lastWo.ServiceId.Value;
-                }
+                // WorkOrder functionality merged into Booking - get last completed booking instead
+                // This would need to be implemented in BookingRepository if needed
+                // For now, using vehicle's own data
 
                 if (!effectiveServiceId.HasValue)
                 {

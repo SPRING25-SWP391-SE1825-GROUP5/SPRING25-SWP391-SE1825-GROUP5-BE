@@ -20,8 +20,14 @@ namespace EVServiceCenter.Application.Models.Responses
         public byte? CenterScheduleDayOfWeek { get; set; }
 
         public required string Status { get; set; }
-        public decimal? TotalCost { get; set; }
         public required string SpecialRequests { get; set; }
+        
+        // Fields migrated from WorkOrder
+        public int? TechnicianId { get; set; }
+        public string? TechnicianName { get; set; }
+        public int? CurrentMileage { get; set; }
+        public string? LicensePlate { get; set; }
+        
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         // Single-slot model: TotalSlots not used

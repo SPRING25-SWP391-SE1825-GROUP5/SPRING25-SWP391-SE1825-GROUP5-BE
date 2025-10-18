@@ -22,59 +22,6 @@ namespace EVServiceCenter.Application.Service
             _timeSlotRepository = timeSlotRepository;
             _bookingRepository = bookingRepository;
         }
-        public async Task UpsertSkillsAsync(int technicianId, UpsertTechnicianSkillsRequest request)
-        {
-            if (technicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
-            if (request == null || request.Items == null || request.Items.Count == 0)
-                throw new ArgumentException("Danh sách kỹ năng không được rỗng");
-
-            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
-            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
-
-            var skills = request.Items.Select(i => new TechnicianSkill
-            {
-                TechnicianId = technicianId,
-                SkillId = i.SkillId,
-                // Notes removed from TechnicianSkill
-            });
-
-            await _technicianRepository.UpsertSkillsAsync(technicianId, skills);
-        }
-
-        public async Task RemoveSkillAsync(int technicianId, int skillId)
-        {
-            if (technicianId <= 0 || skillId <= 0)
-                throw new ArgumentException("Thông tin không hợp lệ");
-            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
-            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
-            await _technicianRepository.RemoveSkillAsync(technicianId, skillId);
-        }
-
-        public async Task<List<TechnicianSkillResponse>> GetTechnicianSkillsAsync(int technicianId)
-        {
-            // Validate input
-            if (technicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
-
-            // Ensure technician exists
-            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
-            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
-
-            // Ensure technician is active
-            var technician = await _technicianRepository.GetTechnicianByIdAsync(technicianId);
-            if (technician == null || !technician.IsActive)
-                throw new InvalidOperationException("Kỹ thuật viên không hoạt động");
-
-            // Fetch and map skills
-            var technicianSkills = await _technicianRepository.GetTechnicianSkillsAsync(technicianId);
-            return technicianSkills.Select(ts => new TechnicianSkillResponse
-            {
-                TechnicianId = ts.TechnicianId,
-                TechnicianName = ts.Technician?.User?.FullName ?? "N/A",
-                SkillId = ts.SkillId,
-                SkillName = ts.Skill?.Name ?? "N/A",
-                SkillDescription = ts.Skill?.Description ?? "N/A"
-            }).ToList();
-        }
         public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date)
         {
             var result = new TechnicianBookingsResponse
@@ -87,7 +34,7 @@ namespace EVServiceCenter.Application.Service
             var bookings = await _bookingRepository.GetByTechnicianAndDateAsync(technicianId, date);
             foreach (var b in bookings)
             {
-                var wo = b.WorkOrders?.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+                // WorkOrder functionality merged into Booking - no separate work order needed
                 result.Bookings.Add(new TechnicianBookingItem
                 {
                     BookingId = b.BookingId,
@@ -102,8 +49,8 @@ namespace EVServiceCenter.Application.Service
                     CustomerName = b.Customer?.User?.FullName ?? "N/A",
                     CustomerPhone = b.Customer?.User?.PhoneNumber ?? string.Empty,
                     VehiclePlate = b.Vehicle?.LicensePlate ?? string.Empty,
-                    WorkOrderId = wo?.WorkOrderId ?? 0,
-                    WorkOrderStatus = wo?.Status ?? string.Empty,
+                    WorkOrderId = b.BookingId, // Use BookingId as WorkOrderId
+                    WorkOrderStatus = b.Status ?? string.Empty, // Use Booking status
                     WorkStartTime = null,
                     WorkEndTime = null
                 });

@@ -123,6 +123,10 @@ builder.Services.AddScoped<ICustomerServiceCreditService, CustomerServiceCreditS
 builder.Services.AddScoped<IVehicleModelService, VehicleModelService>();
 builder.Services.AddScoped<IVehicleModelPartService, VehicleModelPartService>();
 
+// Chat Services
+builder.Services.AddScoped<IConversationService, ConversationService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+
 // ============================================================================
 // REPOSITORY REGISTRATION
 // ============================================================================
@@ -169,6 +173,11 @@ builder.Services.AddScoped<ICustomerServiceCreditRepository, CustomerServiceCred
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 // Wishlist repository removed
 // removed: ProductReviewRepository deprecated
+
+// Chat repositories
+builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
+builder.Services.AddScoped<IMessageRepository, MessageRepository>();
+builder.Services.AddScoped<IConversationMemberRepository, ConversationMemberRepository>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 

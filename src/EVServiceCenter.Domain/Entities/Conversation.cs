@@ -14,6 +14,7 @@ public class Conversation
 
     public Message? LastMessage { get; set; }
     public ICollection<Message> Messages { get; set; } = new List<Message>();
+    public ICollection<ConversationMember> ConversationMembers { get; set; } = new List<ConversationMember>();
 }
 
 

@@ -11,7 +11,7 @@ public partial class Feedback
 
     public int? OrderId { get; set; }
 
-    public int? WorkOrderId { get; set; }
+    public int? BookingId { get; set; }
 
     public int? PartId { get; set; }
 
@@ -27,7 +27,7 @@ public partial class Feedback
 
     public virtual Customer Customer { get; set; }
     public virtual Order? Order { get; set; }
-    public virtual WorkOrder? WorkOrder { get; set; }
+    public virtual Booking? Booking { get; set; }
     public virtual Part? Part { get; set; }
     public virtual Technician? Technician { get; set; }
 }

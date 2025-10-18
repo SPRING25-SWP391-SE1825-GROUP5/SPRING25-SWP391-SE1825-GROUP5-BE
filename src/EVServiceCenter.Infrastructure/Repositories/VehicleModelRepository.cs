@@ -30,13 +30,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<IEnumerable<VehicleModel>> GetByBrandAsync(string brand)
-        {
-            return await _context.VehicleModels
-                .Where(vm => vm.Brand.ToLower().Contains(brand.ToLower()))
-                .OrderByDescending(vm => vm.CreatedAt)
-                .ToListAsync();
-        }
+        // Brand removed - method deleted
 
         public async Task<IEnumerable<VehicleModel>> GetActiveModelsAsync()
         {
@@ -74,8 +68,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<IEnumerable<VehicleModel>> SearchAsync(string searchTerm)
         {
             return await _context.VehicleModels
-                .Where(vm => vm.ModelName.ToLower().Contains(searchTerm.ToLower()) ||
-                           vm.Brand.ToLower().Contains(searchTerm.ToLower()))
+                .Where(vm => vm.ModelName.ToLower().Contains(searchTerm.ToLower()))
                 .OrderByDescending(vm => vm.CreatedAt)
                 .ToListAsync();
         }

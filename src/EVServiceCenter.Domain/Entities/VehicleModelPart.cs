@@ -10,7 +10,7 @@ public partial class VehicleModelPart
 
     public int PartId { get; set; }
 
-    public bool IsCompatible { get; set; } = true;
+    // IsCompatible removed
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 

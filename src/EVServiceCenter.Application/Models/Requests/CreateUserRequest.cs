@@ -15,10 +15,8 @@ namespace EVServiceCenter.Application.Models.Requests
         [StringLength(100, ErrorMessage = "Email không được vượt quá 100 ký tự")]
         public required string Email { get; set; }
 
-        [Required(ErrorMessage = "Mật khẩu là bắt buộc")]
-        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$", 
-            ErrorMessage = "Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt")]
-        public required string Password { get; set; }
+        // Password bỏ khỏi request vì hệ thống gửi mật khẩu tạm qua email khi tạo tài khoản
+        public string? Password { get; set; }
 
         [Required(ErrorMessage = "Số điện thoại là bắt buộc")]
         [RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải bắt đầu bằng 0 và có đúng 10 số")]
@@ -35,7 +33,7 @@ namespace EVServiceCenter.Application.Models.Requests
         [StringLength(255, ErrorMessage = "Địa chỉ không được vượt quá 255 ký tự")]
         public required string Address { get; set; }
 
-        [RegularExpression(@"^(ADMIN|STAFF|TECHNICIAN|CUSTOMER)$", ErrorMessage = "Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER")]
+        [RegularExpression(@"^(ADMIN|MANAGER|STAFF|TECHNICIAN|CUSTOMER)$", ErrorMessage = "Vai trò phải là ADMIN, MANAGER, STAFF, TECHNICIAN hoặc CUSTOMER")]
         public required string Role { get; set; } = "CUSTOMER";
 
         public bool IsActive { get; set; } = true;

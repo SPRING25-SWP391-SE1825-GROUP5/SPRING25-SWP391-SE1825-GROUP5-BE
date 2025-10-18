@@ -94,7 +94,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             var validate = await _promotionService.ValidatePromotionAsync(new ValidatePromotionRequest
             {
                 Code = request.Code.Trim().ToUpper(),
-                OrderAmount = booking.TotalCost ?? 0,
+                OrderAmount = booking.Service?.BasePrice ?? 0,
                 OrderType = "BOOKING"
             });
             if (!validate.IsValid)

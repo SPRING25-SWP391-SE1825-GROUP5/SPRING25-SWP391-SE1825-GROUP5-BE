@@ -14,19 +14,18 @@ public class PaymentController : ControllerBase
 {
 	private readonly PaymentService _paymentService;
     private readonly IBookingRepository _bookingRepo;
-    private readonly IWorkOrderRepository _workOrderRepo;
+    // WorkOrderRepository removed - functionality merged into BookingRepository
     private readonly IInvoiceRepository _invoiceRepo;
     private readonly IPaymentRepository _paymentRepo;
 
     public PaymentController(PaymentService paymentService,
         IBookingRepository bookingRepo,
-        IWorkOrderRepository workOrderRepo,
         IInvoiceRepository invoiceRepo,
         IPaymentRepository paymentRepo)
 	{
 		_paymentService = paymentService;
         _bookingRepo = bookingRepo;
-        _workOrderRepo = workOrderRepo;
+        // WorkOrderRepository removed - functionality merged into BookingRepository
         _invoiceRepo = invoiceRepo;
         _paymentRepo = paymentRepo;
 	}
@@ -80,27 +79,14 @@ public class PaymentController : ControllerBase
             return NotFound(new { success = false, message = "Không tìm thấy booking" });
         }
 
-        // Ensure WorkOrder exists (re-use logic from PaymentService style)
-        var workOrder = await _workOrderRepo.GetByBookingIdAsync(bookingId);
-        if (workOrder == null)
-        {
-            workOrder = new Domain.Entities.WorkOrder
-            {
-                BookingId = booking.BookingId,
-
-                Status = "OPEN",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-            workOrder = await _workOrderRepo.CreateAsync(workOrder);
-        }
+        // WorkOrder functionality merged into Booking - no separate work order needed
+        // Booking already contains all necessary information
 
         var invoice = await _invoiceRepo.GetByBookingIdAsync(booking.BookingId);
         if (invoice == null)
         {
             invoice = new Domain.Entities.Invoice
             {
-                WorkOrderId = workOrder.WorkOrderId,
                 BookingId = booking.BookingId,
                 CustomerId = booking.CustomerId,
                 Email = booking.Customer?.User?.Email,

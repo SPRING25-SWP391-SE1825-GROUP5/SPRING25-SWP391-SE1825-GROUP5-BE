@@ -20,7 +20,6 @@ namespace EVServiceCenter.Application.Models.Responses
         public VehicleSummary VehicleInfo { get; set; } = null!;
         public required string ServiceName { get; set; } = null!;
         public string? TechnicianName { get; set; }
-        public decimal TotalCost { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 

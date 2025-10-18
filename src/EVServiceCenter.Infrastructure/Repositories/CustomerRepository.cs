@@ -65,6 +65,11 @@ namespace EVServiceCenter.Infrastructure.Repositories
             await _context.SaveChangesAsync();
         }
 
+        public async Task<bool> CustomerExistsAsync(int customerId)
+        {
+            return await _context.Customers.AnyAsync(c => c.CustomerId == customerId);
+        }
+
         // CustomerCode & NormalizedPhone removed from Customer; uniqueness now handled on Users
     }
 }

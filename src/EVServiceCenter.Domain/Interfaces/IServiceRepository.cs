@@ -11,5 +11,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<List<Service>> GetActiveServicesAsync();
         Task<Service> CreateServiceAsync(Service service);
         Task UpdateServiceAsync(Service service);
+        Task<bool> ServiceExistsAsync(int serviceId);
     }
 }

@@ -102,19 +102,22 @@ builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IBookingHistoryService, BookingHistoryService>();
 builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
 builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
-builder.Services.AddScoped<ISkillService, SkillService>();
 // Removed: MaintenancePolicyService no longer used
 // Removed: IMaintenanceChecklistItemService
 // Note: ChecklistPartService may be deprecated if not needed without ServiceParts
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
-builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
+// WorkOrderService removed - functionality merged into BookingService
 
 // E-commerce services
 builder.Services.AddScoped<IOrderService, OrderService>();
 // Wishlist removed
 // removed: ProductReviewService deprecated
+
+// Service Package & Credit Services
+builder.Services.AddScoped<IServicePackageService, ServicePackageService>();
+builder.Services.AddScoped<ICustomerServiceCreditService, CustomerServiceCreditService>();
 
 // Vehicle Model Services
 builder.Services.AddScoped<IVehicleModelService, VehicleModelService>();
@@ -141,7 +144,7 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IPartRepository, PartRepository>();
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
-builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
+// WorkOrderRepository removed - functionality merged into BookingRepository
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 // Removed: MaintenancePolicyRepository no longer used
 // Removed: IServicePartRepository registration (ServiceParts deprecated)
@@ -153,12 +156,14 @@ builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 // IOtpCodeRepository already registered above
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
-builder.Services.AddScoped<ISkillRepository, SkillRepository>();
-builder.Services.AddScoped<IServiceRequiredSkillRepository, ServiceRequiredSkillRepository>();
 
 // Vehicle Model Repositories
 builder.Services.AddScoped<IVehicleModelRepository, VehicleModelRepository>();
 builder.Services.AddScoped<IVehicleModelPartRepository, VehicleModelPartRepository>();
+
+// Service Package & Credit Repositories
+builder.Services.AddScoped<IServicePackageRepository, ServicePackageRepository>();
+builder.Services.AddScoped<ICustomerServiceCreditRepository, CustomerServiceCreditRepository>();
 
 // E-commerce repositories
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();

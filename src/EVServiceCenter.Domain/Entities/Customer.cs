@@ -21,7 +21,6 @@ public partial class Customer
 
     public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
 
-    public virtual ICollection<ServiceCredit> ServiceCredits { get; set; } = new List<ServiceCredit>();
 
     // E-commerce navigation properties
     

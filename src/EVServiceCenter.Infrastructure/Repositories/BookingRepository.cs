@@ -82,7 +82,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Center)
                 .Include(b => b.Slot)
                 .Include(b => b.Service)
-                .Include(b => b.WorkOrders)
+                // WorkOrders removed - functionality merged into Booking
                 .Where(b => b.CreatedAt.Date == date.ToDateTime(TimeOnly.MinValue).Date)
                 .OrderBy(b => b.Slot.SlotTime)
                 .ToListAsync();
@@ -139,9 +139,10 @@ namespace EVServiceCenter.Infrastructure.Repositories
                         : query.OrderByDescending(b => b.CreatedAt);
                     break;
                 case "totalcost":
-                    query = sortOrder.ToLower() == "asc" 
-                        ? query.OrderBy(b => b.TotalCost)
-                        : query.OrderByDescending(b => b.TotalCost);
+                    // TotalCost removed -> fallback sort by CreatedAt
+                    query = sortOrder.ToLower() == "asc"
+                        ? query.OrderBy(b => b.CreatedAt)
+                        : query.OrderByDescending(b => b.CreatedAt);
                     break;
                 default:
                     query = query.OrderByDescending(b => b.CreatedAt);
@@ -183,12 +184,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Center)
                 .Include(b => b.Slot)
                 .Include(b => b.Service)
-
-                .Include(b => b.WorkOrders)
-                .ThenInclude(wo => wo.WorkOrderParts)
-                .ThenInclude(wop => wop.Part)
-                .Include(b => b.WorkOrders)
-                .ThenInclude(wo => wo.Invoices)
+                .Include(b => b.Invoices)
                 .ThenInclude(i => i.Payments)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
         }

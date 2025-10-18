@@ -11,6 +11,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<Customer?> GetGuestByEmailOrPhoneAsync(string email, string normalizedPhone);
         Task<Customer> CreateCustomerAsync(Customer customer);
         Task UpdateCustomerAsync(Customer customer);
-        
+        Task<bool> CustomerExistsAsync(int customerId);
     }
 }

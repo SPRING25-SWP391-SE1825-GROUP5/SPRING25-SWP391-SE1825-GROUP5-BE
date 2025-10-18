@@ -337,12 +337,14 @@ namespace EVServiceCenter.Application.Service
                     CenterId = request.CenterId,
                     SlotId = request.SlotId,
                     Status = "PENDING",
-                    TotalCost = totalEstimatedCost,
                     ServiceId = request.ServiceId,
                     SpecialRequests = request.SpecialRequests?.Trim(),
+                    // Fields migrated from WorkOrder
+                    TechnicianId = selectedTechnicianId,
+                    CurrentMileage = null, // Will be updated when work starts
+                    LicensePlate = null,   // Will be updated when work starts
                     CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
-                    // TechnicianId removed from Booking
+                    UpdatedAt = DateTime.UtcNow
                 };
 
                 // Determine matched CenterSchedule to persist its ID
@@ -477,8 +479,14 @@ namespace EVServiceCenter.Application.Service
                 CenterScheduleDayOfWeek = scheduleDow,
 
                 Status = booking.Status ?? string.Empty,
-                TotalCost = booking.TotalCost,
                 SpecialRequests = booking.SpecialRequests ?? string.Empty,
+                
+                // Fields migrated from WorkOrder
+                TechnicianId = booking.TechnicianId,
+                TechnicianName = booking.Technician?.User?.FullName ?? "N/A",
+                CurrentMileage = booking.CurrentMileage,
+                LicensePlate = booking.LicensePlate,
+                
                 CreatedAt = booking.CreatedAt,
                 UpdatedAt = booking.UpdatedAt,
                 // Single-slot model
@@ -489,8 +497,8 @@ namespace EVServiceCenter.Application.Service
                         ServiceId = booking.ServiceId,
                         ServiceName = booking.Service?.ServiceName ?? "N/A",
                         Quantity = 1,
-                        UnitPrice = booking.TotalCost ?? 0m,
-                        TotalPrice = booking.TotalCost ?? 0m
+                        UnitPrice = booking.Service?.BasePrice ?? 0,
+                        TotalPrice = booking.Service?.BasePrice ?? 0
                     }
                 }
             };

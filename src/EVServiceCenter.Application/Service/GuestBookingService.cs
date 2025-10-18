@@ -94,7 +94,6 @@ public class GuestBookingService : IGuestBookingService
                 LicensePlate = request.LicensePlate,
                 Color = request.Color,
                 CurrentMileage = request.CurrentMileage,
-                PurchaseDate = request.PurchaseDate,
                 CreatedAt = DateTime.UtcNow
             };
             vehicle = await _vehicleRepository.CreateVehicleAsync(vehicle);
@@ -103,7 +102,6 @@ public class GuestBookingService : IGuestBookingService
         {
             vehicle.Color = request.Color ?? vehicle.Color;
             vehicle.CurrentMileage = request.CurrentMileage > 0 ? request.CurrentMileage : vehicle.CurrentMileage;
-            vehicle.PurchaseDate = request.PurchaseDate ?? vehicle.PurchaseDate;
             await _vehicleRepository.UpdateVehicleAsync(vehicle);
         }
 
@@ -137,7 +135,6 @@ public class GuestBookingService : IGuestBookingService
             CenterId = request.CenterId,
             SlotId = request.SlotId,
             Status = "PENDING",
-            TotalCost = service.BasePrice,
             ServiceId = request.ServiceId,
             SpecialRequests = request.SpecialRequests?.Trim(),
             CreatedAt = DateTime.UtcNow,

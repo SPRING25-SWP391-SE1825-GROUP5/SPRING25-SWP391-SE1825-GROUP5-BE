@@ -30,10 +30,10 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly EVServiceCenter.Domain.Interfaces.IInvoiceRepository _invoiceRepository;
         private readonly EVServiceCenter.Domain.Interfaces.IPaymentRepository _paymentRepository;
         private readonly EVServiceCenter.Domain.Interfaces.IBookingRepository _bookingRepository;
-        private readonly EVServiceCenter.Domain.Interfaces.IWorkOrderRepository _workOrderRepository;
+        // WorkOrderRepository removed - functionality merged into BookingRepository
         private readonly EVServiceCenter.Domain.Interfaces.ITechnicianRepository _technicianRepository;
 
-    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub, Microsoft.Extensions.Options.IOptions<EVServiceCenter.Application.Configurations.BookingRealtimeOptions> realtimeOptions, IGuestBookingService guestBookingService, EVServiceCenter.Application.Service.PaymentService paymentService, EVServiceCenter.Domain.Interfaces.IInvoiceRepository invoiceRepository, EVServiceCenter.Domain.Interfaces.IPaymentRepository paymentRepository, EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepository, EVServiceCenter.Domain.Interfaces.IWorkOrderRepository workOrderRepository, EVServiceCenter.Domain.Interfaces.ITechnicianRepository technicianRepository)
+    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub, Microsoft.Extensions.Options.IOptions<EVServiceCenter.Application.Configurations.BookingRealtimeOptions> realtimeOptions, IGuestBookingService guestBookingService, EVServiceCenter.Application.Service.PaymentService paymentService, EVServiceCenter.Domain.Interfaces.IInvoiceRepository invoiceRepository, EVServiceCenter.Domain.Interfaces.IPaymentRepository paymentRepository, EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepository, EVServiceCenter.Domain.Interfaces.ITechnicianRepository technicianRepository)
         {
         _bookingService = bookingService;
         _bookingHistoryService = bookingHistoryService;
@@ -45,7 +45,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         _invoiceRepository = invoiceRepository;
         _paymentRepository = paymentRepository;
         _bookingRepository = bookingRepository;
-        _workOrderRepository = workOrderRepository;
+        // WorkOrderRepository removed - functionality merged into BookingRepository
         _technicianRepository = technicianRepository;
         }
 
@@ -546,29 +546,14 @@ namespace EVServiceCenter.WebAPI.Controllers
             var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
             if (booking == null) return NotFound(new { success = false, message = "Không tìm thấy booking" });
 
-            var workOrder = await _workOrderRepository.GetByBookingIdAsync(bookingId);
-            if (workOrder == null)
-            {
-                workOrder = await _workOrderRepository.CreateAsync(new EVServiceCenter.Domain.Entities.WorkOrder
-                {
-                    BookingId = booking.BookingId,
-                    TechnicianId = 0,
-                    CustomerId = booking.CustomerId,
-                    VehicleId = booking.VehicleId,
-                    CenterId = booking.CenterId,
-                    ServiceId = booking.ServiceId,
-                    Status = "NOT_STARTED",
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                });
-            }
+            // WorkOrder functionality merged into Booking - no separate work order needed
+            // Booking already contains all necessary information
 
             var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
             if (invoice == null)
             {
                 invoice = await _invoiceRepository.CreateMinimalAsync(new EVServiceCenter.Domain.Entities.Invoice
                 {
-                    WorkOrderId = workOrder.WorkOrderId,
                     BookingId = booking.BookingId,
                     CustomerId = booking.CustomerId,
                     Email = booking.Customer?.User?.Email,
@@ -610,32 +595,16 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (tech == null) return NotFound(new { success = false, message = "Kỹ thuật viên không tồn tại" });
             if (tech.CenterId != booking.CenterId) return BadRequest(new { success = false, message = "Kỹ thuật viên không thuộc trung tâm của booking" });
 
-            var workOrder = await _workOrderRepository.GetByBookingIdAsync(bookingId);
-            if (workOrder == null)
-            {
-                workOrder = await _workOrderRepository.CreateAsync(new EVServiceCenter.Domain.Entities.WorkOrder
-                {
-                    BookingId = booking.BookingId,
-                    TechnicianId = req.TechnicianId,
-                    CustomerId = booking.CustomerId,
-                    VehicleId = booking.VehicleId,
-                    CenterId = booking.CenterId,
-                    ServiceId = booking.ServiceId,
-                    Status = "NOT_STARTED",
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                });
-            }
-            else
-            {
-                if (string.Equals(workOrder.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) || string.Equals(workOrder.Status, "CANCELED", StringComparison.OrdinalIgnoreCase))
-                    return BadRequest(new { success = false, message = "Không thể gán kỹ thuật viên cho work order đã hoàn tất/hủy" });
-                workOrder.TechnicianId = req.TechnicianId;
-                workOrder.UpdatedAt = DateTime.UtcNow;
-                await _workOrderRepository.UpdateAsync(workOrder);
-            }
+            // WorkOrder functionality merged into Booking - update booking directly
+            if (string.Equals(booking.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) || string.Equals(booking.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { success = false, message = "Không thể gán kỹ thuật viên cho booking đã hoàn tất/hủy" });
+            
+            // Update booking with technician assignment
+            booking.TechnicianId = req.TechnicianId;
+            booking.UpdatedAt = DateTime.UtcNow;
+            await _bookingRepository.UpdateBookingAsync(booking);
 
-            return Ok(new { success = true, data = new { workOrderId = workOrder.WorkOrderId, technicianId = req.TechnicianId } });
+            return Ok(new { success = true, data = new { bookingId = booking.BookingId, technicianId = req.TechnicianId } });
         }
     }
 }

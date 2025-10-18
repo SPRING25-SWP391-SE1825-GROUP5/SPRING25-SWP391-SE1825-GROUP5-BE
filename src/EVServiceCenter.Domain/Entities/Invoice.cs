@@ -7,7 +7,7 @@ public partial class Invoice
 {
     public int InvoiceId { get; set; }
 
-    public int WorkOrderId { get; set; }
+    // WorkOrderId removed - functionality merged into Booking
 
     public int? CustomerId { get; set; }
 
@@ -32,7 +32,7 @@ public partial class Invoice
 
     // Removed navigation to UserPromotions to prevent EF from creating a shadow FK (InvoiceId)
 
-    public virtual WorkOrder WorkOrder { get; set; }
+    // WorkOrder navigation removed - functionality merged into Booking
 
     public virtual Booking Booking { get; set; }
 

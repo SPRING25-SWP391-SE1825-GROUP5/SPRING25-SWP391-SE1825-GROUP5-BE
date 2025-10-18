@@ -7,13 +7,12 @@ public class VehicleModelPartResponse
     public int Id { get; set; }
     public int ModelId { get; set; }
     public int PartId { get; set; }
-    public bool IsCompatible { get; set; }
-    public string? CompatibilityNotes { get; set; }
+    // IsCompatible removed
     public DateTime CreatedAt { get; set; }
     
     // Additional information
     public string? ModelName { get; set; }
-    public string? Brand { get; set; }
+    // Brand removed from VehicleModel
     public string? PartName { get; set; }
     public string? PartNumber { get; set; }
     public string? PartBrand { get; set; }

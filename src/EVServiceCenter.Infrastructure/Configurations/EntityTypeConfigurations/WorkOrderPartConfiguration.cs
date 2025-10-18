@@ -8,20 +8,20 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
 {
     public void Configure(EntityTypeBuilder<WorkOrderPart> entity)
     {
-        entity.HasKey(e => new { e.WorkOrderId, e.PartId });
+        entity.HasKey(e => new { e.BookingId, e.PartId });
         entity.ToTable("WorkOrderParts", "dbo");
 
         entity.HasIndex(e => e.VehicleModelPartId);
 
-        entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
+        entity.Property(e => e.BookingId).HasColumnName("BookingID");
         entity.Property(e => e.PartId).HasColumnName("PartID");
         entity.Property(e => e.VehicleModelPartId).HasColumnName("VehicleModelPartID");
 
         entity.Property(e => e.UnitCost).HasColumnType("decimal(10, 2)");
 
-        entity.HasOne(d => d.WorkOrder)
-            .WithMany(p => p.WorkOrderParts)
-            .HasForeignKey(d => d.WorkOrderId)
+        entity.HasOne(d => d.Booking)
+            .WithMany()
+            .HasForeignKey(d => d.BookingId)
             .OnDelete(DeleteBehavior.ClientSetNull);
 
         entity.HasOne(d => d.Part)

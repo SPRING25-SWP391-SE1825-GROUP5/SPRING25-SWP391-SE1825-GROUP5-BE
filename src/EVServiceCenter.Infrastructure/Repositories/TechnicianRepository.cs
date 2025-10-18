@@ -85,53 +85,5 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Technicians.AnyAsync(t => t.UserId == userId);
         }
 
-        public async Task UpsertSkillsAsync(int technicianId, IEnumerable<TechnicianSkill> skills)
-        {
-            var existing = await _context.TechnicianSkills
-                .Where(ts => ts.TechnicianId == technicianId)
-                .ToListAsync();
-
-            // Update or add
-            foreach (var s in skills)
-            {
-                var found = existing.FirstOrDefault(x => x.SkillId == s.SkillId);
-                if (found == null)
-                {
-                    _context.TechnicianSkills.Add(new TechnicianSkill
-                    {
-                        TechnicianId = technicianId,
-                        SkillId = s.SkillId,
-                        // Notes removed from TechnicianSkill
-                    });
-                }
-                else
-                {
-                    // Notes removed from TechnicianSkill
-                    _context.TechnicianSkills.Update(found);
-                }
-            }
-
-            await _context.SaveChangesAsync();
-        }
-
-        public async Task RemoveSkillAsync(int technicianId, int skillId)
-        {
-            var entity = await _context.TechnicianSkills
-                .FirstOrDefaultAsync(ts => ts.TechnicianId == technicianId && ts.SkillId == skillId);
-            if (entity != null)
-            {
-                _context.TechnicianSkills.Remove(entity);
-                await _context.SaveChangesAsync();
-            }
-        }
-
-        public async Task<List<TechnicianSkill>> GetTechnicianSkillsAsync(int technicianId)
-        {
-            return await _context.TechnicianSkills
-                .Include(ts => ts.Technician)
-                .Include(ts => ts.Skill)
-                .Where(ts => ts.TechnicianId == technicianId)
-                .ToListAsync();
-        }
     }
 }

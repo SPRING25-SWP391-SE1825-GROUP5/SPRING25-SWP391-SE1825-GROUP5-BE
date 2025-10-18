@@ -28,11 +28,7 @@ public sealed class VehicleConfiguration : IEntityTypeConfiguration<Vehicle>
             .HasColumnName("VIN");
         entity.Property(e => e.Color).HasMaxLength(30);
 
-        entity.Property(e => e.PurchaseDate)
-            .HasConversion(
-                v => v.HasValue ? v.Value.ToDateTime(TimeOnly.MinValue) : (DateTime?)null,
-                v => v.HasValue ? DateOnly.FromDateTime(v.Value) : (DateOnly?)null)
-            .HasColumnName("PurchaseDate");
+        // PurchaseDate removed
 
         entity.Property(e => e.CreatedAt)
             .HasPrecision(0)

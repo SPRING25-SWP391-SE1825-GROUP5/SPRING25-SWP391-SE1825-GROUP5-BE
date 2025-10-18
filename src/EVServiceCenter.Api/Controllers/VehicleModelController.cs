@@ -57,22 +57,7 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get vehicle models by brand
-    /// </summary>
-    [HttpGet("brand/{brand}")]
-    public async Task<ActionResult<IEnumerable<VehicleModelResponse>>> GetByBrand(string brand)
-    {
-        try
-        {
-            var models = await _vehicleModelService.GetByBrandAsync(brand);
-            return Ok(models);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
-        }
-    }
+    // Brand removed - endpoint deleted
 
     /// <summary>
     /// Get active vehicle models

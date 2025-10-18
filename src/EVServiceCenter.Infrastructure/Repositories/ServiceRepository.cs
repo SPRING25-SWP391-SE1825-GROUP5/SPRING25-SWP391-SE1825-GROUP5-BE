@@ -51,5 +51,10 @@ namespace EVServiceCenter.Infrastructure.Repositories
             await _context.SaveChangesAsync();
         }
 
+        public async Task<bool> ServiceExistsAsync(int serviceId)
+        {
+            return await _context.Services.AnyAsync(s => s.ServiceId == serviceId);
+        }
+
     }
 }

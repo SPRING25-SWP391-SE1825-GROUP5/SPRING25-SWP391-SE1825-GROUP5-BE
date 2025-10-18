@@ -13,12 +13,42 @@ public sealed class ConversationConfiguration : IEntityTypeConfiguration<Convers
 
         entity.HasIndex(e => e.LastMessageAt);
 
-        entity.Property(e => e.ConversationId).HasColumnName("ConversationID");
-        entity.Property(e => e.Subject).HasMaxLength(255);
-        entity.Property(e => e.LastMessageAt).HasColumnName("LastMessageAt");
-        entity.Property(e => e.LastMessageId).HasColumnName("LastMessageID");
+        // Explicitly configure all properties to avoid auto-mapping issues
+        entity.Property(e => e.ConversationId)
+            .HasColumnName("ConversationID")
+            .ValueGeneratedOnAdd();
+        
+        entity.Property(e => e.Subject)
+            .HasMaxLength(255)
+            .IsRequired(false);
+        
+        entity.Property(e => e.LastMessageAt)
+            .IsRequired(false);
+        
+        entity.Property(e => e.LastMessageId)
+            .HasColumnName("LastMessageID")
+            .IsRequired(false);
+        
         entity.Property(e => e.CreatedAt)
             .HasDefaultValueSql("(sysutcdatetime())");
-        entity.Property(e => e.UpdatedAt).HasColumnName("UpdatedAt");
+        
+        entity.Property(e => e.UpdatedAt)
+            .IsRequired(false);
+
+        // Configure relationships
+        entity.HasOne(e => e.LastMessage)
+            .WithMany()
+            .HasForeignKey(e => e.LastMessageId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasMany(e => e.Messages)
+            .WithOne()
+            .HasForeignKey(m => m.ConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasMany(e => e.ConversationMembers)
+            .WithOne()
+            .HasForeignKey(cm => cm.ConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

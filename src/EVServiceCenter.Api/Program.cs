@@ -123,6 +123,10 @@ builder.Services.AddScoped<ICustomerServiceCreditService, CustomerServiceCreditS
 builder.Services.AddScoped<IVehicleModelService, VehicleModelService>();
 builder.Services.AddScoped<IVehicleModelPartService, VehicleModelPartService>();
 
+// Chat Services
+builder.Services.AddScoped<IConversationService, ConversationService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+
 // ============================================================================
 // REPOSITORY REGISTRATION
 // ============================================================================

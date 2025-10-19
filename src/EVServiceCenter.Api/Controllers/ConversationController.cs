@@ -157,30 +157,20 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Test endpoint để debug JWT claims
-        /// </summary>
-        [HttpGet("debug-claims")]
-        public IActionResult DebugClaims()
+        [HttpPost("{conversationId}/members")]
+        public async Task<IActionResult> AddMember(long conversationId, [FromBody] AddMemberToConversationRequest request)
         {
             try
             {
-                var allClaims = User.Claims.Select(c => new { Type = c.Type, Value = c.Value }).ToList();
-                var userId = GetCurrentUserId();
-                
-                return Ok(new { 
-                    success = true, 
-                    data = new {
-                        allClaims,
-                        userId,
-                        isAuthenticated = User.Identity?.IsAuthenticated,
-                        name = User.Identity?.Name
-                    }
-                });
+                var validationResult = ValidateModelState();
+                if (validationResult != null) return validationResult;
+
+                var result = await _conversationService.AddMemberToConversationAsync(conversationId, request);
+                return Ok(new { success = true, data = result });
             }
             catch (Exception ex)
             {
-                return HandleException(ex, "Debug claims");
+                return HandleException(ex, "Thêm thành viên vào cuộc trò chuyện");
             }
         }
         

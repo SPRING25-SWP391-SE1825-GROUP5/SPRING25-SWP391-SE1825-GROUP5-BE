@@ -541,7 +541,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Lấy danh sách khuyến mãi đang hoạt động cho user
+        /// Lấy danh sách khuyến mãi đang hoạt động cho user (Public - không cần đăng nhập)
         /// </summary>
         /// <param name="pageNumber">Số trang (mặc định: 1)</param>
         /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
@@ -549,6 +549,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="promotionType">Lọc theo loại khuyến mãi (GENERAL, FIRST_TIME, BIRTHDAY, LOYALTY)</param>
         /// <returns>Danh sách khuyến mãi đang hoạt động</returns>
         [HttpGet("active")]
+        [AllowAnonymous] // ✅ Cho phép người chưa đăng nhập xem
         public async Task<IActionResult> GetActivePromotions(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,

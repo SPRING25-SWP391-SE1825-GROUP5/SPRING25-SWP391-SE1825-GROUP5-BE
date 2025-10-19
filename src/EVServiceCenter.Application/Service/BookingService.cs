@@ -94,7 +94,7 @@ namespace EVServiceCenter.Application.Service
                     foreach (var technician in centerTechnicians)
                     {
                         var isTechnicianAvailable = !bookingsForDate.Any(b => 
-                            b.SlotId == timeSlot.SlotId);
+                            b.SlotId == timeSlot.SlotId && b.TechnicianId == technician.TechnicianId);
 
                         timeSlotAvailability.AvailableTechnicians.Add(new TechnicianAvailability
                         {

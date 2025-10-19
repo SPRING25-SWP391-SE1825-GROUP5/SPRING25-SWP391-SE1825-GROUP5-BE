@@ -401,7 +401,7 @@ namespace EVServiceCenter.Application.Service
                 if (promotion == null)
                     throw new ArgumentException("Khuyến mãi không tồn tại.");
 
-                promotion.Status = "INACTIVE";
+                promotion.Status = "CANCELLED";
                 promotion.UpdatedAt = DateTime.UtcNow;
 
                 await _promotionRepository.UpdatePromotionAsync(promotion);

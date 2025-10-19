@@ -24,7 +24,7 @@ namespace EVServiceCenter.Api.Controllers
             _conversationService = conversationService;
         }
 
-        
+
         [HttpPost]
         public async Task<IActionResult> CreateConversation([FromBody] CreateConversationRequest request)
         {
@@ -42,7 +42,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpGet("{conversationId}")]
         public async Task<IActionResult> GetConversation(long conversationId)
         {
@@ -62,7 +62,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpPut("{conversationId}")]
         public async Task<IActionResult> UpdateConversation(long conversationId, [FromBody] UpdateConversationRequest request)
         {
@@ -80,7 +80,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpDelete("{conversationId}")]
         public async Task<IActionResult> DeleteConversation(long conversationId)
         {
@@ -100,7 +100,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpPost("get-or-create")]
         public async Task<IActionResult> GetOrCreateConversation([FromBody] GetOrCreateConversationRequest request)
         {
@@ -118,7 +118,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpGet("my-conversations")]
         public async Task<IActionResult> GetMyConversations([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
@@ -139,9 +139,9 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-   
 
-       
+
+
         [HttpGet("all")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetAllConversations([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? searchTerm = null)
@@ -174,6 +174,24 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
         
+        [HttpDelete("{conversationId}/members")]
+        public async Task<IActionResult> RemoveMember(long conversationId, [FromQuery] int? userId = null, [FromQuery] string? guestSessionId = null)
+        {
+            try
+            {
+                var result = await _conversationService.RemoveMemberFromConversationAsync(conversationId, userId, guestSessionId);
+                if (!result)
+                {
+                    return NotFound(new { success = false, message = "Không tìm thấy thành viên" });
+                }
+
+                return Ok(new { success = true, message = "Xóa thành viên thành công" });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Xóa thành viên khỏi cuộc trò chuyện");
+            }
+        }
         
     }
 }

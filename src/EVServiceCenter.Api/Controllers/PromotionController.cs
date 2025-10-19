@@ -38,7 +38,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="pageNumber">Số trang (mặc định: 1)</param>
         /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
         /// <param name="searchTerm">Từ khóa tìm kiếm (mã, mô tả)</param>
-        /// <param name="status">Lọc theo trạng thái (ACTIVE, INACTIVE, EXPIRED)</param>
+        /// <param name="status">Lọc theo trạng thái (ACTIVE, CANCELLED, EXPIRED)</param>
         /// <param name="promotionType">Lọc theo loại khuyến mãi (GENERAL, FIRST_TIME, BIRTHDAY, LOYALTY)</param>
         /// <returns>Danh sách khuyến mãi</returns>
         [HttpGet]

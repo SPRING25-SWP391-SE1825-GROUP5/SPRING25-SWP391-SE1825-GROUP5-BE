@@ -101,6 +101,51 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        /// <summary>
+        /// Lấy thông tin chi tiết xe của khách hàng
+        /// </summary>
+        /// <param name="customerId">ID khách hàng</param>
+        /// <param name="vehicleId">ID xe</param>
+        /// <returns>Thông tin chi tiết xe của khách hàng</returns>
+        [HttpGet("{customerId}/vehicles/{vehicleId}")]
+        public async Task<IActionResult> GetCustomerVehicleDetail(int customerId, int vehicleId)
+        {
+            try
+            {
+                if (customerId <= 0)
+                    return BadRequest(new { success = false, message = "ID khách hàng không hợp lệ" });
+                
+                if (vehicleId <= 0)
+                    return BadRequest(new { success = false, message = "ID xe không hợp lệ" });
+
+                // Lấy thông tin xe
+                var vehicle = await _vehicleService.GetVehicleByIdAsync(vehicleId);
+                if (vehicle == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy xe" });
+
+                // Kiểm tra xe có thuộc về customer không
+                if (vehicle.CustomerId != customerId)
+                    return Forbid("Xe không thuộc về khách hàng này");
+
+                return Ok(new { 
+                    success = true, 
+                    message = $"Lấy thông tin chi tiết xe {vehicleId} của khách hàng {customerId} thành công",
+                    data = vehicle
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
         // [Removed] PUT /api/Customer/{id} cập nhật nhanh theo phone/isGuest đã bị loại bỏ để đơn giản hóa API.
 
         /// <summary>

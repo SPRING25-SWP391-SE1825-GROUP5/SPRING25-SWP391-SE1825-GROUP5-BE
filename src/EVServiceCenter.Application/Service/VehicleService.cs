@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -14,11 +15,13 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IVehicleRepository _vehicleRepository;
         private readonly ICustomerRepository _customerRepository;
+        private readonly ILogger<VehicleService> _logger;
 
-        public VehicleService(IVehicleRepository vehicleRepository, ICustomerRepository customerRepository)
+        public VehicleService(IVehicleRepository vehicleRepository, ICustomerRepository customerRepository, ILogger<VehicleService> logger)
         {
             _vehicleRepository = vehicleRepository;
             _customerRepository = customerRepository;
+            _logger = logger;
         }
 
         public async Task<VehicleListResponse> GetVehiclesAsync(int pageNumber = 1, int pageSize = 10, int? customerId = null, string? searchTerm = null)

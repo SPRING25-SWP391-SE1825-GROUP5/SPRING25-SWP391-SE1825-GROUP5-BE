@@ -35,7 +35,7 @@ namespace EVServiceCenter.Application.Models.Requests
         public decimal? MaxDiscount { get; set; }
 
         [Required(ErrorMessage = "Trạng thái là bắt buộc")]
-        [RegularExpression("^(ACTIVE|INACTIVE|EXPIRED)$", ErrorMessage = "Trạng thái phải là ACTIVE, INACTIVE hoặc EXPIRED")]
+        [RegularExpression("^(ACTIVE|CANCELLED|EXPIRED)$", ErrorMessage = "Trạng thái phải là ACTIVE, CANCELLED hoặc EXPIRED")]
         public required string Status { get; set; }
 
         [Range(1, int.MaxValue, ErrorMessage = "Giới hạn sử dụng phải lớn hơn 0")]

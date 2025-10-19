@@ -16,13 +16,15 @@ namespace EVServiceCenter.WebAPI.Controllers
     {
         private readonly IVehicleService _vehicleService;
         private readonly EVServiceCenter.Domain.Interfaces.IVehicleRepository _vehicleRepository;
+        private readonly EVServiceCenter.Domain.Interfaces.ICustomerRepository _customerRepository;
         // WorkOrderRepository removed - functionality merged into BookingRepository
         
 
-        public VehicleController(IVehicleService vehicleService, EVServiceCenter.Domain.Interfaces.IVehicleRepository vehicleRepository)
+        public VehicleController(IVehicleService vehicleService, EVServiceCenter.Domain.Interfaces.IVehicleRepository vehicleRepository, EVServiceCenter.Domain.Interfaces.ICustomerRepository customerRepository)
         {
             _vehicleService = vehicleService;
             _vehicleRepository = vehicleRepository;
+            _customerRepository = customerRepository;
             // WorkOrderRepository removed - functionality merged into BookingRepository
         }
 
@@ -31,7 +33,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// </summary>
         /// <param name="pageNumber">Số trang (mặc định: 1)</param>
         /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="customerId">Lọc theo khách hàng</param>
+        /// <param name="customerId">Lọc theo khách hàng (chỉ Admin/Manager được dùng)</param>
         /// <param name="searchTerm">Từ khóa tìm kiếm</param>
         /// <returns>Danh sách xe</returns>
         [HttpGet]
@@ -46,6 +48,35 @@ namespace EVServiceCenter.WebAPI.Controllers
                 // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+                // Check user role and apply appropriate filtering
+                var isAdmin = User.IsInRole("ADMIN") || User.IsInRole("MANAGER");
+                var isCustomer = User.IsInRole("CUSTOMER");
+
+                if (isCustomer)
+                {
+                    // Customer can only see their own vehicles
+                    var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "nameid" || c.Type == "userId");
+                    if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
+                    {
+                        return Unauthorized(new { success = false, message = "Không thể xác định thông tin người dùng" });
+                    }
+
+                    // Get customer ID from user ID
+                    var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
+                    if (customer == null)
+                    {
+                        return NotFound(new { success = false, message = "Không tìm thấy thông tin khách hàng" });
+                    }
+
+                    // Force customerId to be the current customer's ID
+                    customerId = customer.CustomerId;
+                }
+                else if (!isAdmin)
+                {
+                    // Only Admin/Manager can access this endpoint without restrictions
+                    return Forbid();
+                }
 
                 var result = await _vehicleService.GetVehiclesAsync(pageNumber, pageSize, customerId, searchTerm);
                 
@@ -273,6 +304,47 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+
+        /// <summary>
+        /// Debug endpoint để kiểm tra dữ liệu vehicle và customer
+        /// </summary>
+        /// <param name="vehicleId">ID xe</param>
+        /// <returns>Thông tin debug</returns>
+        [HttpGet("{vehicleId:int}/debug")]
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> DebugVehicleData(int vehicleId)
+        {
+            try
+            {
+                var vehicle = await _vehicleRepository.GetVehicleByIdAsync(vehicleId);
+                if (vehicle == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy xe" });
+
+                var customer = await _customerRepository.GetCustomerByIdAsync(vehicle.CustomerId);
+                
+                return Ok(new { 
+                    success = true, 
+                    data = new {
+                        vehicleId = vehicle.VehicleId,
+                        vehicleCustomerId = vehicle.CustomerId,
+                        customerId = customer?.CustomerId,
+                        customerUserId = customer?.UserId,
+                        customerName = customer?.User?.FullName,
+                        customerEmail = customer?.User?.Email,
+                        customerPhone = customer?.User?.PhoneNumber,
+                        vehicleVin = vehicle.Vin,
+                        vehicleLicensePlate = vehicle.LicensePlate
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
 
         /// <summary>
         /// Tìm xe theo VIN hoặc biển số xe

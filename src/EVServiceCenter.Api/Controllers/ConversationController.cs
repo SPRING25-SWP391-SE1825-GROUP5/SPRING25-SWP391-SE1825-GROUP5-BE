@@ -24,7 +24,7 @@ namespace EVServiceCenter.Api.Controllers
             _conversationService = conversationService;
         }
 
-        
+
         [HttpPost]
         public async Task<IActionResult> CreateConversation([FromBody] CreateConversationRequest request)
         {
@@ -42,7 +42,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpGet("{conversationId}")]
         public async Task<IActionResult> GetConversation(long conversationId)
         {
@@ -62,7 +62,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpPut("{conversationId}")]
         public async Task<IActionResult> UpdateConversation(long conversationId, [FromBody] UpdateConversationRequest request)
         {
@@ -80,7 +80,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpDelete("{conversationId}")]
         public async Task<IActionResult> DeleteConversation(long conversationId)
         {
@@ -100,7 +100,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpPost("get-or-create")]
         public async Task<IActionResult> GetOrCreateConversation([FromBody] GetOrCreateConversationRequest request)
         {
@@ -118,7 +118,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+
         [HttpGet("my-conversations")]
         public async Task<IActionResult> GetMyConversations([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
@@ -139,9 +139,9 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-   
 
-       
+
+
         [HttpGet("all")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetAllConversations([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? searchTerm = null)
@@ -157,33 +157,71 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Test endpoint để debug JWT claims
-        /// </summary>
-        [HttpGet("debug-claims")]
-        public IActionResult DebugClaims()
+        [HttpPost("{conversationId}/members")]
+        public async Task<IActionResult> AddMember(long conversationId, [FromBody] AddMemberToConversationRequest request)
         {
             try
             {
-                var allClaims = User.Claims.Select(c => new { Type = c.Type, Value = c.Value }).ToList();
-                var userId = GetCurrentUserId();
-                
-                return Ok(new { 
-                    success = true, 
-                    data = new {
-                        allClaims,
-                        userId,
-                        isAuthenticated = User.Identity?.IsAuthenticated,
-                        name = User.Identity?.Name
-                    }
-                });
+                var validationResult = ValidateModelState();
+                if (validationResult != null) return validationResult;
+
+                var result = await _conversationService.AddMemberToConversationAsync(conversationId, request);
+                return Ok(new { success = true, data = result });
             }
             catch (Exception ex)
             {
-                return HandleException(ex, "Debug claims");
+                return HandleException(ex, "Thêm thành viên vào cuộc trò chuyện");
             }
         }
-        
+
+        [HttpDelete("{conversationId}/members")]
+        public async Task<IActionResult> RemoveMember(long conversationId, [FromQuery] int? userId = null, [FromQuery] string? guestSessionId = null)
+        {
+            try
+            {
+                var result = await _conversationService.RemoveMemberFromConversationAsync(conversationId, userId, guestSessionId);
+                if (!result)
+                {
+                    return NotFound(new { success = false, message = "Không tìm thấy thành viên" });
+                }
+
+                return Ok(new { success = true, message = "Xóa thành viên thành công" });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Xóa thành viên khỏi cuộc trò chuyện");
+            }
+        }
+
+        [HttpGet("{conversationId}/members")]
+        public async Task<IActionResult> GetMembers(long conversationId)
+        {
+            try
+            {
+                var result = await _conversationService.GetConversationMembersAsync(conversationId);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Lấy danh sách thành viên");
+            }
+        }
+
+
+        [HttpPut("{conversationId}/last-read")]
+        public async Task<IActionResult> UpdateLastReadTime(long conversationId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var result = await _conversationService.UpdateLastReadTimeAsync(conversationId, userId);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Cập nhật thời gian đọc cuối cùng");
+            }
+        }
         
     }
 }

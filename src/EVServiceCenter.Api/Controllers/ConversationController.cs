@@ -173,7 +173,7 @@ namespace EVServiceCenter.Api.Controllers
                 return HandleException(ex, "Thêm thành viên vào cuộc trò chuyện");
             }
         }
-        
+
         [HttpDelete("{conversationId}/members")]
         public async Task<IActionResult> RemoveMember(long conversationId, [FromQuery] int? userId = null, [FromQuery] string? guestSessionId = null)
         {
@@ -190,6 +190,20 @@ namespace EVServiceCenter.Api.Controllers
             catch (Exception ex)
             {
                 return HandleException(ex, "Xóa thành viên khỏi cuộc trò chuyện");
+            }
+        }
+        
+        [HttpGet("{conversationId}/members")]
+        public async Task<IActionResult> GetMembers(long conversationId)
+        {
+            try
+            {
+                var result = await _conversationService.GetConversationMembersAsync(conversationId);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Lấy danh sách thành viên");
             }
         }
         

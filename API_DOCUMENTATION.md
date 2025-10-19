@@ -315,6 +315,66 @@ Authorization: Bearer <your-jwt-token>
 
 ---
 
+## 💬 CONVERSATION APIs
+
+### 1. Tạo cuộc trò chuyện
+**POST** `/Conversation`
+**Authorization Required**
+
+**Request Body:**
+```json
+{
+  "subject": "Hỗ trợ kỹ thuật xe điện",
+  "members": [
+    { "userId": 15, "roleInConversation": "CUSTOMER" },
+    { "userId": 23, "roleInConversation": "STAFF" }
+  ]
+}
+```
+
+### 2. Cập nhật cuộc trò chuyện
+**PUT** `/Conversation/{conversationId}`
+**Authorization Required**
+
+**Request Body:**
+```json
+{
+  "subject": "Chủ đề mới"
+}
+```
+
+### 3. Lấy hoặc tạo cuộc trò chuyện giữa 2 thành viên
+**POST** `/Conversation/get-or-create`
+**Authorization Required**
+
+**Request Body:**
+```json
+{
+  "member1": { "userId": 15, "roleInConversation": "CUSTOMER" },
+  "member2": { "userId": 23, "roleInConversation": "STAFF" },
+  "subject": "Hỗ trợ khách hàng"
+}
+```
+
+### 4. Thêm thành viên vào cuộc trò chuyện
+**POST** `/Conversation/{conversationId}/members`
+**Authorization Required**
+
+**Request Body:**
+```json
+{
+  "userId": 45,
+  "guestSessionId": null,
+  "roleInConversation": "STAFF"
+}
+```
+
+---
+
+
+
+---
+
 ## 📋 Common Response Format
 
 ### Success Response

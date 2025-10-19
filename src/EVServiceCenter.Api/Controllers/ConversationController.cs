@@ -192,7 +192,7 @@ namespace EVServiceCenter.Api.Controllers
                 return HandleException(ex, "Xóa thành viên khỏi cuộc trò chuyện");
             }
         }
-        
+
         [HttpGet("{conversationId}/members")]
         public async Task<IActionResult> GetMembers(long conversationId)
         {
@@ -204,6 +204,22 @@ namespace EVServiceCenter.Api.Controllers
             catch (Exception ex)
             {
                 return HandleException(ex, "Lấy danh sách thành viên");
+            }
+        }
+
+
+        [HttpPut("{conversationId}/last-read")]
+        public async Task<IActionResult> UpdateLastReadTime(long conversationId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var result = await _conversationService.UpdateLastReadTimeAsync(conversationId, userId);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Cập nhật thời gian đọc cuối cùng");
             }
         }
         

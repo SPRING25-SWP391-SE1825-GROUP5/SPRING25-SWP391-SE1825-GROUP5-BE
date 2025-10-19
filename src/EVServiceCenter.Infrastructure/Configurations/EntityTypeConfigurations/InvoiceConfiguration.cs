@@ -29,6 +29,14 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .HasPrecision(0)
             .HasDefaultValueSql("(sysdatetime())");
 
+        // New discount columns
+        entity.Property(e => e.PackageDiscountAmount)
+            .HasColumnType("decimal(12, 2)")
+            .HasDefaultValue(0);
+        entity.Property(e => e.PromotionDiscountAmount)
+            .HasColumnType("decimal(12, 2)")
+            .HasDefaultValue(0);
+
         entity.HasOne(d => d.Customer)
             .WithMany(p => p.Invoices)
             .HasForeignKey(d => d.CustomerId);

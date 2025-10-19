@@ -24,6 +24,12 @@ public partial class Invoice
     // Link trực tiếp tới Order thay vì OrderItem
     public int? OrderId { get; set; }
 
+    // Giảm giá áp dụng từ gói dịch vụ (VNĐ)
+    public decimal PackageDiscountAmount { get; set; }
+
+    // Giảm giá áp dụng từ khuyến mãi (VNĐ)
+    public decimal PromotionDiscountAmount { get; set; }
+
     // public int? ParentInvoiceId { get; set; } // Column không tồn tại trong database
 
     public virtual Customer Customer { get; set; }

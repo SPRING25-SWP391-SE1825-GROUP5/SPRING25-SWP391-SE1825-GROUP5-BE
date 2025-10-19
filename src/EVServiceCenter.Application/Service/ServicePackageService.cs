@@ -53,16 +53,30 @@ public class ServicePackageService : IServicePackageService
 
     public async Task<ServicePackageResponse> CreateAsync(CreateServicePackageRequest request)
     {
+        if (request.ServiceId <= 0)
+        {
+            throw new ArgumentException("Dịch vụ với ID 0 không tồn tại.");
+        }
         // Validate service exists
         if (!await _serviceRepository.ServiceExistsAsync(request.ServiceId))
         {
-            throw new ArgumentException($"Service with ID {request.ServiceId} does not exist.");
+            throw new ArgumentException($"Dịch vụ với ID {request.ServiceId} không tồn tại.");
         }
 
-        // Check if package code already exists
+        // Validate code unique
         if (await _servicePackageRepository.PackageCodeExistsAsync(request.PackageCode))
         {
-            throw new ArgumentException($"Package code '{request.PackageCode}' already exists.");
+            throw new ArgumentException($"Mã gói '{request.PackageCode}' đã tồn tại.");
+        }
+
+        // Validate values
+        if (request.DiscountPercent.HasValue && (request.DiscountPercent < 0 || request.DiscountPercent > 100))
+        {
+            throw new ArgumentException("Phần trăm giảm giá phải nằm trong khoảng 0 đến 100.");
+        }
+        if (request.ValidFrom.HasValue && request.ValidTo.HasValue && request.ValidFrom.Value > request.ValidTo.Value)
+        {
+            throw new ArgumentException("Thời gian hiệu lực không hợp lệ: 'ValidFrom' phải nhỏ hơn hoặc bằng 'ValidTo'.");
         }
 
         var servicePackage = new ServicePackage
@@ -73,7 +87,7 @@ public class ServicePackageService : IServicePackageService
             ServiceId = request.ServiceId,
             TotalCredits = request.TotalCredits,
             Price = request.Price,
-            DiscountPercent = request.DiscountPercent,
+            DiscountPercent = request.DiscountPercent ?? 0,
             IsActive = request.IsActive,
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
@@ -90,19 +104,36 @@ public class ServicePackageService : IServicePackageService
         var servicePackage = await _servicePackageRepository.GetByIdAsync(packageId);
         if (servicePackage == null)
         {
-            throw new KeyNotFoundException($"Service package with ID {packageId} not found.");
+            throw new KeyNotFoundException($"Không tìm thấy gói dịch vụ với ID {packageId}.");
         }
 
         // Validate service exists if changing service
-        if (request.ServiceId.HasValue && !await _serviceRepository.ServiceExistsAsync(request.ServiceId.Value))
+        if (request.ServiceId.HasValue)
         {
-            throw new ArgumentException($"Service with ID {request.ServiceId.Value} does not exist.");
+            if (request.ServiceId.Value <= 0)
+            {
+                throw new ArgumentException("Dịch vụ với ID 0 không tồn tại.");
+            }
+            if (!await _serviceRepository.ServiceExistsAsync(request.ServiceId.Value))
+            {
+                throw new ArgumentException($"Dịch vụ với ID {request.ServiceId.Value} không tồn tại.");
+            }
         }
 
-        // Check if package code already exists (excluding current package)
+        // Validate code unique (excluding current package)
         if (!string.IsNullOrEmpty(request.PackageCode) && await _servicePackageRepository.PackageCodeExistsAsync(request.PackageCode, packageId))
         {
-            throw new ArgumentException($"Package code '{request.PackageCode}' already exists.");
+            throw new ArgumentException($"Mã gói '{request.PackageCode}' đã tồn tại.");
+        }
+
+        // Validate values (only when provided)
+        if (request.DiscountPercent.HasValue && (request.DiscountPercent.Value < 0 || request.DiscountPercent.Value > 100))
+        {
+            throw new ArgumentException("Phần trăm giảm giá phải nằm trong khoảng 0 đến 100.");
+        }
+        if (request.ValidFrom.HasValue && request.ValidTo.HasValue && request.ValidFrom.Value > request.ValidTo.Value)
+        {
+            throw new ArgumentException("Thời gian hiệu lực không hợp lệ: 'ValidFrom' phải nhỏ hơn hoặc bằng 'ValidTo'.");
         }
 
         // Update properties
@@ -146,7 +177,7 @@ public class ServicePackageService : IServicePackageService
     {
         if (!await _servicePackageRepository.ExistsAsync(packageId))
         {
-            throw new KeyNotFoundException($"Service package with ID {packageId} not found.");
+            throw new KeyNotFoundException($"Không tìm thấy gói dịch vụ với ID {packageId}.");
         }
 
         await _servicePackageRepository.DeleteAsync(packageId);

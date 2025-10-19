@@ -65,15 +65,51 @@ public class ServicePackageRepository : IServicePackageRepository
     {
         _context.ServicePackages.Add(servicePackage);
         await _context.SaveChangesAsync();
+        // Ensure navigation loaded so API can return ServiceName
+        await _context.Entry(servicePackage).Reference(sp => sp.Service).LoadAsync();
         return servicePackage;
     }
 
     public async Task<ServicePackage> UpdateAsync(ServicePackage servicePackage)
     {
-        servicePackage.UpdatedAt = DateTime.UtcNow;
-        _context.ServicePackages.Update(servicePackage);
-        await _context.SaveChangesAsync();
-        return servicePackage;
+        // Bypass EF OUTPUT clause due to DB trigger by using raw SQL UPDATE
+        var sql = @"UPDATE [dbo].[ServicePackages]
+SET [PackageName] = {0},
+    [PackageCode] = {1},
+    [Description] = {2},
+    [ServiceId] = {3},
+    [TotalCredits] = {4},
+    [Price] = {5},
+    [DiscountPercent] = {6},
+    [IsActive] = {7},
+    [ValidFrom] = {8},
+    [ValidTo] = {9},
+    [UpdatedAt] = {10}
+WHERE [PackageId] = {11};";
+
+        var parameters = new object[]
+        {
+            servicePackage.PackageName ?? string.Empty,
+            servicePackage.PackageCode ?? string.Empty,
+            (object?)servicePackage.Description ?? DBNull.Value,
+            servicePackage.ServiceId,
+            servicePackage.TotalCredits,
+            servicePackage.Price,
+            servicePackage.DiscountPercent ?? 0m,
+            servicePackage.IsActive,
+            (object?)servicePackage.ValidFrom ?? DBNull.Value,
+            (object?)servicePackage.ValidTo ?? DBNull.Value,
+            DateTime.UtcNow,
+            servicePackage.PackageId
+        };
+
+        var rows = await _context.Database.ExecuteSqlRawAsync(sql, parameters);
+
+        // Reload entity from DB with navigation
+        var reloaded = await _context.ServicePackages
+            .Include(sp => sp.Service)
+            .FirstAsync(sp => sp.PackageId == servicePackage.PackageId);
+        return reloaded;
     }
 
     public async Task DeleteAsync(int packageId)

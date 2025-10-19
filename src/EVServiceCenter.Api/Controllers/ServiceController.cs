@@ -64,7 +64,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Lấy danh sách các dịch vụ đang hoạt động (Services.IsActive = 1 AND ServiceCategories.IsActive = 1)
+        /// Lấy danh sách các dịch vụ đang hoạt động (Services.IsActive = 1 AND ServiceCategories.IsActive = 1) - Public
         /// </summary>
         /// <param name="pageNumber">Số trang (mặc định: 1)</param>
         /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
@@ -72,6 +72,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="categoryId">Lọc theo danh mục dịch vụ</param>
         /// <returns>Danh sách dịch vụ đang hoạt động</returns>
         [HttpGet("active")]
+        [AllowAnonymous] // ✅ Cho phép người chưa đăng nhập xem
         public async Task<IActionResult> GetActiveServices(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,

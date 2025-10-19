@@ -30,7 +30,7 @@ namespace EVServiceCenter.Api.Controllers
                 var validationResult = ValidateModelState();
                 if (validationResult != null) return validationResult;
 
-                // Fallback to current user if sender not provided
+                
                 if (!request.SenderUserId.HasValue && string.IsNullOrEmpty(request.SenderGuestSessionId))
                 {
                     var currentUserId = GetCurrentUserId();

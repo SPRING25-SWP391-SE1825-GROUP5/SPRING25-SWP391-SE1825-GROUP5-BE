@@ -12,7 +12,6 @@ GO
 DELETE FROM [dbo].[Payments];
 DELETE FROM [dbo].[Invoices];
 DELETE FROM [dbo].[WorkOrderParts];
-DELETE FROM [dbo].[WorkOrders];
 DELETE FROM [dbo].[Bookings];
 DELETE FROM [dbo].[Vehicles];
 DELETE FROM [dbo].[Customers];
@@ -43,6 +42,8 @@ DELETE FROM [dbo].[OtpCodes];
 DELETE FROM [dbo].[SystemSettings];
 DELETE FROM [dbo].[Inventory];
 DELETE FROM [dbo].[InventoryParts];
+DELETE FROM [dbo].[PartCategoryMaps];
+DELETE FROM [dbo].[PartCategories];
 DELETE FROM [dbo].[MaintenanceChecklists];
 DELETE FROM [dbo].[MaintenanceChecklistResults];
 DELETE FROM [dbo].[MaintenancePolicies];
@@ -283,13 +284,18 @@ VALUES
 GO
 
 -- =====================================================
--- 13. WORK ORDERS (Depends on Bookings, Technicians, etc.)
+-- 13. PART CATEGORIES (Master Data - No dependencies)
 -- =====================================================
-INSERT INTO [dbo].[WorkOrders] ([BookingID], [TechnicianID], [CustomerID], [VehicleID], [CenterID], [ServiceID], [Status], [LicensePlate], [CreatedAt], [UpdatedAt])
+INSERT INTO [dbo].[PartCategories] ([CategoryName], [Description], [ParentId], [IsActive], [CreatedAt], [UpdatedAt])
 VALUES 
-(1, 1, 1, 1, 1, 1, 'IN_PROGRESS', N'30A-12345', GETDATE(), GETDATE()),
-(2, 2, 2, 2, 2, 2, 'NOT_STARTED', N'30B-67890', GETDATE(), GETDATE()),
-(3, 1, 3, 3, 1, 4, 'COMPLETED', N'30C-11111', GETDATE(), GETDATE());
+(N'Pin và Hệ thống Điện', N'Pin xe điện, bộ sạc, hệ thống quản lý pin', NULL, 1, GETDATE(), GETDATE()),
+(N'Động cơ và Truyền động', N'Động cơ điện, hộp số, bộ truyền động', NULL, 1, GETDATE(), GETDATE()),
+(N'Hệ thống Làm mát', N'Bộ tản nhiệt, quạt làm mát, chất làm mát', NULL, 1, GETDATE(), GETDATE()),
+(N'Phanh và Hệ thống An toàn', N'Phanh đĩa, phanh tay, hệ thống ABS', NULL, 1, GETDATE(), GETDATE()),
+(N'Pin Lithium', N'Pin lithium-ion cho xe điện', 1, 1, GETDATE(), GETDATE()),
+(N'Bộ sạc', N'Bộ sạc nhanh và sạc thường', 1, 1, GETDATE(), GETDATE()),
+(N'Động cơ AC', N'Động cơ xoay chiều', 2, 1, GETDATE(), GETDATE()),
+(N'Động cơ DC', N'Động cơ một chiều', 2, 1, GETDATE(), GETDATE());
 GO
 
 -- =====================================================
@@ -334,9 +340,32 @@ VALUES
 GO
 
 -- =====================================================
--- 16. INVOICES (Depends on Customers, WorkOrders, Orders)
+-- 15. PART CATEGORY MAPS (Depends on Parts, PartCategories)
 -- =====================================================
-INSERT INTO [dbo].[Invoices] ([CustomerID], [WorkOrderID], [OrderID], [Email], [Phone], [Status], [CreatedAt])
+INSERT INTO [dbo].[PartCategoryMaps] ([PartId], [CategoryId], [IsPrimary], [CreatedAt])
+VALUES 
+-- Pin và Hệ thống Điện
+(1, 1, 1, GETDATE()),  -- Pin Lithium 60kWh
+(2, 1, 1, GETDATE()),  -- Pin Lithium 80kWh
+(3, 5, 1, GETDATE()),  -- Pin Lithium-ion 100kWh (sub-category)
+(4, 6, 1, GETDATE()),  -- Bộ sạc nhanh 50kW (sub-category)
+-- Động cơ và Truyền động
+(5, 2, 1, GETDATE()),  -- Động cơ AC 150kW
+(6, 2, 1, GETDATE()),  -- Động cơ AC 200kW
+(7, 7, 1, GETDATE()),  -- Động cơ AC 250kW (sub-category)
+(8, 8, 1, GETDATE()),  -- Động cơ DC 100kW (sub-category)
+-- Hệ thống Làm mát
+(9, 3, 1, GETDATE()),  -- Bộ tản nhiệt động cơ
+(10, 3, 1, GETDATE()), -- Quạt làm mát pin
+-- Phanh và Hệ thống An toàn
+(11, 4, 1, GETDATE()), -- Phanh đĩa trước
+(12, 4, 1, GETDATE()); -- Phanh đĩa sau
+GO
+
+-- =====================================================
+-- 16. INVOICES (Depends on Customers, Bookings, Orders)
+-- =====================================================
+INSERT INTO [dbo].[Invoices] ([CustomerID], [BookingId], [OrderID], [Email], [Phone], [Status], [CreatedAt])
 VALUES 
 (1, 1, NULL, 'customer1@email.com', '0901234572', N'PAID', GETDATE()),
 (2, 2, 2, 'customer2@email.com', '0901234573', N'PENDING', GETDATE()),
@@ -611,9 +640,9 @@ VALUES
 GO
 
 -- =====================================================
--- 23. WORK ORDER PARTS (Depends on WorkOrders, Parts)
+-- 23. WORK ORDER PARTS (Depends on Bookings, Parts)
 -- =====================================================
-INSERT INTO [dbo].[WorkOrderParts] ([WorkOrderID], [PartID], [VehicleModelPartID], [QuantityUsed], [UnitCost])
+INSERT INTO [dbo].[WorkOrderParts] ([BookingId], [PartID], [VehicleModelPartID], [QuantityUsed], [UnitCost])
 VALUES 
 (1, 5, NULL, 2, 500000.00),
 (1, 6, NULL, 1, 800000.00),
@@ -773,7 +802,8 @@ PRINT 'Total Users: ' + CAST((SELECT COUNT(*) FROM [dbo].[Users]) AS VARCHAR(10)
 PRINT 'Total Service Centers: ' + CAST((SELECT COUNT(*) FROM [dbo].[ServiceCenters]) AS VARCHAR(10));
 PRINT 'Total Customers: ' + CAST((SELECT COUNT(*) FROM [dbo].[Customers]) AS VARCHAR(10));
 PRINT 'Total Bookings: ' + CAST((SELECT COUNT(*) FROM [dbo].[Bookings]) AS VARCHAR(10));
-PRINT 'Total Work Orders: ' + CAST((SELECT COUNT(*) FROM [dbo].[WorkOrders]) AS VARCHAR(10));
+PRINT 'Total Part Categories: ' + CAST((SELECT COUNT(*) FROM [dbo].[PartCategories]) AS VARCHAR(10));
+PRINT 'Total Part Category Maps: ' + CAST((SELECT COUNT(*) FROM [dbo].[PartCategoryMaps]) AS VARCHAR(10));
 PRINT 'Total Promotions: ' + CAST((SELECT COUNT(*) FROM [dbo].[Promotions]) AS VARCHAR(10));
 PRINT 'Total Invoices: ' + CAST((SELECT COUNT(*) FROM [dbo].[Invoices]) AS VARCHAR(10));
 PRINT 'Total Payments: ' + CAST((SELECT COUNT(*) FROM [dbo].[Payments]) AS VARCHAR(10));

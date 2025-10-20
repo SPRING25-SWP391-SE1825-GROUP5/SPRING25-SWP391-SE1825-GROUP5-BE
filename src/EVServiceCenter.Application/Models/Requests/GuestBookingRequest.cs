@@ -41,15 +41,11 @@ public class GuestBookingRequest
     public DateOnly BookingDate { get; set; }
 
     [Required]
-    public int SlotId { get; set; }
+    public int TechnicianSlotId { get; set; }
 
     [Required]
     public int ServiceId { get; set; }
 
-    public int? TechnicianId { get; set; }
-
     [MaxLength(500)]
     public required string SpecialRequests { get; set; }
 }
-
-

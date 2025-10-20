@@ -336,9 +336,9 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Tạo đặt lịch mới
+        /// Tạo đặt lịch mới (hỗ trợ áp dụng gói dịch vụ)
         /// </summary>
-        /// <param name="request">Thông tin đặt lịch</param>
+        /// <param name="request">Thông tin đặt lịch (có thể bao gồm packageCode)</param>
         /// <returns>Thông tin đặt lịch đã tạo</returns>
         [HttpPost]
         public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
@@ -357,9 +357,13 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var booking = await _bookingService.CreateBookingAsync(request);
                 
+                var message = (!string.IsNullOrWhiteSpace(request.PackageCode))
+                    ? $"Tạo đặt lịch thành công và đã áp dụng gói '{request.PackageCode}'"
+                    : "Tạo đặt lịch thành công";
+                
                 return CreatedAtAction(nameof(GetBookingById), new { id = booking.BookingId }, new { 
                     success = true, 
-                    message = "Tạo đặt lịch thành công",
+                    message = message,
                     data = booking
                 });
             }
@@ -600,12 +604,129 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new { success = false, message = "Không thể gán kỹ thuật viên cho booking đã hoàn tất/hủy" });
             
             // Update booking with technician assignment
-            booking.TechnicianId = req.TechnicianId;
+            // Note: TechnicianId is now derived from TechnicianTimeSlot
             booking.UpdatedAt = DateTime.UtcNow;
             await _bookingRepository.UpdateBookingAsync(booking);
 
             return Ok(new { success = true, data = new { bookingId = booking.BookingId, technicianId = req.TechnicianId } });
         }
+
+        /// <summary>
+        /// Áp dụng gói dịch vụ cho booking
+        /// </summary>
+        /// <param name="bookingId">ID booking</param>
+        /// <param name="request">Thông tin gói dịch vụ</param>
+        /// <returns>Kết quả áp dụng gói</returns>
+        [HttpPost("{bookingId:int}/apply-package")]
+        public async Task<IActionResult> ApplyPackageToBooking([FromRoute] int bookingId, [FromBody] ApplyPackageRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new { 
+                        success = false, 
+                        message = "Dữ liệu không hợp lệ", 
+                        errors = errors 
+                    });
+                }
+
+                var result = await _bookingService.ApplyPackageToBookingAsync(bookingId, request);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Áp dụng gói dịch vụ thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Gỡ gói dịch vụ khỏi booking
+        /// </summary>
+        /// <param name="bookingId">ID booking</param>
+        /// <returns>Kết quả gỡ gói</returns>
+        [HttpDelete("{bookingId:int}/remove-package")]
+        public async Task<IActionResult> RemovePackageFromBooking([FromRoute] int bookingId)
+        {
+            try
+            {
+                var result = await _bookingService.RemovePackageFromBookingAsync(bookingId);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Gỡ gói dịch vụ thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Tạo gói dịch vụ sau khi thanh toán thành công
+        /// </summary>
+        /// <param name="bookingId">ID booking</param>
+        /// <param name="packageCode">Mã gói dịch vụ</param>
+        /// <returns>Thông tin booking đã cập nhật</returns>
+        [HttpPost("{bookingId:int}/create-package")]
+        [Authorize(Roles = "CUSTOMER,STAFF,ADMIN")]
+        public async Task<IActionResult> CreatePackageAfterPayment(int bookingId, [FromBody] CreatePackageAfterPaymentRequest request)
+        {
+            try
+            {
+                if (bookingId <= 0)
+                    return BadRequest(new { success = false, message = "ID booking không hợp lệ" });
+
+                if (string.IsNullOrWhiteSpace(request.PackageCode))
+                    return BadRequest(new { success = false, message = "Mã gói dịch vụ là bắt buộc" });
+
+                var result = await _bookingService.CreatePackageAfterPaymentAsync(bookingId, request.PackageCode);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Tạo gói dịch vụ thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+    }
+
+    public class CreatePackageAfterPaymentRequest
+    {
+        public required string PackageCode { get; set; }
     }
 }
 

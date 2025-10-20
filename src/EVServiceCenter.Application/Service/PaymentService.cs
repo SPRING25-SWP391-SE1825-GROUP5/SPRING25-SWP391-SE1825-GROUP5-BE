@@ -32,10 +32,12 @@ public class PaymentService
     private readonly IMaintenanceChecklistResultRepository _checklistResultRepository;
     private readonly IPromotionService _promotionService;
     private readonly ILogger<PaymentService> _logger;
+    private readonly ICustomerServiceCreditRepository _customerServiceCreditRepository;
+    private readonly IPdfInvoiceService _pdfInvoiceService;
 
     private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, ILogger<PaymentService> logger)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -52,6 +54,8 @@ public class PaymentService
         _holdStore = holdStore;
         _promotionService = promotionService;
         _logger = logger;
+        _customerServiceCreditRepository = customerServiceCreditRepository;
+        _pdfInvoiceService = pdfInvoiceService;
         }
 
 	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId)
@@ -60,8 +64,28 @@ public class PaymentService
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
 		if (booking.Status == "CANCELLED") throw new InvalidOperationException("Booking đã bị hủy");
 
-        // Booking.TotalCost removed: tạm lấy theo giá dịch vụ
-        var amount = (int)Math.Round((booking.Service?.BasePrice ?? 0m)); // VNĐ integer
+        // Tính totalAmount đúng cách (có thể có discount từ package)
+        decimal totalAmount = booking.Service?.BasePrice ?? 0m;
+        
+        // Nếu có package được áp dụng, tính discount
+        if (booking.AppliedCreditId.HasValue)
+        {
+            var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+            if (appliedCredit?.ServicePackage != null)
+            {
+                var servicePrice = booking.Service?.BasePrice ?? 0m;
+                var discountAmount = servicePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+                totalAmount = servicePrice - discountAmount;
+                _logger.LogInformation("Package discount applied: ServicePrice={ServicePrice}, DiscountPercent={DiscountPercent}, DiscountAmount={DiscountAmount}, FinalAmount={FinalAmount}", 
+                    servicePrice, appliedCredit.ServicePackage.DiscountPercent, discountAmount, totalAmount);
+            }
+        }
+        else
+        {
+            _logger.LogInformation("No package applied, using service base price: {BasePrice}", totalAmount);
+        }
+        
+        var amount = (int)Math.Round(totalAmount); // VNĐ integer
         if (amount < _options.MinAmount) amount = _options.MinAmount;
 
 		var orderCode = booking.BookingId; // PayOS yêu cầu là số
@@ -203,11 +227,121 @@ public class PaymentService
 			booking = await _bookingRepository.GetBookingByIdAsync(bookingIdFromOrder);
 		}
 
-		if (status == "PAID")
+		if (status == "PAID" && booking != null)
 		{
-			// Xử lý đơn giản: cập nhật invoice/payment...
-		return true;
-	}
+			// Cập nhật trạng thái booking
+			booking.Status = "PAID";
+			booking.UpdatedAt = DateTime.UtcNow;
+			await _bookingRepository.UpdateBookingAsync(booking);
+
+			// Tạo hoặc cập nhật invoice
+			var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
+			if (invoice == null)
+			{
+				invoice = new Domain.Entities.Invoice
+				{
+					BookingId = booking.BookingId,
+					CustomerId = booking.CustomerId,
+					Email = booking.Customer?.User?.Email,
+					Phone = booking.Customer?.User?.PhoneNumber,
+					Status = "PAID",
+					PackageDiscountAmount = 0,
+					PromotionDiscountAmount = 0,
+					CreatedAt = DateTime.UtcNow
+				};
+				await _invoiceRepository.CreateMinimalAsync(invoice);
+			}
+			else
+			{
+				invoice.Status = "PAID";
+				// Note: IInvoiceRepository doesn't have UpdateAsync method
+				// Invoice will be updated when booking is updated
+			}
+
+			// Tính amount đúng cách (có thể có discount từ package)
+			decimal paymentAmount = booking.Service?.BasePrice ?? 0m;
+			if (booking.AppliedCreditId.HasValue)
+			{
+				var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+				if (appliedCredit?.ServicePackage != null)
+				{
+					var servicePrice = booking.Service?.BasePrice ?? 0m;
+					var discountAmount = servicePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+					paymentAmount = servicePrice - discountAmount;
+				}
+			}
+
+			// Tạo payment record
+			var payment = new Domain.Entities.Payment
+			{
+				InvoiceId = invoice.InvoiceId,
+				Amount = (int)Math.Round(paymentAmount),
+				PaymentMethod = "PAYOS",
+				Status = "COMPLETED",
+				PaymentCode = orderCode,
+				CreatedAt = DateTime.UtcNow,
+				PaidAt = DateTime.UtcNow
+			};
+			await _paymentRepository.CreateAsync(payment);
+
+			// CustomerServiceCredit đã được tạo với status ACTIVE khi tạo booking
+			// Trừ credit khi thanh toán thành công
+			if (booking.AppliedCreditId.HasValue)
+			{
+				var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+				if (appliedCredit != null)
+				{
+					// Trừ 1 credit khi sử dụng dịch vụ
+					appliedCredit.UsedCredits += 1;
+					appliedCredit.UpdatedAt = DateTime.UtcNow;
+					
+					// Cập nhật status nếu hết credit
+					if (appliedCredit.UsedCredits >= appliedCredit.TotalCredits)
+					{
+						appliedCredit.Status = "USED_UP";
+					}
+					
+					await _customerServiceCreditRepository.UpdateAsync(appliedCredit);
+					_logger.LogInformation("Used 1 credit from CustomerServiceCredit {CreditId} for customer {CustomerId}, package {PackageId}. UsedCredits: {UsedCredits}/{TotalCredits}", 
+						appliedCredit.CreditId, booking.CustomerId, appliedCredit.PackageId, appliedCredit.UsedCredits, appliedCredit.TotalCredits);
+				}
+			}
+
+			// Gửi email invoice PDF
+			try
+			{
+				var customerEmail = booking.Customer?.User?.Email;
+				if (!string.IsNullOrEmpty(customerEmail))
+				{
+					var subject = $"Hóa đơn thanh toán - Booking #{booking.BookingId}";
+					var body = $"Xin chào {booking.Customer?.User?.FullName},\n\nCảm ơn bạn đã sử dụng dịch vụ của chúng tôi.\n\nChi tiết booking:\n- Mã booking: #{booking.BookingId}\n- Dịch vụ: {booking.Service?.ServiceName}\n- Tổng tiền: {payment.Amount:N0} VNĐ\n\nHóa đơn được đính kèm trong email này.\n\nTrân trọng,\nEV Service Center";
+					
+					// Generate PDF invoice content
+					var pdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
+					
+					await _emailService.SendEmailWithAttachmentAsync(
+						customerEmail, 
+						subject, 
+						body, 
+						$"Invoice_Booking_{booking.BookingId}.pdf", 
+						pdfContent, 
+						"application/pdf");
+					
+					_logger.LogInformation("Invoice email sent for booking {BookingId} to {Email}", booking.BookingId, customerEmail);
+				}
+				else
+				{
+					_logger.LogWarning("Customer email not found for booking {BookingId}. Cannot send invoice email.", booking.BookingId);
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Failed to send invoice email for booking {BookingId}", booking.BookingId);
+			}
+
+			_logger.LogInformation("Payment confirmed for booking {BookingId}, invoice {InvoiceId}", booking.BookingId, invoice.InvoiceId);
+			return true;
+		}
 
 		return false;
 	}

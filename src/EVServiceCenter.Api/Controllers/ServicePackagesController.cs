@@ -23,7 +23,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <summary>
         /// Danh sách gói dịch vụ (công khai)
         /// </summary>
-        /// <param name="serviceId">Lọc theo ServiceId</param>
+        /// <param name="serviceId">Lọc theo ServiceId - khi có serviceId thì chỉ trả gói ACTIVE của service đó</param>
         /// <param name="activeOnly">Chỉ lấy gói đang hiệu lực</param>
         [HttpGet]
         [AllowAnonymous]
@@ -31,21 +31,34 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
+                // Yêu cầu: khi có serviceId thì chỉ trả gói đang hiệu lực của service đó (public)
+                if (serviceId.HasValue)
+                {
+                    var active = await _service.GetActivePackagesAsync();
+                    var filteredPackages = active.Where(p => p.ServiceId == serviceId.Value).ToList();
+                    return Ok(new { 
+                        success = true, 
+                        message = $"Tìm thấy {filteredPackages.Count} gói dịch vụ cho service {serviceId}",
+                        data = filteredPackages 
+                    });
+                }
+
                 if (activeOnly)
                 {
                     var active = await _service.GetActivePackagesAsync();
-                    if (serviceId.HasValue) active = active.Where(p => p.ServiceId == serviceId.Value);
-                    return Ok(new { success = true, data = active });
-                }
-
-                if (serviceId.HasValue)
-                {
-                    var byService = await _service.GetByServiceIdAsync(serviceId.Value);
-                    return Ok(new { success = true, data = byService });
+                    return Ok(new { 
+                        success = true, 
+                        message = $"Tìm thấy {active.Count()} gói dịch vụ đang hoạt động",
+                        data = active 
+                    });
                 }
 
                 var all = await _service.GetAllAsync();
-                return Ok(new { success = true, data = all });
+                return Ok(new { 
+                    success = true, 
+                    message = $"Tìm thấy {all.Count()} gói dịch vụ",
+                    data = all 
+                });
             }
             catch (Exception ex)
             {

@@ -119,6 +119,11 @@ namespace EVServiceCenter.WebAPI.Controllers
 
             try
             {
+                // Kiểm tra user có tồn tại và có role STAFF không
+                var canAssign = await _staffManagementService.CanUserBeAssignedAsStaffAsync(request.UserId, request.CenterId);
+                if (!canAssign)
+                    return BadRequest(new { success = false, message = "User không tồn tại hoặc không có quyền làm nhân viên. Chỉ user có role STAFF mới được phép." });
+
                 var staff = await _staffManagementService.AddStaffToCenterAsync(new AddStaffToCenterRequest
                 {
                     UserId = request.UserId,
@@ -359,6 +364,11 @@ namespace EVServiceCenter.WebAPI.Controllers
 
             try
             {
+                // Kiểm tra user có tồn tại và có role TECHNICIAN không
+                var canAssign = await _staffManagementService.CanUserBeAssignedAsTechnicianAsync(request.UserId, request.CenterId);
+                if (!canAssign)
+                    return BadRequest(new { success = false, message = "User không tồn tại hoặc không có quyền làm kỹ thuật viên. Chỉ user có role TECHNICIAN mới được phép." });
+
                 // Nếu user đã là technician active ở center khác -> 409
                 var exists = await _staffManagementService.IsUserAlreadyTechnicianAsync(request.UserId);
                 if (exists)

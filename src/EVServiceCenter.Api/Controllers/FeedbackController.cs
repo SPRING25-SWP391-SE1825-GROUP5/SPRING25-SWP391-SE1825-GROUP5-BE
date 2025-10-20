@@ -115,7 +115,7 @@ public class FeedbackController : ControllerBase
         var techExists = await _db.Technicians.AsNoTracking().AnyAsync(t => t.TechnicianId == technicianId);
         if (!techExists) return BadRequest(new { success = false, message = $"technicianId {technicianId} không tồn tại" });
         // Ensure technician matches the booking
-        if (booking.TechnicianId != technicianId)
+        if (booking.TechnicianTimeSlot?.TechnicianId != technicianId)
         {
             return BadRequest(new { success = false, message = "Kỹ thuật viên không phụ trách booking này" });
         }

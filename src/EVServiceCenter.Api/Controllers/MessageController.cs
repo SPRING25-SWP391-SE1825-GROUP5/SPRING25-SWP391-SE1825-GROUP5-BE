@@ -63,6 +63,23 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
+        [HttpPut("{messageId}")]
+        public async Task<IActionResult> UpdateMessage(long messageId, [FromBody] UpdateMessageRequest request)
+        {
+            try
+            {
+                var validationResult = ValidateModelState();
+                if (validationResult != null) return validationResult;
+
+                var result = await _messageService.UpdateMessageAsync(messageId, request);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Cập nhật tin nhắn");
+            }
+        }
+
 
 
     }

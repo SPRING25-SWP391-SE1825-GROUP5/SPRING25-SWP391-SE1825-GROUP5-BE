@@ -15,7 +15,7 @@ public partial class MaintenanceChecklistResult
 
     public string? Result { get; set; }
 
-    public string? Comment { get; set; }
+    public string Status { get; set; } = "PENDING";
 
     public virtual MaintenanceChecklist Checklist { get; set; }
 

@@ -27,13 +27,13 @@ public class WorkOrderPartsController : ControllerBase
                 partId = x.PartId,
                 partName = x.Part?.PartName,
                 quantity = x.QuantityUsed,
-                unitPrice = x.UnitCost,
-                total = x.UnitCost * x.QuantityUsed
+                unitPrice = x.Part?.Price ?? 0,
+                total = (x.Part?.Price ?? 0) * x.QuantityUsed
             });
             return Ok(new { success = true, data = result });
         }
 
-        public class AddRequest { public int PartId { get; set; } public int Quantity { get; set; } public decimal UnitPrice { get; set; } public string? Note { get; set; } }
+        public class AddRequest { public int PartId { get; set; } public int Quantity { get; set; } public string? Note { get; set; } }
 
         [HttpPost]
         public async Task<IActionResult> Add(int bookingId, [FromBody] AddRequest req)
@@ -43,24 +43,17 @@ public class WorkOrderPartsController : ControllerBase
             if (string.Equals(booking.Status, "COMPLETED", System.StringComparison.OrdinalIgnoreCase) || string.Equals(booking.Status, "CANCELED", System.StringComparison.OrdinalIgnoreCase))
                 return BadRequest(new { success = false, message = "Không thể sửa parts khi booking đã hoàn tất/hủy" });
 
-            var unit = req.UnitPrice;
-            if (unit <= 0)
-            {
-                var part = await _partRepo.GetPartLiteByIdAsync(req.PartId);
-                unit = part?.Price ?? 0;
-            }
             var item = new WorkOrderPart
             {
                 BookingId = bookingId,
                 PartId = req.PartId,
-                QuantityUsed = req.Quantity,
-                UnitCost = unit
+                QuantityUsed = req.Quantity
             };
             await _repo.AddAsync(item);
             return Ok(new { success = true });
         }
 
-        public class UpdateRequest { public int Quantity { get; set; } public decimal UnitPrice { get; set; } }
+        public class UpdateRequest { public int Quantity { get; set; } }
 
         [HttpPut("{partId:int}")]
         public async Task<IActionResult> Update(int bookingId, int partId, [FromBody] UpdateRequest req)
@@ -70,18 +63,11 @@ public class WorkOrderPartsController : ControllerBase
             if (string.Equals(booking.Status, "COMPLETED", System.StringComparison.OrdinalIgnoreCase) || string.Equals(booking.Status, "CANCELED", System.StringComparison.OrdinalIgnoreCase))
                 return BadRequest(new { success = false, message = "Không thể sửa parts khi booking đã hoàn tất/hủy" });
 
-            var unit = req.UnitPrice;
-            if (unit <= 0)
-            {
-                var part = await _partRepo.GetPartLiteByIdAsync(partId);
-                unit = part?.Price ?? 0;
-            }
             var item = new WorkOrderPart
             {
                 BookingId = bookingId,
                 PartId = partId,
-                QuantityUsed = req.Quantity,
-                UnitCost = unit
+                QuantityUsed = req.Quantity
             };
             await _repo.UpdateAsync(item);
             return Ok(new { success = true });
@@ -98,7 +84,7 @@ public class WorkOrderPartsController : ControllerBase
             return Ok(new { success = true });
         }
 
-        public class WorkOrderPartBulkItem { public int PartId { get; set; } public int Quantity { get; set; } public decimal UnitPrice { get; set; } }
+        public class WorkOrderPartBulkItem { public int PartId { get; set; } public int Quantity { get; set; } }
         public class WorkOrderPartBulkRequest { public System.Collections.Generic.List<WorkOrderPartBulkItem> Items { get; set; } = new(); }
 
         [HttpPost("bulk")]
@@ -111,13 +97,7 @@ public class WorkOrderPartsController : ControllerBase
             var items = (req?.Items ?? new System.Collections.Generic.List<WorkOrderPartBulkItem>());
             foreach (var i in items)
             {
-                var unit = i.UnitPrice;
-                if (unit <= 0)
-                {
-                    var part = await _partRepo.GetPartLiteByIdAsync(i.PartId);
-                    unit = part?.Price ?? 0;
-                }
-                var entity = new WorkOrderPart { BookingId = bookingId, PartId = i.PartId, QuantityUsed = i.Quantity, UnitCost = unit };
+                var entity = new WorkOrderPart { BookingId = bookingId, PartId = i.PartId, QuantityUsed = i.Quantity };
                 await _repo.UpdateAsync(entity);
             }
             return Ok(new { success = true, count = items.Count });

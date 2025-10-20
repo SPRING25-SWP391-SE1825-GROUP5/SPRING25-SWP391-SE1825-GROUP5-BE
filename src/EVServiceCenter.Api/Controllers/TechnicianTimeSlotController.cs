@@ -63,6 +63,17 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
+        [HttpPost("technician/{technicianId}/full-week-all-slots")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> CreateFullWeekAllSlots(int technicianId, [FromBody] CreateTechnicianFullWeekAllSlotsRequest req)
+        {
+            if (req == null) return BadRequest(new { success = false, message = "Body rỗng" });
+            req.TechnicianId = technicianId;
+            var result = await _technicianTimeSlotService.CreateTechnicianFullWeekAllSlotsAsync(req);
+            if (!result.Success) return BadRequest(new { success = false, message = result.Message, errors = result.Errors });
+            return Ok(new { success = true, message = result.Message, totalDays = result.TotalDays, totalSlotsCreated = result.TotalSlotsCreated });
+        }
+
         /// <summary>
         /// Lấy technician time slot theo ID
         /// </summary>

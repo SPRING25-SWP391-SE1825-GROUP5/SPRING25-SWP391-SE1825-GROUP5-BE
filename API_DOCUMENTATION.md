@@ -342,6 +342,97 @@ Authorization: Bearer <your-jwt-token>
 - **StaffOrAdmin**: STAFF hoặc ADMIN
 - **CustomerOnly**: Chỉ CUSTOMER
 
+---
+
+## 📧 EMAIL TEST APIs
+
+### 1. Test gửi email cơ bản
+**POST** `/api/email/test`
+**Authorization Required**
+
+**Request Body:**
+```json
+{
+  "email": "test@gmail.com"
+}
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "message": "Email test đã được gửi thành công",
+  "data": {
+    "email": "test@gmail.com",
+    "subject": "Test Email - EV Service Center",
+    "sentAt": "2024-01-01T00:00:00Z",
+    "status": "sent"
+  }
+}
+```
+
+### 2. Test gửi email hóa đơn
+**POST** `/api/email/test-invoice`
+**Authorization Required**
+
+**Request Body:**
+```json
+{
+  "email": "test@gmail.com",
+  "customerName": "Nguyễn Văn A",
+  "invoiceId": "INV-001",
+  "bookingId": "BK-001",
+  "serviceName": "Bảo dưỡng xe điện",
+  "servicePrice": "500,000",
+  "totalAmount": "450,000",
+  "hasDiscount": true,
+  "discountAmount": "50,000"
+}
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "message": "Email hóa đơn test đã được gửi thành công",
+  "data": {
+    "email": "test@gmail.com",
+    "subject": "Hóa đơn Test #INV-001 - EV Service Center",
+    "invoiceId": "INV-001",
+    "sentAt": "2024-01-01T00:00:00Z",
+    "status": "sent"
+  }
+}
+```
+
+### 3. Test gửi email với file đính kèm
+**POST** `/api/email/test-with-attachment`
+**Authorization Required**
+
+**Request Body:**
+```json
+{
+  "email": "test@gmail.com"
+}
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "message": "Email test với file đính kèm đã được gửi thành công",
+  "data": {
+    "email": "test@gmail.com",
+    "subject": "Test Email với File Đính Kèm - EV Service Center",
+    "attachmentName": "test-document.pdf",
+    "sentAt": "2024-01-01T00:00:00Z",
+    "status": "sent"
+  }
+}
+```
+
+---
+
 ## 📝 Notes cho Frontend
 
 1. **Token Management**: Lưu JWT token và refresh token an toàn

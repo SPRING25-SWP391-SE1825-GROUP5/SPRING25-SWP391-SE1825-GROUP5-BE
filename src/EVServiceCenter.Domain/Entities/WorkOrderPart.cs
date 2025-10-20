@@ -15,8 +15,6 @@ public partial class WorkOrderPart
 
     public int QuantityUsed { get; set; }
 
-    public decimal UnitCost { get; set; }
-
     public virtual Part Part { get; set; }
 
     public virtual Booking Booking { get; set; }

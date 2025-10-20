@@ -113,6 +113,26 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
+        [HttpGet("my")]
+        public async Task<IActionResult> GetMyMessages([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized(new { success = false, message = "Không xác định được người dùng" });
+                }
+
+                var result = await _messageService.GetMessagesByUserIdAsync(userId.Value, page, pageSize);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Lấy danh sách tin nhắn của tôi");
+            }
+        }
+
 
 
     }

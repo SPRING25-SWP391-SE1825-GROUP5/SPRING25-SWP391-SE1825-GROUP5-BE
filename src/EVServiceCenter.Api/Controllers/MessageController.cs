@@ -99,6 +99,20 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
+        [HttpGet("conversations/{conversationId}")]
+        public async Task<IActionResult> GetMessagesByConversation(long conversationId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+        {
+            try
+            {
+                var result = await _messageService.GetMessagesByConversationIdAsync(conversationId, page, pageSize);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Lấy danh sách tin nhắn theo cuộc trò chuyện");
+            }
+        }
+
 
 
     }

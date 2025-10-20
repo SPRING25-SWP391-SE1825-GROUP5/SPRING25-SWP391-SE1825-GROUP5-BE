@@ -64,21 +64,40 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         [HttpPut("{messageId}")]
-        public async Task<IActionResult> UpdateMessage(long messageId, [FromBody] UpdateMessageRequest request)
-        {
-            try
-            {
-                var validationResult = ValidateModelState();
-                if (validationResult != null) return validationResult;
+        public async Task<IActionResult> UpdateMessage(long messageId, [FromBody] UpdateMessageRequest request)
+        {
+            try
+            {
+                var validationResult = ValidateModelState();
+                if (validationResult != null) return validationResult;
 
-                var result = await _messageService.UpdateMessageAsync(messageId, request);
-                return Ok(new { success = true, data = result });
-            }
-            catch (Exception ex)
-            {
-                return HandleException(ex, "Cập nhật tin nhắn");
-            }
-        }
+                var result = await _messageService.UpdateMessageAsync(messageId, request);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Cập nhật tin nhắn");
+            }
+        }
+
+        [HttpDelete("{messageId}")]
+        public async Task<IActionResult> DeleteMessage(long messageId)
+        {
+            try
+            {
+                var result = await _messageService.DeleteMessageAsync(messageId);
+                if (!result)
+                {
+                    return NotFound(new { success = false, message = "Không tìm thấy tin nhắn" });
+                }
+
+                return Ok(new { success = true, message = "Xóa tin nhắn thành công" });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Xóa tin nhắn");
+            }
+        }
 
 
 

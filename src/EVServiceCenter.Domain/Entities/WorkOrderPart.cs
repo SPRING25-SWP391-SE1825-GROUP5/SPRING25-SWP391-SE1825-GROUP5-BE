@@ -5,6 +5,8 @@ namespace EVServiceCenter.Domain.Entities;
 
 public partial class WorkOrderPart
 {
+    public int WorkOrderPartId { get; set; }
+
     public int BookingId { get; set; }
 
     public int PartId { get; set; }

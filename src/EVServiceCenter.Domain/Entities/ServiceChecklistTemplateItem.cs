@@ -8,6 +8,9 @@ public class ServiceChecklistTemplateItem
     public int TemplateID { get; set; }
     public int PartID { get; set; }
     public DateTime CreatedAt { get; set; }
+    
+    // Navigation properties
+    public virtual Part Part { get; set; }
 }
 
 

@@ -16,8 +16,10 @@ public sealed class MaintenanceChecklistResultConfiguration : IEntityTypeConfigu
         entity.Property(e => e.PartId).HasColumnName("PartID");
 
         entity.Property(e => e.Description).HasMaxLength(500);
-        entity.Property(e => e.Comment).HasMaxLength(250);
         entity.Property(e => e.Result).HasMaxLength(50);
+        entity.Property(e => e.Status)
+            .HasMaxLength(20)
+            .HasDefaultValue("PENDING");
 
         entity.HasOne(d => d.Checklist)
             .WithMany(p => p.MaintenanceChecklistResults)

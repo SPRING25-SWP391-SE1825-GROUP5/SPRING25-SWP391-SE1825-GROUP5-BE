@@ -11,6 +11,8 @@ public partial class MaintenanceChecklist
 
     public int TemplateId { get; set; }
 
+    public string Status { get; set; } = "PENDING";
+
     public DateTime CreatedAt { get; set; }
 
     public string? Notes { get; set; }

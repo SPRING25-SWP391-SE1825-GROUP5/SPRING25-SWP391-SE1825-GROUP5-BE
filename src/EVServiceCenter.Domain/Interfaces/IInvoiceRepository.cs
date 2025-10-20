@@ -10,6 +10,7 @@ namespace EVServiceCenter.Domain.Interfaces
         // GetByWorkOrderIdAsync removed - WorkOrder functionality merged into Booking
         Task<Invoice?> GetByOrderIdAsync(int orderId);
         Task<Invoice> CreateMinimalAsync(Invoice invoice);
+        Task UpdateAmountsAsync(int invoiceId, decimal packageDiscountAmount, decimal promotionDiscountAmount, decimal partsAmount);
         Task<Invoice?> GetByIdAsync(int invoiceId);
         Task<System.Collections.Generic.List<Invoice>> GetAllAsync();
         Task<System.Collections.Generic.List<Invoice>> GetByCustomerIdAsync(int customerId);

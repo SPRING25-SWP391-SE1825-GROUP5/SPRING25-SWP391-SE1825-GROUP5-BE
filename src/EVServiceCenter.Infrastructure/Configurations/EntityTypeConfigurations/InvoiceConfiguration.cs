@@ -37,6 +37,11 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .HasColumnType("decimal(12, 2)")
             .HasDefaultValue(0);
 
+        // New: PartsAmount snapshot on invoice
+        entity.Property(e => e.PartsAmount)
+            .HasColumnType("decimal(12, 2)")
+            .HasDefaultValue(0);
+
         entity.HasOne(d => d.Customer)
             .WithMany(p => p.Invoices)
             .HasForeignKey(d => d.CustomerId);

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Mail;
 using System.Net;
 using System.Threading.Tasks;
@@ -124,6 +126,54 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task SendEmailWithMultipleAttachmentsAsync(string to, string subject, string body, List<(string fileName, byte[] content, string mimeType)> attachments)
+        {
+            if (string.IsNullOrEmpty(to)) throw new ArgumentNullException(nameof(to));
+            if (string.IsNullOrEmpty(subject)) throw new ArgumentNullException(nameof(subject));
+            if (string.IsNullOrEmpty(body)) throw new ArgumentNullException(nameof(body));
+            if (attachments == null || !attachments.Any()) throw new ArgumentNullException(nameof(attachments));
+
+            var host = _config["Email:Host"] ?? throw new InvalidOperationException("Thiếu cấu hình Email:Host");
+            if (!int.TryParse(_config["Email:Port"], out int port)) throw new InvalidOperationException("Cấu hình Email:Port không hợp lệ hoặc thiếu");
+            var user = _config["Email:User"] ?? throw new InvalidOperationException("Thiếu cấu hình Email:User");
+            var password = _config["Email:Password"] ?? throw new InvalidOperationException("Thiếu cấu hình Email:Password");
+            var from = _config["Email:From"] ?? throw new InvalidOperationException("Thiếu cấu hình Email:From");
+            var fromName = _config["Email:FromName"] ?? throw new InvalidOperationException("Thiếu cấu hình Email:FromName");
+
+            try
+            {
+                using var smtp = new SmtpClient(host, port)
+                {
+                    Credentials = new NetworkCredential(user, password),
+                    EnableSsl = true
+                };
+
+                var mail = new MailMessage
+                {
+                    From = new MailAddress(from, fromName),
+                    Subject = subject,
+                    Body = body,
+                    IsBodyHtml = true
+                };
+                mail.To.Add(to);
+
+                // Add all attachments
+                foreach (var (fileName, content, mimeType) in attachments)
+                {
+                    if (content != null && content.Length > 0)
+                    {
+                        mail.Attachments.Add(new Attachment(new System.IO.MemoryStream(content), fileName, mimeType));
+                    }
+                }
+
+                await smtp.SendMailAsync(mail);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Gửi email kèm nhiều tệp thất bại: {ex.Message}", ex);
+            }
+        }
+
         public async Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode)
         {
             try
@@ -232,7 +282,37 @@ namespace EVServiceCenter.Application.Service
                 catch (Exception ex)
                 {
                     throw new Exception($"Không thể gửi email chào mừng kèm mật khẩu: {ex.Message}");
-                }
+            }
+        }
+
+        public async Task<string> RenderInvoiceEmailTemplateAsync(string customerName, string invoiceId, string bookingId, string createdDate, string customerEmail, string serviceName, string servicePrice, string totalAmount, bool hasDiscount, string discountAmount)
+        {
+            try
+            {
+                var placeholders = new Dictionary<string, string>
+                {
+                    {"customerName", customerName},
+                    {"invoiceId", invoiceId},
+                    {"bookingId", bookingId},
+                    {"createdDate", createdDate},
+                    {"customerEmail", customerEmail},
+                    {"serviceName", serviceName},
+                    {"servicePrice", servicePrice},
+                    {"totalAmount", totalAmount},
+                    {"hasDiscount", hasDiscount ? "true" : "false"},
+                    {"discountAmount", discountAmount},
+                    {"baseUrl", _baseUrl},
+                    {"supportPhone", _supportPhone},
+                    {"year", DateTime.UtcNow.Year.ToString()},
+                    {"logoUrl", _baseUrl.TrimEnd('/') + "/email/logo.webp"}
+                };
+
+                return await _templateRenderer.RenderAsync("invoice", placeholders);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Không thể render template email hóa đơn: {ex.Message}", ex);
             }
         }
     }
+}

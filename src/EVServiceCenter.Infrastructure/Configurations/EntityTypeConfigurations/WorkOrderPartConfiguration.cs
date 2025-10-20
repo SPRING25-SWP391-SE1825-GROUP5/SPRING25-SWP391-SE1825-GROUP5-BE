@@ -19,7 +19,6 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
         entity.Property(e => e.PartId).HasColumnName("PartID");
         entity.Property(e => e.VehicleModelPartId).HasColumnName("VehicleModelPartID");
 
-        entity.Property(e => e.UnitCost).HasColumnType("decimal(10, 2)");
 
         entity.HasOne(d => d.Booking)
             .WithMany()

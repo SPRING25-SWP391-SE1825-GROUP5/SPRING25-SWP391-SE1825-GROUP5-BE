@@ -15,15 +15,18 @@ namespace EVServiceCenter.Application.Service
         private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
         private readonly ITechnicianRepository _technicianRepository;
         private readonly ICenterRepository _centerRepository;
+        private readonly ITimeSlotRepository _timeSlotRepository;
 
         public TechnicianTimeSlotService(
             ITechnicianTimeSlotRepository technicianTimeSlotRepository,
             ITechnicianRepository technicianRepository,
-            ICenterRepository centerRepository)
+            ICenterRepository centerRepository,
+            ITimeSlotRepository timeSlotRepository)
         {
             _technicianTimeSlotRepository = technicianTimeSlotRepository;
             _technicianRepository = technicianRepository;
             _centerRepository = centerRepository;
+            _timeSlotRepository = timeSlotRepository;
         }
 
         public async Task<CreateTechnicianTimeSlotResponse> CreateTechnicianTimeSlotAsync(CreateTechnicianTimeSlotRequest request)
@@ -496,6 +499,62 @@ namespace EVServiceCenter.Application.Service
             }
 
             return result.OrderBy(r => r.WorkDate).ThenBy(r => r.TechnicianId).ThenBy(r => r.SlotId).ToList();
+        }
+
+        public async Task<CreateTechnicianFullWeekAllSlotsResponse> CreateTechnicianFullWeekAllSlotsAsync(CreateTechnicianFullWeekAllSlotsRequest request)
+        {
+            var response = new CreateTechnicianFullWeekAllSlotsResponse();
+            try
+            {
+                if (request.TechnicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
+                if (request.StartDate.Date > request.EndDate.Date) throw new ArgumentException("Khoảng thời gian không hợp lệ");
+
+                var technician = await _technicianRepository.GetTechnicianByIdAsync(request.TechnicianId);
+                if (technician == null) throw new ArgumentException("Kỹ thuật viên không tồn tại");
+
+                var timeSlots = await _timeSlotRepository.GetAllTimeSlotsAsync();
+
+                var totalCreated = 0;
+                var currentDate = request.StartDate.Date;
+                while (currentDate <= request.EndDate.Date)
+                {
+                    foreach (var slot in timeSlots)
+                    {
+                        try
+                        {
+                            var entity = new TechnicianTimeSlot
+                            {
+                                TechnicianId = request.TechnicianId,
+                                SlotId = slot.SlotId,
+                                WorkDate = currentDate,
+                                IsAvailable = request.IsAvailable,
+                                Notes = request.Notes,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                            await _technicianTimeSlotRepository.CreateAsync(entity);
+                            totalCreated++;
+                        }
+                        catch
+                        {
+                            // ignore duplicates
+                        }
+                    }
+                    currentDate = currentDate.AddDays(1);
+                }
+
+                response.Success = true;
+                response.TotalDays = (int)(request.EndDate.Date - request.StartDate.Date).TotalDays + 1;
+                response.TotalSlotsCreated = totalCreated;
+                response.Message = "Đã tạo lịch full tuần với toàn bộ slot";
+                return response;
+            }
+            catch (Exception ex)
+            {
+                response.Success = false;
+                response.Message = ex.Message;
+                response.Errors.Add(ex.Message);
+                return response;
+            }
         }
 
         public async Task<List<TechnicianDailyScheduleResponse>> GetTechnicianDailyScheduleAsync(int technicianId, DateTime startDate, DateTime endDate)

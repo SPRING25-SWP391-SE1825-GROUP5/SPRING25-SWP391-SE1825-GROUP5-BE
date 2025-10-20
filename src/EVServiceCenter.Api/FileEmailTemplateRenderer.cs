@@ -28,6 +28,23 @@ namespace EVServiceCenter.Api
                 {
                     html = html.Replace("{{" + kv.Key + "}}", kv.Value ?? string.Empty);
                 }
+                
+                // Xử lý logic có/không có discount
+                if (placeholders.ContainsKey("hasDiscount"))
+                {
+                    bool hasDiscount = placeholders["hasDiscount"] == "true";
+                    if (hasDiscount)
+                    {
+                        // Hiển thị phần discount
+                        html = html.Replace("{{#if hasDiscount}}", "");
+                        html = html.Replace("{{/if}}", "");
+                    }
+                    else
+                    {
+                        // Ẩn phần discount
+                        html = System.Text.RegularExpressions.Regex.Replace(html, @"{{#if hasDiscount}}.*?{{/if}}", "", System.Text.RegularExpressions.RegexOptions.Singleline);
+                    }
+                }
             }
 
             return html;

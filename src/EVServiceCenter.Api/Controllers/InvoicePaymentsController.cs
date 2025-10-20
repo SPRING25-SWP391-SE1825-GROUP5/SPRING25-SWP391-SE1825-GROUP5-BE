@@ -174,8 +174,23 @@ public class InvoicePaymentsController : ControllerBase
         if (inv == null) return NotFound(new { success = false, message = "Không tìm thấy hóa đơn" });
         var email = inv.Email;
         if (string.IsNullOrWhiteSpace(email)) return BadRequest(new { success = false, message = "Hóa đơn không có email" });
+        
         var subject = $"Hóa đơn #{inv.InvoiceId}";
-        var body = $"<p>Xin chào, hóa đơn của bạn đã được phát hành.</p>";
+        
+        // Sử dụng template thay vì hardcode
+        var body = await _email.RenderInvoiceEmailTemplateAsync(
+            customerName: "Khách hàng",
+            invoiceId: inv.InvoiceId.ToString(),
+            bookingId: inv.OrderId?.ToString() ?? "N/A",
+            createdDate: inv.CreatedAt.ToString("dd/MM/yyyy HH:mm"),
+            customerEmail: email,
+            serviceName: "Dịch vụ",
+            servicePrice: "0",
+            totalAmount: "0",
+            hasDiscount: false,
+            discountAmount: "0"
+        );
+        
         await _email.SendEmailAsync(email, subject, body);
         return Ok(new { success = true, message = "Đã gửi email hóa đơn" });
     }

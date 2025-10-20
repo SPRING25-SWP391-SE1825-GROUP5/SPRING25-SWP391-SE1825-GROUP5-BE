@@ -21,4 +21,5 @@ public interface ITechnicianTimeSlotService
     Task<List<TechnicianTimeSlotResponse>> GetTechnicianScheduleAsync(int technicianId, DateTime startDate, DateTime endDate);
     Task<List<TechnicianDailyScheduleResponse>> GetTechnicianDailyScheduleAsync(int technicianId, DateTime startDate, DateTime endDate);
     Task<List<TechnicianTimeSlotResponse>> GetCenterTechnicianScheduleAsync(int centerId, DateTime startDate, DateTime endDate);
+    Task<CreateTechnicianFullWeekAllSlotsResponse> CreateTechnicianFullWeekAllSlotsAsync(CreateTechnicianFullWeekAllSlotsRequest request);
 }

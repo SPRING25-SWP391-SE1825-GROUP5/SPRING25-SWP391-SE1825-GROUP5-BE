@@ -35,13 +35,13 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate conversation exists
+                
                 if (!await _conversationRepository.ConversationExistsAsync(request.ConversationId))
                 {
                     throw new ArgumentException($"Conversation with ID {request.ConversationId} not found");
                 }
 
-                // Validate sender (either UserId or GuestSessionId must be provided)
+                
                 if (!request.SenderUserId.HasValue && string.IsNullOrEmpty(request.SenderGuestSessionId))
                 {
                     throw new ArgumentException("Either SenderUserId or SenderGuestSessionId must be provided");
@@ -60,7 +60,7 @@ namespace EVServiceCenter.Application.Service
 
                 var createdMessage = await _messageRepository.CreateMessageAsync(message);
 
-                // Update conversation's last message
+                
                 await _conversationRepository.UpdateLastMessageAsync(
                     request.ConversationId, 
                     createdMessage.MessageId, 
@@ -132,8 +132,7 @@ namespace EVServiceCenter.Application.Service
                     return false;
                 }
 
-                // For now, we'll just mark as deleted by clearing content
-                // In a real application, you might want to implement soft delete
+                
                 message.Content = "[Message deleted]";
                 message.AttachmentUrl = null;
 
@@ -252,7 +251,7 @@ namespace EVServiceCenter.Application.Service
 
                 var createdReply = await _messageRepository.CreateMessageAsync(replyMessage);
 
-                // Update conversation's last message
+                
                 await _conversationRepository.UpdateLastMessageAsync(
                     originalMessage.ConversationId,
                     createdReply.MessageId,
@@ -305,7 +304,7 @@ namespace EVServiceCenter.Application.Service
                     responses.Add(await MapToMessageResponseAsync(message));
                 }
 
-                // Apply pagination
+                
                 return responses
                     .Skip((request.Page - 1) * request.PageSize)
                     .Take(request.PageSize)
@@ -332,9 +331,6 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // This is a placeholder implementation
-                // In a real application, you might want to track read status per user/guest
-                // For now, we'll just return true
                 await Task.CompletedTask;
                 return true;
             }
@@ -372,9 +368,6 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // This is a placeholder implementation
-                // In a real application, you would track unread status
-                // For now, return empty list
                 await Task.CompletedTask;
                 return new List<MessageResponse>();
             }
@@ -400,7 +393,7 @@ namespace EVServiceCenter.Application.Service
                 IsGuest = !message.SenderUserId.HasValue
             };
 
-            // Get sender information if it's a user
+            
             if (message.SenderUserId.HasValue && message.SenderUser != null)
             {
                 response.SenderName = message.SenderUser.FullName;
@@ -414,7 +407,7 @@ namespace EVServiceCenter.Application.Service
                 response.SenderAvatar = null;
             }
 
-            // Get reply information if exists
+            
             if (message.ReplyToMessageId.HasValue && message.ReplyToMessage != null)
             {
                 response.ReplyToMessage = await MapToMessageResponseAsync(message.ReplyToMessage);

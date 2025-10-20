@@ -30,7 +30,7 @@ namespace EVServiceCenter.Api.Controllers
                 var validationResult = ValidateModelState();
                 if (validationResult != null) return validationResult;
 
-                
+
                 if (!request.SenderUserId.HasValue && string.IsNullOrEmpty(request.SenderGuestSessionId))
                 {
                     var currentUserId = GetCurrentUserId();
@@ -49,7 +49,22 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+        [HttpGet("{messageId}")]
+        public async Task<IActionResult> GetMessage(long messageId)
+        {
+            try
+            {
+                var result = await _messageService.GetMessageByIdAsync(messageId);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Lấy tin nhắn");
+            }
+        }
+
+
+
     }
 }
 

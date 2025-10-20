@@ -509,7 +509,7 @@ namespace EVServiceCenter.Application.Service
                             PartId = i.PartID,
                             Description = i.Part?.PartName ?? string.Empty,
                             Result = null, // chưa đánh giá
-                            Comment = null
+                            Status = "PENDING"
                         }).ToList();
 
                         await _maintenanceChecklistResultRepository.UpsertManyAsync(seedResults);

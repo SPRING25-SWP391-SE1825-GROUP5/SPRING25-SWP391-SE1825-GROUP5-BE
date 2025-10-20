@@ -46,7 +46,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             {
                 existing.Description = result.Description;
                 existing.Result = result.Result;
-                existing.Comment = result.Comment;
+                existing.Status = result.Status;
             }
             await _db.SaveChangesAsync();
         }

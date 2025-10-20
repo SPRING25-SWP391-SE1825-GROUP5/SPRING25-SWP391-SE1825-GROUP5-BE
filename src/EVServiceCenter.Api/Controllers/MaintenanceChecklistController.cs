@@ -222,7 +222,7 @@ namespace EVServiceCenter.Api.Controllers
             sb.AppendLine($"Checklist #{checklist.ChecklistId} for Booking #{bookingId}");
             foreach (var r in results)
             {
-                sb.AppendLine($"- {r.Description}: {r.Result ?? "N/A"} {(string.IsNullOrWhiteSpace(r.Comment) ? string.Empty : "(" + r.Comment + ")")}");
+                sb.AppendLine($"- {r.Description}: {r.Result ?? "N/A"} (Status: {r.Status})");
             }
             var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
             return File(bytes, "application/octet-stream", $"Checklist_{bookingId}.txt");

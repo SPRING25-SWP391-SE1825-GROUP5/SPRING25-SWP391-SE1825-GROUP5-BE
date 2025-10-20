@@ -14,12 +14,13 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         entity.Property(e => e.BookingId).HasColumnName("BookingID");
         entity.Property(e => e.CenterId).HasColumnName("CenterID");
         entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
-        entity.Property(e => e.SlotId).HasColumnName("SlotID");
+        entity.Property(e => e.TechnicianSlotId).HasColumnName("TechnicianSlotId");
         entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
         entity.Property(e => e.VehicleId).HasColumnName("VehicleID");
+        entity.Property(e => e.AppliedCreditId).HasColumnName("AppliedCreditId");
         
         // Fields migrated from WorkOrder
-        entity.Property(e => e.TechnicianId).HasColumnName("TechnicianID");
+        // TechnicianId removed - now derived from TechnicianTimeSlot
         entity.Property(e => e.CurrentMileage).HasColumnName("CurrentMileage");
         entity.Property(e => e.LicensePlate).HasColumnName("LicensePlate").HasMaxLength(20);
 
@@ -44,10 +45,10 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasForeignKey(d => d.CustomerId)
             .OnDelete(DeleteBehavior.ClientSetNull);
 
-        entity.HasOne(d => d.Slot)
-            .WithMany(p => p.Bookings)
-            .HasForeignKey(d => d.SlotId)
-            .OnDelete(DeleteBehavior.ClientSetNull);
+        entity.HasOne(d => d.TechnicianTimeSlot)
+            .WithMany()
+            .HasForeignKey(d => d.TechnicianSlotId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         entity.HasOne(d => d.Vehicle)
             .WithMany(p => p.Bookings)
@@ -59,11 +60,13 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasForeignKey(d => d.ServiceId)
             .OnDelete(DeleteBehavior.ClientSetNull);
 
-        // Foreign key for Technician (nullable)
-        entity.HasOne(d => d.Technician)
-            .WithMany(p => p.Bookings)
-            .HasForeignKey(d => d.TechnicianId)
-            .OnDelete(DeleteBehavior.ClientSetNull);
+        // Foreign key for Technician removed - now derived from TechnicianTimeSlot
+
+        // Applied credit relationship (nullable)
+        entity.HasOne(d => d.AppliedCredit)
+            .WithMany()
+            .HasForeignKey(d => d.AppliedCreditId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
 

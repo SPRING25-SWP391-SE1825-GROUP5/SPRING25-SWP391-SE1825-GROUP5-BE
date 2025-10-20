@@ -215,9 +215,9 @@ namespace EVServiceCenter.Application.Service
                 },
                 TimeSlotInfo = new TimeSlotInfo
                 {
-                    SlotId = booking.SlotId,
-                    StartTime = booking.Slot?.SlotTime.ToString(@"hh\:mm") ?? "",
-                    EndTime = booking.Slot?.SlotTime.AddMinutes(60).ToString(@"hh\:mm") ?? "" // Assume 1 hour duration
+                    SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
+                    StartTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString(@"hh\:mm") ?? "",
+                    EndTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.AddMinutes(60).ToString(@"hh\:mm") ?? "" // Assume 1 hour duration
                 },
                 CostInfo = new CostInfo
                 {

@@ -57,7 +57,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             if (ts == null) return false;
             // Safety: prevent delete if referenced by TechnicianTimeSlots or Bookings
             var hasTech = await _context.TechnicianTimeSlots.AnyAsync(x => x.SlotId == slotId);
-            var hasBooking = await _context.Bookings.AnyAsync(x => x.SlotId == slotId);
+            var hasBooking = await _context.Bookings.AnyAsync(x => x.TechnicianTimeSlot != null && x.TechnicianTimeSlot.SlotId == slotId);
             if (hasTech || hasBooking) return false;
             _context.TimeSlots.Remove(ts);
             await _context.SaveChangesAsync();

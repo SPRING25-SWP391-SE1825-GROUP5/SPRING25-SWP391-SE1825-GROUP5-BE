@@ -13,6 +13,7 @@ public interface ICustomerServiceCreditRepository
     Task<IEnumerable<CustomerServiceCredit>> GetByServiceIdAsync(int serviceId);
     Task<IEnumerable<CustomerServiceCredit>> GetExpiredCreditsAsync();
     Task<CustomerServiceCredit?> GetActiveCreditForServiceAsync(int customerId, int serviceId);
+    Task<IEnumerable<CustomerServiceCredit>> GetByCustomerAndPackageAsync(int customerId, int packageId);
     Task<CustomerServiceCredit> CreateAsync(CustomerServiceCredit customerServiceCredit);
     Task<CustomerServiceCredit> UpdateAsync(CustomerServiceCredit customerServiceCredit);
     Task DeleteAsync(int creditId);

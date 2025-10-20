@@ -25,6 +25,4 @@ public partial class Technician
 
 
     public virtual User User { get; set; }
-
-    public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 }

@@ -87,6 +87,7 @@ builder.Services.AddScoped<ILoginLockoutService, LoginLockoutService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IEmailTemplateRenderer, FileEmailTemplateRenderer>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
+builder.Services.AddScoped<IPdfInvoiceService, PdfInvoiceService>();
 
 // Business Services
 builder.Services.AddScoped<ICenterService, CenterService>();

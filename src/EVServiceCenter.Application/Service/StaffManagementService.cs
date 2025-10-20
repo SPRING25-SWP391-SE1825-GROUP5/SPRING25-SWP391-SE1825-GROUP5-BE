@@ -468,6 +468,52 @@ namespace EVServiceCenter.Application.Service
             return !isAlreadyStaff && !isAlreadyTechnician;
         }
 
+        public async Task<bool> CanUserBeAssignedAsStaffAsync(int userId, int centerId)
+        {
+            // Check if user exists
+            var user = await _userRepository.GetUserByIdAsync(userId);
+            if (user == null)
+                return false;
+
+            // Check if user has STAFF role
+            if (user.Role != "STAFF")
+                return false;
+
+            // Check if center exists
+            var center = await _centerRepository.GetCenterByIdAsync(centerId);
+            if (center == null)
+                return false;
+
+            // Check if user is already staff or technician
+            var isAlreadyStaff = await IsUserAlreadyStaffAsync(userId);
+            var isAlreadyTechnician = await IsUserAlreadyTechnicianAsync(userId);
+
+            return !isAlreadyStaff && !isAlreadyTechnician;
+        }
+
+        public async Task<bool> CanUserBeAssignedAsTechnicianAsync(int userId, int centerId)
+        {
+            // Check if user exists
+            var user = await _userRepository.GetUserByIdAsync(userId);
+            if (user == null)
+                return false;
+
+            // Check if user has TECHNICIAN role
+            if (user.Role != "TECHNICIAN")
+                return false;
+
+            // Check if center exists
+            var center = await _centerRepository.GetCenterByIdAsync(centerId);
+            if (center == null)
+                return false;
+
+            // Check if user is already staff or technician
+            var isAlreadyStaff = await IsUserAlreadyStaffAsync(userId);
+            var isAlreadyTechnician = await IsUserAlreadyTechnicianAsync(userId);
+
+            return !isAlreadyStaff && !isAlreadyTechnician;
+        }
+
         #endregion
 
         #region Private Helper Methods

@@ -86,6 +86,16 @@ public class CustomerServiceCreditRepository : ICustomerServiceCreditRepository
             .FirstOrDefaultAsync();
     }
 
+    public async Task<IEnumerable<CustomerServiceCredit>> GetByCustomerAndPackageAsync(int customerId, int packageId)
+    {
+        return await _context.CustomerServiceCredits
+            .Include(csc => csc.ServicePackage)
+            .Include(csc => csc.Service)
+            .Where(csc => csc.CustomerId == customerId && csc.PackageId == packageId)
+            .OrderByDescending(csc => csc.PurchaseDate)
+            .ToListAsync();
+    }
+
     public async Task<CustomerServiceCredit> CreateAsync(CustomerServiceCredit customerServiceCredit)
     {
         _context.CustomerServiceCredits.Add(customerServiceCredit);
@@ -96,9 +106,23 @@ public class CustomerServiceCreditRepository : ICustomerServiceCreditRepository
     public async Task<CustomerServiceCredit> UpdateAsync(CustomerServiceCredit customerServiceCredit)
     {
         customerServiceCredit.UpdatedAt = DateTime.UtcNow;
-        _context.CustomerServiceCredits.Update(customerServiceCredit);
-        await _context.SaveChangesAsync();
-        return customerServiceCredit;
+        // Avoid OUTPUT clause to be compatible with tables having triggers (SQL error 334)
+        await _context.Database.ExecuteSqlInterpolatedAsync($@"UPDATE [dbo].[CustomerServiceCredits]
+            SET [CustomerId] = {customerServiceCredit.CustomerId},
+                [PackageId] = {customerServiceCredit.PackageId},
+                [ServiceId] = {customerServiceCredit.ServiceId},
+                [TotalCredits] = {customerServiceCredit.TotalCredits},
+                [UsedCredits] = {customerServiceCredit.UsedCredits},
+                [PurchaseDate] = {customerServiceCredit.PurchaseDate},
+                [ExpiryDate] = {customerServiceCredit.ExpiryDate},
+                [Status] = {customerServiceCredit.Status},
+                [CreatedAt] = {customerServiceCredit.CreatedAt},
+                [UpdatedAt] = {customerServiceCredit.UpdatedAt}
+            WHERE [CreditId] = {customerServiceCredit.CreditId}");
+
+        // Re-fetch latest state
+        var updated = await GetByIdAsync(customerServiceCredit.CreditId);
+        return updated ?? customerServiceCredit;
     }
 
     public async Task DeleteAsync(int creditId)

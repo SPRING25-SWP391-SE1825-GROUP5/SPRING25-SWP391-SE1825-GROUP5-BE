@@ -34,8 +34,9 @@ public class BookingPendingCancellationService : BackgroundService
 			{
 				using var scope = _serviceScopeFactory.CreateScope();
 				var bookingRepository = scope.ServiceProvider.GetRequiredService<IBookingRepository>();
+				var technicianTimeSlotRepository = scope.ServiceProvider.GetRequiredService<ITechnicianTimeSlotRepository>();
 				
-				var timeoutMinutes = _configuration.GetValue<int>("Booking:PendingTimeoutMinutes", 30);
+				var timeoutMinutes = _configuration.GetValue<double>("Booking:PendingTimeoutMinutes", 30);
                 // Dùng truy vấn tối giản, tránh include để không đụng các cột NULL bắt buộc từ bảng liên quan
                 var all = await bookingRepository.GetAllForAutoCancelAsync();
                 var now = DateTime.UtcNow;
@@ -62,6 +63,20 @@ public class BookingPendingCancellationService : BackgroundService
                                 _logger.LogWarning($"Bỏ qua hủy booking #{b.BookingId} vì thiếu Customer (tránh lỗi FK)");
                                 continue;
                             }
+                            // Release reserved technician slot when cancelling booking
+                            if (full.TechnicianSlotId.HasValue)
+                            {
+                                var tts = await technicianTimeSlotRepository.GetByIdAsync(full.TechnicianSlotId.Value);
+                                if (tts != null)
+                                {
+                                    await technicianTimeSlotRepository.ReleaseSlotAsync(
+                                        tts.TechnicianId,
+                                        tts.WorkDate,
+                                        tts.SlotId);
+                                }
+                                full.TechnicianSlotId = null;
+                            }
+                            
                             full.Status = "CANCELLED";
                             full.UpdatedAt = now;
                             await bookingRepository.UpdateBookingAsync(full);

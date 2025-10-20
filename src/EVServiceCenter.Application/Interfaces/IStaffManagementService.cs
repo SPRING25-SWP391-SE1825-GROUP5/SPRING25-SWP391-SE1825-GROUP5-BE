@@ -25,5 +25,7 @@ namespace EVServiceCenter.Application.Interfaces
         Task<bool> IsUserAlreadyStaffAsync(int userId);
         Task<bool> IsUserAlreadyTechnicianAsync(int userId);
         Task<bool> CanUserBeAssignedToCenterAsync(int userId, int centerId);
+        Task<bool> CanUserBeAssignedAsStaffAsync(int userId, int centerId);
+        Task<bool> CanUserBeAssignedAsTechnicianAsync(int userId, int centerId);
     }
 }

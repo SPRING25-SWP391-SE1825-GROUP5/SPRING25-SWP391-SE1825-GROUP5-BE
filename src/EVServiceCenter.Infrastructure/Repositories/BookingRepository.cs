@@ -27,7 +27,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     .ThenInclude(c => c.User)
                     .Include(b => b.Vehicle)
                     .Include(b => b.Center)
-                    .Include(b => b.Slot)
+                    .Include(b => b.TechnicianTimeSlot!)
+                    .ThenInclude(tts => tts.Slot!)
                     .Include(b => b.Service)
 
                     .OrderByDescending(b => b.CreatedAt)
@@ -47,7 +48,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Customer.User)
                 .Include(b => b.Vehicle)
                 .Include(b => b.Center)
-                .Include(b => b.Slot)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
         }
@@ -80,11 +82,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Customer).ThenInclude(c => c.User)
                 .Include(b => b.Vehicle)
                 .Include(b => b.Center)
-                .Include(b => b.Slot)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
                 // WorkOrders removed - functionality merged into Booking
                 .Where(b => b.CreatedAt.Date == date.ToDateTime(TimeOnly.MinValue).Date)
-                .OrderBy(b => b.Slot.SlotTime)
+                .OrderBy(b => b.TechnicianTimeSlot!.Slot!.SlotTime)
                 .ToListAsync();
         }
 
@@ -113,7 +116,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Vehicle)
                 .ThenInclude(v => v.VehicleModel)
                 .Include(b => b.Center)
-                .Include(b => b.Slot)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
 
                 .Where(b => b.CustomerId == customerId);
@@ -182,7 +186,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Vehicle)
                 .ThenInclude(v => v.VehicleModel)
                 .Include(b => b.Center)
-                .Include(b => b.Slot)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
                 .Include(b => b.Invoices)
                 .ThenInclude(i => i.Payments)

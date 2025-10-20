@@ -17,11 +17,13 @@ namespace EVServiceCenter.WebAPI.Controllers
     {
         private readonly ICustomerService _customerService;
         private readonly IVehicleService _vehicleService;
+        private readonly ICustomerServiceCreditService _customerServiceCreditService;
 
-        public CustomerController(ICustomerService customerService, IVehicleService vehicleService)
+        public CustomerController(ICustomerService customerService, IVehicleService vehicleService, ICustomerServiceCreditService customerServiceCreditService)
         {
             _customerService = customerService;
             _vehicleService = vehicleService;
+            _customerServiceCreditService = customerServiceCreditService;
         }
 
         /// <summary>
@@ -98,6 +100,37 @@ namespace EVServiceCenter.WebAPI.Controllers
                     success = false, 
                     message = "Lỗi hệ thống: " + ex.Message 
                 });
+            }
+        }
+
+        /// <summary>
+        /// Liệt kê các gói dịch vụ khách đã mua (credits)
+        /// </summary>
+        /// <param name="customerId">ID khách hàng</param>
+        [HttpGet("{customerId}/credits")]
+        public async Task<IActionResult> GetCustomerCredits(int customerId)
+        {
+            try
+            {
+                if (customerId <= 0)
+                    return BadRequest(new { success = false, message = "ID khách hàng không hợp lệ" });
+
+                var credits = await _customerServiceCreditService.GetByCustomerIdAsync(customerId);
+                var creditsList = credits.ToList();
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Tìm thấy {creditsList.Count} gói dịch vụ đã mua",
+                    data = creditsList 
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
             }
         }
 

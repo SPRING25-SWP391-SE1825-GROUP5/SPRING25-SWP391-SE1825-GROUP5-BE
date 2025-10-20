@@ -695,15 +695,62 @@ namespace EVServiceCenter.Application.Service
             if (request.TechnicianSlotId <= 0)
                 errors.Add("TechnicianSlotId không hợp lệ.");
 
-            // Validate technician slot exists
+            // Validate technician slot exists & belongs to center & matches date
             if (errors.Count == 0)
-                {
+            {
                 var timeSlot = await _technicianTimeSlotRepository.GetByIdAsync(request.TechnicianSlotId);
                 if (timeSlot == null)
-                    {
+                {
                     errors.Add("TechnicianSlotId không tồn tại.");
                 }
-                // Removed availability check to allow rebooking cancelled slots
+                else
+                {
+                    // Ensure the technician of this slot belongs to the requested center
+                    var technician = await _technicianRepository.GetTechnicianByIdAsync(timeSlot.TechnicianId);
+                    if (technician == null)
+                    {
+                        errors.Add("Kỹ thuật viên của slot không tồn tại.");
+                    }
+                    else if (technician.CenterId != request.CenterId)
+                    {
+                        errors.Add("TechnicianSlot không thuộc trung tâm đã chọn.");
+                    }
+
+                    // Ensure the slot date matches requested booking date
+                    var slotDate = DateOnly.FromDateTime(timeSlot.WorkDate);
+                    if (slotDate != request.BookingDate)
+                    {
+                        errors.Add("Ngày đặt không khớp với khung giờ đã chọn.");
+                    }
+
+                    // If booking for today, ensure slot time is not in the past
+                    var today = DateOnly.FromDateTime(DateTime.Today);
+                    if (slotDate == today && timeSlot.Slot != null)
+                    {
+                        var nowLocal = TimeOnly.FromDateTime(DateTime.Now);
+                        // Convert Slot.SlotTime to TimeOnly regardless of underlying type
+                        TimeOnly slotStartTime;
+                        var slotObj = (object)timeSlot.Slot.SlotTime!;
+                        switch (slotObj)
+                        {
+                            case TimeOnly to:
+                                slotStartTime = to;
+                                break;
+                            case TimeSpan ts:
+                                slotStartTime = new TimeOnly(ts.Hours, ts.Minutes, ts.Seconds);
+                                break;
+                            default:
+                                // Fallback: treat as 00:00 to avoid throwing; validation won't block
+                                slotStartTime = new TimeOnly(0, 0);
+                                break;
+                        }
+                        if (nowLocal > slotStartTime)
+                        {
+                            errors.Add("Khung giờ đã qua thời điểm hiện tại. Vui lòng chọn khung giờ khác.");
+                        }
+                    }
+                }
+                // Availability check intentionally omitted to allow rebooking cancelled slots
             }
 
                 // Validate service duy nhất

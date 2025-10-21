@@ -8,6 +8,7 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<MaintenanceChecklist?> GetByBookingIdAsync(int bookingId);
         Task<MaintenanceChecklist> CreateAsync(MaintenanceChecklist checklist);
+        Task<MaintenanceChecklist> UpdateAsync(MaintenanceChecklist checklist);
     }
 }
 

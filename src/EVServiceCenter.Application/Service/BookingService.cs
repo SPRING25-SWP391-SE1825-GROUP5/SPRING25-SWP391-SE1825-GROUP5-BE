@@ -24,6 +24,9 @@ namespace EVServiceCenter.Application.Service
         private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
         private readonly IServicePackageRepository _servicePackageRepository;
         private readonly ICustomerServiceCreditRepository _customerServiceCreditRepository;
+        private readonly IMaintenanceChecklistRepository _maintenanceChecklistRepository;
+        private readonly IServiceChecklistRepository _serviceChecklistRepository;
+        private readonly IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
         private readonly ILogger<BookingService> _logger;
         
 
@@ -38,6 +41,9 @@ namespace EVServiceCenter.Application.Service
             ITechnicianTimeSlotRepository technicianTimeSlotRepository,
             IServicePackageRepository servicePackageRepository,
             ICustomerServiceCreditRepository customerServiceCreditRepository,
+            IMaintenanceChecklistRepository maintenanceChecklistRepository,
+            IServiceChecklistRepository serviceChecklistRepository,
+            IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository,
             ILogger<BookingService> logger)
         {
             _bookingRepository = bookingRepository;
@@ -50,6 +56,9 @@ namespace EVServiceCenter.Application.Service
             _technicianTimeSlotRepository = technicianTimeSlotRepository;
             _servicePackageRepository = servicePackageRepository;
             _customerServiceCreditRepository = customerServiceCreditRepository;
+            _maintenanceChecklistRepository = maintenanceChecklistRepository;
+            _serviceChecklistRepository = serviceChecklistRepository;
+            _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
             _logger = logger;
         }
 
@@ -432,6 +441,9 @@ namespace EVServiceCenter.Application.Service
                     createdBooking.BookingId);
                 _logger.LogDebug("Booking {BookingId} created with status: {Status}", createdBooking.BookingId, createdBooking.Status);
 
+                // Tự động tạo MaintenanceChecklist từ ServiceChecklistTemplate
+                await CreateMaintenanceChecklistFromTemplateAsync(createdBooking.BookingId, resolvedServiceId);
+
                 // Không còn thêm vào BookingServices trong mô hình 1 dịch vụ
 
                 // Sử dụng booking vừa tạo thay vì query lại từ database để tránh race condition
@@ -451,6 +463,72 @@ namespace EVServiceCenter.Application.Service
             catch (Exception ex)
             {
                 throw new Exception($"Lỗi khi tạo đặt lịch: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Tự động tạo MaintenanceChecklist từ ServiceChecklistTemplate khi booking thành công
+        /// </summary>
+        private async Task CreateMaintenanceChecklistFromTemplateAsync(int bookingId, int serviceId)
+        {
+            try
+            {
+                // Lấy template checklist cho service này
+                var templates = await _serviceChecklistRepository.GetActiveAsync(serviceId);
+                var template = templates.FirstOrDefault();
+                
+                if (template == null)
+                {
+                    _logger.LogWarning("Không tìm thấy ServiceChecklistTemplate cho service {ServiceId}", serviceId);
+                    return;
+                }
+
+                // Tạo MaintenanceChecklist
+                var checklist = new MaintenanceChecklist
+                {
+                    BookingId = bookingId,
+                    TemplateId = template.TemplateID,
+                    Status = "PENDING", // Mặc định là PENDING
+                    CreatedAt = DateTime.UtcNow,
+                    Notes = $"Auto-generated from template: {template.TemplateName}"
+                };
+
+                await _maintenanceChecklistRepository.CreateAsync(checklist);
+                _logger.LogInformation("Đã tạo MaintenanceChecklist {ChecklistId} cho booking {BookingId} từ template {TemplateId}", 
+                    checklist.ChecklistId, bookingId, template.TemplateID);
+
+                // Seed MaintenanceChecklistResults từ ServiceChecklistTemplateItems
+                try
+                {
+                    var templateItems = await _serviceChecklistRepository.GetItemsByTemplateAsync(template.TemplateID);
+                    if (templateItems != null && templateItems.Any())
+                    {
+                        var seedResults = templateItems.Select(i => new MaintenanceChecklistResult
+                        {
+                            ChecklistId = checklist.ChecklistId,
+                            PartId = i.PartID,
+                            Description = i.Part?.PartName ?? string.Empty,
+                            Result = null, // chưa đánh giá
+                            Status = "PENDING"
+                        }).ToList();
+
+                        await _maintenanceChecklistResultRepository.UpsertManyAsync(seedResults);
+                        _logger.LogInformation("Đã seed {Count} MaintenanceChecklistResults cho checklist {ChecklistId}", seedResults.Count, checklist.ChecklistId);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Template {TemplateId} không có items để seed MaintenanceChecklistResults", template.TemplateID);
+                    }
+                }
+                catch (Exception exSeed)
+                {
+                    _logger.LogError(exSeed, "Lỗi khi seed MaintenanceChecklistResults cho checklist {ChecklistId}", checklist.ChecklistId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tạo MaintenanceChecklist cho booking {BookingId}, service {ServiceId}", bookingId, serviceId);
+                // Không throw exception để không làm fail booking process
             }
         }
 

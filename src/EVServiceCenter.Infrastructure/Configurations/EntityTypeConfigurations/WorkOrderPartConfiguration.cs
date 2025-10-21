@@ -8,16 +8,17 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
 {
     public void Configure(EntityTypeBuilder<WorkOrderPart> entity)
     {
-        entity.HasKey(e => new { e.BookingId, e.PartId });
+        // New PK per DB: WorkOrderPartID
+        entity.HasKey(e => e.WorkOrderPartId);
         entity.ToTable("WorkOrderParts", "dbo");
 
         entity.HasIndex(e => e.VehicleModelPartId);
 
+        entity.Property(e => e.WorkOrderPartId).HasColumnName("WorkOrderPartID");
         entity.Property(e => e.BookingId).HasColumnName("BookingID");
         entity.Property(e => e.PartId).HasColumnName("PartID");
         entity.Property(e => e.VehicleModelPartId).HasColumnName("VehicleModelPartID");
 
-        entity.Property(e => e.UnitCost).HasColumnType("decimal(10, 2)");
 
         entity.HasOne(d => d.Booking)
             .WithMany()

@@ -32,6 +32,18 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return invoice;
         }
 
+        public async Task UpdateAmountsAsync(int invoiceId, decimal packageDiscountAmount, decimal promotionDiscountAmount, decimal partsAmount)
+        {
+            // Tránh OUTPUT clause khi có trigger: dùng UPDATE thủ công
+            await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE [dbo].[Invoices]
+                SET [PackageDiscountAmount] = {packageDiscountAmount},
+                    [PromotionDiscountAmount] = {promotionDiscountAmount},
+                    [PartsAmount] = {partsAmount}
+                WHERE [InvoiceID] = {invoiceId}
+            ");
+        }
+
 
         public async Task<Invoice?> GetByIdAsync(int invoiceId)
         {

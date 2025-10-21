@@ -30,6 +30,9 @@ public partial class Invoice
     // Giảm giá áp dụng từ khuyến mãi (VNĐ)
     public decimal PromotionDiscountAmount { get; set; }
 
+    // Tổng tiền phụ tùng phát sinh (VNĐ)
+    public decimal PartsAmount { get; set; }
+
     // public int? ParentInvoiceId { get; set; } // Column không tồn tại trong database
 
     public virtual Customer Customer { get; set; }

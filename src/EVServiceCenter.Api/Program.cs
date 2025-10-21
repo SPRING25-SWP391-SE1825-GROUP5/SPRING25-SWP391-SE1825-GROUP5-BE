@@ -169,6 +169,7 @@ builder.Services.AddScoped<IVehicleModelPartRepository, VehicleModelPartReposito
 // Service Package & Credit Repositories
 builder.Services.AddScoped<IServicePackageRepository, ServicePackageRepository>();
 builder.Services.AddScoped<ICustomerServiceCreditRepository, CustomerServiceCreditRepository>();
+builder.Services.AddScoped<IServiceChecklistRepository, ServiceChecklistRepository>();
 
 // E-commerce repositories
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();

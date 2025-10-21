@@ -64,26 +64,25 @@ public class PaymentService
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
 		if (booking.Status == "CANCELLED") throw new InvalidOperationException("Booking đã bị hủy");
 
-        // Tính totalAmount đúng cách (có thể có discount từ package)
-        decimal totalAmount = booking.Service?.BasePrice ?? 0m;
-        
-        // Nếu có package được áp dụng, tính discount
+        // Tính tổng tiền theo logic: (gói hoặc dịch vụ lẻ) + parts - promotion
+        var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+        decimal packageDiscountAmount = 0m;
+        decimal promotionDiscountAmount = 0m; // TODO: tích hợp khi có khuyến mãi
+        decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
+            .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
+
         if (booking.AppliedCreditId.HasValue)
         {
             var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
             if (appliedCredit?.ServicePackage != null)
             {
-                var servicePrice = booking.Service?.BasePrice ?? 0m;
-                var discountAmount = servicePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
-                totalAmount = servicePrice - discountAmount;
-                _logger.LogInformation("Package discount applied: ServicePrice={ServicePrice}, DiscountPercent={DiscountPercent}, DiscountAmount={DiscountAmount}, FinalAmount={FinalAmount}", 
-                    servicePrice, appliedCredit.ServicePackage.DiscountPercent, discountAmount, totalAmount);
+                packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
             }
         }
-        else
-        {
-            _logger.LogInformation("No package applied, using service base price: {BasePrice}", totalAmount);
-        }
+
+        // total = (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) - promotion + parts
+        decimal totalAmount = (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice)
+                               - promotionDiscountAmount + partsAmount;
         
         var amount = (int)Math.Round(totalAmount); // VNĐ integer
         if (amount < _options.MinAmount) amount = _options.MinAmount;
@@ -121,8 +120,29 @@ public class PaymentService
 
 		var response = await _httpClient.SendAsync(request);
 		var responseText = await response.Content.ReadAsStringAsync();
-		response.EnsureSuccessStatusCode();
-        var json = JsonDocument.Parse(responseText).RootElement;
+		
+		// Xử lý trường hợp "Đơn thanh toán đã tồn tại"
+		if (!response.IsSuccessStatusCode)
+		{
+			var errorJson = JsonDocument.Parse(responseText).RootElement;
+			var code = errorJson.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
+			var desc = errorJson.TryGetProperty("desc", out var errorDescElem) ? errorDescElem.GetString() : null;
+			
+			if (code == "231" && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
+			{
+				// Lấy link cũ từ PayOS
+				var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
+				if (!string.IsNullOrEmpty(existingUrl))
+				{
+					return existingUrl;
+				}
+				// Nếu không lấy được link cũ, tiếp tục throw exception
+			}
+			
+			response.EnsureSuccessStatusCode();
+		}
+		
+		var json = JsonDocument.Parse(responseText).RootElement;
         if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
             dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
         {
@@ -134,6 +154,44 @@ public class PaymentService
             ?? (json.TryGetProperty("desc", out var descElem) && descElem.ValueKind == JsonValueKind.String ? descElem.GetString() : null)
             ?? "Không nhận được checkoutUrl từ PayOS";
         throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
+    }
+
+    /// <summary>
+    /// Lấy payment link đã tồn tại từ PayOS
+    /// </summary>
+    private async Task<string?> GetExistingPaymentLinkAsync(int orderCode)
+    {
+        try
+        {
+            var getUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(getUrl));
+            request.Headers.Add("x-client-id", _options.ClientId);
+            request.Headers.Add("x-api-key", _options.ApiKey);
+
+            var response = await _httpClient.SendAsync(request);
+            var responseText = await response.Content.ReadAsStringAsync();
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Không thể lấy payment link cũ cho orderCode {OrderCode}: {ResponseText}", orderCode, responseText);
+                return null;
+            }
+            
+            var json = JsonDocument.Parse(responseText).RootElement;
+            if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
+                dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
+            {
+                return urlElem.GetString();
+            }
+            
+            _logger.LogWarning("Không tìm thấy checkoutUrl trong response cho orderCode {OrderCode}: {ResponseText}", orderCode, responseText);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi lấy payment link cũ cho orderCode {OrderCode}", orderCode);
+            return null;
+        }
     }
 
     public async Task<string?> CreateOrderPaymentLinkAsync(int orderId)
@@ -258,21 +316,27 @@ public class PaymentService
 				// Invoice will be updated when booking is updated
 			}
 
-			// Tính amount đúng cách (có thể có discount từ package)
-			decimal paymentAmount = booking.Service?.BasePrice ?? 0m;
-			if (booking.AppliedCreditId.HasValue)
-			{
-				var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
-				if (appliedCredit?.ServicePackage != null)
-				{
-					var servicePrice = booking.Service?.BasePrice ?? 0m;
-					var discountAmount = servicePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
-					paymentAmount = servicePrice - discountAmount;
-				}
-			}
+            // Tính các khoản theo logic mới
+            var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+            decimal packageDiscountAmount = 0m;
+            decimal promotionDiscountAmount = 0m; // hook khuyến mãi sau
+            decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
+                .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
+
+            if (booking.AppliedCreditId.HasValue)
+            {
+                var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+                if (appliedCredit?.ServicePackage != null)
+                {
+                    packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+                }
+            }
+
+            decimal paymentAmount = (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice)
+                                      - promotionDiscountAmount + partsAmount;
 
 			// Tạo payment record
-			var payment = new Domain.Entities.Payment
+            var payment = new Domain.Entities.Payment
 			{
 				InvoiceId = invoice.InvoiceId,
 				Amount = (int)Math.Round(paymentAmount),
@@ -283,6 +347,9 @@ public class PaymentService
 				PaidAt = DateTime.UtcNow
 			};
 			await _paymentRepository.CreateAsync(payment);
+
+            // Cập nhật số liệu vào invoice
+            await _invoiceRepository.UpdateAmountsAsync(invoice.InvoiceId, packageDiscountAmount, promotionDiscountAmount, partsAmount);
 
 			// CustomerServiceCredit đã được tạo với status ACTIVE khi tạo booking
 			// Trừ credit khi thanh toán thành công
@@ -307,25 +374,69 @@ public class PaymentService
 				}
 			}
 
-			// Gửi email invoice PDF
+			// Gửi email invoice PDF với template
 			try
 			{
 				var customerEmail = booking.Customer?.User?.Email;
 				if (!string.IsNullOrEmpty(customerEmail))
 				{
 					var subject = $"Hóa đơn thanh toán - Booking #{booking.BookingId}";
-					var body = $"Xin chào {booking.Customer?.User?.FullName},\n\nCảm ơn bạn đã sử dụng dịch vụ của chúng tôi.\n\nChi tiết booking:\n- Mã booking: #{booking.BookingId}\n- Dịch vụ: {booking.Service?.ServiceName}\n- Tổng tiền: {payment.Amount:N0} VNĐ\n\nHóa đơn được đính kèm trong email này.\n\nTrân trọng,\nEV Service Center";
 					
-					// Generate PDF invoice content
-					var pdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
+					// Sử dụng template email thay vì hardcode
+					var body = await _emailService.RenderInvoiceEmailTemplateAsync(
+						customerName: booking.Customer?.User?.FullName ?? "Khách hàng",
+						invoiceId: $"INV-{booking.BookingId:D6}",
+						bookingId: booking.BookingId.ToString(),
+						createdDate: DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm"),
+						customerEmail: customerEmail,
+						serviceName: booking.Service?.ServiceName ?? "N/A",
+						servicePrice: (booking.Service?.BasePrice ?? 0m).ToString("N0"),
+						totalAmount: payment.Amount.ToString("N0"),
+						hasDiscount: booking.AppliedCreditId.HasValue,
+						discountAmount: booking.AppliedCreditId.HasValue ? (payment.Amount * 0.1m).ToString("N0") : "0"
+					);
 					
-					await _emailService.SendEmailWithAttachmentAsync(
-						customerEmail, 
-						subject, 
-						body, 
-						$"Invoice_Booking_{booking.BookingId}.pdf", 
-						pdfContent, 
-						"application/pdf");
+        // Generate PDF invoice content
+        var invoicePdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
+        
+        // Generate PDF maintenance report content (if available)
+        byte[]? maintenancePdfContent = null;
+        try
+        {
+            maintenancePdfContent = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(booking.BookingId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not generate maintenance report PDF for booking {BookingId}", booking.BookingId);
+        }
+        
+        // Send email with attachments
+        if (maintenancePdfContent != null)
+        {
+            // Send with both attachments
+            var attachments = new List<(string fileName, byte[] content, string mimeType)>
+            {
+                ($"Invoice_Booking_{booking.BookingId}.pdf", invoicePdfContent, "application/pdf"),
+                ($"MaintenanceReport_Booking_{booking.BookingId}.pdf", maintenancePdfContent, "application/pdf")
+            };
+            
+            await _emailService.SendEmailWithMultipleAttachmentsAsync(
+                customerEmail, 
+                subject, 
+                body, 
+                attachments);
+        }
+        else
+        {
+            // Send with invoice only
+            await _emailService.SendEmailWithAttachmentAsync(
+                customerEmail, 
+                subject, 
+                body, 
+                $"Invoice_Booking_{booking.BookingId}.pdf", 
+                invoicePdfContent, 
+                "application/pdf");
+        }
 					
 					_logger.LogInformation("Invoice email sent for booking {BookingId} to {Email}", booking.BookingId, customerEmail);
 				}
@@ -340,8 +451,8 @@ public class PaymentService
 			}
 
 			_logger.LogInformation("Payment confirmed for booking {BookingId}, invoice {InvoiceId}", booking.BookingId, invoice.InvoiceId);
-			return true;
-		}
+		return true;
+	}
 
 		return false;
 	}

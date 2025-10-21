@@ -25,6 +25,13 @@ namespace EVServiceCenter.Infrastructure.Repositories
             await _db.SaveChangesAsync();
             return checklist;
         }
+
+        public async Task<MaintenanceChecklist> UpdateAsync(MaintenanceChecklist checklist)
+        {
+            _db.MaintenanceChecklists.Update(checklist);
+            await _db.SaveChangesAsync();
+            return checklist;
+        }
     }
 }
 

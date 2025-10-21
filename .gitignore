@@ -41,7 +41,7 @@ bld/
 .vs/
 # Uncomment if you have tasks that create the project's static files in wwwroot
 #wwwroot/
-
+.cursor/
 # Visual Studio 2017 auto generated files
 Generated\ Files/
 
@@ -182,6 +182,8 @@ DocProject/Help/html
 
 # Click-Once directory
 publish/
+*.McpServer.cs
+*.EVServiceCenter.McpServer.csproj
 
 # Publish Web Output
 *.[Pp]ublish.xml

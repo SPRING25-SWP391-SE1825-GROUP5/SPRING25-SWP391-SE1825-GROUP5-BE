@@ -124,14 +124,19 @@ public class PaymentService
 		// Xử lý trường hợp "Đơn thanh toán đã tồn tại"
 		if (!response.IsSuccessStatusCode)
 		{
-			var json = JsonDocument.Parse(responseText).RootElement;
-			var code = json.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
-			var desc = json.TryGetProperty("desc", out var descElem) ? descElem.GetString() : null;
+			var errorJson = JsonDocument.Parse(responseText).RootElement;
+			var code = errorJson.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
+			var desc = errorJson.TryGetProperty("desc", out var errorDescElem) ? errorDescElem.GetString() : null;
 			
 			if (code == "231" && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
 			{
 				// Lấy link cũ từ PayOS
-				return await GetExistingPaymentLinkAsync(orderCode);
+				var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
+				if (!string.IsNullOrEmpty(existingUrl))
+				{
+					return existingUrl;
+				}
+				// Nếu không lấy được link cũ, tiếp tục throw exception
 			}
 			
 			response.EnsureSuccessStatusCode();
@@ -154,29 +159,39 @@ public class PaymentService
     /// <summary>
     /// Lấy payment link đã tồn tại từ PayOS
     /// </summary>
-    private async Task<string> GetExistingPaymentLinkAsync(int orderCode)
+    private async Task<string?> GetExistingPaymentLinkAsync(int orderCode)
     {
-        var getUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
-        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(getUrl));
-        request.Headers.Add("x-client-id", _options.ClientId);
-        request.Headers.Add("x-api-key", _options.ApiKey);
+        try
+        {
+            var getUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(getUrl));
+            request.Headers.Add("x-client-id", _options.ClientId);
+            request.Headers.Add("x-api-key", _options.ApiKey);
 
-        var response = await _httpClient.SendAsync(request);
-        var responseText = await response.Content.ReadAsStringAsync();
-        
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Không thể lấy payment link cũ: {responseText}");
+            var response = await _httpClient.SendAsync(request);
+            var responseText = await response.Content.ReadAsStringAsync();
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Không thể lấy payment link cũ cho orderCode {OrderCode}: {ResponseText}", orderCode, responseText);
+                return null;
+            }
+            
+            var json = JsonDocument.Parse(responseText).RootElement;
+            if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
+                dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
+            {
+                return urlElem.GetString();
+            }
+            
+            _logger.LogWarning("Không tìm thấy checkoutUrl trong response cho orderCode {OrderCode}: {ResponseText}", orderCode, responseText);
+            return null;
         }
-        
-        var json = JsonDocument.Parse(responseText).RootElement;
-        if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
-            dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
+        catch (Exception ex)
         {
-            return urlElem.GetString();
+            _logger.LogError(ex, "Lỗi khi lấy payment link cũ cho orderCode {OrderCode}", orderCode);
+            return null;
         }
-        
-        throw new InvalidOperationException($"Không tìm thấy checkoutUrl trong response: {responseText}");
     }
 
     public async Task<string?> CreateOrderPaymentLinkAsync(int orderId)

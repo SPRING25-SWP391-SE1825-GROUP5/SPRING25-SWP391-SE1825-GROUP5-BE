@@ -15,10 +15,12 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class StaffManagementController : ControllerBase
     {
         private readonly IStaffManagementService _staffManagementService;
+        private readonly EVServiceCenter.Domain.Interfaces.ITechnicianRepository _technicianRepository;
 
-        public StaffManagementController(IStaffManagementService staffManagementService)
+        public StaffManagementController(IStaffManagementService staffManagementService, EVServiceCenter.Domain.Interfaces.ITechnicianRepository technicianRepository)
         {
             _staffManagementService = staffManagementService;
+            _technicianRepository = technicianRepository;
         }
 
         #region Staff Management APIs
@@ -43,13 +45,20 @@ namespace EVServiceCenter.WebAPI.Controllers
                     });
                 }
 
-                var staff = await _staffManagementService.AddStaffToCenterAsync(request);
+                try
+                {
+                    var staff = await _staffManagementService.AddStaffToCenterAsync(request);
                 
-                return CreatedAtAction(nameof(GetStaffById), new { id = staff.StaffId }, new { 
-                    success = true, 
-                    message = "Thêm nhân viên vào trung tâm thành công",
-                    data = staff
-                });
+                    return CreatedAtAction(nameof(GetStaffById), new { id = staff.StaffId }, new {
+                        success = true,
+                        message = "Thêm nhân viên vào trung tâm thành công",
+                        data = staff
+                    });
+                }
+                catch (System.Exception ex) when (ex is Microsoft.EntityFrameworkCore.DbUpdateException || ex is System.Data.Common.DbException)
+                {
+                    return Conflict(new { success = false, message = "User đã có bản ghi Staff đang hoạt động ở trung tâm khác." });
+                }
             }
             catch (ArgumentException ex)
             {
@@ -99,6 +108,42 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Tạo staff từ userId và gán vào center (đồng bộ hồ sơ Staff)
+        /// </summary>
+        [HttpPost("staff/from-user")]
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> CreateStaffFromUser([FromBody] CreateStaffFromUserRequest request)
+        {
+            if (request == null || request.UserId <= 0 || request.CenterId <= 0)
+                return BadRequest(new { success = false, message = "userId và centerId bắt buộc" });
+
+            try
+            {
+                // Kiểm tra user có tồn tại và có role STAFF không
+                var canAssign = await _staffManagementService.CanUserBeAssignedAsStaffAsync(request.UserId, request.CenterId);
+                if (!canAssign)
+                    return BadRequest(new { success = false, message = "User không tồn tại hoặc không có quyền làm nhân viên. Chỉ user có role STAFF mới được phép." });
+
+                var staff = await _staffManagementService.AddStaffToCenterAsync(new AddStaffToCenterRequest
+                {
+                    UserId = request.UserId,
+                    CenterId = request.CenterId
+                });
+                return CreatedAtAction(nameof(GetStaffById), new { id = staff.StaffId }, new { success = true, data = staff });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+            {
+                return Conflict(new { success = false, message = "Vi phạm ràng buộc: user chỉ được có 1 staff active." });
+            }
+            catch (System.ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        public class CreateStaffFromUserRequest { public int UserId { get; set; } public int CenterId { get; set; } }
+
+        /// <summary>
         /// Lấy danh sách nhân viên theo trung tâm hoặc tất cả nhân viên
         /// </summary>
         /// <param name="centerId">ID trung tâm (optional - nếu không có sẽ lấy tất cả)</param>
@@ -113,8 +158,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             [FromQuery] int? centerId = null,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
-            [FromQuery] string position = null,
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? position = null,
             [FromQuery] bool? isActive = null)
         {
             try
@@ -202,37 +247,23 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Xóa nhân viên khỏi trung tâm
-        /// </summary>
-        /// <param name="id">ID nhân viên</param>
-        /// <returns>Kết quả xóa</returns>
+        // Deactivate staff (soft delete)
         [HttpDelete("staff/{id}")]
-        public async Task<IActionResult> RemoveStaffFromCenter(int id)
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> DeactivateStaff(int id)
         {
             try
             {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID nhân viên không hợp lệ" });
-
-                var result = await _staffManagementService.RemoveStaffFromCenterAsync(id);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Xóa nhân viên khỏi trung tâm thành công",
-                    data = new { removed = result }
-                });
+                var ok = await _staffManagementService.RemoveStaffFromCenterAsync(id);
+                return Ok(new { success = ok, message = ok ? "Đã vô hiệu hóa nhân viên" : "Không thể vô hiệu hóa" });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = ex.Message });
+                return NotFound(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
+                return StatusCode(500, new { success = false, message = ex.Message });
             }
         }
 
@@ -260,13 +291,19 @@ namespace EVServiceCenter.WebAPI.Controllers
                     });
                 }
 
-                var technician = await _staffManagementService.AddTechnicianToCenterAsync(request);
-                
-                return CreatedAtAction(nameof(GetTechnicianById), new { id = technician.TechnicianId }, new { 
-                    success = true, 
-                    message = "Thêm kỹ thuật viên vào trung tâm thành công",
-                    data = technician
-                });
+                try
+                {
+                    var technician = await _staffManagementService.AddTechnicianToCenterAsync(request);
+                    return CreatedAtAction(nameof(GetTechnicianById), new { id = technician.TechnicianId }, new {
+                        success = true,
+                        message = "Thêm kỹ thuật viên vào trung tâm thành công",
+                        data = technician
+                    });
+                }
+                catch (System.Exception ex) when (ex is Microsoft.EntityFrameworkCore.DbUpdateException || ex is System.Data.Common.DbException)
+                {
+                    return Conflict(new { success = false, message = "User đã có bản ghi Technician đang hoạt động ở trung tâm khác." });
+                }
             }
             catch (ArgumentException ex)
             {
@@ -316,6 +353,48 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Tạo kỹ thuật viên từ userId và gán vào center (đồng bộ hồ sơ Technician)
+        /// </summary>
+        [HttpPost("technician/from-user")]
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> CreateTechnicianFromUser([FromBody] CreateTechnicianFromUserRequest request)
+        {
+            if (request == null || request.UserId <= 0 || request.CenterId <= 0)
+                return BadRequest(new { success = false, message = "userId và centerId bắt buộc" });
+
+            try
+            {
+                // Kiểm tra user có tồn tại và có role TECHNICIAN không
+                var canAssign = await _staffManagementService.CanUserBeAssignedAsTechnicianAsync(request.UserId, request.CenterId);
+                if (!canAssign)
+                    return BadRequest(new { success = false, message = "User không tồn tại hoặc không có quyền làm kỹ thuật viên. Chỉ user có role TECHNICIAN mới được phép." });
+
+                // Nếu user đã là technician active ở center khác -> 409
+                var exists = await _staffManagementService.IsUserAlreadyTechnicianAsync(request.UserId);
+                if (exists)
+                    return Conflict(new { success = false, message = "User đã có hồ sơ kỹ thuật viên." });
+
+                // Tạo technician entity trực tiếp qua repository/service hiện có
+                var tech = await _technicianRepository.CreateTechnicianAsync(new EVServiceCenter.Domain.Entities.Technician
+                {
+                    UserId = request.UserId,
+                    CenterId = request.CenterId,
+                    Position = string.IsNullOrWhiteSpace(request.Position) ? "GENERAL" : request.Position,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+
+                return CreatedAtAction(nameof(GetTechnicianById), new { id = tech.TechnicianId }, new { success = true, data = new { tech.TechnicianId, tech.UserId, tech.CenterId, tech.Position, tech.IsActive } });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+            {
+                return Conflict(new { success = false, message = "Vi phạm ràng buộc: user chỉ được có 1 technician active." });
+            }
+        }
+
+        public class CreateTechnicianFromUserRequest { public int UserId { get; set; } public int CenterId { get; set; } public string Position { get; set; } = string.Empty; }
+
+        /// <summary>
         /// Lấy danh sách kỹ thuật viên theo trung tâm
         /// </summary>
         /// <param name="centerId">ID trung tâm</param>
@@ -330,8 +409,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             [FromQuery] int centerId,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
-            [FromQuery] string specialization = null,
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? specialization = null,
             [FromQuery] bool? isActive = null)
         {
             try
@@ -408,37 +487,23 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Xóa kỹ thuật viên khỏi trung tâm
-        /// </summary>
-        /// <param name="id">ID kỹ thuật viên</param>
-        /// <returns>Kết quả xóa</returns>
+        // Deactivate technician (soft delete)
         [HttpDelete("technician/{id}")]
-        public async Task<IActionResult> RemoveTechnicianFromCenter(int id)
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> DeactivateTechnician(int id)
         {
             try
             {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID kỹ thuật viên không hợp lệ" });
-
-                var result = await _staffManagementService.RemoveTechnicianFromCenterAsync(id);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Xóa kỹ thuật viên khỏi trung tâm thành công",
-                    data = new { removed = result }
-                });
+                var ok = await _staffManagementService.RemoveTechnicianFromCenterAsync(id);
+                return Ok(new { success = ok, message = ok ? "Đã vô hiệu hóa kỹ thuật viên" : "Không thể vô hiệu hóa" });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = ex.Message });
+                return NotFound(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
+                return StatusCode(500, new { success = false, message = ex.Message });
             }
         }
 

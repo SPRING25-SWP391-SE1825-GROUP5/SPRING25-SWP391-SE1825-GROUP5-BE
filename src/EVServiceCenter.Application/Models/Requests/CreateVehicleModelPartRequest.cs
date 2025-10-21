@@ -10,8 +10,5 @@ public class CreateVehicleModelPartRequest
     [Required(ErrorMessage = "Part ID is required")]
     public int PartId { get; set; }
 
-    public bool IsCompatible { get; set; } = true;
-
-    [StringLength(200, ErrorMessage = "Compatibility notes cannot exceed 200 characters")]
-    public string? CompatibilityNotes { get; set; }
+    // IsCompatible removed
 }

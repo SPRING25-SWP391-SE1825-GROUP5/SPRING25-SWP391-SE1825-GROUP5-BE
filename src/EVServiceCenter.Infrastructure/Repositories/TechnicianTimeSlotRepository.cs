@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenter.Infrastructure.Repositories;
@@ -24,7 +24,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
             .Include(t => t.Technician)
             .ThenInclude(x => x.User)
             .Include(t => t.Slot)
-            .Include(t => t.Booking)
+            // Removed: .Include(t => t.Booking) - causes TechnicianId query error
             .FirstOrDefaultAsync(t => t.TechnicianSlotId == id);
     }
 
@@ -34,7 +34,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
             .Include(t => t.Technician)
             .ThenInclude(x => x.User)
             .Include(t => t.Slot)
-            .Include(t => t.Booking)
+            // Removed: .Include(t => t.Booking) - causes TechnicianId query error
             .Where(t => t.TechnicianId == technicianId)
             .OrderBy(t => t.WorkDate)
             .ThenBy(t => t.Slot.SlotTime)
@@ -47,7 +47,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
             .Include(t => t.Technician)
             .ThenInclude(x => x.User)
             .Include(t => t.Slot)
-            .Include(t => t.Booking)
+            // Removed: .Include(t => t.Booking) - causes TechnicianId query error
             .Where(t => t.WorkDate.Date == date.Date)
             .OrderBy(t => t.Slot.SlotTime)
             .ToListAsync();
@@ -58,7 +58,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
         return await _context.TechnicianTimeSlots
             .Include(t => t.Technician)
             .Include(t => t.Slot)
-            .Include(t => t.Booking)
+            // Removed: .Include(t => t.Booking) - causes TechnicianId query error
             .Where(t => t.TechnicianId == technicianId && 
                        t.WorkDate >= startDate.Date && 
                        t.WorkDate <= endDate.Date)
@@ -121,37 +121,59 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
         return tts.IsAvailable && tts.BookingId == null;
     }
 
-    public async Task<bool> ReserveSlotAsync(int technicianId, DateTime date, int slotId, int bookingId)
+    public async Task<bool> TechnicianTimeSlotExistsAsync(int technicianId, DateTime date, int slotId)
     {
-        // Tìm slot tồn tại bất kể trạng thái
-        var timeSlot = await _context.TechnicianTimeSlots
+        var tts = await _context.TechnicianTimeSlots
             .FirstOrDefaultAsync(t => t.TechnicianId == technicianId &&
                                      t.WorkDate.Date == date.Date &&
                                      t.SlotId == slotId);
 
-        if (timeSlot == null)
+        return tts != null;
+    }
+
+    public async Task<bool> ReserveSlotAsync(int technicianId, DateTime date, int slotId, int? bookingId)
+    {
+        // Force reserve: update regardless of current availability (allows rebooking cancelled slots)
+        var rows = await _context.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE [dbo].[TechnicianTimeSlots]
+            SET [IsAvailable] = 0, [BookingID] = {bookingId}
+            WHERE [TechnicianID] = {technicianId}
+              AND CONVERT(date, [WorkDate]) = {date.Date}
+              AND [SlotID] = {slotId}
+        ");
+
+        if (rows == 1)
+            return true; // reserved successfully
+
+        // If no existing row, attempt to insert a fresh reservation
+        var exists = await _context.TechnicianTimeSlots
+            .AnyAsync(t => t.TechnicianId == technicianId && t.WorkDate.Date == date.Date && t.SlotId == slotId);
+
+        if (!exists)
         {
-            // Chưa có thì tạo mới và giữ chỗ
-            timeSlot = new TechnicianTimeSlot
+            try
             {
-                TechnicianId = technicianId,
-                WorkDate = date.Date,
-                SlotId = slotId,
-                IsAvailable = false,
-                BookingId = bookingId,
-                CreatedAt = DateTime.UtcNow
-            };
-            _context.TechnicianTimeSlots.Add(timeSlot);
-        }
-        else
-        {
-            // Có rồi thì cập nhật giữ chỗ
-            timeSlot.IsAvailable = false;
-            timeSlot.BookingId = bookingId;
+                var tts = new TechnicianTimeSlot
+                {
+                    TechnicianId = technicianId,
+                    WorkDate = date.Date,
+                    SlotId = slotId,
+                    IsAvailable = false,
+                    BookingId = bookingId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.TechnicianTimeSlots.Add(tts);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch
+            {
+                // In case of race condition during insert, treat as failed reservation
+                return false;
+            }
         }
 
-        await _context.SaveChangesAsync();
-        return true;
+        return false; // slot doesn't exist and couldn't be created
     }
 
     public async Task<bool> ReleaseSlotAsync(int technicianId, DateTime date, int slotId)
@@ -167,6 +189,22 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
 
         timeSlot.IsAvailable = true;
         timeSlot.BookingId = null;
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> UpdateSlotBookingIdAsync(int technicianId, DateTime date, int slotId, int bookingId)
+    {
+        var timeSlot = await _context.TechnicianTimeSlots
+            .FirstOrDefaultAsync(t => t.TechnicianId == technicianId &&
+                                     t.WorkDate.Date == date.Date &&
+                                     t.SlotId == slotId &&
+                                     !t.IsAvailable);
+        
+        if (timeSlot == null)
+            return false;
+
+        timeSlot.BookingId = bookingId;
         await _context.SaveChangesAsync();
         return true;
     }

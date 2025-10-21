@@ -11,7 +11,6 @@ namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "AuthenticatedUser")] // Tất cả user đã đăng nhập
     public class PartController : ControllerBase
     {
         private readonly IPartService _partService;
@@ -32,10 +31,11 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="isActive">Lọc theo trạng thái hoạt động (true/false/null = all)</param>
         /// <returns>Danh sách phụ tùng</returns>
         [HttpGet]
+        [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetAllParts(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
+            [FromQuery] string? searchTerm = null,
             [FromQuery] bool? isActive = null)
         {
             try
@@ -65,7 +65,8 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// Tồn kho tổng hợp toàn hệ thống cho danh sách phụ tùng
         /// </summary>
         [HttpGet("availability")]
-        public async Task<IActionResult> GetGlobalAvailability([FromQuery] string partIds)
+        [AllowAnonymous]
+        public async Task<IActionResult> GetGlobalAvailability([FromQuery] string? partIds = null)
         {
             // Nếu không truyền partIds => trả toàn bộ các phụ tùng còn hàng (Get All)
             if (string.IsNullOrWhiteSpace(partIds))
@@ -90,6 +91,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// Cập nhật phụ tùng
         /// </summary>
         [HttpPut("{id:int}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdatePartRequest request)
         {
             try
@@ -113,6 +115,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="id">ID phụ tùng</param>
         /// <returns>Thông tin phụ tùng</returns>
         [HttpGet("{id}")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetPartById(int id)
         {
             try
@@ -147,7 +150,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="request">Thông tin phụ tùng mới</param>
         /// <returns>Thông tin phụ tùng đã tạo</returns>
         [HttpPost]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> CreatePart([FromBody] CreatePartRequest request)
         {
             try
@@ -182,5 +185,12 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Lấy danh sách dịch vụ tương thích với phụ tùng
+        /// </summary>
+        /// <param name="id">ID phụ tùng</param>
+        /// <returns>Danh sách dịch vụ tương thích</returns>
+        // Removed: GET /{id}/services (ServiceParts dependency)
     }
 }

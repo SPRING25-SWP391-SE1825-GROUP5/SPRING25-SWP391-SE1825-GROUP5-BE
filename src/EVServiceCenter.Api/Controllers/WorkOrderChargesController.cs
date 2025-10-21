@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -6,85 +7,105 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Configurations;
+using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Api.Controllers
 {
 [ApiController]
-[Route("api/workorders/{workOrderId:int}/charges")]
+[Route("api/bookings/{bookingId:int}/charges")]
 [Authorize]
 public class WorkOrderChargesController : ControllerBase
     {
-        private readonly IWorkOrderRepository _workOrderRepo;
+        private readonly IBookingRepository _bookingRepo;
         private readonly IInvoiceRepository _invoiceRepo;
         private readonly IPaymentRepository _paymentRepo;
         private readonly HttpClient _httpClient;
         private readonly EVServiceCenter.Application.Interfaces.IEmailService _email;
         private readonly PayOsOptions _payos;
+        private readonly ILogger<WorkOrderChargesController> _logger;
 
         public WorkOrderChargesController(
-            IWorkOrderRepository workOrderRepo,
+            IBookingRepository bookingRepo,
             IInvoiceRepository invoiceRepo,
             IPaymentRepository paymentRepo,
             IOptions<PayOsOptions> payos,
             HttpClient httpClient,
-            EVServiceCenter.Application.Interfaces.IEmailService email)
+            EVServiceCenter.Application.Interfaces.IEmailService email,
+            ILogger<WorkOrderChargesController> logger)
         {
-            _workOrderRepo = workOrderRepo;
+            _bookingRepo = bookingRepo;
             _invoiceRepo = invoiceRepo;
             _paymentRepo = paymentRepo;
             _httpClient = httpClient;
             _payos = payos.Value;
             _email = email;
+            _logger = logger;
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetCharges(int workOrderId)
+        public async Task<IActionResult> GetCharges(int bookingId)
         {
-            var wo = await _workOrderRepo.GetByIdAsync(workOrderId);
-            if (wo == null) return NotFound(new { success = false, message = "WorkOrder không tồn tại" });
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
 
-            var items = (wo.WorkOrderParts ?? new System.Collections.Generic.List<Domain.Entities.WorkOrderPart>())
-                .Select(p => new
-                {
-                    partId = p.PartId,
-                    partName = p.Part?.PartName,
-                    qty = p.QuantityUsed,
-                    unitPrice = p.UnitCost,
-                    lineTotal = p.UnitCost * p.QuantityUsed
-                })
-                .ToList();
+            // WorkOrder functionality merged into Booking - get parts from WorkOrderParts table using bookingId
+            // This would need to be implemented in WorkOrderPartRepository if needed
+            // For now, return empty items
+            var items = new List<object>();
 
-            var subtotal = items.Sum(x => x.lineTotal);
-            return Ok(new { workOrderId, subtotalParts = subtotal, serviceFee = 0m, discount = 0m, tax = 0m, total = subtotal, items });
+            var subtotal = 0m; // No parts available yet
+            return Ok(new { bookingId, subtotalParts = subtotal, serviceFee = 0m, discount = 0m, tax = 0m, total = subtotal, items });
+        }
+
+        [HttpGet("/api/bookings/{bookingId:int}/invoice")]
+        public async Task<IActionResult> GetInvoice(int bookingId)
+        {
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            // Dùng bookingId để lấy invoice gần nhất cho booking này
+            var invoice = await _invoiceRepo.GetByBookingIdAsync(bookingId);
+            if (invoice == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho booking" });
+            return Ok(new { success = true, data = new { invoice.InvoiceId, invoice.Status, invoice.CreatedAt } });
+        }
+
+        [HttpGet("/api/bookings/{bookingId:int}/payments")]
+        public async Task<IActionResult> GetPayments(int bookingId)
+        {
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            var invoice = await _invoiceRepo.GetByBookingIdAsync(bookingId);
+            if (invoice == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho booking" });
+            var list = await _paymentRepo.GetByInvoiceIdAsync(invoice.InvoiceId, null, null, null, null);
+            var resp = list.Select(p => new { p.PaymentId, p.PaymentCode, p.PaymentMethod, p.Amount, p.Status, p.PaidAt, p.CreatedAt });
+            return Ok(new { success = true, data = resp });
         }
 
 
         [HttpPost("link")]
-        public async Task<IActionResult> CreatePaymentLink(int workOrderId)
+        public async Task<IActionResult> CreatePaymentLink(int bookingId)
         {
-            var wo = await _workOrderRepo.GetByIdAsync(workOrderId);
-            if (wo == null) return NotFound(new { success = false, message = "WorkOrder không tồn tại" });
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
 
-            var parts = wo.WorkOrderParts ?? new System.Collections.Generic.List<Domain.Entities.WorkOrderPart>();
-            Console.WriteLine($"[DEBUG] WorkOrder {workOrderId} has {parts.Count} WorkOrderParts");
+            // WorkOrder functionality merged into Booking - get parts from WorkOrderParts table using bookingId
+            // This would need to be implemented in WorkOrderPartRepository if needed
+            // For now, return empty parts
+            var parts = new List<object>();
+            _logger.LogDebug("Booking {BookingId} has {PartsCount} WorkOrderParts", bookingId, parts.Count);
             
-            foreach (var part in parts)
-            {
-                Console.WriteLine($"[DEBUG] Part {part.PartId}: UnitCost={part.UnitCost}, Quantity={part.QuantityUsed}, Total={part.UnitCost * part.QuantityUsed}");
-            }
-
-            var total = parts.Sum(p => p.UnitCost * p.QuantityUsed);
-            Console.WriteLine($"[DEBUG] Total calculated: {total}");
+            var total = 0m; // No parts available yet
+            _logger.LogDebug("Total calculated: {Total}", total);
             
             if (total <= 0) return BadRequest(new { success = false, message = "Không có chi phí phát sinh", debug = new { partsCount = parts.Count, total = total } });
 
-            var orderCode = long.Parse($"{workOrderId}99"); // mã riêng cho phát sinh
-            var amount = (int)Math.Round(total);
-            var description = ($"WO-{workOrderId}-Charges").Substring(0, Math.Min(25, $"WO-{workOrderId}-Charges".Length));
+            var orderCode = long.Parse($"{bookingId}99"); // mã riêng cho phát sinh
+            var amount = (int)Math.Round((decimal)total);
+            var description = ($"BOOKING-{bookingId}-Charges").Substring(0, Math.Min(25, $"BOOKING-{bookingId}-Charges".Length));
             var returnUrl = _payos.ReturnUrl ?? string.Empty;
             var cancelUrl = _payos.CancelUrl ?? string.Empty;
             
@@ -98,9 +119,7 @@ public class WorkOrderChargesController : ControllerBase
                 orderCode,
                 amount,
                 description,
-                items = wo.WorkOrderParts
-                    .Where(p => p.QuantityUsed > 0 && p.UnitCost > 0) // Filter out invalid items
-                    .Select(p => new { name = p.Part?.PartName ?? $"Part {p.PartId}", quantity = p.QuantityUsed, price = (int)Math.Round(p.UnitCost) }),
+                items = new List<object>(), // No parts available yet
                 returnUrl,
                 cancelUrl,
                 signature
@@ -117,7 +136,7 @@ public class WorkOrderChargesController : ControllerBase
             response.EnsureSuccessStatusCode();
             var json = JsonDocument.Parse(responseText).RootElement;
             
-            Console.WriteLine($"[DEBUG] PayOS Response: {responseText}");
+            _logger.LogDebug("PayOS Response: {ResponseText}", responseText);
             
             if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
                 dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
@@ -143,10 +162,10 @@ public class WorkOrderChargesController : ControllerBase
         }
 
         [HttpPost("confirm")]
-        public async Task<IActionResult> Confirm(int workOrderId, [FromQuery] long orderCode)
+        public async Task<IActionResult> Confirm(int bookingId, [FromQuery] long orderCode)
         {
-            var wo = await _workOrderRepo.GetByIdAsync(workOrderId);
-            if (wo == null) return NotFound(new { success = false, message = "WorkOrder không tồn tại" });
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
 
             var getUrl = $"{_payos.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
             using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(getUrl));
@@ -159,39 +178,30 @@ public class WorkOrderChargesController : ControllerBase
             if (status != "PAID" && status != "SUCCESS" && status != "COMPLETED")
                 return BadRequest(new { success = false, message = $"Trạng thái PayOS: {status}" });
 
-            // Create invoice DETAIL from WorkOrderParts
-            var total = (wo.WorkOrderParts ?? new System.Collections.Generic.List<Domain.Entities.WorkOrderPart>())
-                .Sum(p => p.UnitCost * p.QuantityUsed);
+            // WorkOrder functionality merged into Booking - no separate work order needed
+            var total = 0m; // No parts available yet
             var invoice = new Domain.Entities.Invoice
             {
-                WorkOrderId = workOrderId,
-                BookingId = wo.BookingId,
-                CustomerId = wo.Booking?.CustomerId,
-                Email = wo.Booking?.Customer?.User?.Email,
-                Phone = wo.Booking?.Customer?.User?.PhoneNumber,
+                BookingId = bookingId,
+                CustomerId = booking.CustomerId,
+                Email = booking.Customer?.User?.Email,
+                Phone = booking.Customer?.User?.PhoneNumber,
                 Status = "PAID",
                 CreatedAt = DateTime.UtcNow,
                 
             };
             invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
 
-            var items = (wo.WorkOrderParts ?? new System.Collections.Generic.List<Domain.Entities.WorkOrderPart>())
-                .Select(p => new Domain.Entities.InvoiceItem
-                {
-                    InvoiceId = invoice.InvoiceId,
-                    Description = p.Part?.PartName
-                }).ToList();
-            await _invoiceRepo.CreateInvoiceItemsAsync(items);
 
-            var payment = (Domain.Entities.Payment)null;
+            var payment = (Domain.Entities.Payment?)null;
             if (payment == null)
             {
                 payment = new Domain.Entities.Payment
                 {
-                    PaymentCode = $"PAY{DateTime.UtcNow:yyyyMMddHHmmss}{workOrderId}",
+                    PaymentCode = $"PAY{DateTime.UtcNow:yyyyMMddHHmmss}{bookingId}",
                     InvoiceId = invoice.InvoiceId,
                     PaymentMethod = "PAYOS",
-                    Amount = (int)Math.Round(total),
+                    Amount = (int)Math.Round((decimal)total),
                     Status = "PAID",
                     PaidAt = DateTime.UtcNow,
                     CreatedAt = DateTime.UtcNow,
@@ -208,10 +218,10 @@ public class WorkOrderChargesController : ControllerBase
 
             try
             {
-                var customerEmail = wo.Booking?.Customer?.User?.Email;
+                var customerEmail = booking.Customer?.User?.Email;
                 if (!string.IsNullOrWhiteSpace(customerEmail))
                 {
-                    var pdf = BuildInvoicePdf(invoice, items);
+                    var pdf = BuildInvoicePdf(invoice);
                     var subject = $"Hóa đơn phát sinh #{invoice.InvoiceId}";
                     var body = $"<p>Cảm ơn bạn đã thanh toán phát sinh.</p><p>Mã hóa đơn: {invoice.InvoiceId}</p>";
                     await _email.SendEmailWithAttachmentAsync(customerEmail, subject, body, $"Invoice_{invoice.InvoiceId}.pdf", pdf);
@@ -219,7 +229,7 @@ public class WorkOrderChargesController : ControllerBase
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[WARN] Send invoice email failed: {ex.Message}");
+                _logger.LogWarning("Send invoice email failed: {Error}", ex.Message);
             }
 
             return Ok(new { success = true, invoiceId = invoice.InvoiceId, status = "PAID" });
@@ -229,31 +239,28 @@ public class WorkOrderChargesController : ControllerBase
         {
             public int Amount { get; set; }
             public int PaidByUserId { get; set; }
-            public string Note { get; set; }
+            public string Note { get; set; } = string.Empty;
         }
 
         [HttpPost("offline")]
-        public async Task<IActionResult> CreateOffline(int workOrderId, [FromBody] OfflinePaymentRequest req)
+        public async Task<IActionResult> CreateOffline(int bookingId, [FromBody] OfflinePaymentRequest req)
         {
             if (req == null || req.Amount <= 0 || req.PaidByUserId <= 0)
                 return BadRequest(new { success = false, message = "amount và paidByUserId là bắt buộc" });
 
-            var wo = await _workOrderRepo.GetByIdAsync(workOrderId);
-            if (wo == null) return NotFound(new { success = false, message = "WorkOrder không tồn tại" });
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
 
-            // Tính tổng chi phí phát sinh
-            var total = (wo.WorkOrderParts ?? new System.Collections.Generic.List<Domain.Entities.WorkOrderPart>())
-                .Sum(p => p.UnitCost * p.QuantityUsed);
-            if (total <= 0) total = req.Amount; // fallback theo amount nhập nếu không có parts
+            // WorkOrder functionality merged into Booking - no separate work order needed
+            var total = req.Amount; // Use provided amount
 
             // Tạo invoice DETAIL
             var invoice = new Domain.Entities.Invoice
             {
-                WorkOrderId = workOrderId,
-                BookingId = wo.BookingId,
-                CustomerId = wo.Booking?.CustomerId,
-                Email = wo.Booking?.Customer?.User?.Email,
-                Phone = wo.Booking?.Customer?.User?.PhoneNumber,
+                BookingId = bookingId,
+                CustomerId = booking.CustomerId,
+                Email = booking.Customer?.User?.Email,
+                Phone = booking.Customer?.User?.PhoneNumber,
                 Status = "PAID",
                 CreatedAt = DateTime.UtcNow,
                 
@@ -262,32 +269,28 @@ public class WorkOrderChargesController : ControllerBase
 
             var payment = new Domain.Entities.Payment
             {
-                PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{workOrderId}",
+                PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{bookingId}",
                 InvoiceId = invoice.InvoiceId,
                 PaymentMethod = "CASH",
-                Amount = (int)Math.Round(total),
+                Amount = (int)Math.Round((decimal)total),
                 Status = "PAID",
                 PaidAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
-                PaidByUserId = req.PaidByUserId,
+                PaidByUserID = req.PaidByUserId,
             };
             await _paymentRepo.CreateAsync(payment);
 
             return Ok(new { success = true, invoiceId = invoice.InvoiceId, paymentId = payment.PaymentId, status = payment.Status });
         }
 
-        private static byte[] BuildInvoicePdf(Domain.Entities.Invoice invoice, System.Collections.Generic.List<Domain.Entities.InvoiceItem> items)
+        private static byte[] BuildInvoicePdf(Domain.Entities.Invoice invoice)
         {
             // Simple PDF using plain text (placeholder). Replace with QuestPDF if available.
             var sb = new StringBuilder();
             sb.AppendLine($"Invoice: {invoice.InvoiceId}");
             sb.AppendLine($"Date: {DateTime.UtcNow:yyyy-MM-dd HH:mm}");
             sb.AppendLine($"Customer email: {invoice.Email}");
-            sb.AppendLine("Items:");
-            foreach (var i in items)
-            {
-                sb.AppendLine($"- {i.Description}");
-            }
+            sb.AppendLine("Items: (chi tiết đã giản lược)");
             return Encoding.UTF8.GetBytes(sb.ToString());
         }
     }

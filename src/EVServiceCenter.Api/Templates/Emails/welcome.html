@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Service Center - Chào mừng</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; background-color: #f8f9fa; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .header { background: #a5ed94; color: #1f2937; padding: 28px 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 26px; font-weight: 700; }
+        .content { padding: 28px; }
+        .content h2 { margin-top: 0; font-size: 22px; }
+        .cta { display: inline-block; margin-top: 16px; background: #22c55e; color: #fff; padding: 10px 16px; border-radius: 8px; text-decoration: none; }
+        .footer { background-color: #f8f9fa; padding: 18px; text-align: center; font-size: 12px; color: #6b7280; }
+    </style>
+    </head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Chào mừng bạn đến với EV Service Center</h1>
+        </div>
+        <div class="content">
+            <h2>Xin chào {{fullName}},</h2>
+            <p>Tài khoản của bạn đã được tạo thành công. Bạn có thể đăng nhập và cập nhật thông tin bất kỳ lúc nào.</p>
+            <p>Truy cập trang chủ: <a href="{{baseUrl}}" class="cta">Mở EV Service Center</a></p>
+            <p>Nếu bạn cần hỗ trợ, liên hệ: {{supportPhone}}</p>
+        </div>
+        <div class="footer">
+            © {{year}} EV Service Center
+        </div>
+    </div>
+</body>
+</html>
+

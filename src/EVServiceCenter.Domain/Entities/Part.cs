@@ -23,16 +23,16 @@ public partial class Part
 
     public decimal? Rating { get; set; }
 
-    public virtual ICollection<Inventory> Inventories { get; set; } = new List<Inventory>();
+    public virtual ICollection<InventoryPart> InventoryParts { get; set; } = new List<InventoryPart>();
 
-    public virtual ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
+    
 
     
 
     public virtual ICollection<WorkOrderPart> WorkOrderParts { get; set; } = new List<WorkOrderPart>();
 
     // E-commerce navigation properties
-    public virtual ICollection<ShoppingCart> ShoppingCarts { get; set; } = new List<ShoppingCart>();
+    
 
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,8 +41,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(vmp => vmp.VehicleModel)
                 .Include(vmp => vmp.Part)
                 .Where(vmp => vmp.PartId == partId)
-                .OrderBy(vmp => vmp.VehicleModel.Brand)
-                .ThenBy(vmp => vmp.VehicleModel.ModelName)
+                .OrderBy(vmp => vmp.VehicleModel.ModelName)
                 .ToListAsync();
         }
 
@@ -52,12 +51,13 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(vmp => vmp.ModelId == modelId && vmp.PartId == partId);
         }
 
+        // IsCompatible removed; keep generic getter by modelId
         public async Task<IEnumerable<VehicleModelPart>> GetCompatiblePartsByModelIdAsync(int modelId)
         {
             return await _context.VehicleModelParts
                 .Include(vmp => vmp.VehicleModel)
                 .Include(vmp => vmp.Part)
-                .Where(vmp => vmp.ModelId == modelId && vmp.IsCompatible)
+                .Where(vmp => vmp.ModelId == modelId)
                 .OrderBy(vmp => vmp.Part.PartName)
                 .ToListAsync();
         }
@@ -67,7 +67,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.VehicleModelParts
                 .Include(vmp => vmp.VehicleModel)
                 .Include(vmp => vmp.Part)
-                .Where(vmp => vmp.ModelId == modelId && !vmp.IsCompatible)
+                .Where(vmp => vmp.ModelId == modelId)
                 .OrderBy(vmp => vmp.Part.PartName)
                 .ToListAsync();
         }
@@ -99,14 +99,15 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<int> CountCompatiblePartsByModelIdAsync(int modelId)
         {
+            // IsCompatible removed: trả số lượng bản ghi theo model
             return await _context.VehicleModelParts
-                .CountAsync(vmp => vmp.ModelId == modelId && vmp.IsCompatible);
+                .CountAsync(vmp => vmp.ModelId == modelId);
         }
 
         public async Task<int> CountIncompatiblePartsByModelIdAsync(int modelId)
         {
-            return await _context.VehicleModelParts
-                .CountAsync(vmp => vmp.ModelId == modelId && !vmp.IsCompatible);
+            // IsCompatible removed: không phân biệt, trả 0 để giữ tương thích nếu cần
+            return await Task.FromResult(0);
         }
     }
 }

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Service Center - OTP Verification</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f8f9fa; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background-color: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+        .header { background: linear-gradient(135deg, #FF593D, #F4A261); color: white; padding: 30px 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; font-weight: bold; }
+        .content { padding: 30px; }
+        .otp-box { background: #f3f4f6; border-radius: 12px; padding: 24px; text-align: center; margin: 20px 0; }
+        .otp-code { font-size: 32px; font-weight: bold; letter-spacing: 8px; background: #fff; border-radius: 8px; padding: 16px; display: inline-block; border: 1px solid #e5e7eb; }
+        .note { color: #6b7280; font-size: 14px; }
+        .security { background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px; padding: 16px; margin-top: 16px; }
+        .footer { background-color: #f8f9fa; padding: 18px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+    <!-- Keep styles minimal for reliability across email clients -->
+    <!-- All dynamic content uses double-curly placeholders: {{placeholder}} -->
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="/email/10.webp" alt="EV Service Center" style="height:64px; display:block; margin:0 auto 12px auto;" />
+            <h1>EV Service Center</h1>
+        </div>
+        <div class="content">
+            <p>Xin chào {{fullName}},</p>
+            <p>Đây là mã xác thực để hoàn tất đăng nhập/đăng ký:</p>
+            <div class="otp-box">
+                <div class="otp-code">{{otpCode}}</div>
+                <div class="note">Mã sẽ hết hạn trong {{expireMinutes}} phút và chỉ dùng 1 lần.</div>
+            </div>
+            <div class="security">
+                <ul>
+                    <li>Không chia sẻ mã này với bất kỳ ai.</li>
+                    <li>Chúng tôi sẽ không bao giờ hỏi mã OTP.</li>
+                    <li>Chỉ nhập mã trên trang chính thức: {{baseUrl}}.</li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer">
+            <div>© {{year}} EV Service Center</div>
+            <div>Hỗ trợ: support@evservicecenter.com | {{supportPhone}}</div>
+        </div>
+    </div>
+</body>
+</html>
+
+

@@ -15,6 +15,9 @@ public partial class UserPromotion
 
     public int? OrderId { get; set; }
 
+    // Optional link to a specific service (e.g., booking service)
+    public int? ServiceId { get; set; }
+
     public DateTime UsedAt { get; set; }
 
     public decimal DiscountAmount { get; set; }
@@ -28,4 +31,6 @@ public partial class UserPromotion
     public virtual Order Order { get; set; }
 
     public virtual Promotion Promotion { get; set; }
+
+    public virtual Service Service { get; set; }
 }

@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -14,14 +15,16 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IVehicleRepository _vehicleRepository;
         private readonly ICustomerRepository _customerRepository;
+        private readonly ILogger<VehicleService> _logger;
 
-        public VehicleService(IVehicleRepository vehicleRepository, ICustomerRepository customerRepository)
+        public VehicleService(IVehicleRepository vehicleRepository, ICustomerRepository customerRepository, ILogger<VehicleService> logger)
         {
             _vehicleRepository = vehicleRepository;
             _customerRepository = customerRepository;
+            _logger = logger;
         }
 
-        public async Task<VehicleListResponse> GetVehiclesAsync(int pageNumber = 1, int pageSize = 10, int? customerId = null, string searchTerm = null)
+        public async Task<VehicleListResponse> GetVehiclesAsync(int pageNumber = 1, int pageSize = 10, int? customerId = null, string? searchTerm = null)
         {
             try
             {
@@ -100,7 +103,6 @@ namespace EVServiceCenter.Application.Service
                     Color = request.Color.Trim(),
                     CurrentMileage = request.CurrentMileage,
                     LastServiceDate = request.LastServiceDate,
-                    PurchaseDate = request.PurchaseDate,
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -168,7 +170,6 @@ namespace EVServiceCenter.Application.Service
                 vehicle.Color = request.Color.Trim();
                 vehicle.CurrentMileage = request.CurrentMileage;
                 vehicle.LastServiceDate = request.LastServiceDate;
-                vehicle.PurchaseDate = request.PurchaseDate;
 
                 await _vehicleRepository.UpdateVehicleAsync(vehicle);
 
@@ -196,10 +197,9 @@ namespace EVServiceCenter.Application.Service
                 Color = vehicle.Color,
                 CurrentMileage = vehicle.CurrentMileage,
                 LastServiceDate = vehicle.LastServiceDate,
-                PurchaseDate = vehicle.PurchaseDate,
                 CreatedAt = vehicle.CreatedAt,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
-                CustomerPhone = vehicle.Customer?.User?.PhoneNumber
+                CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? string.Empty
             };
         }
 
@@ -230,13 +230,79 @@ namespace EVServiceCenter.Application.Service
                 throw new ArgumentException(string.Join(" ", errors));
         }
 
-        private async Task ValidateUpdateVehicleRequestAsync(UpdateVehicleRequest request, int vehicleId)
+        private Task ValidateUpdateVehicleRequestAsync(UpdateVehicleRequest request, int vehicleId)
         {
             var errors = new List<string>();
             // Không còn kiểm tra biển số khi cập nhật
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
+            
+            return Task.CompletedTask;
+        }
+
+        // New methods implementation
+        public async Task<CustomerResponse> GetCustomerByVehicleIdAsync(int vehicleId)
+        {
+            try
+            {
+                var vehicle = await _vehicleRepository.GetVehicleByIdAsync(vehicleId);
+                if (vehicle == null)
+                    throw new ArgumentException("Xe không tồn tại.");
+
+                var customer = await _customerRepository.GetCustomerByIdAsync(vehicle.CustomerId);
+                if (customer == null)
+                    throw new ArgumentException("Khách hàng không tồn tại.");
+
+                return new CustomerResponse
+                {
+                    CustomerId = customer.CustomerId,
+                    UserId = customer.UserId,
+                    IsGuest = customer.UserId == null,
+                    UserFullName = customer.User?.FullName ?? "Khách vãng lai",
+                    UserEmail = customer.User?.Email ?? string.Empty,
+                    UserPhoneNumber = customer.User?.PhoneNumber ?? string.Empty,
+                    VehicleCount = 1 // We know this customer has at least this vehicle
+                };
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy thông tin khách hàng: {ex.Message}");
+            }
+        }
+
+
+        public async Task<VehicleResponse> GetVehicleByVinOrLicensePlateAsync(string vinOrLicensePlate)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(vinOrLicensePlate))
+                    throw new ArgumentException("VIN hoặc biển số xe không được để trống.");
+
+                var vehicles = await _vehicleRepository.GetAllVehiclesAsync();
+                var normalizedSearch = vinOrLicensePlate.Trim().ToUpper();
+
+                var vehicle = vehicles.FirstOrDefault(v => 
+                    v.Vin.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    v.LicensePlate.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase));
+
+                if (vehicle == null)
+                    throw new ArgumentException("Không tìm thấy xe với VIN hoặc biển số này.");
+
+                return MapToVehicleResponse(vehicle);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi tìm xe: {ex.Message}");
+            }
         }
     }
 }

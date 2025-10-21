@@ -17,11 +17,13 @@ namespace EVServiceCenter.WebAPI.Controllers
     {
         private readonly ICustomerService _customerService;
         private readonly IVehicleService _vehicleService;
+        private readonly ICustomerServiceCreditService _customerServiceCreditService;
 
-        public CustomerController(ICustomerService customerService, IVehicleService vehicleService)
+        public CustomerController(ICustomerService customerService, IVehicleService vehicleService, ICustomerServiceCreditService customerServiceCreditService)
         {
             _customerService = customerService;
             _vehicleService = vehicleService;
+            _customerServiceCreditService = customerServiceCreditService;
         }
 
         /// <summary>
@@ -58,46 +60,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo hồ sơ khách hàng mới
-        /// </summary>
-        /// <param name="request">Thông tin khách hàng mới</param>
-        /// <returns>Thông tin khách hàng đã tạo</returns>
-        [HttpPost]
-        public async Task<IActionResult> CreateCustomer([FromBody] CreateCustomerRequest request)
-        {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
-                    });
-                }
-
-                var customer = await _customerService.CreateCustomerAsync(request);
-                
-                return CreatedAtAction(nameof(GetCurrentCustomer), new { }, new { 
-                    success = true, 
-                    message = "Tạo khách hàng thành công",
-                    data = customer
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
+        // [Removed] POST /api/Customer tạo theo phone/isGuest đã bị loại bỏ để tránh trùng chức năng với quick-create.
 
         /// <summary>
         /// Lấy danh sách phương tiện của khách hàng
@@ -112,7 +75,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             int id,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null)
+            [FromQuery] string? searchTerm = null)
         {
             try
             {
@@ -141,40 +104,71 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Cập nhật thông tin khách hàng
+        /// Liệt kê các gói dịch vụ khách đã mua (credits)
         /// </summary>
-        /// <param name="id">ID khách hàng</param>
-        /// <param name="request">Thông tin cập nhật</param>
-        /// <returns>Kết quả cập nhật</returns>
-        [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateCustomer(int id, [FromBody] UpdateCustomerRequest request)
+        /// <param name="customerId">ID khách hàng</param>
+        [HttpGet("{customerId}/credits")]
+        public async Task<IActionResult> GetCustomerCredits(int customerId)
         {
             try
             {
-                if (id <= 0)
+                if (customerId <= 0)
                     return BadRequest(new { success = false, message = "ID khách hàng không hợp lệ" });
 
-                if (!ModelState.IsValid)
-                {
-                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
-                    });
-                }
-
-                var customer = await _customerService.UpdateCustomerAsync(id, request);
+                var credits = await _customerServiceCreditService.GetByCustomerIdAsync(customerId);
+                var creditsList = credits.ToList();
                 
                 return Ok(new { 
                     success = true, 
-                    message = "Cập nhật khách hàng thành công",
-                    data = customer
+                    message = $"Tìm thấy {creditsList.Count} gói dịch vụ đã mua",
+                    data = creditsList 
                 });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = ex.Message });
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy thông tin chi tiết xe của khách hàng
+        /// </summary>
+        /// <param name="customerId">ID khách hàng</param>
+        /// <param name="vehicleId">ID xe</param>
+        /// <returns>Thông tin chi tiết xe của khách hàng</returns>
+        [HttpGet("{customerId}/vehicles/{vehicleId}")]
+        public async Task<IActionResult> GetCustomerVehicleDetail(int customerId, int vehicleId)
+        {
+            try
+            {
+                if (customerId <= 0)
+                    return BadRequest(new { success = false, message = "ID khách hàng không hợp lệ" });
+                
+                if (vehicleId <= 0)
+                    return BadRequest(new { success = false, message = "ID xe không hợp lệ" });
+
+                // Lấy thông tin xe
+                var vehicle = await _vehicleService.GetVehicleByIdAsync(vehicleId);
+                if (vehicle == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy xe" });
+
+                // Kiểm tra xe có thuộc về customer không
+                if (vehicle.CustomerId != customerId)
+                    return Forbid("Xe không thuộc về khách hàng này");
+
+                return Ok(new { 
+                    success = true, 
+                    message = $"Lấy thông tin chi tiết xe {vehicleId} của khách hàng {customerId} thành công",
+                    data = vehicle
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -185,12 +179,13 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        // [Removed] PUT /api/Customer/{id} cập nhật nhanh theo phone/isGuest đã bị loại bỏ để đơn giản hóa API.
+
         /// <summary>
         /// STAFF/TECHNICIAN/ADMIN tạo nhanh tài khoản CUSTOMER với 3 trường cơ bản
         /// </summary>
         [HttpPost("quick-create")]
-        [Authorize(Policy = "StaffOrAdmin")]
-        [Authorize(Policy = "TechnicianOrAdmin")]
+        [Authorize(Roles = "STAFF,TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> QuickCreateCustomer([FromBody] QuickCreateCustomerRequest request)
         {
             try

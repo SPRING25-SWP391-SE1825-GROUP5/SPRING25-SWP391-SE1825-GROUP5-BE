@@ -13,16 +13,12 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IBookingRepository _bookingRepository;
         private readonly ICustomerRepository _customerRepository;
-        private readonly IWorkOrderRepository _workOrderRepository;
-
         public BookingHistoryService(
             IBookingRepository bookingRepository,
-            ICustomerRepository customerRepository,
-            IWorkOrderRepository workOrderRepository)
+            ICustomerRepository customerRepository)
         {
             _bookingRepository = bookingRepository;
             _customerRepository = customerRepository;
-            _workOrderRepository = workOrderRepository;
         }
 
         public async Task<BookingHistoryListResponse> GetBookingHistoryAsync(int customerId, int page = 1, int pageSize = 10, 
@@ -143,7 +139,7 @@ namespace EVServiceCenter.Application.Service
             // Calculate statistics
             var totalBookings = allBookings.Count;
             var statusBreakdown = CalculateStatusBreakdown(allBookings);
-            var totalSpent = allBookings.Where(b => b.Status == "COMPLETED").Sum(b => b.TotalCost ?? 0);
+            var totalSpent = allBookings.Where(b => b.Status == "COMPLETED").Sum(b => b.Service?.BasePrice ?? 0);
             var averageCost = totalBookings > 0 ? totalSpent / totalBookings : 0;
 
             var favoriteService = CalculateFavoriteService(allBookings);
@@ -179,12 +175,12 @@ namespace EVServiceCenter.Application.Service
                 },
                 ServiceName = booking.Service?.ServiceName ?? "",
                 TechnicianName = "N/A", // Technician removed from Booking
-                TotalCost = booking.TotalCost ?? 0,
+                // TotalCost field removed from summary model in response list; omit
                 CreatedAt = booking.CreatedAt
             };
         }
 
-        private async Task<BookingHistoryResponse> MapToBookingHistoryResponse(Booking booking)
+        private Task<BookingHistoryResponse> MapToBookingHistoryResponse(Booking booking)
         {
             var response = new BookingHistoryResponse
             {
@@ -192,6 +188,8 @@ namespace EVServiceCenter.Application.Service
                 BookingCode = "",
                 BookingDate = DateOnly.FromDateTime(booking.CreatedAt),
                 Status = booking.Status ?? "",
+                PartsUsed = new List<PartUsedInfo>(),
+                Timeline = new List<StatusTimelineInfo>(),
                 CenterInfo = new CenterInfo
                 {
                     CenterId = booking.CenterId,
@@ -205,7 +203,6 @@ namespace EVServiceCenter.Application.Service
                     LicensePlate = booking.Vehicle?.LicensePlate ?? "",
                     Vin = booking.Vehicle?.Vin ?? "",
                     ModelName = booking.Vehicle?.VehicleModel?.ModelName,
-                    Brand = booking.Vehicle?.VehicleModel?.Brand,
                     Year = null
                 },
                 ServiceInfo = new BookingServiceInfo
@@ -218,17 +215,17 @@ namespace EVServiceCenter.Application.Service
                 },
                 TimeSlotInfo = new TimeSlotInfo
                 {
-                    SlotId = booking.SlotId,
-                    StartTime = booking.Slot?.SlotTime.ToString(@"hh\:mm") ?? "",
-                    EndTime = booking.Slot?.SlotTime.AddMinutes(60).ToString(@"hh\:mm") ?? "" // Assume 1 hour duration
+                    SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
+                    StartTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString(@"hh\:mm") ?? "",
+                    EndTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.AddMinutes(60).ToString(@"hh\:mm") ?? "" // Assume 1 hour duration
                 },
                 CostInfo = new CostInfo
                 {
                     ServiceCost = booking.Service?.BasePrice ?? 0,
-                    PartsCost = 0, // Will be calculated from WorkOrderParts
-                    TotalCost = booking.TotalCost ?? 0,
-                    Discount = 0, // Will be calculated from promotions
-                    FinalCost = booking.TotalCost ?? 0
+                    PartsCost = 0,
+                    TotalCost = booking.Service?.BasePrice ?? 0,
+                    Discount = 0,
+                    FinalCost = booking.Service?.BasePrice ?? 0
                 },
                 CreatedAt = booking.CreatedAt,
                 UpdatedAt = booking.UpdatedAt
@@ -237,61 +234,46 @@ namespace EVServiceCenter.Application.Service
             // Technician info removed from Booking - will be handled in WorkOrder
             response.TechnicianInfo = null;
 
-            // Get work order details
-            var workOrder = await _workOrderRepository.GetByBookingIdAsync(booking.BookingId);
-            if (workOrder != null)
+            // WorkOrder functionality merged into Booking - no separate work order needed
+            response.WorkOrderInfo = new WorkOrderInfo
             {
-                response.WorkOrderInfo = new WorkOrderInfo
+                WorkOrderId = booking.BookingId, // Use BookingId as WorkOrderId
+                WorkOrderNumber = $"WO-#{booking.BookingId}",
+                ActualDuration = null,
+                WorkPerformed = null,
+                CustomerComplaints = null,
+                InitialMileage = booking.CurrentMileage,
+                FinalMileage = null,
+                StartTime = null,
+                EndTime = null
+            };
+
+            // Calculate parts cost from WorkOrderParts (now linked to Booking)
+            var partsCost = 0m; // Will be calculated from WorkOrderParts if needed
+            response.CostInfo.PartsCost = partsCost;
+            response.CostInfo.FinalCost = response.CostInfo.ServiceCost + partsCost;
+
+            // Parts used will be handled separately through WorkOrderParts repository
+            response.PartsUsed = new List<PartUsedInfo>();
+
+            // Get payment info from Invoice
+            var payment = booking.Invoices?.FirstOrDefault()?.Payments?.FirstOrDefault();
+            if (payment != null)
+            {
+                response.PaymentInfo = new PaymentInfo
                 {
-                    WorkOrderId = workOrder.WorkOrderId,
-                    WorkOrderNumber = $"WO-#{workOrder.WorkOrderId}",
-                    ActualDuration = null,
-                    WorkPerformed = null,
-                    CustomerComplaints = null,
-                    InitialMileage = null,
-                    FinalMileage = null,
-                    StartTime = null,
-                    EndTime = null
+                    PaymentId = payment.PaymentId,
+                    PaymentStatus = payment.Status ?? "",
+                    PaymentMethod = payment.PaymentMethod ?? "",
+                    PaidAt = payment.PaidAt,
+                    Amount = payment.Amount
                 };
-
-                // Calculate parts cost
-                var partsCost = workOrder.WorkOrderParts?.Sum(wp => wp.UnitCost * wp.QuantityUsed) ?? 0;
-                response.CostInfo.PartsCost = partsCost;
-                response.CostInfo.FinalCost = response.CostInfo.ServiceCost + partsCost;
-
-                // Add parts used
-                if (workOrder.WorkOrderParts != null)
-                {
-                    response.PartsUsed = workOrder.WorkOrderParts.Select(wp => new PartUsedInfo
-                    {
-                        PartId = wp.PartId,
-                        PartName = wp.Part?.PartName ?? "",
-                        PartNumber = wp.Part?.PartNumber,
-                        Quantity = wp.QuantityUsed,
-                        UnitPrice = wp.UnitCost,
-                        TotalPrice = wp.UnitCost * wp.QuantityUsed
-                    }).ToList();
-                }
-
-                // Get payment info
-                var payment = workOrder.Invoices?.FirstOrDefault()?.Payments?.FirstOrDefault();
-                if (payment != null)
-                {
-                    response.PaymentInfo = new PaymentInfo
-                    {
-                        PaymentId = payment.PaymentId,
-                        PaymentStatus = payment.Status ?? "",
-                        PaymentMethod = payment.PaymentMethod ?? "",
-                        PaidAt = payment.PaidAt,
-                        Amount = payment.Amount
-                    };
-                }
             }
 
             // Generate timeline
             response.Timeline = GenerateStatusTimeline(booking);
 
-            return response;
+            return Task.FromResult(response);
         }
 
         private List<StatusTimelineInfo> GenerateStatusTimeline(Booking booking)

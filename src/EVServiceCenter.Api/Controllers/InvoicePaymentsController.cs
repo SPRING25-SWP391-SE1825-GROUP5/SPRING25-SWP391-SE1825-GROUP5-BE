@@ -1,10 +1,12 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Application.Interfaces;
 
 namespace EVServiceCenter.Api.Controllers;
 
@@ -14,18 +16,22 @@ public class InvoicePaymentsController : ControllerBase
 {
     private readonly IPaymentRepository _paymentRepo;
     private readonly IInvoiceRepository _invoiceRepo;
+    private readonly ICustomerRepository _customerRepo;
+    private readonly IEmailService _email;
 
-    public InvoicePaymentsController(IPaymentRepository paymentRepo, IInvoiceRepository invoiceRepo)
+    public InvoicePaymentsController(IPaymentRepository paymentRepo, IInvoiceRepository invoiceRepo, ICustomerRepository customerRepo, IEmailService email)
     {
         _paymentRepo = paymentRepo;
         _invoiceRepo = invoiceRepo;
+        _customerRepo = customerRepo;
+        _email = email;
     }
 
     public class CreateOfflinePaymentRequest
     {
         public int Amount { get; set; }
         public int PaidByUserId { get; set; }
-        public string Note { get; set; }
+        public string Note { get; set; } = string.Empty;
     }
 
     [HttpPost("offline")]
@@ -52,7 +58,7 @@ public class InvoicePaymentsController : ControllerBase
             Status = "PAID",
             PaidAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
-            PaidByUserId = req.PaidByUserId,
+            PaidByUserID = req.PaidByUserId,
         };
 
         payment = await _paymentRepo.CreateAsync(payment);
@@ -63,13 +69,13 @@ public class InvoicePaymentsController : ControllerBase
             status = payment.Status,
             amount = payment.Amount,
             paymentMethod = payment.PaymentMethod,
-            paidByUserId = payment.PaidByUserId
+            paidByUserId = payment.PaidByUserID
         });
     }
 
     [HttpGet]
     [Authorize]
-    public async Task<IActionResult> List([FromRoute] int invoiceId, [FromQuery] string status = null, [FromQuery] string method = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    public async Task<IActionResult> List([FromRoute] int invoiceId, [FromQuery] string? status = null, [FromQuery] string? method = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         var invoice = await _invoiceRepo.GetByIdAsync(invoiceId);
         if (invoice == null)
@@ -84,12 +90,109 @@ public class InvoicePaymentsController : ControllerBase
             status = p.Status,
             paymentMethod = p.PaymentMethod,
             amount = p.Amount,
-            paidByUserId = p.PaidByUserId,
+            paidByUserId = p.PaidByUserID,
             createdAt = p.CreatedAt,
             paidAt = p.PaidAt
         });
 
         return Ok(resp);
+    }
+
+    // GET api/invoices (tất cả hóa đơn)
+    [HttpGet("/api/invoices")]
+    [Authorize]
+    public async Task<IActionResult> GetAllInvoices()
+    {
+        var items = await _invoiceRepo.GetAllAsync();
+        var resp = items.Select(i => new {
+            invoiceId = i.InvoiceId,
+            customerId = i.CustomerId,
+            bookingId = i.BookingId,
+            orderId = i.OrderId,
+            status = i.Status,
+            email = i.Email,
+            phone = i.Phone,
+            createdAt = i.CreatedAt
+        });
+        return Ok(resp);
+    }
+
+    // GET api/invoices/customers/{customerId}
+    [HttpGet("/api/invoices/customers/{customerId:int}")]
+    [Authorize]
+    public async Task<IActionResult> GetInvoicesByCustomer([FromRoute] int customerId)
+    {
+        var items = await _invoiceRepo.GetByCustomerIdAsync(customerId);
+        var resp = items.Select(i => new {
+            invoiceId = i.InvoiceId,
+            customerId = i.CustomerId,
+            bookingId = i.BookingId,
+            orderId = i.OrderId,
+            status = i.Status,
+            email = i.Email,
+            phone = i.Phone,
+            createdAt = i.CreatedAt
+        });
+        return Ok(resp);
+    }
+
+    // ----------- Invoice details & finders -----------
+    [HttpGet("/api/invoices/{invoiceId:int}")]
+    [Authorize]
+    public async Task<IActionResult> GetInvoiceById([FromRoute] int invoiceId)
+    {
+        var inv = await _invoiceRepo.GetByIdAsync(invoiceId);
+        if (inv == null) return NotFound(new { success = false, message = "Không tìm thấy hóa đơn" });
+        return Ok(new { success = true, data = inv });
+    }
+
+    [HttpGet("/api/invoices/by-booking/{bookingId:int}")]
+    [Authorize]
+    public async Task<IActionResult> GetInvoiceByBooking([FromRoute] int bookingId)
+    {
+        var inv = await _invoiceRepo.GetByBookingIdAsync(bookingId);
+        if (inv == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho booking" });
+        return Ok(new { success = true, data = inv });
+    }
+
+    // GetInvoiceByWorkOrder removed - WorkOrder functionality merged into Booking
+
+    [HttpGet("/api/invoices/by-order/{orderId:int}")]
+    [Authorize]
+    public async Task<IActionResult> GetInvoiceByOrder([FromRoute] int orderId)
+    {
+        var inv = await _invoiceRepo.GetByOrderIdAsync(orderId);
+        if (inv == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho order" });
+        return Ok(new { success = true, data = inv });
+    }
+
+    [HttpPost("/api/invoices/{invoiceId:int}/send")]
+    [Authorize]
+    public async Task<IActionResult> SendInvoice([FromRoute] int invoiceId)
+    {
+        var inv = await _invoiceRepo.GetByIdAsync(invoiceId);
+        if (inv == null) return NotFound(new { success = false, message = "Không tìm thấy hóa đơn" });
+        var email = inv.Email;
+        if (string.IsNullOrWhiteSpace(email)) return BadRequest(new { success = false, message = "Hóa đơn không có email" });
+        
+        var subject = $"Hóa đơn #{inv.InvoiceId}";
+        
+        // Sử dụng template thay vì hardcode
+        var body = await _email.RenderInvoiceEmailTemplateAsync(
+            customerName: "Khách hàng",
+            invoiceId: inv.InvoiceId.ToString(),
+            bookingId: inv.OrderId?.ToString() ?? "N/A",
+            createdDate: inv.CreatedAt.ToString("dd/MM/yyyy HH:mm"),
+            customerEmail: email,
+            serviceName: "Dịch vụ",
+            servicePrice: "0",
+            totalAmount: "0",
+            hasDiscount: false,
+            discountAmount: "0"
+        );
+        
+        await _email.SendEmailAsync(email, subject, body);
+        return Ok(new { success = true, message = "Đã gửi email hóa đơn" });
     }
 }
 

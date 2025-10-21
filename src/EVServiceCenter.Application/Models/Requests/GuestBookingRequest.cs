@@ -8,25 +8,25 @@ public class GuestBookingRequest
     // Guest info
     [Required]
     [EmailAddress]
-    public string Email { get; set; }
+    public required string Email { get; set; }
 
     [Required]
     [RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải bắt đầu bằng 0 và có đúng 10 chữ số.")]
-    public string PhoneNumber { get; set; }
+    public required string PhoneNumber { get; set; }
 
     [Required]
     [MaxLength(100)]
-    public string FullName { get; set; }
+    public required string FullName { get; set; }
 
     // Vehicle info
     [MaxLength(50)]
-    public string LicensePlate { get; set; }
+    public required string LicensePlate { get; set; }
 
     [MaxLength(50)]
-    public string Vin { get; set; }
+    public required string Vin { get; set; }
 
     [MaxLength(30)]
-    public string Color { get; set; }
+    public required string Color { get; set; }
 
     [Range(0, int.MaxValue)]
     public int CurrentMileage { get; set; }
@@ -41,15 +41,11 @@ public class GuestBookingRequest
     public DateOnly BookingDate { get; set; }
 
     [Required]
-    public int SlotId { get; set; }
+    public int TechnicianSlotId { get; set; }
 
     [Required]
     public int ServiceId { get; set; }
 
-    public int? TechnicianId { get; set; }
-
     [MaxLength(500)]
-    public string SpecialRequests { get; set; }
+    public required string SpecialRequests { get; set; }
 }
-
-

@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace EVServiceCenter.Api.Controllers
 {
@@ -28,6 +29,7 @@ namespace EVServiceCenter.Api.Controllers
         /// </summary>
         /// <returns>Danh sách technician time slots</returns>
         [HttpGet]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetAllTechnicianTimeSlots()
         {
             try
@@ -61,12 +63,24 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
+        [HttpPost("technician/{technicianId}/full-week-all-slots")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> CreateFullWeekAllSlots(int technicianId, [FromBody] CreateTechnicianFullWeekAllSlotsRequest req)
+        {
+            if (req == null) return BadRequest(new { success = false, message = "Body rỗng" });
+            req.TechnicianId = technicianId;
+            var result = await _technicianTimeSlotService.CreateTechnicianFullWeekAllSlotsAsync(req);
+            if (!result.Success) return BadRequest(new { success = false, message = result.Message, errors = result.Errors });
+            return Ok(new { success = true, message = result.Message, totalDays = result.TotalDays, totalSlotsCreated = result.TotalSlotsCreated });
+        }
+
         /// <summary>
         /// Lấy technician time slot theo ID
         /// </summary>
         /// <param name="id">ID của technician time slot</param>
         /// <returns>Technician time slot</returns>
         [HttpGet("{id}")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetTechnicianTimeSlotById(int id)
         {
             try
@@ -105,6 +119,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="technicianId">ID của technician</param>
         /// <returns>Danh sách technician time slots</returns>
         [HttpGet("technician/{technicianId}")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetTechnicianTimeSlotsByTechnicianId(int technicianId)
         {
             try
@@ -135,6 +150,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="centerId">ID của center</param>
         /// <returns>Danh sách technician time slots</returns>
         [HttpGet("center/{centerId}")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetTechnicianTimeSlotsByCenterId(int centerId)
         {
             try
@@ -175,6 +191,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="centerId">ID của center</param>
         /// <returns>Danh sách technician time slots</returns>
         [HttpGet("technician/{technicianId}/center/{centerId}")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetTechnicianTimeSlotsByTechnicianAndCenter(int technicianId, int centerId)
         {
             try
@@ -216,6 +233,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="dayOfWeek">Ngày trong tuần (1-6)</param>
         /// <returns>Danh sách technician time slots</returns>
         [HttpGet("day/{dayOfWeek}")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetTechnicianTimeSlotsByDayOfWeek(byte dayOfWeek)
         {
             try
@@ -266,6 +284,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="request">Thông tin tạo technician time slot</param>
         /// <returns>Kết quả tạo technician time slot</returns>
         [HttpPost]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> CreateTechnicianTimeSlot([FromBody] CreateTechnicianTimeSlotRequest request)
         {
             try
@@ -322,6 +341,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="request">Thông tin tạo lịch tuần</param>
         /// <returns>Kết quả tạo lịch tuần</returns>
         [HttpPost("weekly")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> CreateWeeklyTechnicianTimeSlot([FromBody] CreateWeeklyTechnicianTimeSlotRequest request)
         {
             try
@@ -380,6 +400,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="request">Thông tin tạo lịch</param>
         /// <returns>Kết quả tạo lịch</returns>
         [HttpPost("all-technicians")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> CreateAllTechniciansTimeSlot([FromBody] CreateAllTechniciansTimeSlotRequest request)
         {
             try
@@ -439,6 +460,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="request">Thông tin tạo lịch tuần</param>
         /// <returns>Kết quả tạo lịch tuần</returns>
         [HttpPost("all-technicians-weekly")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> CreateAllTechniciansWeeklyTimeSlot([FromBody] CreateAllTechniciansWeeklyTimeSlotRequest request)
         {
             try
@@ -499,6 +521,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="request">Thông tin cập nhật</param>
         /// <returns>Kết quả cập nhật</returns>
         [HttpPut("{id}")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> UpdateTechnicianTimeSlot(int id, [FromBody] UpdateTechnicianTimeSlotRequest request)
         {
             try
@@ -543,6 +566,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="id">ID của technician time slot</param>
         /// <returns>Kết quả xóa</returns>
         [HttpDelete("{id}")]
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> DeleteTechnicianTimeSlot(int id)
         {
             try
@@ -576,5 +600,51 @@ namespace EVServiceCenter.Api.Controllers
                 });
             }
         }
+
+        [HttpGet("technician/{technicianId}/schedule")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> GetTechnicianSchedule(int technicianId, [FromQuery] DateTime startDate, [FromQuery] DateTime endDate)
+        {
+            try
+            {
+                var data = await _technicianTimeSlotService.GetTechnicianDailyScheduleAsync(technicianId, startDate, endDate);
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = "Lấy lịch làm việc technician thành công",
+                    data, 
+                    total = data.Count 
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("center/{centerId}/schedule")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> GetCenterTechnicianSchedule(int centerId, [FromQuery] DateTime startDate, [FromQuery] DateTime endDate)
+        {
+            try
+            {
+                var data = await _technicianTimeSlotService.GetCenterTechnicianScheduleAsync(centerId, startDate, endDate);
+                return Ok(new { success = true, data, total = data.Count });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        
     }
 }

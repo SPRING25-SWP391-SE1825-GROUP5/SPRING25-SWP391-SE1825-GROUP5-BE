@@ -39,19 +39,11 @@ public class VehicleModelService : IVehicleModelService
         {
             ModelId = model.ModelId,
             ModelName = model.ModelName,
-            Brand = model.Brand,
-            BatteryCapacity = null,
-            MaxRange = null,
-            MaxSpeed = null,
-            ChargingTime = null,
-            Weight = null,
-            Price = null,
-            Year = null,
             IsActive = model.IsActive,
             CreatedAt = model.CreatedAt,
-            UpdatedAt = model.UpdatedAt,
             VehicleCount = vehicleCount,
-            CompatiblePartsCount = compatiblePartsCount
+            CompatiblePartsCount = compatiblePartsCount,
+            Version = model.Version
         };
     }
 
@@ -69,57 +61,18 @@ public class VehicleModelService : IVehicleModelService
             {
                 ModelId = model.ModelId,
                 ModelName = model.ModelName,
-                Brand = model.Brand,
-                BatteryCapacity = null,
-                MaxRange = null,
-                MaxSpeed = null,
-                ChargingTime = null,
-                Weight = null,
-                Price = null,
-                Year = null,
                 IsActive = model.IsActive,
                 CreatedAt = model.CreatedAt,
-                UpdatedAt = model.UpdatedAt,
                 VehicleCount = vehicleCount,
-                CompatiblePartsCount = compatiblePartsCount
+                CompatiblePartsCount = compatiblePartsCount,
+                Version = model.Version
             });
         }
 
         return responses;
     }
 
-    public async Task<IEnumerable<VehicleModelResponse>> GetByBrandAsync(string brand)
-    {
-        var models = await _vehicleModelRepository.GetByBrandAsync(brand);
-        var responses = new List<VehicleModelResponse>();
-
-        foreach (var model in models)
-        {
-            var vehicleCount = await _vehicleRepository.CountByModelIdAsync(model.ModelId);
-            var compatiblePartsCount = await _vehicleModelPartRepository.CountCompatiblePartsByModelIdAsync(model.ModelId);
-
-            responses.Add(new VehicleModelResponse
-            {
-                ModelId = model.ModelId,
-                ModelName = model.ModelName,
-                Brand = model.Brand,
-                BatteryCapacity = null,
-                MaxRange = null,
-                MaxSpeed = null,
-                ChargingTime = null,
-                Weight = null,
-                Price = null,
-                Year = null,
-                IsActive = model.IsActive,
-                CreatedAt = model.CreatedAt,
-                UpdatedAt = model.UpdatedAt,
-                VehicleCount = vehicleCount,
-                CompatiblePartsCount = compatiblePartsCount
-            });
-        }
-
-        return responses;
-    }
+    // Brand removed - GetByBrandAsync deleted
 
     public async Task<IEnumerable<VehicleModelResponse>> GetActiveModelsAsync()
     {
@@ -135,17 +88,8 @@ public class VehicleModelService : IVehicleModelService
             {
                 ModelId = model.ModelId,
                 ModelName = model.ModelName,
-                Brand = model.Brand,
-                BatteryCapacity = null,
-                MaxRange = null,
-                MaxSpeed = null,
-                ChargingTime = null,
-                Weight = null,
-                Price = null,
-                Year = null,
                 IsActive = model.IsActive,
                 CreatedAt = model.CreatedAt,
-                UpdatedAt = model.UpdatedAt,
                 VehicleCount = vehicleCount,
                 CompatiblePartsCount = compatiblePartsCount
             });
@@ -159,9 +103,9 @@ public class VehicleModelService : IVehicleModelService
         var model = new VehicleModel
         {
             ModelName = request.ModelName,
-            Brand = request.Brand,
             IsActive = true,
-            CreatedAt = DateTime.Now
+            CreatedAt = DateTime.Now,
+            Version = null
         };
 
         var createdModel = await _vehicleModelRepository.CreateAsync(model);
@@ -170,19 +114,11 @@ public class VehicleModelService : IVehicleModelService
         {
             ModelId = createdModel.ModelId,
             ModelName = createdModel.ModelName,
-            Brand = createdModel.Brand,
-            BatteryCapacity = null,
-            MaxRange = null,
-            MaxSpeed = null,
-            ChargingTime = null,
-            Weight = null,
-            Price = null,
-            Year = null,
             IsActive = createdModel.IsActive,
             CreatedAt = createdModel.CreatedAt,
-            UpdatedAt = createdModel.UpdatedAt,
             VehicleCount = 0,
-            CompatiblePartsCount = 0
+            CompatiblePartsCount = 0,
+            Version = createdModel.Version
         };
     }
 
@@ -194,13 +130,13 @@ public class VehicleModelService : IVehicleModelService
 
         if (request.ModelName != null)
             model.ModelName = request.ModelName;
-        if (request.Brand != null)
-            model.Brand = request.Brand;
+        // Brand removed
         // Spec fields removed
         if (request.IsActive.HasValue)
             model.IsActive = request.IsActive.Value;
+        // Version hiện chưa cập nhật qua request
 
-        model.UpdatedAt = DateTime.Now;
+        // UpdatedAt removed - not in database
 
         var updatedModel = await _vehicleModelRepository.UpdateAsync(model);
         var vehicleCount = await _vehicleRepository.CountByModelIdAsync(id);
@@ -210,17 +146,8 @@ public class VehicleModelService : IVehicleModelService
         {
             ModelId = updatedModel.ModelId,
             ModelName = updatedModel.ModelName,
-            Brand = updatedModel.Brand,
-            BatteryCapacity = null,
-            MaxRange = null,
-            MaxSpeed = null,
-            ChargingTime = null,
-            Weight = null,
-            Price = null,
-            Year = null,
             IsActive = updatedModel.IsActive,
             CreatedAt = updatedModel.CreatedAt,
-            UpdatedAt = updatedModel.UpdatedAt,
             VehicleCount = vehicleCount,
             CompatiblePartsCount = compatiblePartsCount
         };
@@ -242,7 +169,7 @@ public class VehicleModelService : IVehicleModelService
             return false;
 
         model.IsActive = !model.IsActive;
-        model.UpdatedAt = DateTime.Now;
+        // UpdatedAt removed - not in database
 
         await _vehicleModelRepository.UpdateAsync(model);
         return true;
@@ -262,17 +189,8 @@ public class VehicleModelService : IVehicleModelService
             {
                 ModelId = model.ModelId,
                 ModelName = model.ModelName,
-                Brand = model.Brand,
-                BatteryCapacity = null,
-                MaxRange = null,
-                MaxSpeed = null,
-                ChargingTime = null,
-                Weight = null,
-                Price = null,
-                Year = null,
                 IsActive = model.IsActive,
                 CreatedAt = model.CreatedAt,
-                UpdatedAt = model.UpdatedAt,
                 VehicleCount = vehicleCount,
                 CompatiblePartsCount = compatiblePartsCount
             });

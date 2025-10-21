@@ -40,8 +40,8 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> GetAllUsers(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
-            [FromQuery] string role = null)
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? role = null)
         {
             try
             {
@@ -71,7 +71,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// </summary>
         [HttpGet("find-by-email-or-phone")]
         [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
-        public async Task<IActionResult> FindByEmailOrPhone([FromQuery] string email = null, [FromQuery] string phone = null)
+        public async Task<IActionResult> FindByEmailOrPhone([FromQuery] string? email = null, [FromQuery] string? phone = null)
         {
             try
             {
@@ -83,24 +83,24 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (hasEmail && hasPhone)
                     return BadRequest(new { success = false, message = "Chỉ được truyền 1 trường: email hoặc phone, không được đồng thời cả hai" });
 
-                Domain.Entities.User user = null;
+                Domain.Entities.User? user = null;
                 if (hasEmail)
                 {
-                    var trimmed = email.Trim();
+                    var trimmed = email?.Trim() ?? string.Empty;
                     if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[a-zA-Z0-9._%+-]+@gmail\.com$"))
                         return BadRequest(new { success = false, message = "Email không hợp lệ (yêu cầu @gmail.com)" });
                     user = await _accountService.GetAccountByEmailAsync(trimmed);
                 }
                 else
                 {
-                    var trimmed = phone.Trim();
+                    var trimmed = phone?.Trim() ?? string.Empty;
                     if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^0\d{9}$"))
                         return BadRequest(new { success = false, message = "Số điện thoại không hợp lệ (bắt đầu bằng 0 và đủ 10 số)" });
                     user = await _accountService.GetAccountByPhoneNumberAsync(trimmed);
                 }
 
                 if (user == null)
-                    return NotFound(new { success = false, message = "Không tìm thấy user" });
+                    return NotFound(new { success = false, message = "Không tìm thấy người dùng" });
 
                 var resp = new
                 {
@@ -157,12 +157,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Tạo người dùng mới (Staff/Admin)
+        /// Tạo người dùng mới (Staff/Admin) - Luôn tạo CUSTOMER, cần verify email
         /// </summary>
-        /// <param name="request">Thông tin người dùng mới</param>
-        /// <returns>Thông tin người dùng đã tạo</returns>
+        /// <param name="request">Thông tin người dùng mới (role phải là CUSTOMER, emailVerified phải là false)</param>
+        /// <returns>Thông tin người dùng đã tạo + gửi OTP verification</returns>
         [HttpPost]
-        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
         {
             try
@@ -199,12 +199,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Kích hoạt người dùng (Staff/Admin)
+        /// Kích hoạt người dùng (Admin only)
         /// </summary>
         /// <param name="id">ID người dùng</param>
         /// <returns>Kết quả kích hoạt</returns>
         [HttpPatch("{id}/activate")]
-        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> ActivateUser(int id)
         {
             try
@@ -243,12 +243,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Vô hiệu hóa người dùng (Staff/Admin)
+        /// Vô hiệu hóa người dùng (Admin only)
         /// </summary>
         /// <param name="id">ID người dùng</param>
         /// <returns>Kết quả vô hiệu hóa</returns>
         [HttpPatch("{id}/deactivate")]
-        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> DeactivateUser(int id)
         {
             try
@@ -289,6 +289,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
+
+        
 
         #region Helper Methods
 

@@ -10,6 +10,7 @@ using EVServiceCenter.Application.Configurations;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Globalization;
 
@@ -20,46 +21,75 @@ public class PaymentService
 	private readonly HttpClient _httpClient;
 	private readonly PayOsOptions _options;
     private readonly IBookingRepository _bookingRepository;
-    private readonly IWorkOrderRepository _workOrderRepository;
+    // WorkOrderRepository removed - functionality merged into BookingRepository
     private readonly IOrderRepository _orderRepository;
 	private readonly IInvoiceRepository _invoiceRepository;
 	private readonly IPaymentRepository _paymentRepository;
     private readonly ITechnicianRepository _technicianRepository;
     private readonly IEmailService _emailService;
-    private readonly IServicePartRepository _servicePartRepository;
     private readonly IWorkOrderPartRepository _workOrderPartRepository;
     private readonly IMaintenanceChecklistRepository _checklistRepository;
     private readonly IMaintenanceChecklistResultRepository _checklistResultRepository;
+    private readonly IPromotionService _promotionService;
+    private readonly ILogger<PaymentService> _logger;
+    private readonly ICustomerServiceCreditRepository _customerServiceCreditRepository;
+    private readonly IPdfInvoiceService _pdfInvoiceService;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IWorkOrderRepository workOrderRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IServicePartRepository servicePartRepository, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository)
+    private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
+
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
 		_bookingRepository = bookingRepository;
-		_workOrderRepository = workOrderRepository;
+		// WorkOrderRepository removed - functionality merged into BookingRepository
         _orderRepository = orderRepository;
 		_invoiceRepository = invoiceRepository;
 		_paymentRepository = paymentRepository;
         _technicianRepository = technicianRepository;
         _emailService = emailService;
-        _servicePartRepository = servicePartRepository;
         _workOrderPartRepository = workOrderPartRepository;
         _checklistRepository = checklistRepository;
         _checklistResultRepository = checklistResultRepository;
+        _holdStore = holdStore;
+        _promotionService = promotionService;
+        _logger = logger;
+        _customerServiceCreditRepository = customerServiceCreditRepository;
+        _pdfInvoiceService = pdfInvoiceService;
         }
 
-	public async Task<string> CreateBookingPaymentLinkAsync(int bookingId)
+	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId)
 	{
 		var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
 		if (booking.Status == "CANCELLED") throw new InvalidOperationException("Booking đã bị hủy");
 
-		var amount = (int)Math.Round((booking.TotalCost ?? 0m)); // VNĐ integer
-		if (amount < 1000) amount = 1000; // Tối thiểu theo PayOS
+        // Tính tổng tiền theo logic: (gói hoặc dịch vụ lẻ) + parts - promotion
+        var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+        decimal packageDiscountAmount = 0m;
+        decimal promotionDiscountAmount = 0m; // TODO: tích hợp khi có khuyến mãi
+        decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
+            .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
+
+        if (booking.AppliedCreditId.HasValue)
+        {
+            var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+            if (appliedCredit?.ServicePackage != null)
+            {
+                packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+            }
+        }
+
+        // total = (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) - promotion + parts
+        decimal totalAmount = (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice)
+                               - promotionDiscountAmount + partsAmount;
+        
+        var amount = (int)Math.Round(totalAmount); // VNĐ integer
+        if (amount < _options.MinAmount) amount = _options.MinAmount;
 
 		var orderCode = booking.BookingId; // PayOS yêu cầu là số
         var rawDesc = $"Booking #{booking.BookingId}";
-		var description = rawDesc.Length > 25 ? rawDesc.Substring(0, 25) : rawDesc;
+        var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
 		var returnUrl = (_options.ReturnUrl ?? string.Empty);
 		var cancelUrl = (_options.CancelUrl ?? string.Empty);
@@ -105,18 +135,18 @@ public class PaymentService
         throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
     }
 
-    public async Task<string> CreateOrderPaymentLinkAsync(int orderId)
+    public async Task<string?> CreateOrderPaymentLinkAsync(int orderId)
     {
         var order = await _orderRepository.GetByIdAsync(orderId);
         if (order == null) throw new InvalidOperationException("Đơn hàng không tồn tại");
 
         var amountDecimal = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? 0m;
         var amount = (int)Math.Round(amountDecimal);
-        if (amount < 1000) amount = 1000;
+        if (amount < _options.MinAmount) amount = _options.MinAmount;
 
         var orderCode = orderId; // PayOS yêu cầu số
         var rawDesc = $"Order #{order.OrderId}";
-        var description = rawDesc.Length > 25 ? rawDesc.Substring(0, 25) : rawDesc;
+        var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
         var returnUrl = (_options.ReturnUrl ?? string.Empty);
         var cancelUrl = (_options.CancelUrl ?? string.Empty);
@@ -176,7 +206,7 @@ public class PaymentService
 	{
 		if (string.IsNullOrWhiteSpace(orderCode)) return false;
 
-		Console.WriteLine($"[DEBUG] ConfirmPaymentAsync called with orderCode: {orderCode}");
+		_logger.LogDebug("ConfirmPaymentAsync called with orderCode: {OrderCode}", orderCode);
 
 		var getUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
 		using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(getUrl));
@@ -188,260 +218,185 @@ public class PaymentService
 		var json = await response.Content.ReadFromJsonAsync<JsonElement>();
 		var status = json.GetProperty("data").GetProperty("status").GetString();
 		
-		Console.WriteLine($"[DEBUG] PayOS status for orderCode {orderCode}: {status}");
+		_logger.LogDebug("PayOS status for orderCode {OrderCode}: {Status}", orderCode, status);
 
-		Domain.Entities.Booking booking = null;
+		Domain.Entities.Booking? booking = null;
 		if (int.TryParse(orderCode, out var bookingIdFromOrder))
 		{
 			booking = await _bookingRepository.GetBookingByIdAsync(bookingIdFromOrder);
 		}
-        // Lookup by code removed; orderCode is numeric BookingId in our flow
-		if (booking == null) 
+
+		if (status == "PAID" && booking != null)
 		{
-			Console.WriteLine($"[DEBUG] Booking not found for orderCode: {orderCode}");
-			return false;
-		}
+			// Cập nhật trạng thái booking
+			booking.Status = "PAID";
+			booking.UpdatedAt = DateTime.UtcNow;
+			await _bookingRepository.UpdateBookingAsync(booking);
 
-		Console.WriteLine($"[DEBUG] Found booking {booking.BookingId} with status: {booking.Status}");
-
-		Domain.Entities.Invoice emailInvoiceRef = null;
-
-		if (status == "PAID" || status == "SUCCESS" || status == "COMPLETED")
-		{
-			Console.WriteLine($"[DEBUG] Payment successful, updating booking {booking.BookingId} to CONFIRMED");
-			booking.Status = "CONFIRMED";
-
-            // 1) Ensure WorkOrder exists
-            var workOrder = await _workOrderRepository.GetByBookingIdAsync(booking.BookingId);
-            if (workOrder == null)
-            {
-                // Ưu tiên kỹ thuật viên đã gán ở Booking; nếu chưa có thì mới tự chọn
-                var techId = 0; // TechnicianId removed from Booking
-                if (techId == 0)
-                {
-                    var techsInCenter = await _technicianRepository.GetTechniciansByCenterIdAsync(booking.CenterId);
-                    if (techsInCenter != null && techsInCenter.Count > 0) techId = techsInCenter[0].TechnicianId;
-                    else
-                    {
-                        var allTechs = await _technicianRepository.GetAllTechniciansAsync();
-                        if (allTechs != null && allTechs.Count > 0) techId = allTechs[0].TechnicianId;
-                    }
-                }
-                if (techId == 0) throw new InvalidOperationException("Không có kỹ thuật viên để lập WorkOrder");
-                workOrder = new Domain.Entities.WorkOrder
-                {
-                    BookingId = booking.BookingId,
-                    TechnicianId = techId,
-                    CustomerId = booking.CustomerId,
-                    VehicleId = booking.VehicleId,
-                    CenterId = booking.CenterId,
-                    ServiceId = booking.ServiceId,
-                    CurrentMileage = null,
-                    LicensePlate = booking.Vehicle?.LicensePlate,
-                    Status = "NOT_STARTED",
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-				workOrder = await _workOrderRepository.CreateAsync(workOrder);
-			}
-
-            // 2) Ensure Invoice exists
+			// Tạo hoặc cập nhật invoice
 			var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
 			if (invoice == null)
 			{
-				Console.WriteLine($"[DEBUG] Creating new invoice for booking {booking.BookingId}");
-                invoice = new Domain.Entities.Invoice
-                {
-                    WorkOrderId = workOrder.WorkOrderId,
-                    BookingId = booking.BookingId,
-                    CustomerId = booking.CustomerId,
-                    Email = booking.Customer?.User?.Email,
-                    Phone = booking.Customer?.User?.PhoneNumber,
-                    Status = "PAID",
-                    CreatedAt = DateTime.UtcNow,
-                };
-				invoice = await _invoiceRepository.CreateMinimalAsync(invoice);
-				Console.WriteLine($"[DEBUG] Invoice created with ID: {invoice.InvoiceId}");
-				
-				// Tạo InvoiceItems từ BookingServices
-				await CreateInvoiceItemsFromBookingServicesAsync(invoice, booking);
+				invoice = new Domain.Entities.Invoice
+				{
+					BookingId = booking.BookingId,
+					CustomerId = booking.CustomerId,
+					Email = booking.Customer?.User?.Email,
+					Phone = booking.Customer?.User?.PhoneNumber,
+					Status = "PAID",
+					PackageDiscountAmount = 0,
+					PromotionDiscountAmount = 0,
+					CreatedAt = DateTime.UtcNow
+				};
+				await _invoiceRepository.CreateMinimalAsync(invoice);
 			}
 			else
 			{
-				Console.WriteLine($"[DEBUG] Invoice already exists with ID: {invoice.InvoiceId}");
+				invoice.Status = "PAID";
+				// Note: IInvoiceRepository doesn't have UpdateAsync method
+				// Invoice will be updated when booking is updated
 			}
 
-			// Giữ tham chiếu để gửi email sau khi cập nhật booking
-			emailInvoiceRef = invoice;
+            // Tính các khoản theo logic mới
+            var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+            decimal packageDiscountAmount = 0m;
+            decimal promotionDiscountAmount = 0m; // hook khuyến mãi sau
+            decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
+                .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
 
-            // 3) Clone ServiceParts -> WorkOrderParts (checklist/gợi ý)
-            try
+            if (booking.AppliedCreditId.HasValue)
             {
-                if (workOrder != null && booking.ServiceId > 0)
+                var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+                if (appliedCredit?.ServicePackage != null)
                 {
-                    var templates = await _servicePartRepository.GetByServiceIdAsync(booking.ServiceId);
-                    var existing = await _workOrderPartRepository.GetByWorkOrderIdAsync(workOrder.WorkOrderId);
-                    var existingPartIds = existing.Select(e => e.PartId).ToHashSet();
-
-                    foreach (var t in templates)
-                    {
-                        if (!existingPartIds.Contains(t.PartId))
-                        {
-                            await _workOrderPartRepository.AddAsync(new Domain.Entities.WorkOrderPart
-                            {
-                                WorkOrderId = workOrder.WorkOrderId,
-                                PartId = t.PartId,
-                                QuantityUsed = 0,
-                                UnitCost = 0
-                            });
-                        }
-                    }
-
-                    // 3b) Auto-init maintenance checklist for this work order if not exists
-                    var existingChecklist = await _checklistRepository.GetByWorkOrderIdAsync(workOrder.WorkOrderId);
-                    if (existingChecklist == null)
-                    {
-                        var checklist = await _checklistRepository.CreateAsync(new Domain.Entities.MaintenanceChecklist
-                        {
-                            WorkOrderId = workOrder.WorkOrderId,
-                            CreatedAt = DateTime.UtcNow,
-                            Notes = null
-                        });
-
-                        // Create checklist results from ServiceParts
-                        var serviceParts = await _servicePartRepository.GetByServiceIdAsync(booking.ServiceId);
-                        var results = serviceParts.Select(sp => new Domain.Entities.MaintenanceChecklistResult
-                        {
-                            ChecklistId = checklist.ChecklistId,
-                            PartId = sp.PartId,
-                            Description = sp.Notes ?? sp.Part?.PartName ?? $"Part {sp.PartId}",
-                            Result = null,
-                            Comment = null
-                        });
-                        await _checklistResultRepository.UpsertManyAsync(results);
-                    }
+                    packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WARN] Clone ServiceParts -> WorkOrderParts failed: {ex.Message}");
-            }
 
-            // 4) Create Payment record for this invoice
-            if (!long.TryParse(orderCode, out var payOsOrder)) payOsOrder = booking.BookingId;
-            var payment = (Domain.Entities.Payment)null;
-			if (payment == null)
+            decimal paymentAmount = (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice)
+                                      - promotionDiscountAmount + partsAmount;
+
+			// Tạo payment record
+            var payment = new Domain.Entities.Payment
 			{
-				Console.WriteLine($"[DEBUG] Creating new payment for booking {booking.BookingId}");
-				payment = new Domain.Entities.Payment
-				{
-				PaymentCode = $"PAY{DateTime.UtcNow:yyyyMMddHHmmss}{booking.BookingId}",
 				InvoiceId = invoice.InvoiceId,
+				Amount = (int)Math.Round(paymentAmount),
 				PaymentMethod = "PAYOS",
-				Amount = (int)Math.Round((booking.TotalCost ?? 0m)),
-					Status = "PAID",
-					PaidAt = DateTime.UtcNow,
-					CreatedAt = DateTime.UtcNow,
-                    
-				};
-				await _paymentRepository.CreateAsync(payment);
-				Console.WriteLine($"[DEBUG] Payment created successfully");
-			}
-			else
+				Status = "COMPLETED",
+				PaymentCode = orderCode,
+				CreatedAt = DateTime.UtcNow,
+				PaidAt = DateTime.UtcNow
+			};
+			await _paymentRepository.CreateAsync(payment);
+
+            // Cập nhật số liệu vào invoice
+            await _invoiceRepository.UpdateAmountsAsync(invoice.InvoiceId, packageDiscountAmount, promotionDiscountAmount, partsAmount);
+
+			// CustomerServiceCredit đã được tạo với status ACTIVE khi tạo booking
+			// Trừ credit khi thanh toán thành công
+			if (booking.AppliedCreditId.HasValue)
 			{
-				Console.WriteLine($"[DEBUG] Payment already exists, updating status to PAID");
-				payment.Status = "PAID";
-				payment.PaidAt = DateTime.UtcNow;
-				await _paymentRepository.UpdateAsync(payment);
+				var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+				if (appliedCredit != null)
+				{
+					// Trừ 1 credit khi sử dụng dịch vụ
+					appliedCredit.UsedCredits += 1;
+					appliedCredit.UpdatedAt = DateTime.UtcNow;
+					
+					// Cập nhật status nếu hết credit
+					if (appliedCredit.UsedCredits >= appliedCredit.TotalCredits)
+					{
+						appliedCredit.Status = "USED_UP";
+					}
+					
+					await _customerServiceCreditRepository.UpdateAsync(appliedCredit);
+					_logger.LogInformation("Used 1 credit from CustomerServiceCredit {CreditId} for customer {CustomerId}, package {PackageId}. UsedCredits: {UsedCredits}/{TotalCredits}", 
+						appliedCredit.CreditId, booking.CustomerId, appliedCredit.PackageId, appliedCredit.UsedCredits, appliedCredit.TotalCredits);
+				}
 			}
-		}
-		else if (status == "CANCELLED" || status == "FAILED" || status == "EXPIRED")
-		{
-			booking.Status = "CANCELLED";
-		}
-		else
-		{
-			return false;
-		}
 
-        await _bookingRepository.UpdateBookingAsync(booking);
-        Console.WriteLine($"[DEBUG] Booking {booking.BookingId} updated successfully");
-
-		// Send invoice email (summary + items)
+			// Gửi email invoice PDF với template
+			try
+			{
+				var customerEmail = booking.Customer?.User?.Email;
+				if (!string.IsNullOrEmpty(customerEmail))
+				{
+					var subject = $"Hóa đơn thanh toán - Booking #{booking.BookingId}";
+					
+					// Sử dụng template email thay vì hardcode
+					var body = await _emailService.RenderInvoiceEmailTemplateAsync(
+						customerName: booking.Customer?.User?.FullName ?? "Khách hàng",
+						invoiceId: $"INV-{booking.BookingId:D6}",
+						bookingId: booking.BookingId.ToString(),
+						createdDate: DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm"),
+						customerEmail: customerEmail,
+						serviceName: booking.Service?.ServiceName ?? "N/A",
+						servicePrice: (booking.Service?.BasePrice ?? 0m).ToString("N0"),
+						totalAmount: payment.Amount.ToString("N0"),
+						hasDiscount: booking.AppliedCreditId.HasValue,
+						discountAmount: booking.AppliedCreditId.HasValue ? (payment.Amount * 0.1m).ToString("N0") : "0"
+					);
+					
+        // Generate PDF invoice content
+        var invoicePdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
+        
+        // Generate PDF maintenance report content (if available)
+        byte[]? maintenancePdfContent = null;
         try
         {
-            var customerEmail = booking.Customer?.User?.Email;
-            if (!string.IsNullOrWhiteSpace(customerEmail))
-            {
-				// Đảm bảo invoice đã có (nếu không có từ trước, lấy lại theo booking)
-				var emailInvoice = emailInvoiceRef ?? await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
-                if (emailInvoice == null)
-                {
-                    Console.WriteLine("[WARN] Không tìm thấy invoice để gửi email");
-                }
-                else
-                {
-                    var subject = $"Hóa đơn thanh toán #{emailInvoice.InvoiceId} - EV Service Center";
-                var body = $@"<h3>Cảm ơn bạn đã thanh toán!</h3>
-<p><b>Mã hóa đơn:</b> {emailInvoice.InvoiceId}</p>
-<p><b>Email:</b> {emailInvoice.Email}</p>
-<p><b>SĐT:</b> {emailInvoice.Phone}</p>
-<hr/>
-<p>Chi tiết dịch vụ đã đặt sẽ hiển thị trên hóa đơn chi tiết trong hệ thống.</p>";
-                    await _emailService.SendEmailAsync(customerEmail, subject, body);
-                }
-            }
+            maintenancePdfContent = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(booking.BookingId);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[WARN] Gửi email hóa đơn thất bại: {ex.Message}");
+            _logger.LogWarning(ex, "Could not generate maintenance report PDF for booking {BookingId}", booking.BookingId);
         }
+        
+        // Send email with attachments
+        if (maintenancePdfContent != null)
+        {
+            // Send with both attachments
+            var attachments = new List<(string fileName, byte[] content, string mimeType)>
+            {
+                ($"Invoice_Booking_{booking.BookingId}.pdf", invoicePdfContent, "application/pdf"),
+                ($"MaintenanceReport_Booking_{booking.BookingId}.pdf", maintenancePdfContent, "application/pdf")
+            };
+            
+            await _emailService.SendEmailWithMultipleAttachmentsAsync(
+                customerEmail, 
+                subject, 
+                body, 
+                attachments);
+        }
+        else
+        {
+            // Send with invoice only
+            await _emailService.SendEmailWithAttachmentAsync(
+                customerEmail, 
+                subject, 
+                body, 
+                $"Invoice_Booking_{booking.BookingId}.pdf", 
+                invoicePdfContent, 
+                "application/pdf");
+        }
+					
+					_logger.LogInformation("Invoice email sent for booking {BookingId} to {Email}", booking.BookingId, customerEmail);
+				}
+				else
+				{
+					_logger.LogWarning("Customer email not found for booking {BookingId}. Cannot send invoice email.", booking.BookingId);
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Failed to send invoice email for booking {BookingId}", booking.BookingId);
+			}
+
+			_logger.LogInformation("Payment confirmed for booking {BookingId}, invoice {InvoiceId}", booking.BookingId, invoice.InvoiceId);
 		return true;
 	}
 
-private async Task CreateInvoiceItemsFromBookingServicesAsync(Domain.Entities.Invoice invoice, Domain.Entities.Booking booking)
-	{
-		try
-		{
-			Console.WriteLine($"[DEBUG] Creating InvoiceItems for invoice {invoice.InvoiceId}");
-        var invoiceItems = new List<Domain.Entities.InvoiceItem>();
-
-        // Mô hình 1 booking = 1 service: tạo 1 dòng invoice item từ booking.Service
-        var description = booking.Service?.ServiceName ?? "Dịch vụ";
-        var unitPrice = booking.TotalCost ?? 0m;
-        var item = new Domain.Entities.InvoiceItem
-        {
-            InvoiceId = invoice.InvoiceId,
-            Description = description
-        };
-        invoiceItems.Add(item);
-
-        await _invoiceRepository.CreateInvoiceItemsAsync(invoiceItems);
-        Console.WriteLine($"[DEBUG] Created {invoiceItems.Count} InvoiceItems successfully");
-		}
-		catch (Exception ex)
-		{
-                Console.WriteLine($"[ERROR] Failed to create InvoiceItems: {ex.Message}");
-                throw;
-		}
+		return false;
 	}
-
-    private async Task SeedEmptyPartIfNoneAsync(Domain.Entities.WorkOrder workOrder)
-    {
-        if (workOrder.WorkOrderParts == null || workOrder.WorkOrderParts.Count == 0)
-        {
-            workOrder.WorkOrderParts = new List<Domain.Entities.WorkOrderPart>();
-            workOrder.WorkOrderParts.Add(new Domain.Entities.WorkOrderPart
-            {
-                PartId = 0,
-                QuantityUsed = 0,
-                UnitCost = 0
-            });
-        }
-    }
-
-	
 }
 
 

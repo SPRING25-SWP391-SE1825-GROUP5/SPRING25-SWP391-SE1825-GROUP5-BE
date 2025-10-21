@@ -22,17 +22,21 @@ namespace EVServiceCenter.Application.Service
         private readonly IAccountRepository _accountRepository;
         private readonly IStaffRepository _staffRepository;
         private readonly ITechnicianRepository _technicianRepository;
+        private readonly IEmailService _emailService;
+        private readonly IOtpService _otpService;
 
-        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository)
+        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IOtpService otpService)
         {
             _authRepository = authRepository;
             _accountRepository = accountRepository;
             _customerRepository = customerRepository;
             _staffRepository = staffRepository;
             _technicianRepository = technicianRepository;
+            _emailService = emailService;
+            _otpService = otpService;
         }
 
-        public async Task<UserListResponse> GetAllUsersAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string role = null)
+        public async Task<UserListResponse> GetAllUsersAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? role = null)
         {
             try
             {
@@ -43,14 +47,14 @@ namespace EVServiceCenter.Application.Service
                 {
                     users = users.Where(u => 
                         u.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        u.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        u.PhoneNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        (u.Email?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                        (u.PhoneNumber?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
                     ).ToList();
                 }
 
                 if (!string.IsNullOrWhiteSpace(role))
                 {
-                    users = users.Where(u => u.Role.Equals(role, StringComparison.OrdinalIgnoreCase)).ToList();
+                    users = users.Where(u => (u.Role ?? string.Empty).Equals(role, StringComparison.OrdinalIgnoreCase)).ToList();
                 }
 
                 // Calculate pagination
@@ -110,14 +114,14 @@ namespace EVServiceCenter.Application.Service
                 {
                     Email = request.Email.ToLower().Trim(),
                     FullName = request.FullName.Trim(),
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(GenerateTempPassword(out var tempPassword)),
                     PhoneNumber = request.PhoneNumber.Trim(),
                     Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : null,
                     DateOfBirth = request.DateOfBirth,
                     Gender = request.Gender,
-                    Role = request.Role,
-                    IsActive = request.IsActive,
-                    EmailVerified = request.EmailVerified,
+                    Role = request.Role?.Trim().ToUpper(),
+                    IsActive = true, // Mặc định là active
+                    EmailVerified = false, // Luôn cần verify email
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -136,30 +140,16 @@ namespace EVServiceCenter.Application.Service
 
                     await _customerRepository.CreateCustomerAsync(customer);
                 }
-                else if (user.Role == "STAFF")
-                {
-                    var staff = new Staff
-                    {
-                        UserId = user.UserId,
-                        CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
 
-                    await _staffRepository.CreateStaffAsync(staff);
-                }
-                else if (user.Role == "TECHNICIAN")
-                {
-                    var technician = new Technician
-                    {
-                        UserId = user.UserId,
-                        CenterId = 1, // Default center ID - có thể cần thay đổi tùy theo logic business
-                        Position = "GENERAL", // Default position
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
+                // Gửi email mật khẩu tạm cho user
+                await _emailService.SendEmailAsync(user.Email, "Tài khoản của bạn đã được tạo", GenerateTempPasswordEmailBody(user.FullName, tempPassword));
 
-                    await _technicianRepository.CreateTechnicianAsync(technician);
+                // Nếu admin đã đánh dấu emailVerified=true thì bỏ qua OTP; ngược lại gửi OTP
+                if (!request.EmailVerified)
+                {
+                    var otpCode = _otpService.GenerateOtp();
+                    await _otpService.CreateOtpAsync(user.UserId, otpCode, "EMAIL_VERIFICATION");
+                    await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
                 }
 
                 return MapToUserResponse(user);
@@ -321,11 +311,7 @@ namespace EVServiceCenter.Application.Service
                 errors.Add("Email không đúng định dạng");
             }
 
-            // Check password strength
-            if (!IsValidPassword(request.Password))
-            {
-                errors.Add("Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.");
-            }
+            // Password không yêu cầu khi tạo (dùng mật khẩu tạm gửi email)
 
             // Check phone number format
             if (!IsValidPhoneNumber(request.PhoneNumber))
@@ -345,11 +331,13 @@ namespace EVServiceCenter.Application.Service
                 errors.Add("Giới tính phải là MALE hoặc FEMALE.");
             }
 
-            // Check role
+            // Validate role cho ADMIN: cho phép ADMIN/STAFF/TECHNICIAN/CUSTOMER
             if (!IsValidRole(request.Role))
             {
-                errors.Add("Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
+                errors.Add("Vai trò không hợp lệ. Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
             }
+
+            // EmailVerified: cho phép ADMIN đánh dấu đã xác thực để bỏ qua bước OTP
 
             // Check email uniqueness
             var existingUserByEmail = await _accountRepository.GetAccountByEmailAsync(request.Email);
@@ -396,7 +384,7 @@ namespace EVServiceCenter.Application.Service
             // Check role
             if (!IsValidRole(request.Role))
             {
-                errors.Add("Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
+                errors.Add("Vai trò phải là ADMIN, MANAGER, STAFF, TECHNICIAN hoặc CUSTOMER.");
             }
 
             // Check phone uniqueness (excluding current user)
@@ -467,7 +455,7 @@ namespace EVServiceCenter.Application.Service
             if (string.IsNullOrWhiteSpace(role))
                 return false;
 
-            var validRoles = new[] { "ADMIN", "STAFF", "TECHNICIAN", "CUSTOMER" };
+            var validRoles = new[] { "ADMIN", "MANAGER", "STAFF", "TECHNICIAN", "CUSTOMER" };
             return validRoles.Contains(role, StringComparer.Ordinal);
         }
 
@@ -478,12 +466,12 @@ namespace EVServiceCenter.Application.Service
                 UserId = user.UserId,
                 Email = user.Email,
                 FullName = user.FullName,
-                PhoneNumber = user.PhoneNumber,
+                PhoneNumber = user.PhoneNumber ?? string.Empty,
                 DateOfBirth = user.DateOfBirth,
-                Address = user.Address,
-                Gender = user.Gender,
-                AvatarUrl = user.AvatarUrl,
-                Role = user.Role,
+                Address = user.Address ?? string.Empty,
+                Gender = user.Gender ?? string.Empty,
+                AvatarUrl = user.AvatarUrl ?? string.Empty,
+                Role = user.Role ?? string.Empty,
                 IsActive = user.IsActive,
                 EmailVerified = user.EmailVerified,
                 CreatedAt = user.CreatedAt,
@@ -504,8 +492,69 @@ namespace EVServiceCenter.Application.Service
             var random = new Random().Next(10, 99);
             return $"ST{timestamp}{random}";
         }
+        private string GenerateTempPassword(out string plain)
+        {
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789@$!%*?&";
+            var rnd = new Random();
+            plain = new string(Enumerable.Range(0, 12).Select(_ => chars[rnd.Next(chars.Length)]).ToArray());
+            return plain;
+        }
+
+        private string GenerateTempPasswordEmailBody(string fullName, string tempPwd)
+        {
+            return $@"<!DOCTYPE html><html><body style='font-family:Arial,sans-serif'>
+<h2>EV Service Center - Tài khoản được tạo</h2>
+<p>Xin chào {fullName},</p>
+<p>Tài khoản của bạn đã được tạo thành công. Mật khẩu tạm thời của bạn là: <strong>{tempPwd}</strong></p>
+<p>Vui lòng đăng nhập và đổi mật khẩu ngay để đảm bảo an toàn.</p>
+<p>Trân trọng,</p>
+<p>EV Service Center</p>
+</body></html>";
+        }
 
         // GenerateTechnicianCode removed
+
+        /// <summary>
+        /// Gán vai trò cho người dùng (chỉ Admin)
+        /// </summary>
+        /// <param name="userId">ID người dùng</param>
+        /// <param name="role">Vai trò mới</param>
+        /// <returns>Kết quả gán vai trò</returns>
+        public async Task<bool> AssignUserRoleAsync(int userId, string role)
+        {
+            try
+            {
+                // Validate role
+                if (!IsValidRole(role))
+                {
+                    throw new ArgumentException("Vai trò không hợp lệ. Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
+                }
+
+                // Lấy thông tin user
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                {
+                    throw new ArgumentException("Không tìm thấy người dùng với ID này.");
+                }
+
+                // Cập nhật role
+                user.Role = role;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                // Lưu thay đổi
+                await _authRepository.UpdateUserAsync(user);
+
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi gán vai trò cho người dùng: {ex.Message}");
+            }
+        }
 
         private string NormalizePhoneNumber(string phoneNumber)
         {

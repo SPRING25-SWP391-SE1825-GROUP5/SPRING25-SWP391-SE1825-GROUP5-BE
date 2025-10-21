@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +39,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _db.Payments.CountAsync(p => p.InvoiceId == invoiceId);
         }
 
-        public async Task<List<Payment>> GetByInvoiceIdAsync(int invoiceId, string status = null, string method = null, DateTime? from = null, DateTime? to = null)
+        public async Task<List<Payment>> GetByInvoiceIdAsync(int invoiceId, string? status = null, string? method = null, DateTime? from = null, DateTime? to = null)
         {
             var query = _db.Payments.AsQueryable().Where(p => p.InvoiceId == invoiceId);
             if (!string.IsNullOrWhiteSpace(status)) query = query.Where(p => p.Status == status);

@@ -5,15 +5,19 @@ namespace EVServiceCenter.Domain.Entities;
 
 public partial class WorkOrderPart
 {
-    public int WorkOrderId { get; set; }
+    public int WorkOrderPartId { get; set; }
+
+    public int BookingId { get; set; }
 
     public int PartId { get; set; }
 
-    public int QuantityUsed { get; set; }
+    public int? VehicleModelPartId { get; set; }
 
-    public decimal UnitCost { get; set; }
+    public int QuantityUsed { get; set; }
 
     public virtual Part Part { get; set; }
 
-    public virtual WorkOrder WorkOrder { get; set; }
+    public virtual Booking Booking { get; set; }
+
+    public virtual VehicleModelPart? VehicleModelPart { get; set; }
 }

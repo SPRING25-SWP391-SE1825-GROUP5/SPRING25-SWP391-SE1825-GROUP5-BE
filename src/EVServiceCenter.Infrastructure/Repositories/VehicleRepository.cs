@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +26,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<Vehicle> GetVehicleByIdAsync(int vehicleId)
+        public async Task<Vehicle?> GetVehicleByIdAsync(int vehicleId)
         {
             return await _context.Vehicles
                 .Include(v => v.Customer)

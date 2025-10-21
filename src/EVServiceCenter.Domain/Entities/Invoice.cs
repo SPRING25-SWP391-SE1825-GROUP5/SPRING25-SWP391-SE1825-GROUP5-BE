@@ -7,7 +7,7 @@ public partial class Invoice
 {
     public int InvoiceId { get; set; }
 
-    public int WorkOrderId { get; set; }
+    // WorkOrderId removed - functionality merged into Booking
 
     public int? CustomerId { get; set; }
 
@@ -21,21 +21,31 @@ public partial class Invoice
 
     public int? BookingId { get; set; }
 
+    // Link trực tiếp tới Order thay vì OrderItem
     public int? OrderId { get; set; }
+
+    // Giảm giá áp dụng từ gói dịch vụ (VNĐ)
+    public decimal PackageDiscountAmount { get; set; }
+
+    // Giảm giá áp dụng từ khuyến mãi (VNĐ)
+    public decimal PromotionDiscountAmount { get; set; }
+
+    // Tổng tiền phụ tùng phát sinh (VNĐ)
+    public decimal PartsAmount { get; set; }
 
     // public int? ParentInvoiceId { get; set; } // Column không tồn tại trong database
 
     public virtual Customer Customer { get; set; }
 
-    public virtual ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
-
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
-    public virtual ICollection<UserPromotion> UserPromotions { get; set; } = new List<UserPromotion>();
+    // Removed navigation to UserPromotions to prevent EF from creating a shadow FK (InvoiceId)
 
-    public virtual WorkOrder WorkOrder { get; set; }
+    // WorkOrder navigation removed - functionality merged into Booking
 
     public virtual Booking Booking { get; set; }
 
     public virtual Order? Order { get; set; }
+
+    
 }

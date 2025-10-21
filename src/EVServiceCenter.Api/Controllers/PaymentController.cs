@@ -14,19 +14,18 @@ public class PaymentController : ControllerBase
 {
 	private readonly PaymentService _paymentService;
     private readonly IBookingRepository _bookingRepo;
-    private readonly IWorkOrderRepository _workOrderRepo;
+    // WorkOrderRepository removed - functionality merged into BookingRepository
     private readonly IInvoiceRepository _invoiceRepo;
     private readonly IPaymentRepository _paymentRepo;
 
     public PaymentController(PaymentService paymentService,
         IBookingRepository bookingRepo,
-        IWorkOrderRepository workOrderRepo,
         IInvoiceRepository invoiceRepo,
         IPaymentRepository paymentRepo)
 	{
 		_paymentService = paymentService;
         _bookingRepo = bookingRepo;
-        _workOrderRepo = workOrderRepo;
+        // WorkOrderRepository removed - functionality merged into BookingRepository
         _invoiceRepo = invoiceRepo;
         _paymentRepo = paymentRepo;
 	}
@@ -43,7 +42,7 @@ public class PaymentController : ControllerBase
 	// Cho phép anonymous vì PayOS gọi từ trình duyệt người dùng
 	[AllowAnonymous]
 	[HttpGet("/payment/result")]
-	public async Task<IActionResult> PaymentResult([FromQuery] string orderCode, [FromQuery] string status = null, [FromQuery] string code = null, [FromQuery] string desc = null)
+	public async Task<IActionResult> PaymentResult([FromQuery] string orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] string? desc = null)
 	{
 		if (string.IsNullOrWhiteSpace(orderCode))
 		{
@@ -57,17 +56,17 @@ public class PaymentController : ControllerBase
 		return Content(html, "text/html; charset=utf-8");
 	}
 
-    public class CreateOfflinePaymentForBookingRequest
+    public class PaymentOfflineRequest
     {
         public int Amount { get; set; }
         public int PaidByUserId { get; set; }
-        public string Note { get; set; }
+        public string Note { get; set; } = string.Empty;
     }
 
     // Ghi nhận thanh toán offline cho booking: tự đảm bảo invoice tồn tại
     [HttpPost("booking/{bookingId:int}/payments/offline")]
     [Authorize]
-    public async Task<IActionResult> CreateOfflineForBooking([FromRoute] int bookingId, [FromBody] CreateOfflinePaymentForBookingRequest req)
+    public async Task<IActionResult> CreateOfflineForBooking([FromRoute] int bookingId, [FromBody] PaymentOfflineRequest req)
     {
         if (req == null || req.Amount <= 0 || req.PaidByUserId <= 0)
         {
@@ -80,27 +79,14 @@ public class PaymentController : ControllerBase
             return NotFound(new { success = false, message = "Không tìm thấy booking" });
         }
 
-        // Ensure WorkOrder exists (re-use logic from PaymentService style)
-        var workOrder = await _workOrderRepo.GetByBookingIdAsync(bookingId);
-        if (workOrder == null)
-        {
-            workOrder = new Domain.Entities.WorkOrder
-            {
-                BookingId = booking.BookingId,
-
-                Status = "OPEN",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-            workOrder = await _workOrderRepo.CreateAsync(workOrder);
-        }
+        // WorkOrder functionality merged into Booking - no separate work order needed
+        // Booking already contains all necessary information
 
         var invoice = await _invoiceRepo.GetByBookingIdAsync(booking.BookingId);
         if (invoice == null)
         {
             invoice = new Domain.Entities.Invoice
             {
-                WorkOrderId = workOrder.WorkOrderId,
                 BookingId = booking.BookingId,
                 CustomerId = booking.CustomerId,
                 Email = booking.Customer?.User?.Email,
@@ -120,11 +106,11 @@ public class PaymentController : ControllerBase
             Status = "PAID",
             PaidAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
-            PaidByUserId = req.PaidByUserId,
+            PaidByUserID = req.PaidByUserId,
         };
 
         payment = await _paymentRepo.CreateAsync(payment);
-        return Ok(new { paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, status = payment.Status, amount = payment.Amount, paymentMethod = payment.PaymentMethod, paidByUserId = payment.PaidByUserId });
+        return Ok(new { paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, status = payment.Status, amount = payment.Amount, paymentMethod = payment.PaymentMethod, paidByUserId = payment.PaidByUserID });
     }
 
 	// (Tuỳ chọn) Kiểm tra trạng thái theo orderCode nếu FE cần hỏi lại
@@ -133,6 +119,23 @@ public class PaymentController : ControllerBase
 	{
 		var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
 		return Ok(new { orderCode, updated = ok });
+	}
+
+	[HttpGet("return")]
+	[AllowAnonymous]
+	public async Task<IActionResult> Return([FromQuery] string orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = false)
+	{
+		var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
+		return Ok(new { success = ok, message = ok ? "Payment success processed" : "Payment not confirmed", orderCode, status, code, cancel });
+	}
+
+	[HttpGet("cancel")]
+	[AllowAnonymous]
+	public async Task<IActionResult> Cancel([FromQuery] string orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = true)
+	{
+		// For cancel route, still call confirm to fetch status and let service no-op if not paid
+		var _ = await _paymentService.ConfirmPaymentAsync(orderCode);
+		return Ok(new { success = true, message = "Payment cancelled", orderCode, status, code, cancel });
 	}
 }
 

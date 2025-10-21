@@ -12,6 +12,28 @@ namespace EVServiceCenter.Application.Service
 {
     public class PromotionService : IPromotionService
     {
+        private PromotionValidationResponse CreateInvalidResponse(string message, decimal orderAmount)
+        {
+            return new PromotionValidationResponse
+            {
+                IsValid = false,
+                Message = message,
+                DiscountAmount = 0,
+                FinalAmount = orderAmount,
+                Promotion = new PromotionResponse
+                {
+                    PromotionId = 0,
+                    Code = "",
+                    Description = "",
+                    DiscountType = "",
+                    DiscountValue = 0,
+                    Status = "",
+                    StartDate = DateOnly.FromDateTime(DateTime.MinValue),
+                    EndDate = DateOnly.FromDateTime(DateTime.MinValue),
+                    CreatedAt = DateTime.MinValue
+                }
+            };
+        }
         private readonly IPromotionRepository _promotionRepository;
         private readonly ICustomerRepository _customerRepository;
 
@@ -21,7 +43,66 @@ namespace EVServiceCenter.Application.Service
             _customerRepository = customerRepository;
         }
 
-        public async Task<PromotionListResponse> GetAllPromotionsAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string status = null, string promotionType = null)
+        public async Task<int> MarkUsedByOrderAsync(int orderId)
+        {
+            var items = await _promotionRepository.GetUserPromotionsByOrderAsync(orderId);
+            var count = 0;
+            foreach (var up in items)
+            {
+                if (!string.Equals(up.Status, "USED", StringComparison.OrdinalIgnoreCase))
+                {
+                    up.Status = "USED";
+                    up.UsedAt = DateTime.UtcNow;
+                    await _promotionRepository.UpdateUserPromotionAsync(up);
+                    // increase promotion usage
+                    var promo = await _promotionRepository.GetPromotionByIdAsync(up.PromotionId);
+                    if (promo != null)
+                    {
+                        promo.UsageCount = promo.UsageCount + 1;
+                        await _promotionRepository.UpdatePromotionAsync(promo);
+                    }
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public async Task<int> MarkUsedByBookingAsync(int bookingId)
+        {
+            var items = await _promotionRepository.GetUserPromotionsByBookingAsync(bookingId);
+            var count = 0;
+            foreach (var up in items)
+            {
+                if (!string.Equals(up.Status, "USED", StringComparison.OrdinalIgnoreCase))
+                {
+                    up.Status = "USED";
+                    up.UsedAt = DateTime.UtcNow;
+                    await _promotionRepository.UpdateUserPromotionAsync(up);
+                    var promo = await _promotionRepository.GetPromotionByIdAsync(up.PromotionId);
+                    if (promo != null)
+                    {
+                        promo.UsageCount = promo.UsageCount + 1;
+                        await _promotionRepository.UpdatePromotionAsync(promo);
+                    }
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public async Task<int> RemoveByBookingAsync(int bookingId)
+        {
+            var items = await _promotionRepository.GetUserPromotionsByBookingAsync(bookingId);
+            var count = 0;
+            foreach (var up in items)
+            {
+                var removed = await _promotionRepository.DeleteUserPromotionByBookingAndCodeAsync(bookingId, up.Promotion?.Code ?? string.Empty);
+                if (removed) count++;
+            }
+            return count;
+        }
+
+        public async Task<PromotionListResponse> GetAllPromotionsAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? status = null, string? promotionType = null)
         {
             try
             {
@@ -217,73 +298,37 @@ namespace EVServiceCenter.Application.Service
                 var promotion = await _promotionRepository.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
                 if (promotion == null)
                 {
-                    return new PromotionValidationResponse
-                    {
-                        IsValid = false,
-                        Message = "Mã khuyến mãi không tồn tại.",
-                        DiscountAmount = 0,
-                        FinalAmount = request.OrderAmount
-                    };
+                    return CreateInvalidResponse("Mã khuyến mãi không tồn tại.", request.OrderAmount);
                 }
 
                 // Check if promotion is active
                 if (promotion.Status != "ACTIVE")
                 {
-                    return new PromotionValidationResponse
-                    {
-                        IsValid = false,
-                        Message = "Mã khuyến mãi không còn hoạt động.",
-                        DiscountAmount = 0,
-                        FinalAmount = request.OrderAmount
-                    };
+                    return CreateInvalidResponse("Mã khuyến mãi không còn hoạt động.", request.OrderAmount);
                 }
 
                 // Check date validity
                 var today = DateOnly.FromDateTime(DateTime.Today);
                 if (promotion.StartDate > today)
                 {
-                    return new PromotionValidationResponse
-                    {
-                        IsValid = false,
-                        Message = "Mã khuyến mãi chưa có hiệu lực.",
-                        DiscountAmount = 0,
-                        FinalAmount = request.OrderAmount
-                    };
+                    return CreateInvalidResponse("Mã khuyến mãi chưa có hiệu lực.", request.OrderAmount);
                 }
 
                 if (promotion.EndDate.HasValue && promotion.EndDate.Value < today)
                 {
-                    return new PromotionValidationResponse
-                    {
-                        IsValid = false,
-                        Message = "Mã khuyến mãi đã hết hạn.",
-                        DiscountAmount = 0,
-                        FinalAmount = request.OrderAmount
-                    };
+                    return CreateInvalidResponse("Mã khuyến mãi đã hết hạn.", request.OrderAmount);
                 }
 
                 // Check minimum order amount
                 if (promotion.MinOrderAmount.HasValue && request.OrderAmount < promotion.MinOrderAmount.Value)
                 {
-                    return new PromotionValidationResponse
-                    {
-                        IsValid = false,
-                        Message = $"Đơn hàng phải có giá trị tối thiểu {promotion.MinOrderAmount.Value:N0} VNĐ.",
-                        DiscountAmount = 0,
-                        FinalAmount = request.OrderAmount
-                    };
+                    return CreateInvalidResponse($"Đơn hàng phải có giá trị tối thiểu {promotion.MinOrderAmount.Value:N0} VNĐ.", request.OrderAmount);
                 }
 
                 // Check usage limit
                 if (promotion.UsageLimit.HasValue && promotion.UsageCount >= promotion.UsageLimit.Value)
                 {
-                    return new PromotionValidationResponse
-                    {
-                        IsValid = false,
-                        Message = "Mã khuyến mãi đã hết lượt sử dụng.",
-                        DiscountAmount = 0,
-                        FinalAmount = request.OrderAmount
-                    };
+                    return CreateInvalidResponse("Mã khuyến mãi đã hết lượt sử dụng.", request.OrderAmount);
                 }
 
                 // ApplyFor removed: scope is inferred by where the promotion is linked (booking/order)
@@ -356,7 +401,7 @@ namespace EVServiceCenter.Application.Service
                 if (promotion == null)
                     throw new ArgumentException("Khuyến mãi không tồn tại.");
 
-                promotion.Status = "INACTIVE";
+                promotion.Status = "CANCELLED";
                 promotion.UpdatedAt = DateTime.UtcNow;
 
                 await _promotionRepository.UpdatePromotionAsync(promotion);
@@ -400,7 +445,8 @@ namespace EVServiceCenter.Application.Service
                 IsActive = isActive,
                 IsExpired = isExpired,
                 IsUsageLimitReached = isUsageLimitReached,
-                RemainingUsage = promotion.UsageLimit.HasValue ? promotion.UsageLimit.Value - promotion.UsageCount : int.MaxValue
+                // Nếu không giới hạn lượt (UsageLimit null) thì để 0 để tránh giá trị rất lớn gây hiểu nhầm
+                RemainingUsage = promotion.UsageLimit.HasValue ? Math.Max(0, promotion.UsageLimit.Value - promotion.UsageCount) : 0
             };
         }
 
@@ -426,10 +472,36 @@ namespace EVServiceCenter.Application.Service
             }
 
             // Validate discount logic
-            if (request.DiscountType == "PERCENTAGE" && request.DiscountValue > 100)
+            if (string.IsNullOrWhiteSpace(request.DiscountType))
+                errors.Add("Loại giảm giá không được trống.");
+
+            var discountType = (request.DiscountType ?? string.Empty).ToUpper();
+            if (discountType == "PERCENTAGE")
             {
-                errors.Add("Giá trị giảm giá phần trăm không được vượt quá 100%.");
+                if (request.DiscountValue <= 0 || request.DiscountValue > 100)
+                    errors.Add("Giá trị giảm giá phần trăm phải trong khoảng 0 < giá trị ≤ 100.");
+                if (request.MaxDiscount.HasValue && request.MaxDiscount.Value < 0)
+                    errors.Add("Giảm tối đa (maxDiscount) phải ≥ 0.");
             }
+            else if (discountType == "FIXED")
+            {
+                if (request.DiscountValue <= 0)
+                    errors.Add("Giá trị giảm giá cố định phải > 0.");
+                if (request.MaxDiscount.HasValue && request.MaxDiscount.Value < 0)
+                    errors.Add("Giảm tối đa (maxDiscount) phải ≥ 0.");
+            }
+            else
+            {
+                errors.Add("Loại giảm giá không hợp lệ. Chỉ hỗ trợ PERCENTAGE hoặc FIXED.");
+            }
+
+            // Validate min order amount
+            if (request.MinOrderAmount.HasValue && request.MinOrderAmount.Value < 0)
+                errors.Add("Giá trị đơn hàng tối thiểu (minOrderAmount) phải ≥ 0.");
+
+            // Validate usage limit
+            if (request.UsageLimit.HasValue && request.UsageLimit.Value <= 0)
+                errors.Add("Giới hạn lượt sử dụng (usageLimit) phải > 0 nếu được cung cấp.");
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
@@ -452,9 +524,38 @@ namespace EVServiceCenter.Application.Service
             }
 
             // Validate discount logic
-            if (request.DiscountType == "PERCENTAGE" && request.DiscountValue > 100)
+            var discountType = (request.DiscountType ?? string.Empty).ToUpper();
+            if (discountType == "PERCENTAGE")
             {
-                errors.Add("Giá trị giảm giá phần trăm không được vượt quá 100%.");
+                if (request.DiscountValue <= 0 || request.DiscountValue > 100)
+                    errors.Add("Giá trị giảm giá phần trăm phải trong khoảng 0 < giá trị ≤ 100.");
+                if (request.MaxDiscount.HasValue && request.MaxDiscount.Value < 0)
+                    errors.Add("Giảm tối đa (maxDiscount) phải ≥ 0.");
+            }
+            else if (discountType == "FIXED")
+            {
+                if (request.DiscountValue <= 0)
+                    errors.Add("Giá trị giảm giá cố định phải > 0.");
+                if (request.MaxDiscount.HasValue && request.MaxDiscount.Value < 0)
+                    errors.Add("Giảm tối đa (maxDiscount) phải ≥ 0.");
+            }
+            else
+            {
+                errors.Add("Loại giảm giá không hợp lệ. Chỉ hỗ trợ PERCENTAGE hoặc FIXED.");
+            }
+
+            // Validate min order amount
+            if (request.MinOrderAmount.HasValue && request.MinOrderAmount.Value < 0)
+                errors.Add("Giá trị đơn hàng tối thiểu (minOrderAmount) phải ≥ 0.");
+
+            // Validate usage limit không nhỏ hơn usageCount hiện tại
+            if (request.UsageLimit.HasValue)
+            {
+                var existing = await _promotionRepository.GetPromotionByIdAsync(promotionId);
+                if (existing != null && request.UsageLimit.Value < existing.UsageCount)
+                    errors.Add("Giới hạn lượt sử dụng (usageLimit) không được nhỏ hơn số lượt đã dùng (usageCount) hiện tại.");
+                if (request.UsageLimit.Value <= 0)
+                    errors.Add("Giới hạn lượt sử dụng (usageLimit) phải > 0 nếu được cung cấp.");
             }
 
             if (errors.Any())

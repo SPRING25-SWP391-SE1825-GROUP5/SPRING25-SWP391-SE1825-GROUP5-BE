@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenter.Infrastructure.Repositories;
@@ -24,7 +24,7 @@ public class OrderRepository : IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Part)
-            .Include(o => o.OrderStatusHistories)
+            // Removed: OrderStatusHistories
             .Where(o => o.CustomerId == customerId)
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync();
@@ -36,8 +36,7 @@ public class OrderRepository : IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Part)
-            .Include(o => o.OrderStatusHistories)
-                .ThenInclude(osh => osh.CreatedByUser)
+            // Removed: OrderStatusHistories
             .FirstOrDefaultAsync(o => o.OrderId == orderId);
     }
 
@@ -57,7 +56,7 @@ public class OrderRepository : IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Part)
-            .Include(o => o.OrderStatusHistories)
+            // Removed: OrderStatusHistories
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync();
     }
@@ -193,7 +192,7 @@ public class OrderRepository : IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Part)
-            .Include(o => o.OrderStatusHistories)
+            // Removed: OrderStatusHistories
             .Include(o => o.Invoices)
                 .ThenInclude(i => i.Payments)
             .FirstOrDefaultAsync(o => o.OrderId == orderId);

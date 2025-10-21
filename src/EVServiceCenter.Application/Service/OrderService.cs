@@ -13,21 +13,16 @@ namespace EVServiceCenter.Application.Service;
 public class OrderService : IOrderService
 {
     private readonly IOrderRepository _orderRepository;
-    private readonly IOrderStatusHistoryRepository _orderStatusHistoryRepository;
-    private readonly IShoppingCartRepository _shoppingCartRepository;
     private readonly ICustomerRepository _customerRepository;
     private readonly IPartRepository _partRepository;
 
     public OrderService(
         IOrderRepository orderRepository,
-        IOrderStatusHistoryRepository orderStatusHistoryRepository,
-        IShoppingCartRepository shoppingCartRepository,
         ICustomerRepository customerRepository,
         IPartRepository partRepository)
     {
         _orderRepository = orderRepository;
-        _orderStatusHistoryRepository = orderStatusHistoryRepository;
-        _shoppingCartRepository = shoppingCartRepository;
+    
         _customerRepository = customerRepository;
         _partRepository = partRepository;
     }
@@ -57,13 +52,30 @@ public class OrderService : IOrderService
         if (customer == null)
             throw new ArgumentException("Khách hàng không tồn tại");
 
-        // Lấy giỏ hàng của khách hàng
-        var cartItems = await _shoppingCartRepository.GetByCustomerIdAsync(request.CustomerId);
-        if (!cartItems.Any())
-            throw new ArgumentException("Giỏ hàng trống");
+        // Không còn giỏ hàng: buộc phải gửi items trong request
+        if (request.Items == null || !request.Items.Any())
+            throw new ArgumentException("Danh sách sản phẩm không được rỗng");
 
-        // Tạo đơn hàng
-        var totalAmount = cartItems.Sum(item => item.Quantity * item.UnitPrice);
+        // Validate parts và tạo OrderItems từ request
+        var orderItems = new List<OrderItem>();
+        foreach (var item in request.Items)
+        {
+            if (item.PartId <= 0 || item.Quantity <= 0)
+                throw new ArgumentException("Sản phẩm hoặc số lượng không hợp lệ");
+
+            var part = await _partRepository.GetPartByIdAsync(item.PartId);
+            if (part == null)
+                throw new ArgumentException($"Sản phẩm {item.PartId} không tồn tại");
+            if (!part.IsActive)
+                throw new ArgumentException($"Sản phẩm {part.PartName} đã ngưng hoạt động");
+
+            orderItems.Add(new OrderItem
+            {
+                PartId = part.PartId,
+                Quantity = item.Quantity,
+                UnitPrice = part.Price
+            });
+        }
 
         var order = new Order
         {
@@ -72,30 +84,14 @@ public class OrderService : IOrderService
             Notes = request.Notes,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-            OrderItems = cartItems.Select(cartItem => new OrderItem
-            {
-                PartId = cartItem.PartId,
-                Quantity = cartItem.Quantity,
-                UnitPrice = cartItem.UnitPrice
-            }).ToList()
+            OrderItems = orderItems
         };
 
         var createdOrder = await _orderRepository.AddAsync(order);
 
-        // Tạo lịch sử trạng thái
-        var statusHistory = new OrderStatusHistory
-        {
-            OrderId = createdOrder.OrderId,
-            Status = "PENDING",
-            Notes = "Đơn hàng được tạo",
-            SystemGenerated = true,
-            CreatedAt = DateTime.UtcNow
-        };
+        // Lịch sử trạng thái đã bỏ theo yêu cầu
 
-        await _orderStatusHistoryRepository.AddAsync(statusHistory);
-
-        // Xóa giỏ hàng
-        await _shoppingCartRepository.DeleteByCustomerIdAsync(request.CustomerId);
+        // Không cần xóa giỏ hàng nữa
 
         return MapToResponse(createdOrder);
     }
@@ -148,15 +144,7 @@ public class OrderService : IOrderService
 
         var created = await _orderRepository.AddAsync(order);
 
-        var statusHistory = new OrderStatusHistory
-        {
-            OrderId = created.OrderId,
-            Status = "PENDING",
-            Notes = "Đơn hàng mua ngay được tạo",
-            SystemGenerated = true,
-            CreatedAt = DateTime.UtcNow
-        };
-        await _orderStatusHistoryRepository.AddAsync(statusHistory);
+        // Lịch sử trạng thái đã bỏ theo yêu cầu
 
         return MapToResponse(created);
     }
@@ -177,21 +165,7 @@ public class OrderService : IOrderService
             }).ToList();
     }
 
-    public async Task<List<OrderStatusHistoryResponse>> GetStatusHistoryAsync(int orderId)
-    {
-        var order = await _orderRepository.GetByIdAsync(orderId);
-        if (order == null) throw new ArgumentException("Đơn hàng không tồn tại.");
-        var list = order.OrderStatusHistories ?? new List<OrderStatusHistory>();
-        return list.Select(h => new OrderStatusHistoryResponse
-        {
-            HistoryId = h.HistoryId,
-            Status = h.Status,
-            Notes = h.Notes,
-            CreatedBy = h.CreatedByUser?.FullName,
-            SystemGenerated = h.SystemGenerated,
-            CreatedAt = h.CreatedAt
-        }).ToList();
-    }
+    // Lịch sử trạng thái đã bỏ theo yêu cầu
 
     public async Task<OrderResponse> UpdateOrderStatusAsync(int orderId, UpdateOrderStatusRequest request)
     {
@@ -205,18 +179,7 @@ public class OrderService : IOrderService
 
         var updatedOrder = await _orderRepository.UpdateAsync(order);
 
-        // Tạo lịch sử trạng thái
-        var statusHistory = new OrderStatusHistory
-        {
-            OrderId = orderId,
-            Status = request.Status,
-            Notes = request.Notes ?? $"Trạng thái thay đổi từ {oldStatus} thành {request.Status}",
-            CreatedBy = request.CreatedBy,
-            SystemGenerated = false,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _orderStatusHistoryRepository.AddAsync(statusHistory);
+        // Lịch sử trạng thái đã bỏ theo yêu cầu
 
         return MapToResponse(updatedOrder);
     }
@@ -248,7 +211,7 @@ public class OrderService : IOrderService
             Notes = order.Notes,
             CreatedAt = order.CreatedAt,
             UpdatedAt = order.UpdatedAt,
-            OrderItems = order.OrderItems.Select(oi => new OrderItemResponse
+            OrderItems = (order.OrderItems ?? new List<OrderItem>()).Select(oi => new OrderItemResponse
             {
                 OrderItemId = oi.OrderItemId,
                 PartId = oi.PartId,
@@ -258,15 +221,6 @@ public class OrderService : IOrderService
                 Quantity = oi.Quantity,
                 UnitPrice = oi.UnitPrice,
                 LineTotal = oi.Quantity * oi.UnitPrice
-            }).ToList(),
-            StatusHistory = order.OrderStatusHistories.Select(osh => new OrderStatusHistoryResponse
-            {
-                HistoryId = osh.HistoryId,
-                Status = osh.Status,
-                Notes = osh.Notes,
-                CreatedBy = osh.CreatedByUser?.FullName ?? "Hệ thống",
-                SystemGenerated = osh.SystemGenerated,
-                CreatedAt = osh.CreatedAt
             }).ToList()
         };
     }

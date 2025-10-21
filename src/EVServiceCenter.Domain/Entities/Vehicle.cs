@@ -17,11 +17,11 @@ public partial class Vehicle
 
     public int CurrentMileage { get; set; }
 
-    public DateOnly? PurchaseDate { get; set; }
+    // PurchaseDate removed
 
     public DateOnly? LastServiceDate { get; set; }
 
-    public DateOnly? NextServiceDue { get; set; }
+    // NextServiceDue removed
 
     public DateTime CreatedAt { get; set; }
 

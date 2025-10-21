@@ -38,6 +38,10 @@ namespace EVServiceCenter.Application.Service
                 // Validate request
                 await ValidateAddStaffRequestAsync(request);
 
+                // Ràng buộc: 1 user chỉ có 1 staff active
+                if (await _staffRepository.ExistsActiveByUserAsync(request.UserId))
+                    throw new ArgumentException("Người dùng đã là nhân viên đang hoạt động ở một trung tâm khác.");
+
                 // Create staff entity
                 var staff = new Staff
                 {
@@ -82,7 +86,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<StaffListResponse> GetStaffByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string searchTerm = null, string position = null, bool? isActive = null)
+        public async Task<StaffListResponse> GetStaffByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null)
         {
             try
             {
@@ -94,7 +98,7 @@ namespace EVServiceCenter.Application.Service
                 // Get all staff for the center
                 var allStaff = await _staffRepository.GetStaffByCenterIdAsync(centerId);
 
-                return await ProcessStaffListAsync(allStaff, pageNumber, pageSize, searchTerm, position, isActive);
+                return await ProcessStaffListAsync(allStaff, pageNumber, pageSize, searchTerm ?? string.Empty, position ?? string.Empty, isActive);
             }
             catch (ArgumentException)
             {
@@ -106,14 +110,14 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<StaffListResponse> GetAllStaffAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, string position = null, bool? isActive = null)
+        public async Task<StaffListResponse> GetAllStaffAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null)
         {
             try
             {
                 // Get all staff
                 var allStaff = await _staffRepository.GetAllStaffAsync();
 
-                return await ProcessStaffListAsync(allStaff, pageNumber, pageSize, searchTerm, position, isActive);
+                return await ProcessStaffListAsync(allStaff, pageNumber, pageSize, searchTerm ?? string.Empty, position ?? string.Empty, isActive);
             }
             catch (Exception ex)
             {
@@ -212,23 +216,21 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate staff exists
                 var staff = await _staffRepository.GetStaffByIdAsync(staffId);
                 if (staff == null)
                     throw new ArgumentException("Nhân viên không tồn tại.");
 
-                // Delete staff
-                await _staffRepository.DeleteStaffAsync(staffId);
-
+                staff.IsActive = false;
+                await _staffRepository.UpdateStaffAsync(staff);
                 return true;
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
-                throw new Exception($"Lỗi khi xóa nhân viên: {ex.Message}");
+                throw new Exception($"Lỗi khi vô hiệu hóa nhân viên: {ex.Message}");
             }
         }
 
@@ -242,12 +244,17 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Hai chế độ: nếu có TechnicianId -> cập nhật center cho technician hiện hữu; ngược lại -> tạo mới từ UserId
-                if (request.TechnicianId.HasValue && request.TechnicianId.Value > 0)
+                // Chế độ duy nhất: dùng TechnicianId để gán vào center
+                if (request.TechnicianId > 0)
                 {
-                    var existing = await _technicianRepository.GetTechnicianByIdAsync(request.TechnicianId.Value);
+                    var existing = await _technicianRepository.GetTechnicianByIdAsync(request.TechnicianId);
                     if (existing == null)
                         throw new ArgumentException("Kỹ thuật viên không tồn tại.");
+
+                    // Ràng buộc: 1 user chỉ có 1 technician active
+                    // Nếu technician đã active ở center khác -> 409
+                    if (existing.IsActive && existing.CenterId != request.CenterId)
+                        throw new ArgumentException("Kỹ thuật viên đang hoạt động ở trung tâm khác.");
 
                     // Cập nhật center và các thuộc tính tùy chọn
                     existing.CenterId = request.CenterId;
@@ -257,30 +264,7 @@ namespace EVServiceCenter.Application.Service
                     await _technicianRepository.UpdateTechnicianAsync(existing);
                     return await MapToTechnicianResponseAsync(existing.TechnicianId);
                 }
-                else
-                {
-                    // Validate request tạo mới
-                    await ValidateAddTechnicianRequestAsync(request);
-
-                    // Generate technician code if not provided
-                    // TechnicianCode removed
-
-                    // Create technician entity
-                    var technician = new Technician
-                    {
-                        UserId = request.UserId!.Value,
-                        CenterId = request.CenterId,
-                        
-                        Position = request.Position,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    // Save technician
-                    var createdTechnician = await _technicianRepository.CreateTechnicianAsync(technician);
-
-                    return await MapToTechnicianResponseAsync(createdTechnician.TechnicianId);
-                }
+                throw new ArgumentException("TechnicianId phải > 0");
             }
             catch (ArgumentException)
             {
@@ -312,7 +296,7 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        public async Task<TechnicianListResponse> GetTechniciansByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string searchTerm = null, string specialization = null, bool? isActive = null)
+        public async Task<TechnicianListResponse> GetTechniciansByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? specialization = null, bool? isActive = null)
         {
             try
             {
@@ -431,23 +415,21 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate technician exists
                 var technician = await _technicianRepository.GetTechnicianByIdAsync(technicianId);
                 if (technician == null)
                     throw new ArgumentException("Kỹ thuật viên không tồn tại.");
 
-                // Delete technician
-                await _technicianRepository.DeleteTechnicianAsync(technicianId);
-
+                technician.IsActive = false;
+                await _technicianRepository.UpdateTechnicianAsync(technician);
                 return true;
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
-                throw new Exception($"Lỗi khi xóa kỹ thuật viên: {ex.Message}");
+                throw new Exception($"Lỗi khi vô hiệu hóa kỹ thuật viên: {ex.Message}");
             }
         }
 
@@ -472,6 +454,52 @@ namespace EVServiceCenter.Application.Service
             // Check if user exists
             var user = await _userRepository.GetUserByIdAsync(userId);
             if (user == null)
+                return false;
+
+            // Check if center exists
+            var center = await _centerRepository.GetCenterByIdAsync(centerId);
+            if (center == null)
+                return false;
+
+            // Check if user is already staff or technician
+            var isAlreadyStaff = await IsUserAlreadyStaffAsync(userId);
+            var isAlreadyTechnician = await IsUserAlreadyTechnicianAsync(userId);
+
+            return !isAlreadyStaff && !isAlreadyTechnician;
+        }
+
+        public async Task<bool> CanUserBeAssignedAsStaffAsync(int userId, int centerId)
+        {
+            // Check if user exists
+            var user = await _userRepository.GetUserByIdAsync(userId);
+            if (user == null)
+                return false;
+
+            // Check if user has STAFF role
+            if (user.Role != "STAFF")
+                return false;
+
+            // Check if center exists
+            var center = await _centerRepository.GetCenterByIdAsync(centerId);
+            if (center == null)
+                return false;
+
+            // Check if user is already staff or technician
+            var isAlreadyStaff = await IsUserAlreadyStaffAsync(userId);
+            var isAlreadyTechnician = await IsUserAlreadyTechnicianAsync(userId);
+
+            return !isAlreadyStaff && !isAlreadyTechnician;
+        }
+
+        public async Task<bool> CanUserBeAssignedAsTechnicianAsync(int userId, int centerId)
+        {
+            // Check if user exists
+            var user = await _userRepository.GetUserByIdAsync(userId);
+            if (user == null)
+                return false;
+
+            // Check if user has TECHNICIAN role
+            if (user.Role != "TECHNICIAN")
                 return false;
 
             // Check if center exists
@@ -522,31 +550,15 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Validate user exists (chỉ khi tạo mới)
-            if (!request.TechnicianId.HasValue)
-            {
-                var user = await _userRepository.GetUserByIdAsync(request.UserId ?? 0);
-                if (user == null)
-                    errors.Add("Người dùng không tồn tại.");
-            }
-
             // Validate center exists
             var center = await _centerRepository.GetCenterByIdAsync(request.CenterId);
             if (center == null)
                 errors.Add("Trung tâm không tồn tại.");
 
-            if (!request.TechnicianId.HasValue)
-            {
-                // Validate user is not already staff
-                if (await IsUserAlreadyStaffAsync(request.UserId ?? 0))
-                    errors.Add("Người dùng đã là nhân viên của trung tâm khác.");
-
-                // Validate user is not already technician
-                if (await IsUserAlreadyTechnicianAsync(request.UserId ?? 0))
-                    errors.Add("Người dùng đã là kỹ thuật viên của trung tâm khác.");
-            }
-
-            // TechnicianCode removed: không còn validate mã kỹ thuật viên
+            // Validate technician exists
+            var tech = await _technicianRepository.GetTechnicianByIdAsync(request.TechnicianId);
+            if (tech == null)
+                errors.Add("Kỹ thuật viên không tồn tại.");
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));

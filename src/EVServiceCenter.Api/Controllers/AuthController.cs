@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
@@ -31,7 +31,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
-                    .SelectMany(x => x.Value.Errors)
+                    .SelectMany(x => x.Value?.Errors ?? new Microsoft.AspNetCore.Mvc.ModelBinding.ModelErrorCollection())
                     .Select(x => x.ErrorMessage)
                     .ToList();
                 
@@ -82,8 +82,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             catch (Exception ex)
             {
                 // Log the actual error for debugging
-                Console.WriteLine($"Registration error: {ex}");
-                
+                // Registration error occurred
+
                 // Parse specific database errors
                 var errorMessage = "Lỗi hệ thống";
                 
@@ -93,11 +93,11 @@ namespace EVServiceCenter.WebAPI.Controllers
                 }
                 else if (ex.Message.Contains("UQ_Users_Email") || ex.Message.Contains("Email already exists"))
                 {
-                    errorMessage = "Email này đã được sử dụng. Vui lòng sử dụng email khác.";
+                    errorMessage = "Email này đã được sử dụng. Vui lòng dùng email khác.";
                 }
                 else if (ex.Message.Contains("UQ_Users_PhoneNumber") || ex.Message.Contains("Phone number already exists"))
                 {
-                    errorMessage = "Số điện thoại này đã được sử dụng. Vui lòng sử dụng số khác.";
+                    errorMessage = "Số điện thoại này đã được sử dụng. Vui lòng dùng số khác.";
                 }
                 else if (ex.Message.Contains("CHECK constraint"))
                 {
@@ -126,9 +126,24 @@ namespace EVServiceCenter.WebAPI.Controllers
         [HttpPost("verify-otp")]
         public async Task<IActionResult> VerifyOtp([FromQuery] string email, [FromQuery] string otp)
         {
-            var ok = await _authService.VerifyOtpAsync(email, otp);
-            return ok ? Ok(new { message = "Xác minh thành công" })
-                      : BadRequest(new { message = "OTP không hợp lệ hoặc đã hết hạn" });
+            try
+            {
+                var ok = await _authService.VerifyOtpAsync(email, otp);
+                return ok ? Ok(new { success = true, message = "Xác minh thành công" })
+                          : BadRequest(new { success = false, message = "OTP không hợp lệ hoặc đã hết hạn" });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (System.Net.Mail.SmtpException ex)
+            {
+                return BadRequest(new { success = false, message = "Gửi email thất bại. Vui lòng kiểm tra địa chỉ email và thử lại.", errors = new[] { ex.Message } });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
         }
 
         [HttpPost("login")]
@@ -138,7 +153,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
-                    .SelectMany(x => x.Value.Errors)
+                    .SelectMany(x => x.Value?.Errors ?? new Microsoft.AspNetCore.Mvc.ModelBinding.ModelErrorCollection())
                     .Select(x => x.ErrorMessage)
                     .ToList();
                 
@@ -160,7 +175,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message += ". Khuyến nghị: Hãy xác thực email để bảo mật tài khoản tốt hơn.";
                 }
 
-                // Tạo response phù hợp với FE
+                // T?o response ph� h?p v?i FE
                 var response = new
                 {
                     success = true,
@@ -201,13 +216,13 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Login error: {ex}");
+                // Login error occurred
                 
                 return StatusCode(500, new 
                 { 
                     success = false,
                     message = "Có lỗi xảy ra trong quá trình đăng nhập. Vui lòng thử lại sau.",
-                    errors = new[] { "Lỗi hệ thống" }
+                    errors = new[] { ex.Message }
                 });
             }
         }
@@ -241,7 +256,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
-                    .SelectMany(x => x.Value.Errors)
+                    .SelectMany(x => x.Value?.Errors ?? new Microsoft.AspNetCore.Mvc.ModelBinding.ModelErrorCollection())
                     .Select(x => x.ErrorMessage)
                     .ToList();
                 
@@ -280,13 +295,13 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Email verification error: {ex}");
+                // Email verification error occurred
                 
                 return StatusCode(500, new 
                 { 
                     success = false,
                     message = "Có lỗi xảy ra trong quá trình xác thực email. Vui lòng thử lại sau.",
-                    errors = new[] { "Lỗi hệ thống" }
+                    errors = new[] { ex.Message }
                 });
             }
         }
@@ -294,11 +309,11 @@ namespace EVServiceCenter.WebAPI.Controllers
         [HttpPost("resend-verification")]
         public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request)
         {
-            // Kiểm tra ModelState validation
+            // Ki?m tra ModelState validation
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
-                    .SelectMany(x => x.Value.Errors)
+                    .SelectMany(x => x.Value?.Errors ?? new Microsoft.AspNetCore.Mvc.ModelBinding.ModelErrorCollection())
                     .Select(x => x.ErrorMessage)
                     .ToList();
                 
@@ -336,13 +351,13 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Resend verification error: {ex}");
+                // Resend verification error occurred
                 
                 return StatusCode(500, new 
                 { 
                     success = false,
                     message = "Có lỗi xảy ra trong quá trình gửi lại mã xác thực. Vui lòng thử lại sau.",
-                    errors = new[] { "Lỗi hệ thống" }
+                    errors = new[] { ex.Message }
                 });
             }
         }
@@ -369,7 +384,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = "Lỗi validation", errors = new[] { ex.Message } });
+                return BadRequest(new { success = false, message = "Lỗi xác thực", errors = new[] { ex.Message } });
             }
             catch (Exception ex)
             {
@@ -428,7 +443,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { success = false, message = "Lỗi validation", errors = new[] { ex.Message } });
+                return BadRequest(new { success = false, message = "Lỗi xác thực", errors = new[] { ex.Message } });
             }
             catch (Exception ex)
             {

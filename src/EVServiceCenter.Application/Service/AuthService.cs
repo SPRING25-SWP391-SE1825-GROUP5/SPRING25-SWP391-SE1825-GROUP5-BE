@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Principal;
@@ -104,10 +104,10 @@ namespace EVServiceCenter.Application.Service
                     
                     return "Đăng ký tài khoản thành công! Vui lòng kiểm tra email để nhận mã xác thực và hoàn tất kích hoạt tài khoản.";
                 }
-                catch (Exception emailEx)
+                catch (Exception)
                 {
                     // Nếu gửi OTP thất bại, vẫn coi đăng ký thành công nhưng yêu cầu user thử lại
-                    Console.WriteLine($"OTP email sending failed: {emailEx.Message}");
+                    // OTP email sending failed - continuing without email
                     return "Đăng ký tài khoản thành công! Tuy nhiên có lỗi khi gửi email xác thực. Vui lòng thử yêu cầu gửi lại mã xác thực.";
                 }
             }
@@ -161,14 +161,14 @@ namespace EVServiceCenter.Application.Service
             var existingUserByEmail = await _accountService.GetAccountByEmailAsync(request.Email);
             if (existingUserByEmail != null)
             {
-                errors.Add("Email này đã được sử dụng. Vui lòng sử dụng email khác.");
+                errors.Add("Email này đã được sử dụng. Vui lòng dùng email khác.");
             }
 
             // Kiểm tra số điện thoại đã tồn tại
             var existingUserByPhone = await _accountService.GetAccountByPhoneNumberAsync(request.PhoneNumber);
             if (existingUserByPhone != null)
             {
-                errors.Add("Số điện thoại này đã được sử dụng. Vui lòng sử dụng số điện thoại khác.");
+                errors.Add("Số điện thoại này đã được sử dụng. Vui lòng dùng số điện thoại khác.");
             }
 
             // Throw exception với tất cả lỗi nếu có
@@ -207,24 +207,11 @@ namespace EVServiceCenter.Application.Service
 
         public async Task<LoginTokenResponse> LoginAsync(LoginRequest request)
         {
-            User user = null;
-            string email = string.Empty;
+            User? user = null;
+            string email = request.Email;
 
-            // Kiểm tra xem input là email hay phone number
-            if (IsValidEmail(request.EmailOrPhone))
-            {
-                user = await _accountService.GetAccountByEmailAsync(request.EmailOrPhone);
-                email = request.EmailOrPhone;
-            }
-            else if (IsValidPhoneNumber(request.EmailOrPhone))
-            {
-                user = await _accountService.GetAccountByPhoneNumberAsync(request.EmailOrPhone);
-                email = user?.Email ?? string.Empty;
-            }
-            else
-            {
-                throw new ArgumentException("Vui lòng nhập email (@gmail.com) hoặc số điện thoại hợp lệ");
-            }
+            // Chỉ sử dụng email để đăng nhập
+            user = await _accountService.GetAccountByEmailAsync(email);
 
             // Kiểm tra lockout trước khi xử lý login
             if (!string.IsNullOrEmpty(email))
@@ -245,14 +232,14 @@ namespace EVServiceCenter.Application.Service
                 {
                     await _loginLockoutService.RecordFailedAttemptAsync(email);
                 }
-                throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng");
+                throw new ArgumentException("Email hoặc mật khẩu không đúng");
             }
 
             // Note: Email verification is optional - users can login without verification
             // Just log for tracking purposes
             if (!user.EmailVerified)
             {
-                Console.WriteLine($"User {user.Email} logged in without email verification");
+                // User logged in without email verification
             }
             
             // Kiểm tra tài khoản có active không
@@ -268,7 +255,7 @@ namespace EVServiceCenter.Application.Service
                 var remainingAttempts = await _loginLockoutService.GetRemainingAttemptsAsync(user.Email);
                 if (remainingAttempts > 0)
                 {
-                    throw new ArgumentException($"Email/số điện thoại hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
+                    throw new ArgumentException($"Email hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
                 }
                 else
                 {
@@ -319,7 +306,7 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Kiểm tra user có tồn tại không
+            // Kiểm tra user có tồn tại không
                 var user = await _authRepository.GetUserByIdAsync(userId);
                 if (user == null)
                     throw new ArgumentException("Người dùng không tồn tại.");
@@ -345,9 +332,9 @@ namespace EVServiceCenter.Application.Service
                 {
                     await _emailService.SendWelcomeEmailAsync(user.Email, user.FullName);
                 }
-                catch (Exception emailEx)
+                catch (Exception)
                 {
-                    Console.WriteLine($"Welcome email sending failed: {emailEx.Message}");
+                    // Welcome email sending failed - continuing without email
                     // Không throw exception vì xác thực đã thành công
                 }
 
@@ -522,11 +509,11 @@ namespace EVServiceCenter.Application.Service
                     UserId = user.UserId,
                     Email = user.Email,
                     FullName = user.FullName,
-                    PhoneNumber = user.PhoneNumber,
+                    PhoneNumber = user.PhoneNumber ?? string.Empty,
                     DateOfBirth = user.DateOfBirth,
-                    Address = user.Address,
-                    Gender = user.Gender,
-                    AvatarUrl = user.AvatarUrl,
+                    Address = user.Address ?? string.Empty,
+                    Gender = user.Gender ?? string.Empty,
+                    AvatarUrl = user.AvatarUrl ?? string.Empty,
                     Role = user.Role ?? "CUSTOMER",
                     IsActive = user.IsActive,
                     EmailVerified = user.EmailVerified,
@@ -564,11 +551,30 @@ namespace EVServiceCenter.Application.Service
                 if (!user.IsActive)
                     throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.");
 
-                // Cập nhật thông tin (KHÔNG cho phép đổi email, phone và avatar)
+                // Cập nhật thông tin
                 user.FullName = request.FullName.Trim();
                 user.DateOfBirth = request.DateOfBirth;
                 user.Gender = request.Gender;
                 user.Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : string.Empty;
+
+                // Cho phép cập nhật email nếu cung cấp và khác hiện tại
+                if (!string.IsNullOrWhiteSpace(request.Email) && !string.Equals(request.Email, user.Email, StringComparison.OrdinalIgnoreCase))
+                {
+                    var existingByEmail = await _accountService.GetAccountByEmailAsync(request.Email);
+                    if (existingByEmail != null && existingByEmail.UserId != user.UserId)
+                        throw new ArgumentException("Email này đã được sử dụng. Vui lòng dùng email khác.");
+                    user.Email = request.Email.ToLower().Trim();
+                    user.EmailVerified = false; // yêu cầu xác thực lại nếu đổi email
+                }
+
+                // Cho phép cập nhật số điện thoại nếu cung cấp và khác hiện tại
+                if (!string.IsNullOrWhiteSpace(request.PhoneNumber) && !string.Equals(request.PhoneNumber, user.PhoneNumber, StringComparison.Ordinal))
+                {
+                    var existingByPhone = await _accountService.GetAccountByPhoneNumberAsync(request.PhoneNumber);
+                    if (existingByPhone != null && existingByPhone.UserId != user.UserId)
+                        throw new ArgumentException("Số điện thoại này đã được sử dụng. Vui lòng dùng số khác.");
+                    user.PhoneNumber = request.PhoneNumber;
+                }
                 user.UpdatedAt = DateTime.UtcNow;
 
                 await _authRepository.UpdateUserAsync(user);
@@ -668,16 +674,16 @@ namespace EVServiceCenter.Application.Service
             if (user == null) throw new Exception("Người dùng không tồn tại.");
 
             var lastOtp = await _otpRepository.GetLastOtpCodeAsync(user.UserId, "EMAIL_VERIFICATION");
-            if (lastOtp == null) throw new Exception("Không tìm thấy mã OTP.");
+            if (lastOtp == null) throw new ArgumentException("Không tìm thấy mã OTP.");
 
             if (lastOtp.IsUsed || lastOtp.ExpiresAt < DateTime.UtcNow)
-                throw new Exception("Mã OTP đã hết hạn hoặc đã được sử dụng.");
+                throw new ArgumentException("Mã OTP đã hết hạn hoặc đã được sử dụng.");
 
             if (lastOtp.Otpcode1 != otp)
             {
                 lastOtp.AttemptCount++;
                 await _otpRepository.UpdateAsync(lastOtp);
-                throw new Exception("Mã OTP không chính xác.");
+                throw new ArgumentException("Mã OTP không chính xác.");
             }
 
             lastOtp.IsUsed = true;
@@ -719,7 +725,7 @@ namespace EVServiceCenter.Application.Service
                 }
                 catch (Exception ex)
                 {
-                    throw new ArgumentException($"Token Google không hợp lệ: {ex.Message}");
+                    throw new ArgumentException($"Token Google không hợp lý: {ex.Message}");
                 }
 
                 if (payload == null || string.IsNullOrEmpty(payload.Email))
@@ -830,7 +836,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 if (string.IsNullOrWhiteSpace(token))
-                    throw new ArgumentException("Token không hợp lệ");
+                    throw new ArgumentException("Token không hợp lý");
                 if (!IsValidPassword(newPassword))
                     throw new ArgumentException("Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.");
 
@@ -838,7 +844,7 @@ namespace EVServiceCenter.Application.Service
                 // Expect token format: email-guid or just guid mapped to userId in OTP table
                 var otp = await _otpRepository.GetByRawTokenAsync(token);
                 if (otp == null || otp.ExpiresAt < DateTime.UtcNow || otp.IsUsed)
-                    throw new ArgumentException("Token không hợp lệ hoặc đã hết hạn");
+                    throw new ArgumentException("Token không hợp lý hoặc đã hết hạn");
 
                 var user = await _authRepository.GetUserByIdAsync(otp.UserId);
                 if (user == null)

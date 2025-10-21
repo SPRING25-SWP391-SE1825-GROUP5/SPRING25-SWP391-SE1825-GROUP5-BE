@@ -10,7 +10,6 @@ public interface IVehicleModelService
 {
     Task<VehicleModelResponse> GetByIdAsync(int id);
     Task<IEnumerable<VehicleModelResponse>> GetAllAsync();
-    Task<IEnumerable<VehicleModelResponse>> GetByBrandAsync(string brand);
     Task<IEnumerable<VehicleModelResponse>> GetActiveModelsAsync();
     Task<VehicleModelResponse> CreateAsync(CreateVehicleModelRequest request);
     Task<VehicleModelResponse> UpdateAsync(int id, UpdateVehicleModelRequest request);

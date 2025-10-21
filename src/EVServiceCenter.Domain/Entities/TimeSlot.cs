@@ -13,7 +13,7 @@ public partial class TimeSlot
 
     public bool IsActive { get; set; }
 
-    public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
+    // Removed: Bookings now link through TechnicianTimeSlot
 
     public virtual ICollection<TechnicianTimeSlot> TechnicianTimeSlots { get; set; } = new List<TechnicianTimeSlot>();
 }

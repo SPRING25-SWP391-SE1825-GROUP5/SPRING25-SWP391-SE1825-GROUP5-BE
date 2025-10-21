@@ -7,7 +7,7 @@ namespace EVServiceCenter.Application.Models.Requests
         // TechnicianCode removed
 
         [StringLength(100, ErrorMessage = "Vị trí không được vượt quá 100 ký tự")]
-        public string Position { get; set; }
+        public required string Position { get; set; }
 
         public bool? IsActive { get; set; }
     }

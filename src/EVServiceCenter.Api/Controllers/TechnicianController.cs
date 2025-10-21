@@ -16,11 +16,13 @@ namespace EVServiceCenter.WebAPI.Controllers
     {
         private readonly ITechnicianService _technicianService;
         private readonly ITimeSlotService _timeSlotService;
+        private readonly IBookingService _bookingService;
 
-        public TechnicianController(ITechnicianService technicianService, ITimeSlotService timeSlotService)
+        public TechnicianController(ITechnicianService technicianService, ITimeSlotService timeSlotService, IBookingService bookingService)
         {
             _technicianService = technicianService;
             _timeSlotService = timeSlotService;
+            _bookingService = bookingService;
         }
 
         /// <summary>
@@ -35,7 +37,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> GetAllTechnicians(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
-            [FromQuery] string searchTerm = null,
+            [FromQuery] string? searchTerm = null,
             [FromQuery] int? centerId = null)
         {
             try
@@ -153,6 +155,65 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Khả dụng của kỹ thuật viên theo dịch vụ trong 1 ngày (lọc theo center + service)
+        /// </summary>
+        [HttpGet("{technicianId}/availability-by-service")]
+        public async Task<IActionResult> GetTechnicianAvailabilityByService(
+            int technicianId,
+            [FromQuery] int centerId,
+            [FromQuery] string date,
+            [FromQuery] int serviceId)
+        {
+            if (technicianId <= 0 || centerId <= 0 || serviceId <= 0)
+                return BadRequest(new { success = false, message = "Thiếu tham số hoặc không hợp lệ" });
+            if (!DateOnly.TryParse(date, out var d))
+                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
+
+            var availability = await _bookingService.GetAvailabilityAsync(centerId, d, new System.Collections.Generic.List<int> { serviceId });
+            var slots = availability?.TimeSlots ?? new System.Collections.Generic.List<EVServiceCenter.Application.Models.Responses.TimeSlotAvailability>();
+            var availableSlotIds = slots
+                .Where(ts => ts.IsAvailable && ts.AvailableTechnicians.Any(t => t.TechnicianId == technicianId && t.IsAvailable))
+                .Select(ts => ts.SlotId)
+                .ToList();
+
+            return Ok(new { success = true, data = new { technicianId, centerId, serviceId, date = d, slotIds = availableSlotIds } });
+        }
+
+        /// <summary>
+        /// Khả dụng của kỹ thuật viên theo trung tâm trong 1 ngày (gom theo technician)
+        /// </summary>
+        [HttpGet("centers/{centerId}/technicians/availability")]
+        public async Task<IActionResult> GetCenterTechniciansAvailability(
+            int centerId,
+            [FromQuery] string date,
+            [FromQuery] int serviceId)
+        {
+            if (centerId <= 0 || serviceId <= 0)
+                return BadRequest(new { success = false, message = "Thiếu tham số hoặc không hợp lệ" });
+            if (!DateOnly.TryParse(date, out var d))
+                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
+
+            var availability = await _bookingService.GetAvailabilityAsync(centerId, d, new System.Collections.Generic.List<int> { serviceId });
+            var slots = availability?.TimeSlots ?? new System.Collections.Generic.List<EVServiceCenter.Application.Models.Responses.TimeSlotAvailability>();
+
+            var dict = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
+            foreach (var ts in slots.Where(s => s.IsAvailable))
+            {
+                foreach (var tech in ts.AvailableTechnicians.Where(t => t.IsAvailable))
+                {
+                    if (!dict.TryGetValue(tech.TechnicianId, out var list))
+                    {
+                        list = new System.Collections.Generic.List<int>();
+                        dict[tech.TechnicianId] = list;
+                    }
+                    list.Add(ts.SlotId);
+                }
+            }
+
+            return Ok(new { success = true, data = new { centerId, serviceId, date = d, technicians = dict } });
+        }
+
+        /// <summary>
         /// Lấy danh sách timeslots của kỹ thuật viên
         /// </summary>
         /// <param name="id">ID kỹ thuật viên</param>
@@ -256,54 +317,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Thêm/cập nhật danh sách kỹ năng cho kỹ thuật viên (ADMIN)
-        /// </summary>
-        [HttpPost("{technicianId}/skills")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> UpsertSkills(int technicianId, [FromBody] UpsertTechnicianSkillsRequest request)
-        {
-            try
-            {
-                if (!ModelState.IsValid || request == null)
-                {
-                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
-                }
-                await _technicianService.UpsertSkillsAsync(technicianId, request);
-                return Ok(new { success = true, message = "Cập nhật kỹ năng thành công" });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Xoá một kỹ năng của kỹ thuật viên (ADMIN)
-        /// </summary>
-        [HttpDelete("{technicianId}/skills/{skillId}")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> RemoveSkill(int technicianId, int skillId)
-        {
-            try
-            {
-                await _technicianService.RemoveSkillAsync(technicianId, skillId);
-                return Ok(new { success = true, message = "Xoá kỹ năng thành công" });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = ex.Message });
-            }
-        }
     }
 
 }

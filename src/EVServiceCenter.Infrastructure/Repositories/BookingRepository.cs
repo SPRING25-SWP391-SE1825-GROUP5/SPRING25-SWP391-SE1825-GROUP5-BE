@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Configurations;
+using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -27,29 +27,29 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     .ThenInclude(c => c.User)
                     .Include(b => b.Vehicle)
                     .Include(b => b.Center)
-                    .Include(b => b.Slot)
+                    .Include(b => b.TechnicianTimeSlot!)
+                    .ThenInclude(tts => tts.Slot!)
                     .Include(b => b.Service)
 
                     .OrderByDescending(b => b.CreatedAt)
                     .ToListAsync();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log the detailed error for debugging
-                Console.WriteLine($"Error in GetAllBookingsAsync: {ex.Message}");
-                Console.WriteLine($"Inner Exception: {ex.InnerException?.Message}");
+                // Error in GetAllBookingsAsync - rethrowing exception
                 throw;
             }
         }
 
-        public async Task<Booking> GetBookingByIdAsync(int bookingId)
+        public async Task<Booking?> GetBookingByIdAsync(int bookingId)
         {
             return await _context.Bookings
                 .Include(b => b.Customer)
                 .Include(b => b.Customer.User)
                 .Include(b => b.Vehicle)
                 .Include(b => b.Center)
-                .Include(b => b.Slot)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
         }
@@ -82,11 +82,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Customer).ThenInclude(c => c.User)
                 .Include(b => b.Vehicle)
                 .Include(b => b.Center)
-                .Include(b => b.Slot)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
-                .Include(b => b.WorkOrders)
+                // WorkOrders removed - functionality merged into Booking
                 .Where(b => b.CreatedAt.Date == date.ToDateTime(TimeOnly.MinValue).Date)
-                .OrderBy(b => b.Slot.SlotTime)
+                .OrderBy(b => b.TechnicianTimeSlot!.Slot!.SlotTime)
                 .ToListAsync();
         }
 
@@ -115,7 +116,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Vehicle)
                 .ThenInclude(v => v.VehicleModel)
                 .Include(b => b.Center)
-                .Include(b => b.Slot)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
 
                 .Where(b => b.CustomerId == customerId);
@@ -141,9 +143,10 @@ namespace EVServiceCenter.Infrastructure.Repositories
                         : query.OrderByDescending(b => b.CreatedAt);
                     break;
                 case "totalcost":
-                    query = sortOrder.ToLower() == "asc" 
-                        ? query.OrderBy(b => b.TotalCost)
-                        : query.OrderByDescending(b => b.TotalCost);
+                    // TotalCost removed -> fallback sort by CreatedAt
+                    query = sortOrder.ToLower() == "asc"
+                        ? query.OrderBy(b => b.CreatedAt)
+                        : query.OrderByDescending(b => b.CreatedAt);
                     break;
                 default:
                     query = query.OrderByDescending(b => b.CreatedAt);
@@ -183,14 +186,10 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Vehicle)
                 .ThenInclude(v => v.VehicleModel)
                 .Include(b => b.Center)
-                .Include(b => b.Slot)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
-
-                .Include(b => b.WorkOrders)
-                .ThenInclude(wo => wo.WorkOrderParts)
-                .ThenInclude(wop => wop.Part)
-                .Include(b => b.WorkOrders)
-                .ThenInclude(wo => wo.Invoices)
+                .Include(b => b.Invoices)
                 .ThenInclude(i => i.Payments)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
         }

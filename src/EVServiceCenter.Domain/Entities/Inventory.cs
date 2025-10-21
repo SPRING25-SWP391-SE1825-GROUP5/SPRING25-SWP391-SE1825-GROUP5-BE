@@ -6,18 +6,9 @@ namespace EVServiceCenter.Domain.Entities;
 public partial class Inventory
 {
     public int InventoryId { get; set; }
-
     public int CenterId { get; set; }
-
-    public int PartId { get; set; }
-
-    public int CurrentStock { get; set; }
-
-    public int MinimumStock { get; set; }
-
-    public DateTime LastUpdated { get; set; }
+    public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 
     public virtual ServiceCenter Center { get; set; }
-
-    public virtual Part Part { get; set; }
+    public virtual ICollection<InventoryPart> InventoryParts { get; set; } = new List<InventoryPart>();
 }

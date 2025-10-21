@@ -12,7 +12,7 @@ namespace EVServiceCenter.Application.Service
 {
     public class CloudinaryService : ICloudinaryService
     {
-        private readonly Cloudinary _cloudinary;
+        private readonly Cloudinary? _cloudinary;
         private readonly IConfiguration _configuration;
 
         public CloudinaryService(IConfiguration configuration)
@@ -26,26 +26,21 @@ namespace EVServiceCenter.Application.Service
                 var apiSecret = _configuration["Cloudinary:ApiSecret"];
 
                 // Debug logging
-                Console.WriteLine($"DEBUG - Cloudinary Config:");
-                Console.WriteLine($"CloudName: '{cloudName}'");
-                Console.WriteLine($"ApiKey: '{apiKey}'");
-                Console.WriteLine($"ApiSecret: '{apiSecret}'");
+                // Cloudinary configuration loaded successfully
 
                 if (string.IsNullOrEmpty(cloudName) || string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(apiSecret))
                 {
-                    Console.WriteLine("WARNING: Cloudinary configuration is missing. Upload avatar feature will be disabled.");
-                    _cloudinary = null; // Set to null instead of throwing exception
+                    // Cloudinary configuration is missing - upload feature disabled
                     return;
                 }
 
                 var account = new Account(cloudName, apiKey, apiSecret);
                 _cloudinary = new Cloudinary(account);
-                Console.WriteLine("Cloudinary service initialized successfully.");
+                // Cloudinary service initialized successfully
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"WARNING: Failed to initialize Cloudinary service: {ex.Message}");
-                _cloudinary = null; // Set to null instead of throwing exception
+                // Failed to initialize Cloudinary service - upload feature disabled
             }
         }
 
@@ -131,9 +126,9 @@ namespace EVServiceCenter.Application.Service
                 var result = await _cloudinary.DestroyAsync(deleteParams);
                 return result.Result == "ok";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"Error deleting image: {ex.Message}");
+                // Error deleting image - continuing without error
                 return false;
             }
         }
@@ -166,9 +161,9 @@ namespace EVServiceCenter.Application.Service
                 var url = _cloudinary.Api.UrlImgUp.Transform(transformation).BuildUrl(publicId);
                 return Task.FromResult(url);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"Error getting image URL: {ex.Message}");
+                // Error getting image URL - returning null
                 return Task.FromResult(string.Empty);
             }
         }

@@ -6,6 +6,6 @@ namespace EVServiceCenter.Application.Models.Requests
     {
         [Required(ErrorMessage = "Email là bắt buộc")]
         [EmailAddress(ErrorMessage = "Email không đúng định dạng")]
-        public string Email { get; set; }
+        public required string Email { get; set; }
     }
 }

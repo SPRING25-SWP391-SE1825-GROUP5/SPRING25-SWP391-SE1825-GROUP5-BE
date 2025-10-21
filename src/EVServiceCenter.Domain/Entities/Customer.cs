@@ -21,10 +21,9 @@ public partial class Customer
 
     public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
 
-    public virtual ICollection<ServiceCredit> ServiceCredits { get; set; } = new List<ServiceCredit>();
 
     // E-commerce navigation properties
-    public virtual ICollection<ShoppingCart> ShoppingCarts { get; set; } = new List<ShoppingCart>();
+    
 
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
 

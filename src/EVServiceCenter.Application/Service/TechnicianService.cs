@@ -22,33 +22,6 @@ namespace EVServiceCenter.Application.Service
             _timeSlotRepository = timeSlotRepository;
             _bookingRepository = bookingRepository;
         }
-        public async Task UpsertSkillsAsync(int technicianId, UpsertTechnicianSkillsRequest request)
-        {
-            if (technicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
-            if (request == null || request.Items == null || request.Items.Count == 0)
-                throw new ArgumentException("Danh sách kỹ năng không được rỗng");
-
-            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
-            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
-
-            var skills = request.Items.Select(i => new TechnicianSkill
-            {
-                TechnicianId = technicianId,
-                SkillId = i.SkillId,
-                Notes = i.Notes
-            });
-
-            await _technicianRepository.UpsertSkillsAsync(technicianId, skills);
-        }
-
-        public async Task RemoveSkillAsync(int technicianId, int skillId)
-        {
-            if (technicianId <= 0 || skillId <= 0)
-                throw new ArgumentException("Thông tin không hợp lệ");
-            var exists = await _technicianRepository.TechnicianExistsAsync(technicianId);
-            if (!exists) throw new ArgumentException("Kỹ thuật viên không tồn tại.");
-            await _technicianRepository.RemoveSkillAsync(technicianId, skillId);
-        }
         public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date)
         {
             var result = new TechnicianBookingsResponse
@@ -61,23 +34,23 @@ namespace EVServiceCenter.Application.Service
             var bookings = await _bookingRepository.GetByTechnicianAndDateAsync(technicianId, date);
             foreach (var b in bookings)
             {
-                var wo = b.WorkOrders?.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+                // WorkOrder functionality merged into Booking - no separate work order needed
                 result.Bookings.Add(new TechnicianBookingItem
                 {
                     BookingId = b.BookingId,
-                    BookingCode = null,
-                    Status = b.Status,
+                    BookingCode = string.Empty,
+                    Status = b.Status ?? string.Empty,
                     ServiceId = b.ServiceId,
-                    ServiceName = b.Service?.ServiceName ?? "N/A",
+                    ServiceName = b.Service?.ServiceName ?? string.Empty,
                     CenterId = b.CenterId,
                     CenterName = b.Center?.CenterName ?? "N/A",
-                    SlotId = b.SlotId,
-                    SlotTime = b.Slot?.SlotTime.ToString() ?? "N/A",
+                    SlotId = b.TechnicianTimeSlot?.SlotId ?? 0,
+                    SlotTime = b.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
                     CustomerName = b.Customer?.User?.FullName ?? "N/A",
-                    CustomerPhone = b.Customer?.User?.PhoneNumber,
-                    VehiclePlate = b.Vehicle?.LicensePlate,
-                    WorkOrderId = wo?.WorkOrderId,
-                    WorkOrderStatus = wo?.Status,
+                    CustomerPhone = b.Customer?.User?.PhoneNumber ?? string.Empty,
+                    VehiclePlate = b.Vehicle?.LicensePlate ?? string.Empty,
+                    WorkOrderId = b.BookingId, // Use BookingId as WorkOrderId
+                    WorkOrderStatus = b.Status ?? string.Empty, // Use Booking status
                     WorkStartTime = null,
                     WorkEndTime = null
                 });
@@ -86,7 +59,7 @@ namespace EVServiceCenter.Application.Service
             return result;
         }
 
-        public async Task<TechnicianListResponse> GetAllTechniciansAsync(int pageNumber = 1, int pageSize = 10, string searchTerm = null, int? centerId = null)
+        public async Task<TechnicianListResponse> GetAllTechniciansAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, int? centerId = null)
         {
             try
             {
@@ -222,7 +195,7 @@ namespace EVServiceCenter.Application.Service
                     SlotId = ts.SlotId,
                     IsAvailable = ts.IsAvailable,
                     BookingId = null,
-                    Notes = ts.Notes,
+                    // Notes removed from TechnicianSkill
                     CreatedAt = DateTime.UtcNow
                 }).ToList();
 
@@ -251,10 +224,10 @@ namespace EVServiceCenter.Application.Service
                 Position = technician.Position,
                 IsActive = technician.IsActive,
                 CreatedAt = technician.CreatedAt,
-                UserFullName = technician.User?.FullName,
-                UserEmail = technician.User?.Email,
-                UserPhoneNumber = technician.User?.PhoneNumber,
-                CenterName = technician.Center?.CenterName,
+                UserFullName = technician.User?.FullName ?? string.Empty,
+                UserEmail = technician.User?.Email ?? string.Empty,
+                UserPhoneNumber = technician.User?.PhoneNumber ?? string.Empty,
+                CenterName = technician.Center?.CenterName ?? string.Empty,
                 // CenterCity = technician.Center?.City
             };
         }

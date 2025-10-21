@@ -8,7 +8,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public int BookingId { get; set; }
         public string? BookingCode { get; set; }
         public DateOnly BookingDate { get; set; }
-        public string Status { get; set; } = null!;
+        public required string Status { get; set; } = null!;
         
         public CenterInfo CenterInfo { get; set; } = null!;
         public VehicleInfo VehicleInfo { get; set; } = null!;
@@ -16,10 +16,10 @@ namespace EVServiceCenter.Application.Models.Responses
         public TechnicianInfo? TechnicianInfo { get; set; }
         public TimeSlotInfo TimeSlotInfo { get; set; } = null!;
         public CostInfo CostInfo { get; set; } = null!;
-        public List<PartUsedInfo> PartsUsed { get; set; } = new List<PartUsedInfo>();
+        public required List<PartUsedInfo> PartsUsed { get; set; } = new List<PartUsedInfo>();
         public WorkOrderInfo? WorkOrderInfo { get; set; }
         public PaymentInfo? PaymentInfo { get; set; }
-        public List<StatusTimelineInfo> Timeline { get; set; } = new List<StatusTimelineInfo>();
+        public required List<StatusTimelineInfo> Timeline { get; set; } = new List<StatusTimelineInfo>();
         
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
@@ -28,26 +28,26 @@ namespace EVServiceCenter.Application.Models.Responses
     public class CenterInfo
     {
         public int CenterId { get; set; }
-        public string CenterName { get; set; } = null!;
-        public string CenterAddress { get; set; } = null!;
+        public required string CenterName { get; set; } = null!;
+        public required string CenterAddress { get; set; } = null!;
         public string? PhoneNumber { get; set; }
     }
 
     public class VehicleInfo
     {
         public int VehicleId { get; set; }
-        public string LicensePlate { get; set; } = null!;
-        public string Vin { get; set; } = null!;
+        public required string LicensePlate { get; set; } = null!;
+        public required string Vin { get; set; } = null!;
         public string? ModelName { get; set; }
-        public string? Brand { get; set; }
+        // Brand removed from VehicleModel
         public int? Year { get; set; }
     }
 
     public class BookingServiceInfo
     {
         public int ServiceId { get; set; }
-        public string ServiceName { get; set; } = null!;
-        public string Description { get; set; } = null!;
+        public required string ServiceName { get; set; } = null!;
+        public required string Description { get; set; } = null!;
         public decimal BasePrice { get; set; }
         public int? EstimatedDuration { get; set; }
     }
@@ -55,7 +55,7 @@ namespace EVServiceCenter.Application.Models.Responses
     public class TechnicianInfo
     {
         public int TechnicianId { get; set; }
-        public string TechnicianName { get; set; } = null!;
+        public required string TechnicianName { get; set; } = null!;
         public string? PhoneNumber { get; set; }
         public string? Position { get; set; }
         public decimal? Rating { get; set; }
@@ -64,8 +64,8 @@ namespace EVServiceCenter.Application.Models.Responses
     public class TimeSlotInfo
     {
         public int SlotId { get; set; }
-        public string StartTime { get; set; } = null!;
-        public string EndTime { get; set; } = null!;
+        public required string StartTime { get; set; } = null!;
+        public required string EndTime { get; set; } = null!;
     }
 
     public class CostInfo
@@ -80,7 +80,7 @@ namespace EVServiceCenter.Application.Models.Responses
     public class PartUsedInfo
     {
         public int PartId { get; set; }
-        public string PartName { get; set; } = null!;
+        public required string PartName { get; set; } = null!;
         public string? PartNumber { get; set; }
         public int Quantity { get; set; }
         public decimal UnitPrice { get; set; }
@@ -90,7 +90,7 @@ namespace EVServiceCenter.Application.Models.Responses
     public class WorkOrderInfo
     {
         public int WorkOrderId { get; set; }
-        public string WorkOrderNumber { get; set; } = null!;
+        public required string WorkOrderNumber { get; set; } = null!;
         public int? ActualDuration { get; set; }
         public string? WorkPerformed { get; set; }
         public string? CustomerComplaints { get; set; }
@@ -103,15 +103,15 @@ namespace EVServiceCenter.Application.Models.Responses
     public class PaymentInfo
     {
         public int PaymentId { get; set; }
-        public string PaymentStatus { get; set; } = null!;
-        public string PaymentMethod { get; set; } = null!;
+        public required string PaymentStatus { get; set; } = null!;
+        public required string PaymentMethod { get; set; } = null!;
         public DateTime? PaidAt { get; set; }
         public decimal Amount { get; set; }
     }
 
     public class StatusTimelineInfo
     {
-        public string Status { get; set; } = null!;
+        public required string Status { get; set; } = null!;
         public DateTime Timestamp { get; set; }
         public string? Note { get; set; }
     }

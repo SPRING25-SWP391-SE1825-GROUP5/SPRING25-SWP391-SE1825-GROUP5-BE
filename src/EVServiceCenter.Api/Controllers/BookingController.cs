@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using EVServiceCenter.Application.Service;
+using EVServiceCenter.Domain.Entities;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -582,34 +583,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             return Ok(new { success = true, paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, amount = payment.Amount });
         }
 
-        // ===== Assign technician for a booking (create WO if needed) =====
-        public class AssignTechnicianRequest { public int TechnicianId { get; set; } }
-
-        [HttpPost("{bookingId:int}/workorders/assign")]
-        public async Task<IActionResult> AssignTechnician([FromRoute] int bookingId, [FromBody] AssignTechnicianRequest req)
-        {
-            if (req == null || req.TechnicianId <= 0)
-                return BadRequest(new { success = false, message = "TechnicianId bắt buộc" });
-
-            var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
-            if (booking == null) return NotFound(new { success = false, message = "Không tìm thấy booking" });
-
-            // ensure technician exists
-            var tech = await _technicianRepository.GetTechnicianByIdAsync(req.TechnicianId);
-            if (tech == null) return NotFound(new { success = false, message = "Kỹ thuật viên không tồn tại" });
-            if (tech.CenterId != booking.CenterId) return BadRequest(new { success = false, message = "Kỹ thuật viên không thuộc trung tâm của booking" });
-
-            // WorkOrder functionality merged into Booking - update booking directly
-            if (string.Equals(booking.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) || string.Equals(booking.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
-                return BadRequest(new { success = false, message = "Không thể gán kỹ thuật viên cho booking đã hoàn tất/hủy" });
-            
-            // Update booking with technician assignment
-            // Note: TechnicianId is now derived from TechnicianTimeSlot
-            booking.UpdatedAt = DateTime.UtcNow;
-            await _bookingRepository.UpdateBookingAsync(booking);
-
-            return Ok(new { success = true, data = new { bookingId = booking.BookingId, technicianId = req.TechnicianId } });
-        }
 
         /// <summary>
         /// Áp dụng gói dịch vụ cho booking
@@ -721,6 +694,157 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message = "Lỗi hệ thống: " + ex.Message 
                 });
             }
+        }
+
+        /// <summary>
+        /// Lấy danh sách booking theo center với phân trang và lọc
+        /// </summary>
+        /// <param name="centerId">ID của trung tâm</param>
+        /// <param name="page">Số trang (default: 1)</param>
+        /// <param name="pageSize">Số lượng item per page (default: 10, max: 50)</param>
+        /// <param name="status">Lọc theo trạng thái ("PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "PAID")</param>
+        /// <param name="fromDate">Lọc từ ngày (format: YYYY-MM-DD)</param>
+        /// <param name="toDate">Lọc đến ngày (format: YYYY-MM-DD)</param>
+        /// <param name="sortBy">Sắp xếp theo ("bookingDate", "createdAt", "status") (default: "createdAt")</param>
+        /// <param name="sortOrder">Thứ tự sắp xếp ("asc", "desc") (default: "desc")</param>
+        /// <returns>Danh sách booking theo center với thông tin phân trang</returns>
+        [HttpGet("center/{centerId}")]
+        [Authorize(Roles = "STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> GetBookingsByCenter(
+            [FromRoute] int centerId,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string? status = null,
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] string sortBy = "createdAt",
+            [FromQuery] string sortOrder = "desc")
+        {
+            try
+            {
+                // Validate parameters
+                if (centerId <= 0)
+                {
+                    return BadRequest(new { success = false, message = "Center ID must be greater than 0." });
+                }
+
+                if (page < 1)
+                {
+                    return BadRequest(new { success = false, message = "Page must be greater than 0." });
+                }
+
+                if (pageSize < 1 || pageSize > 50)
+                {
+                    return BadRequest(new { success = false, message = "Page size must be between 1 and 50." });
+                }
+
+                var bookings = await _bookingRepository.GetBookingsByCenterIdAsync(
+                    centerId, page, pageSize, status, fromDate, toDate, sortBy, sortOrder);
+
+                var totalItems = await _bookingRepository.CountBookingsByCenterIdAsync(
+                    centerId, status, fromDate, toDate);
+                var bookingSummaries = bookings.Select(MapToBookingSummary).ToList();
+                var totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
+                var pagination = new
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalItems = totalItems,
+                    TotalPages = totalPages,
+                    HasNextPage = page < totalPages,
+                    HasPreviousPage = page > 1
+                };
+
+                var filters = new
+                {
+                    Status = status,
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    SortBy = sortBy,
+                    SortOrder = sortOrder
+                };
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách booking theo center thành công",
+                    data = new
+                    {
+                        Bookings = bookingSummaries,
+                        Pagination = pagination,
+                        Filters = filters
+                    }
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Internal server error: {ex.Message}" });
+            }
+        }
+
+
+        private object MapToBookingSummary(Booking booking)
+        {
+            return new
+            {
+                BookingId = booking.BookingId,
+                BookingDate = DateOnly.FromDateTime(booking.CreatedAt),
+                Status = booking.Status ?? "",
+                CenterInfo = new
+                {
+                    CenterId = booking.Center?.CenterId ?? 0,
+                    CenterName = booking.Center?.CenterName ?? "",
+                    CenterAddress = booking.Center?.Address ?? "",
+                    PhoneNumber = booking.Center?.PhoneNumber
+                },
+                VehicleInfo = new
+                {
+                    VehicleId = booking.Vehicle?.VehicleId ?? 0,
+                    LicensePlate = booking.Vehicle?.LicensePlate ?? "",
+                    Vin = booking.Vehicle?.Vin ?? "",
+                    ModelName = booking.Vehicle?.VehicleModel?.ModelName ?? "",
+                    Version = booking.Vehicle?.VehicleModel?.Version ?? "",
+                    CurrentMileage = booking.CurrentMileage ?? 0
+                },
+                ServiceInfo = new
+                {
+                    ServiceId = booking.Service?.ServiceId ?? 0,
+                    ServiceName = booking.Service?.ServiceName ?? "",
+                    Description = booking.Service?.Description ?? "",
+                    BasePrice = booking.Service?.BasePrice ?? 0
+                },
+                TechnicianInfo = new
+                {
+                    TechnicianId = booking.TechnicianTimeSlot?.TechnicianId ?? 0,
+                    TechnicianName = booking.TechnicianTimeSlot?.Technician?.User?.FullName ?? "Chưa gán",
+                    PhoneNumber = booking.TechnicianTimeSlot?.Technician?.User?.PhoneNumber ?? "",
+                    Position = booking.TechnicianTimeSlot?.Technician?.Position ?? ""
+                },
+                TimeSlotInfo = new
+                {
+                    SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
+                    StartTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString("HH:mm") ?? "Chưa xác định",
+                    EndTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.AddMinutes(30).ToString("HH:mm") ?? "Chưa xác định",
+                    SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel ?? "Chưa xác định",
+                    WorkDate = booking.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd") ?? "Chưa xác định",
+                    Notes = booking.TechnicianTimeSlot?.Notes ?? ""
+                },
+                CustomerInfo = new
+                {
+                    CustomerId = booking.Customer?.CustomerId ?? 0,
+                    FullName = booking.Customer?.User?.FullName ?? "",
+                    Email = booking.Customer?.User?.Email ?? "",
+                    PhoneNumber = booking.Customer?.User?.PhoneNumber ?? ""
+                },
+                SpecialRequests = booking.SpecialRequests,
+                AppliedCreditId = booking.AppliedCreditId,
+                CreatedAt = booking.CreatedAt,
+                UpdatedAt = booking.UpdatedAt
+            };
         }
     }
 

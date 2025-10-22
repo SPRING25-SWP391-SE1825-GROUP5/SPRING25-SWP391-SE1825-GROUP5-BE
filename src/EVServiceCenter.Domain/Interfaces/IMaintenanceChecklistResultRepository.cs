@@ -9,6 +9,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<List<MaintenanceChecklistResult>> GetByChecklistIdAsync(int checklistId);
         Task UpsertAsync(MaintenanceChecklistResult result);
         Task UpsertManyAsync(IEnumerable<MaintenanceChecklistResult> results);
+        Task UpdateAsync(MaintenanceChecklistResult result);
     }
 }
 

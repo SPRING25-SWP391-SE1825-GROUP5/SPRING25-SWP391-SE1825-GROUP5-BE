@@ -314,5 +314,5 @@ namespace EVServiceCenter.Application.Service
                 throw new Exception($"Không thể render template email hóa đơn: {ex.Message}", ex);
             }
         }
+        }
     }
-}

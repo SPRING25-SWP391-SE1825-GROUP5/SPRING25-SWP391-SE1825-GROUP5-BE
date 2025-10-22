@@ -219,4 +219,14 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
             .ThenInclude(x => x.User)
             .ToListAsync();
     }
+
+    public async Task<List<TechnicianTimeSlot>> GetExpiredAvailableSlotsAsync(DateOnly workDate, TimeOnly currentTime)
+    {
+        return await _context.TechnicianTimeSlots
+            .Include(t => t.Slot)
+            .Where(t => t.WorkDate.Date == workDate.ToDateTime(TimeOnly.MinValue).Date &&
+                       t.IsAvailable == true &&
+                       t.Slot.SlotTime < currentTime)
+            .ToListAsync();
+    }
 }

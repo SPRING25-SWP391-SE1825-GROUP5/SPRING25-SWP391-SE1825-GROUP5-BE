@@ -43,7 +43,7 @@ allureConfig.json
 
 # Mono auto generated files
 mono_crash.*
-.cursor/ 
+*.cursor/ 
 
 # Build results
 [Dd]ebug/

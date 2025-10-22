@@ -139,10 +139,10 @@ public class PaymentService
 				// Nếu không lấy được link cũ, tiếp tục throw exception
 			}
 			
-			response.EnsureSuccessStatusCode();
+		response.EnsureSuccessStatusCode();
 		}
 		
-		var json = JsonDocument.Parse(responseText).RootElement;
+        var json = JsonDocument.Parse(responseText).RootElement;
         if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
             dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
         {

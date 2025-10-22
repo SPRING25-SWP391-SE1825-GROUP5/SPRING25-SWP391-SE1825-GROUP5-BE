@@ -67,6 +67,28 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Danh sách tất cả gói dịch vụ đang hoạt động (công khai)
+        /// </summary>
+        [HttpGet("active")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetAllActive()
+        {
+            try
+            {
+                var active = await _service.GetActivePackagesAsync();
+                return Ok(new {
+                    success = true,
+                    message = $"Tìm thấy {active.Count()} gói dịch vụ đang hoạt động",
+                    data = active
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Chi tiết gói dịch vụ theo ID (công khai)
         /// </summary>
         [HttpGet("{id:int}")]

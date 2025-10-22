@@ -184,6 +184,7 @@ builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 builder.Services.AddScoped<IConversationMemberRepository, ConversationMemberRepository>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
+builder.Services.AddHostedService<SlotAvailabilityUpdateService>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");

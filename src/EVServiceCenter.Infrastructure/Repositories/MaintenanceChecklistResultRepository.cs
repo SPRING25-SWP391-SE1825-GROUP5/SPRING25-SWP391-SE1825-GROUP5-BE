@@ -58,6 +58,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 await UpsertAsync(r);
             }
         }
+
+        public async Task UpdateAsync(MaintenanceChecklistResult result)
+        {
+            _db.MaintenanceChecklistResults.Update(result);
+            await _db.SaveChangesAsync();
+        }
     }
 }
 

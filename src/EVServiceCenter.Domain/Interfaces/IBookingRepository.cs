@@ -20,6 +20,11 @@ namespace EVServiceCenter.Domain.Interfaces
             string sortBy = "createdAt", string sortOrder = "desc");
         Task<int> CountBookingsByCustomerIdAsync(int customerId, string? status = null, 
             DateTime? fromDate = null, DateTime? toDate = null);
+        Task<List<Booking>> GetBookingsByCenterIdAsync(int centerId, int page = 1, int pageSize = 10, 
+            string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+            string sortBy = "createdAt", string sortOrder = "desc");
+        Task<int> CountBookingsByCenterIdAsync(int centerId, string? status = null, 
+            DateTime? fromDate = null, DateTime? toDate = null);
         Task<Booking?> GetBookingWithDetailsByIdAsync(int bookingId);
     }
 }

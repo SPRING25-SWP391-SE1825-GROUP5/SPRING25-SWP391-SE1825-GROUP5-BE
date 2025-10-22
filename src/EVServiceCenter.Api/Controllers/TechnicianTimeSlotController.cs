@@ -191,7 +191,7 @@ namespace EVServiceCenter.Api.Controllers
         /// <param name="centerId">ID của center</param>
         /// <returns>Danh sách technician time slots</returns>
         [HttpGet("technician/{technicianId}/center/{centerId}")]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetTechnicianTimeSlotsByTechnicianAndCenter(int technicianId, int centerId)
         {
             try
@@ -602,7 +602,7 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         [HttpGet("technician/{technicianId}/schedule")]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetTechnicianSchedule(int technicianId, [FromQuery] DateTime startDate, [FromQuery] DateTime endDate)
         {
             try

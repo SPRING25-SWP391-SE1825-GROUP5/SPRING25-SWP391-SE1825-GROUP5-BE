@@ -107,6 +107,8 @@ builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
 // Removed: IMaintenanceChecklistItemService
 // Note: ChecklistPartService may be deprecated if not needed without ServiceParts
 // Payment service removed from DI per requirement
+builder.Services.AddScoped<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
+builder.Services.AddHttpClient<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
 // WorkOrderService removed - functionality merged into BookingService

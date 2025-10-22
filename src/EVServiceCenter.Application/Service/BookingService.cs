@@ -600,6 +600,12 @@ namespace EVServiceCenter.Application.Service
                     booking.TechnicianSlotId = null;
                 }
 
+                // Update MaintenanceChecklist and MaintenanceChecklistResult when booking is cancelled
+                if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+                {
+                    await HandleMaintenanceChecklistCancellationAsync(booking.BookingId);
+                }
+
                 await _bookingRepository.UpdateBookingAsync(booking);
 
                 return await MapToBookingResponseAsync(bookingId);
@@ -1205,6 +1211,43 @@ namespace EVServiceCenter.Application.Service
             {
                 _logger.LogError(ex, "Lỗi khi tạo gói dịch vụ cho booking {BookingId}", bookingId);
                 throw new Exception("Lỗi hệ thống khi tạo gói dịch vụ.", ex);
+            }
+        }
+
+        /// <summary>
+        /// Xử lý hủy MaintenanceChecklist và MaintenanceChecklistResult khi booking bị hủy
+        /// </summary>
+        private async Task HandleMaintenanceChecklistCancellationAsync(int bookingId)
+        {
+            try
+            {
+                // Lấy MaintenanceChecklist theo BookingId
+                var checklist = await _maintenanceChecklistRepository.GetByBookingIdAsync(bookingId);
+                if (checklist != null)
+                {
+                    // Cập nhật status của MaintenanceChecklist thành CANCELLED
+                    checklist.Status = "CANCELLED";
+                    await _maintenanceChecklistRepository.UpdateAsync(checklist);
+
+                    // Lấy tất cả MaintenanceChecklistResult của checklist này
+                    var results = await _maintenanceChecklistResultRepository.GetByChecklistIdAsync(checklist.ChecklistId);
+                    
+                    // Cập nhật status và result của tất cả MaintenanceChecklistResult thành CANCELLED
+                    foreach (var result in results)
+                    {
+                        result.Status = "CANCELLED";
+                        result.Result = "CANCELLED";
+                        await _maintenanceChecklistResultRepository.UpdateAsync(result);
+                    }
+
+                    _logger.LogInformation("Đã cập nhật MaintenanceChecklist và {Count} MaintenanceChecklistResult thành CANCELLED cho booking {BookingId}", 
+                        results.Count, bookingId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi cập nhật MaintenanceChecklist cho booking {BookingId}", bookingId);
+                // Không throw exception để không ảnh hưởng đến việc cancel booking
             }
         }
     }

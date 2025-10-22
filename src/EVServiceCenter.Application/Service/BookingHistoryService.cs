@@ -175,6 +175,12 @@ namespace EVServiceCenter.Application.Service
                 },
                 ServiceName = booking.Service?.ServiceName ?? "",
                 TechnicianName = "N/A", // Technician removed from Booking
+                TimeSlotInfo = new TimeSlotSummary
+                {
+                    SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
+                    StartTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString("HH:mm") ?? "",
+                    EndTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.AddMinutes(30).ToString("HH:mm") ?? ""
+                },
                 // TotalCost field removed from summary model in response list; omit
                 CreatedAt = booking.CreatedAt
             };

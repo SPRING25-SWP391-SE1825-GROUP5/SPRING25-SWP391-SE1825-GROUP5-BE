@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using EVServiceCenter.Application.Service;
+using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.Entities;
 
@@ -13,29 +14,117 @@ namespace EVServiceCenter.Api.Controllers;
 public class PaymentController : ControllerBase
 {
 	private readonly PaymentService _paymentService;
+    private readonly IPayOSService _payOSService;
     private readonly IBookingRepository _bookingRepo;
     // WorkOrderRepository removed - functionality merged into BookingRepository
     private readonly IInvoiceRepository _invoiceRepo;
     private readonly IPaymentRepository _paymentRepo;
 
     public PaymentController(PaymentService paymentService,
+        IPayOSService payOSService,
         IBookingRepository bookingRepo,
         IInvoiceRepository invoiceRepo,
         IPaymentRepository paymentRepo)
 	{
 		_paymentService = paymentService;
+        _payOSService = payOSService;
         _bookingRepo = bookingRepo;
         // WorkOrderRepository removed - functionality merged into BookingRepository
         _invoiceRepo = invoiceRepo;
         _paymentRepo = paymentRepo;
 	}
 
-	// Tạo link thanh toán PayOS cho Booking
+	// Tạo link thanh toán PayOS cho Booking (sử dụng PayOSService mới)
 	[HttpPost("booking/{bookingId:int}/link")]
 	public async Task<IActionResult> CreateBookingPaymentLink([FromRoute] int bookingId)
 	{
-		var checkoutUrl = await _paymentService.CreateBookingPaymentLinkAsync(bookingId);
-		return Ok(new { checkoutUrl });
+		try
+		{
+			// Lấy thông tin booking
+			var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+			if (booking == null)
+			{
+				return NotFound(new { success = false, message = "Không tìm thấy booking" });
+			}
+
+			// Tính tổng tiền từ service
+			var totalAmount = booking.Service?.BasePrice ?? 0;
+
+			// Trừ credit nếu có (sử dụng remaining credits)
+			if (booking.AppliedCredit != null)
+			{
+				totalAmount -= booking.AppliedCredit.RemainingCredits;
+			}
+
+			// Tạo description (giống code mẫu - giới hạn 25 ký tự)
+			var description = $"Thanh toán vé #{bookingId}";
+
+			// Lấy tên khách hàng
+			var customerName = booking.Customer?.User?.FullName ?? "Khách hàng";
+
+			// Tạo PayOS payment link (giống code mẫu)
+			var checkoutUrl = await _payOSService.CreatePaymentLinkAsync(
+				bookingId, 
+				totalAmount, 
+				description, 
+				customerName
+			);
+
+			return Ok(new { checkoutUrl });
+		}
+		catch (Exception ex)
+		{
+			return StatusCode(500, new { success = false, message = $"Lỗi tạo link thanh toán: {ex.Message}" });
+		}
+	}
+
+	// Lấy thông tin thanh toán từ PayOS (giống code mẫu)
+	[HttpGet("status/{orderCode}")]
+	public async Task<IActionResult> GetPaymentStatus([FromRoute] int orderCode)
+	{
+		try
+		{
+			var paymentInfo = await _payOSService.GetPaymentInfoAsync(orderCode);
+			return Ok(new { success = true, data = paymentInfo });
+		}
+		catch (Exception ex)
+		{
+			return StatusCode(500, new { success = false, message = $"Lỗi lấy thông tin thanh toán: {ex.Message}" });
+		}
+	}
+
+	// Lấy QR code từ PayOS (giống code mẫu)
+	[HttpGet("qr/{orderCode}")]
+	public async Task<IActionResult> GetPaymentQRCode([FromRoute] int orderCode)
+	{
+		try
+		{
+			var paymentInfo = await _payOSService.GetPaymentInfoAsync(orderCode);
+			if (paymentInfo?.QrCode != null)
+			{
+				return Ok(new { success = true, qrCode = paymentInfo.QrCode, checkoutUrl = paymentInfo.CheckoutUrl });
+			}
+			return NotFound(new { success = false, message = "Không tìm thấy QR code" });
+		}
+		catch (Exception ex)
+		{
+			return StatusCode(500, new { success = false, message = $"Lỗi lấy QR code: {ex.Message}" });
+		}
+	}
+
+	// Hủy link thanh toán PayOS (giống code mẫu)
+	[HttpDelete("cancel/{orderCode}")]
+	public async Task<IActionResult> CancelPaymentLink([FromRoute] int orderCode)
+	{
+		try
+		{
+			var result = await _payOSService.CancelPaymentLinkAsync(orderCode);
+			return Ok(new { success = result, message = result ? "Hủy link thành công" : "Hủy link thất bại" });
+		}
+		catch (Exception ex)
+		{
+			return StatusCode(500, new { success = false, message = $"Lỗi hủy link: {ex.Message}" });
+		}
 	}
 
 	// ReturnUrl: PayOS redirect về đây sau khi thanh toán (KHÔNG dùng webhook)
@@ -114,7 +203,7 @@ public class PaymentController : ControllerBase
     }
 
 	// (Tuỳ chọn) Kiểm tra trạng thái theo orderCode nếu FE cần hỏi lại
-	[HttpGet("status/{orderCode}")]
+	[HttpGet("check-status/{orderCode}")]
 	public async Task<IActionResult> CheckStatus([FromRoute] string orderCode)
 	{
 		var ok = await _paymentService.ConfirmPaymentAsync(orderCode);

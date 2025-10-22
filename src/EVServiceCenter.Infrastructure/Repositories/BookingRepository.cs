@@ -179,6 +179,82 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await query.CountAsync();
         }
 
+        public async Task<List<Booking>> GetBookingsByCenterIdAsync(int centerId, int page = 1, int pageSize = 10, 
+            string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+            string sortBy = "createdAt", string sortOrder = "desc")
+        {
+            var query = _context.Bookings
+                .Include(b => b.Customer)
+                .ThenInclude(c => c.User)
+                .Include(b => b.Vehicle)
+                .ThenInclude(v => v.VehicleModel)
+                .Include(b => b.Center)
+                .Include(b => b.TechnicianTimeSlot)
+                .ThenInclude(tts => tts!.Slot)
+                .Include(b => b.TechnicianTimeSlot)
+                .ThenInclude(tts => tts!.Technician)
+                .ThenInclude(t => t.User)
+                .Include(b => b.Service)
+                .Where(b => b.CenterId == centerId);
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(status))
+            {
+                query = query.Where(b => b.Status == status);
+            }
+
+            if (fromDate.HasValue)
+                query = query.Where(b => b.CreatedAt >= fromDate.Value);
+            if (toDate.HasValue)
+                query = query.Where(b => b.CreatedAt <= toDate.Value);
+
+            // Apply sorting
+            switch (sortBy.ToLower())
+            {
+                case "bookingdate":
+                    query = sortOrder.ToLower() == "asc" 
+                        ? query.OrderBy(b => b.CreatedAt) 
+                        : query.OrderByDescending(b => b.CreatedAt);
+                    break;
+                case "status":
+                    query = sortOrder.ToLower() == "asc" 
+                        ? query.OrderBy(b => b.Status) 
+                        : query.OrderByDescending(b => b.Status);
+                    break;
+                case "createdat":
+                default:
+                    query = sortOrder.ToLower() == "asc" 
+                        ? query.OrderBy(b => b.CreatedAt) 
+                        : query.OrderByDescending(b => b.CreatedAt);
+                    break;
+            }
+
+            // Apply pagination
+            return await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+
+        public async Task<int> CountBookingsByCenterIdAsync(int centerId, string? status = null, 
+            DateTime? fromDate = null, DateTime? toDate = null)
+        {
+            var query = _context.Bookings.Where(b => b.CenterId == centerId);
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(status))
+            {
+                query = query.Where(b => b.Status == status);
+            }
+
+            if (fromDate.HasValue)
+                query = query.Where(b => b.CreatedAt >= fromDate.Value);
+            if (toDate.HasValue)
+                query = query.Where(b => b.CreatedAt <= toDate.Value);
+
+            return await query.CountAsync();
+        }
+
         public async Task<Booking?> GetBookingWithDetailsByIdAsync(int bookingId)
         {
             return await _context.Bookings

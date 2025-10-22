@@ -454,6 +454,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<EVServiceCenter.Api.BookingHub>("/hubs/booking");
+app.MapHub<EVServiceCenter.Api.ChatHub>("/hubs/chat");
 
 
 app.Run();

@@ -61,79 +61,62 @@ public class FeedbackController : ControllerBase
         return Ok(new { success = true, data = new { fb.FeedbackId } });
     }
 
-    [HttpPost("bookings/{bookingId:int}/parts/{partId:int}")]
+    [HttpPost("bookings/{bookingId:int}")]
     [Authorize(Policy = "AuthenticatedUser")]
-    public async Task<IActionResult> CreateForBookingPart(int bookingId, int partId, [FromBody] CreateWorkOrderPartFeedbackRequest request)
+    public async Task<IActionResult> CreateForBooking(int bookingId, [FromBody] CreateBookingFeedbackRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
+        
         // Validate booking and require completed status before allowing feedback
         var booking = await _db.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.BookingId == bookingId);
         if (booking == null) return BadRequest(new { success = false, message = $"bookingId {bookingId} không tồn tại" });
+        
         var completedStatuses = new[] { "COMPLETED", "DONE", "FINISHED" };
         if (string.IsNullOrWhiteSpace(booking.Status) || !completedStatuses.Contains(booking.Status.ToUpper()))
         {
             return BadRequest(new { success = false, message = "Chỉ được đánh giá sau khi booking đã hoàn thành" });
         }
-        var partExists = await _db.Parts.AsNoTracking().AnyAsync(p => p.PartId == partId);
-        if (!partExists) return BadRequest(new { success = false, message = $"partId {partId} không tồn tại" });
-        // Ensure part belongs to the booking
-        var partInBooking = await _db.WorkOrderParts.AsNoTracking().AnyAsync(wop => wop.BookingId == bookingId && wop.PartId == partId);
-        if (!partInBooking) return BadRequest(new { success = false, message = "Phụ tùng không thuộc booking này" });
+        
         var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
         if (customer == null) return BadRequest(new { success = false, message = $"customerId {request.CustomerId} không tồn tại" });
+
+        // Validate technician if provided
+        if (request.TechnicianId.HasValue)
+        {
+            var techExists = await _db.Technicians.AsNoTracking().AnyAsync(t => t.TechnicianId == request.TechnicianId.Value);
+            if (!techExists) return BadRequest(new { success = false, message = $"technicianId {request.TechnicianId} không tồn tại" });
+            
+            // Ensure technician matches the booking
+            if (booking.TechnicianTimeSlot?.TechnicianId != request.TechnicianId.Value)
+            {
+                return BadRequest(new { success = false, message = "Kỹ thuật viên không phụ trách booking này" });
+            }
+        }
+
+        // Validate part if provided
+        if (request.PartId.HasValue)
+        {
+            var partExists = await _db.Parts.AsNoTracking().AnyAsync(p => p.PartId == request.PartId.Value);
+            if (!partExists) return BadRequest(new { success = false, message = $"partId {request.PartId} không tồn tại" });
+            
+            // Ensure part belongs to the booking
+            var partInBooking = await _db.WorkOrderParts.AsNoTracking().AnyAsync(wop => wop.BookingId == bookingId && wop.PartId == request.PartId.Value);
+            if (!partInBooking) return BadRequest(new { success = false, message = "Phụ tùng không thuộc booking này" });
+        }
 
         var fb = new Feedback
         {
             CustomerId = request.CustomerId,
             OrderId = null,
-            BookingId = bookingId,    // Từ path parameter
-            PartId = partId,              // Từ path parameter
-            TechnicianId = null,
+            BookingId = bookingId,
+            PartId = request.PartId,
+            TechnicianId = request.TechnicianId,
             Rating = (byte)request.Rating,
             Comment = request.Comment?.Trim(),
             IsAnonymous = request.IsAnonymous,
             CreatedAt = DateTime.UtcNow
         };
-        _db.Feedbacks.Add(fb);
-        await _db.SaveChangesAsync();
-        return Ok(new { success = true, data = new { fb.FeedbackId } });
-    }
-
-    [HttpPost("bookings/{bookingId:int}/technicians/{technicianId:int}")]
-    [Authorize(Policy = "AuthenticatedUser")]
-    public async Task<IActionResult> CreateForBookingTechnician(int bookingId, int technicianId, [FromBody] CreateWorkOrderTechnicianFeedbackRequest request)
-    {
-        if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
-        // Validate booking and require completed status before allowing feedback
-        var booking = await _db.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.BookingId == bookingId);
-        if (booking == null) return BadRequest(new { success = false, message = $"bookingId {bookingId} không tồn tại" });
-        var completedStatuses = new[] { "COMPLETED", "DONE", "FINISHED" };
-        if (string.IsNullOrWhiteSpace(booking.Status) || !completedStatuses.Contains(booking.Status.ToUpper()))
-        {
-            return BadRequest(new { success = false, message = "Chỉ được đánh giá sau khi booking đã hoàn thành" });
-        }
-        var techExists = await _db.Technicians.AsNoTracking().AnyAsync(t => t.TechnicianId == technicianId);
-        if (!techExists) return BadRequest(new { success = false, message = $"technicianId {technicianId} không tồn tại" });
-        // Ensure technician matches the booking
-        if (booking.TechnicianTimeSlot?.TechnicianId != technicianId)
-        {
-            return BadRequest(new { success = false, message = "Kỹ thuật viên không phụ trách booking này" });
-        }
-        var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
-        if (customer == null) return BadRequest(new { success = false, message = $"customerId {request.CustomerId} không tồn tại" });
-
-        var fb = new Feedback
-        {
-            CustomerId = request.CustomerId,
-            OrderId = null,
-            BookingId = bookingId,        // Từ path parameter
-            PartId = null,
-            TechnicianId = technicianId,      // Từ path parameter
-            Rating = (byte)request.Rating,
-            Comment = request.Comment?.Trim(),
-            IsAnonymous = request.IsAnonymous,
-            CreatedAt = DateTime.UtcNow
-        };
+        
         _db.Feedbacks.Add(fb);
         await _db.SaveChangesAsync();
         return Ok(new { success = true, data = new { fb.FeedbackId } });

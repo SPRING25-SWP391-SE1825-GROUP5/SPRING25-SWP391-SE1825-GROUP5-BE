@@ -2,6 +2,9 @@
 	"folders": [
 		{
 			"path": ".."
+		},
+		{
+			"path": "../../SPRING25-SWP391-SE1825-GROUP5-FE"
 		}
 	],
 	"settings": {

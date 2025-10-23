@@ -21,4 +21,8 @@ public interface ICustomerServiceCreditRepository
     Task<int> GetRemainingCreditsCountAsync(int customerId, int serviceId);
     Task UpdateExpiredCreditsStatusAsync();
     Task<bool> CanUseCreditAsync(int customerId, int serviceId);
+    
+    // New methods for service package APIs
+    Task<CustomerServiceCredit?> GetByCustomerIdAndPackageIdAsync(int customerId, int packageId);
+    Task<IEnumerable<Booking>> GetBookingsByCreditIdAsync(int creditId);
 }

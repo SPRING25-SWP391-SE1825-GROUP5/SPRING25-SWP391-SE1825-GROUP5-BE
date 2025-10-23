@@ -18,4 +18,10 @@ public interface ICustomerServiceCreditService
     Task<int> GetRemainingCreditsCountAsync(int customerId, int serviceId);
     Task UpdateExpiredCreditsStatusAsync();
     Task<bool> CanUseCreditAsync(int customerId, int serviceId);
+    
+    // Service Package APIs for Customer
+    Task<IEnumerable<CustomerServicePackageResponse>> GetCustomerServicePackagesAsync(int userId);
+    Task<CustomerServicePackageDetailResponse?> GetServicePackageDetailAsync(int packageId, int userId);
+    Task<IEnumerable<ServicePackageUsageHistoryResponse>> GetServicePackageUsageHistoryAsync(int packageId, int userId);
+    Task<CustomerServicePackageStatisticsResponse> GetCustomerServicePackageStatisticsAsync(int userId);
 }

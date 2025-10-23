@@ -187,6 +187,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         {
                             id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
                             userId = result.UserId,
+                            customerId = result.CustomerId,
                             email = result.Email ?? "",
                             fullName = result.FullName,
                             phoneNumber = result.PhoneNumber ?? "",
@@ -635,6 +636,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         {
                             id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
                             userId = result.UserId,
+                            customerId = result.CustomerId,
                             email = result.Email ?? "",
                             fullName = result.FullName,
                             phoneNumber = result.PhoneNumber ?? "",

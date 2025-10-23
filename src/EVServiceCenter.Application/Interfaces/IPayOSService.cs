@@ -8,6 +8,7 @@ namespace EVServiceCenter.Application.Interfaces
         Task<PayOSPaymentInfo?> GetPaymentInfoAsync(int orderCode);
         Task<bool> CancelPaymentLinkAsync(int orderCode);
         bool VerifyPaymentWebhook(string webhookData);
+        Task<bool> HandlePaymentCallbackAsync(string orderCode);
     }
 
     public class PayOSPaymentInfo

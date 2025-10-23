@@ -10,6 +10,9 @@ namespace EVServiceCenter.Application.Models.Requests
         [Range(1, int.MaxValue, ErrorMessage = "ID khách hàng phải là số nguyên dương")]
         public int CustomerId { get; set; }
 
+        [Required(ErrorMessage = "ID model xe là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "ID model xe phải là số nguyên dương")]
+        public int ModelId { get; set; }
 
         [Required(ErrorMessage = "VIN là bắt buộc")]
         [StringLength(17, MinimumLength = 17, ErrorMessage = "VIN phải có đúng 17 ký tự")]

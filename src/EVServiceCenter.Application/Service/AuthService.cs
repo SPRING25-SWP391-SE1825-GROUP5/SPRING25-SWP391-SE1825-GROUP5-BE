@@ -283,6 +283,14 @@ namespace EVServiceCenter.Application.Service
             user.UpdatedAt = DateTime.UtcNow;
             await _authRepository.UpdateUserAsync(user);
 
+            // Lấy CustomerId từ database
+            int? customerId = null;
+            if (user.Role == "CUSTOMER")
+            {
+                var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
+                customerId = customer?.CustomerId;
+            }
+
             return new LoginTokenResponse
             {
                 AccessToken = accessToken,
@@ -291,6 +299,7 @@ namespace EVServiceCenter.Application.Service
                 ExpiresAt = expiresAt,
                 RefreshToken = refreshToken,
                 UserId = user.UserId,
+                CustomerId = customerId,
                 FullName = user.FullName,
                 Role = user.Role ?? "CUSTOMER",
                 EmailVerified = user.EmailVerified,
@@ -392,7 +401,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Validate email format
                 if (!IsValidEmail(email))
-                    throw new ArgumentException("Email phải có đuôi @gmail.com");
+                    throw new ArgumentException("Email không hợp lệ");
 
                 // Kiểm tra user có tồn tại không
                 var user = await _accountService.GetAccountByEmailAsync(email);
@@ -429,7 +438,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Validate email format
                 if (!IsValidEmail(request.Email))
-                    throw new ArgumentException("Email phải có đuôi @gmail.com");
+                    throw new ArgumentException("Email không hợp lệ");
 
                 // Validate password strength
                 if (!IsValidPassword(request.NewPassword))
@@ -735,9 +744,8 @@ namespace EVServiceCenter.Application.Service
                 if (payload == null || string.IsNullOrEmpty(payload.Email))
                     throw new ArgumentException("Không đọc được thông tin email từ Google");
 
-                // Check if email is Gmail (as per our system requirement)
-                if (!payload.Email.EndsWith("@gmail.com"))
-                    throw new ArgumentException("Chỉ hỗ trợ đăng nhập bằng tài khoản Gmail");
+                // Accept all Google OAuth emails (Gmail, Google Workspace, etc.)
+                // Removed Gmail-only restriction for better user experience
 
                 // Find or create user
                 var email = payload.Email.ToLowerInvariant();
@@ -802,6 +810,14 @@ namespace EVServiceCenter.Application.Service
                 user.UpdatedAt = DateTime.UtcNow;
                 await _authRepository.UpdateUserAsync(user);
 
+                // Lấy CustomerId từ database
+                int? customerId = null;
+                if (user.Role == "CUSTOMER")
+                {
+                    var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
+                    customerId = customer?.CustomerId;
+                }
+
                 return new LoginTokenResponse
                 {
                     AccessToken = accessToken,
@@ -810,6 +826,7 @@ namespace EVServiceCenter.Application.Service
                     ExpiresAt = expiresAt,
                     RefreshToken = refreshToken,
                     UserId = user.UserId,
+                    CustomerId = customerId,
                     FullName = user.FullName,
                     Role = user.Role ?? "CUSTOMER",
                     EmailVerified = user.EmailVerified,

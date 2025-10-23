@@ -227,6 +227,40 @@ namespace EVServiceCenter.Application.Services
                 return false;
             }
         }
+
+        /// <summary>
+        /// Xử lý callback từ PayOS sau khi thanh toán thành công
+        /// </summary>
+        public async Task<bool> HandlePaymentCallbackAsync(string orderCode)
+        {
+            try
+            {
+                _logger.LogInformation($"Xử lý callback thanh toán cho orderCode: {orderCode}");
+                
+                // Lấy thông tin thanh toán từ PayOS
+                var paymentInfo = await GetPaymentInfoAsync(int.Parse(orderCode));
+                if (paymentInfo == null)
+                {
+                    _logger.LogWarning($"Không tìm thấy thông tin thanh toán cho orderCode: {orderCode}");
+                    return false;
+                }
+
+                // Kiểm tra trạng thái thanh toán
+                if (paymentInfo.Status != "PAID")
+                {
+                    _logger.LogInformation($"Thanh toán chưa thành công cho orderCode: {orderCode}, status: {paymentInfo.Status}");
+                    return false;
+                }
+
+                _logger.LogInformation($"Thanh toán thành công cho orderCode: {orderCode}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Lỗi khi xử lý callback thanh toán cho orderCode: {orderCode}");
+                return false;
+            }
+        }
     }
 
     // DTOs cho PayOS API

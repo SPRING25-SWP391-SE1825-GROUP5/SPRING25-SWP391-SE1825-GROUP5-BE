@@ -230,6 +230,132 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Lấy danh sách service package của khách hàng hiện tại
+        /// </summary>
+        /// <returns>Danh sách service package đã mua</returns>
+        [HttpGet("service-packages")]
+        public async Task<IActionResult> GetCustomerServicePackages()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+
+                var servicePackages = await _customerServiceCreditService.GetCustomerServicePackagesAsync(userId.Value);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Tìm thấy {servicePackages.Count()} service package",
+                    data = servicePackages
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy chi tiết service package theo ID
+        /// </summary>
+        /// <param name="packageId">ID của service package</param>
+        /// <returns>Chi tiết service package</returns>
+        [HttpGet("service-packages/{packageId:int}")]
+        public async Task<IActionResult> GetServicePackageDetail(int packageId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+
+                var servicePackage = await _customerServiceCreditService.GetServicePackageDetailAsync(packageId, userId.Value);
+                
+                if (servicePackage == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy service package hoặc bạn không có quyền truy cập" });
+
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy chi tiết service package thành công",
+                    data = servicePackage
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy lịch sử sử dụng service package
+        /// </summary>
+        /// <param name="packageId">ID của service package</param>
+        /// <returns>Lịch sử sử dụng</returns>
+        [HttpGet("service-packages/{packageId:int}/usage-history")]
+        public async Task<IActionResult> GetServicePackageUsageHistory(int packageId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+
+                var usageHistory = await _customerServiceCreditService.GetServicePackageUsageHistoryAsync(packageId, userId.Value);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Tìm thấy {usageHistory.Count()} lần sử dụng",
+                    data = usageHistory
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy thống kê service package của khách hàng
+        /// </summary>
+        /// <returns>Thống kê tổng quan</returns>
+        [HttpGet("service-packages/statistics")]
+        public async Task<IActionResult> GetServicePackageStatistics()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+
+                var statistics = await _customerServiceCreditService.GetCustomerServicePackageStatisticsAsync(userId.Value);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy thống kê service package thành công",
+                    data = statistics
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+
         /// API để sửa dữ liệu không đồng bộ giữa Users và Customers
         /// </summary>
         /// <returns>Kết quả sửa dữ liệu</returns>
@@ -289,6 +415,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                     success = false, 
                     message = "Lỗi hệ thống khi sửa dữ liệu: " + ex.Message 
                 });
+                
             }
         }
 

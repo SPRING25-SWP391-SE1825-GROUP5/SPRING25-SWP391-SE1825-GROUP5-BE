@@ -171,4 +171,177 @@ public class CustomerServiceCreditService : ICustomerServiceCreditService
             UpdatedAt = credit.UpdatedAt
         };
     }
+
+    // Service Package APIs for Customer
+    public async Task<IEnumerable<CustomerServicePackageResponse>> GetCustomerServicePackagesAsync(int userId)
+    {
+        var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
+        if (customer == null) throw new ArgumentException("Không tìm thấy khách hàng");
+
+        var credits = await _customerServiceCreditRepository.GetByCustomerIdAsync(customer.CustomerId);
+        return credits.Select(MapToServicePackageResponse);
+    }
+
+    public async Task<CustomerServicePackageDetailResponse?> GetServicePackageDetailAsync(int packageId, int userId)
+    {
+        var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
+        if (customer == null) throw new ArgumentException("Không tìm thấy khách hàng");
+
+        var credit = await _customerServiceCreditRepository.GetByCustomerIdAndPackageIdAsync(customer.CustomerId, packageId);
+        if (credit == null) return null;
+
+        return MapToServicePackageDetailResponse(credit);
+    }
+
+    public async Task<IEnumerable<ServicePackageUsageHistoryResponse>> GetServicePackageUsageHistoryAsync(int packageId, int userId)
+    {
+        var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
+        if (customer == null) throw new ArgumentException("Không tìm thấy khách hàng");
+
+        var credit = await _customerServiceCreditRepository.GetByCustomerIdAndPackageIdAsync(customer.CustomerId, packageId);
+        if (credit == null) return new List<ServicePackageUsageHistoryResponse>();
+
+        // Get bookings that used this credit
+        var bookings = await _customerServiceCreditRepository.GetBookingsByCreditIdAsync(credit.CreditId);
+        return bookings.Select(MapToUsageHistoryResponse);
+    }
+
+    public async Task<CustomerServicePackageStatisticsResponse> GetCustomerServicePackageStatisticsAsync(int userId)
+    {
+        var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
+        if (customer == null) throw new ArgumentException("Không tìm thấy khách hàng");
+
+        var credits = await _customerServiceCreditRepository.GetByCustomerIdAsync(customer.CustomerId);
+        
+        return new CustomerServicePackageStatisticsResponse
+        {
+            TotalPackages = credits.Count(),
+            ActivePackages = credits.Count(c => c.Status == "ACTIVE"),
+            ExpiredPackages = credits.Count(c => c.Status == "EXPIRED"),
+            UsedUpPackages = credits.Count(c => c.Status == "USED_UP"),
+            TotalCreditsPurchased = credits.Sum(c => c.TotalCredits),
+            TotalCreditsUsed = credits.Sum(c => c.UsedCredits),
+            TotalCreditsRemaining = credits.Sum(c => c.RemainingCredits),
+            TotalAmountSpent = credits.Sum(c => c.ServicePackage?.Price ?? 0),
+            TotalSavings = credits.Sum(c => (c.ServicePackage?.Price ?? 0) * (c.ServicePackage?.DiscountPercent ?? 0) / 100),
+            FirstPurchaseDate = credits.Min(c => c.CreatedAt),
+            LastPurchaseDate = credits.Max(c => c.CreatedAt),
+            LastUsageDate = credits.Max(c => c.UpdatedAt),
+            TopServices = GetTopServices(credits),
+            MonthlyStats = GetMonthlyStats(credits)
+        };
+    }
+
+    private CustomerServicePackageResponse MapToServicePackageResponse(CustomerServiceCredit credit)
+    {
+        return new CustomerServicePackageResponse
+        {
+            CreditId = credit.CreditId,
+            PackageId = credit.PackageId,
+            PackageName = credit.ServicePackage?.PackageName ?? "",
+            PackageDescription = credit.ServicePackage?.Description ?? "",
+            OriginalPrice = credit.ServicePackage?.Price ?? 0,
+            DiscountPercent = credit.ServicePackage?.DiscountPercent ?? 0,
+            FinalPrice = (credit.ServicePackage?.Price ?? 0) * (1 - (credit.ServicePackage?.DiscountPercent ?? 0) / 100),
+            TotalCredits = credit.TotalCredits,
+            UsedCredits = credit.UsedCredits,
+            RemainingCredits = credit.RemainingCredits,
+            Status = credit.Status,
+            PurchaseDate = credit.CreatedAt,
+            ExpiryDate = credit.ExpiryDate,
+            ServiceName = credit.ServicePackage?.Service?.ServiceName ?? "",
+            ServiceDescription = credit.ServicePackage?.Service?.Description ?? ""
+        };
+    }
+
+    private CustomerServicePackageDetailResponse MapToServicePackageDetailResponse(CustomerServiceCredit credit)
+    {
+        return new CustomerServicePackageDetailResponse
+        {
+            CreditId = credit.CreditId,
+            PackageId = credit.PackageId,
+            PackageName = credit.ServicePackage?.PackageName ?? "",
+            PackageDescription = credit.ServicePackage?.Description ?? "",
+            OriginalPrice = credit.ServicePackage?.Price ?? 0,
+            DiscountPercent = credit.ServicePackage?.DiscountPercent ?? 0,
+            FinalPrice = (credit.ServicePackage?.Price ?? 0) * (1 - (credit.ServicePackage?.DiscountPercent ?? 0) / 100),
+            TotalCredits = credit.TotalCredits,
+            UsedCredits = credit.UsedCredits,
+            RemainingCredits = credit.RemainingCredits,
+            Status = credit.Status,
+            PurchaseDate = credit.CreatedAt,
+            ExpiryDate = credit.ExpiryDate,
+            ServiceInfo = new ServicePackageServiceInfo
+            {
+                ServiceId = credit.ServicePackage?.ServiceId ?? 0,
+                ServiceName = credit.ServicePackage?.Service?.ServiceName ?? "",
+                ServiceDescription = credit.ServicePackage?.Service?.Description ?? "",
+                BasePrice = credit.ServicePackage?.Service?.BasePrice ?? 0,
+                EstimatedDuration = 0 // Service entity không có EstimatedDuration
+            },
+            UsageSummary = new ServicePackageUsageSummary
+            {
+                TotalBookings = 0, // TODO: Implement booking count
+                CompletedBookings = 0, // TODO: Implement completed count
+                CancelledBookings = 0, // TODO: Implement cancelled count
+                TotalSavings = (credit.ServicePackage?.Price ?? 0) * (credit.ServicePackage?.DiscountPercent ?? 0) / 100 * credit.UsedCredits,
+                LastUsedDate = credit.UpdatedAt
+            }
+        };
+    }
+
+    private ServicePackageUsageHistoryResponse MapToUsageHistoryResponse(Booking booking)
+    {
+        return new ServicePackageUsageHistoryResponse
+        {
+            BookingId = booking.BookingId,
+            BookingCode = $"BK{booking.BookingId:D6}",
+            BookingDate = booking.CreatedAt,
+            Status = booking.Status ?? "",
+            OriginalPrice = booking.Service?.BasePrice ?? 0,
+            DiscountAmount = 0, // TODO: Calculate discount amount
+            FinalPrice = 0, // TODO: Calculate final price
+            CreditsUsed = 1,
+            ServiceName = booking.Service?.ServiceName ?? "",
+            CenterName = booking.Center?.CenterName ?? "",
+            VehicleLicensePlate = booking.LicensePlate ?? "",
+            CreatedAt = booking.CreatedAt
+        };
+    }
+
+    private List<ServiceUsageStatistic> GetTopServices(IEnumerable<CustomerServiceCredit> credits)
+    {
+        return credits
+            .Where(c => c.ServicePackage?.Service != null)
+            .GroupBy(c => c.ServicePackage!.Service!.ServiceId)
+            .Select(g => new ServiceUsageStatistic
+            {
+                ServiceId = g.Key,
+                ServiceName = g.First().ServicePackage!.Service!.ServiceName,
+                UsageCount = g.Sum(c => c.UsedCredits),
+                TotalSavings = g.Sum(c => ((c.ServicePackage?.Price ?? 0) * (c.ServicePackage?.DiscountPercent ?? 0) / 100) * c.UsedCredits)
+            })
+            .OrderByDescending(s => s.UsageCount)
+            .Take(5)
+            .ToList();
+    }
+
+    private List<MonthlyStatistic> GetMonthlyStats(IEnumerable<CustomerServiceCredit> credits)
+    {
+        return credits
+            .GroupBy(c => new { c.CreatedAt.Year, c.CreatedAt.Month })
+            .Select(g => new MonthlyStatistic
+            {
+                Year = g.Key.Year,
+                Month = g.Key.Month,
+                PackagesPurchased = g.Count(),
+                CreditsUsed = g.Sum(c => c.UsedCredits),
+                AmountSpent = g.Sum(c => c.ServicePackage?.Price ?? 0),
+                Savings = g.Sum(c => (c.ServicePackage?.Price ?? 0) * (c.ServicePackage?.DiscountPercent ?? 0) / 100)
+            })
+            .OrderByDescending(m => m.Year)
+            .ThenByDescending(m => m.Month)
+            .Take(12)
+            .ToList();
+    }
 }

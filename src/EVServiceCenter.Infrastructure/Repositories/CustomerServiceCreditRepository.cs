@@ -182,4 +182,24 @@ public class CustomerServiceCreditRepository : ICustomerServiceCreditRepository
                            csc.RemainingCredits > 0 &&
                            (csc.ExpiryDate == null || csc.ExpiryDate >= now));
     }
+
+    public async Task<CustomerServiceCredit?> GetByCustomerIdAndPackageIdAsync(int customerId, int packageId)
+    {
+        return await _context.CustomerServiceCredits
+            .Include(csc => csc.ServicePackage)
+                .ThenInclude(sp => sp.Service)
+            .Include(csc => csc.Customer)
+            .FirstOrDefaultAsync(csc => csc.CustomerId == customerId && csc.PackageId == packageId);
+    }
+
+    public async Task<IEnumerable<Booking>> GetBookingsByCreditIdAsync(int creditId)
+    {
+        return await _context.Bookings
+            .Include(b => b.Service)
+            .Include(b => b.Center)
+            .Include(b => b.Customer)
+            .Where(b => b.AppliedCreditId == creditId)
+            .OrderByDescending(b => b.CreatedAt)
+            .ToListAsync();
+    }
 }

@@ -355,6 +355,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
 
         /// API để sửa dữ liệu không đồng bộ giữa Users và Customers
         /// </summary>

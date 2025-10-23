@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
@@ -37,6 +39,18 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             _context.Users.Update(user);
             await _context.SaveChangesAsync();
+        }
+
+        public async Task<User?> GetUserByIdAsync(int userId)
+        {
+            return await _context.Users.FindAsync(userId);
+        }
+
+        public async Task<List<User>> GetAllUsersWithRoleAsync(string role)
+        {
+            return await _context.Users
+                .Where(u => u.Role == role)
+                .ToListAsync();
         }
     }
 }

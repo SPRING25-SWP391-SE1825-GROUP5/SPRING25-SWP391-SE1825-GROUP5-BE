@@ -26,13 +26,51 @@ namespace EVServiceCenter.Application.Service
             _emailService = emailService;
         }
 
+        public async Task<List<User>> GetAllUsersWithCustomerRoleAsync()
+        {
+            return await _accountRepository.GetAllUsersWithRoleAsync("CUSTOMER");
+        }
+
+        public async Task<List<Customer>> GetAllCustomersAsync()
+        {
+            return await _customerRepository.GetAllCustomersAsync();
+        }
+
         public async Task<CustomerResponse> GetCurrentCustomerAsync(int userId)
         {
             try
             {
+                Console.WriteLine($"GetCurrentCustomerAsync called for userId: {userId}");
+                
                 var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
                 if (customer == null)
-                    throw new ArgumentException("Khách hàng không tồn tại.");
+                {
+                    Console.WriteLine($"Customer not found for userId: {userId}, creating new customer...");
+                    
+                    // Tự động tạo customer nếu chưa có
+                    var user = await _accountRepository.GetUserByIdAsync(userId);
+                    if (user == null)
+                    {
+                        Console.WriteLine($"User not found for userId: {userId}");
+                        throw new ArgumentException("Người dùng không tồn tại.");
+                    }
+
+                    Console.WriteLine($"User found: {user.FullName}, Role: {user.Role}");
+
+                    // Tạo customer mới
+                    var newCustomer = new Customer
+                    {
+                        UserId = userId,
+                        IsGuest = false // User đã đăng ký nên không phải guest
+                    };
+
+                    customer = await _customerRepository.CreateCustomerAsync(newCustomer);
+                    Console.WriteLine($"Customer created successfully with ID: {customer.CustomerId}");
+                }
+                else
+                {
+                    Console.WriteLine($"Customer found for userId: {userId}, CustomerId: {customer.CustomerId}");
+                }
 
                 return MapToCustomerResponse(customer);
             }
@@ -42,6 +80,7 @@ namespace EVServiceCenter.Application.Service
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"Error in GetCurrentCustomerAsync: {ex.Message}");
                 throw new Exception($"Lỗi khi lấy thông tin khách hàng: {ex.Message}");
             }
         }

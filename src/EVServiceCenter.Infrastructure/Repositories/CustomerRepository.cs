@@ -30,6 +30,14 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Customers
                 .Include(c => c.User)
                 .Include(c => c.Vehicles)
+                .Where(c => c.CustomerId == customerId && c.User != null) // Đảm bảo User không null
+                .FirstOrDefaultAsync();
+        }
+
+        // Method debug để kiểm tra customer mà không cần User
+        public async Task<Customer?> GetCustomerByIdDebugAsync(int customerId)
+        {
+            return await _context.Customers
                 .FirstOrDefaultAsync(c => c.CustomerId == customerId);
         }
 
@@ -68,6 +76,13 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<bool> CustomerExistsAsync(int customerId)
         {
             return await _context.Customers.AnyAsync(c => c.CustomerId == customerId);
+        }
+
+        public async Task<List<Customer>> GetAllCustomersAsync()
+        {
+            return await _context.Customers
+                .Include(c => c.User)
+                .ToListAsync();
         }
 
         // CustomerCode & NormalizedPhone removed from Customer; uniqueness now handled on Users

@@ -6,6 +6,7 @@ using EVServiceCenter.Application.Models.Responses;
 using System;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -17,14 +18,16 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly IVehicleService _vehicleService;
         private readonly EVServiceCenter.Domain.Interfaces.IVehicleRepository _vehicleRepository;
         private readonly EVServiceCenter.Domain.Interfaces.ICustomerRepository _customerRepository;
+        private readonly ILogger<VehicleController> _logger;
         // WorkOrderRepository removed - functionality merged into BookingRepository
         
 
-        public VehicleController(IVehicleService vehicleService, EVServiceCenter.Domain.Interfaces.IVehicleRepository vehicleRepository, EVServiceCenter.Domain.Interfaces.ICustomerRepository customerRepository)
+        public VehicleController(IVehicleService vehicleService, EVServiceCenter.Domain.Interfaces.IVehicleRepository vehicleRepository, EVServiceCenter.Domain.Interfaces.ICustomerRepository customerRepository, ILogger<VehicleController> logger)
         {
             _vehicleService = vehicleService;
             _vehicleRepository = vehicleRepository;
             _customerRepository = customerRepository;
+            _logger = logger;
             // WorkOrderRepository removed - functionality merged into BookingRepository
         }
 
@@ -185,6 +188,72 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Kiểm tra customer có tồn tại không
+        /// </summary>
+        /// <param name="customerId">ID của customer</param>
+        /// <returns>Thông tin customer</returns>
+        [HttpGet("check-customer/{customerId}")]
+        public async Task<IActionResult> CheckCustomerExists(int customerId)
+        {
+            try
+            {
+                _logger.LogInformation($"Checking customer existence for ID: {customerId}");
+                
+                // Kiểm tra customer với và không có User
+                var customer = await _customerRepository.GetCustomerByIdAsync(customerId);
+                var customerDebug = await _customerRepository.GetCustomerByIdDebugAsync(customerId);
+                
+                if (customerDebug == null)
+                {
+                    return NotFound(new { 
+                        success = false, 
+                        message = "Khách hàng không tồn tại",
+                        customerId = customerId
+                    });
+                }
+
+                if (customer == null)
+                {
+                    return Ok(new {
+                        success = true,
+                        message = "Khách hàng tồn tại nhưng thiếu thông tin User",
+                        data = new {
+                            customerId = customerDebug.CustomerId,
+                            userId = customerDebug.UserId,
+                            isGuest = customerDebug.IsGuest,
+                            userExists = false,
+                            fullName = "N/A",
+                            email = "N/A",
+                            phoneNumber = "N/A"
+                        }
+                    });
+                }
+
+                return Ok(new {
+                    success = true,
+                    message = "Khách hàng tồn tại và có đầy đủ thông tin",
+                    data = new {
+                        customerId = customer.CustomerId,
+                        userId = customer.UserId,
+                        isGuest = customer.IsGuest,
+                        userExists = true,
+                        fullName = customer.User?.FullName,
+                        email = customer.User?.Email,
+                        phoneNumber = customer.User?.PhoneNumber
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking customer existence for ID: {customerId}");
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống khi kiểm tra khách hàng" 
+                });
+            }
+        }
+
+        /// <summary>
         /// Tạo xe mới
         /// </summary>
         /// <param name="request">Thông tin xe mới</param>
@@ -194,9 +263,13 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
+                // Debug logging
+                _logger.LogInformation($"CreateVehicle request received: CustomerId={request?.CustomerId}, VIN={request?.Vin}, LicensePlate={request?.LicensePlate}");
+
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    _logger.LogWarning($"ModelState validation failed: {string.Join(", ", errors)}");
                     return BadRequest(new { 
                         success = false, 
                         message = "Dữ liệu không hợp lệ", 
@@ -204,7 +277,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                     });
                 }
 
-                var vehicle = await _vehicleService.CreateVehicleAsync(request);
+                var vehicle = await _vehicleService.CreateVehicleAsync(request!);
                 
                 return CreatedAtAction(nameof(GetVehicleById), new { id = vehicle.VehicleId }, new { 
                     success = true, 

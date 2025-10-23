@@ -14,5 +14,7 @@ namespace EVServiceCenter.Domain.IRepositories
         Task<User?> GetAccountByEmailAsync(string email);
         Task<User> CreateAccountAsync(User account);
         Task UpdateAccountAsync(User user);
+        Task<User?> GetUserByIdAsync(int userId);
+        Task<List<User>> GetAllUsersWithRoleAsync(string role);
     }
 }

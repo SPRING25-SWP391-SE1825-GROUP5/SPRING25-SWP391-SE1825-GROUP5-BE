@@ -4,9 +4,12 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Domain.Interfaces;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -18,12 +21,14 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly ICustomerService _customerService;
         private readonly IVehicleService _vehicleService;
         private readonly ICustomerServiceCreditService _customerServiceCreditService;
+        private readonly ICustomerRepository _customerRepository;
 
-        public CustomerController(ICustomerService customerService, IVehicleService vehicleService, ICustomerServiceCreditService customerServiceCreditService)
+        public CustomerController(ICustomerService customerService, IVehicleService vehicleService, ICustomerServiceCreditService customerServiceCreditService, ICustomerRepository customerRepository)
         {
             _customerService = customerService;
             _vehicleService = vehicleService;
             _customerServiceCreditService = customerServiceCreditService;
+            _customerRepository = customerRepository;
         }
 
         /// <summary>
@@ -36,11 +41,18 @@ namespace EVServiceCenter.WebAPI.Controllers
             try
             {
                 var userId = GetCurrentUserId();
+                Console.WriteLine($"GetCurrentCustomer API called, userId: {userId}");
+                
                 if (userId == null)
+                {
+                    Console.WriteLine("UserId is null, returning Unauthorized");
                     return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+                }
 
+                Console.WriteLine($"Calling GetCurrentCustomerAsync with userId: {userId}");
                 var customer = await _customerService.GetCurrentCustomerAsync(userId.Value);
                 
+                Console.WriteLine($"GetCurrentCustomerAsync completed successfully");
                 return Ok(new { 
                     success = true, 
                     message = "Lấy thông tin khách hàng thành công",
@@ -217,9 +229,80 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        /// <summary>
+        /// API để sửa dữ liệu không đồng bộ giữa Users và Customers
+        /// </summary>
+        /// <returns>Kết quả sửa dữ liệu</returns>
+        [HttpPost("fix-data-sync")]
+        [Authorize(Policy = "AdminOnly")]
+        public async Task<IActionResult> FixDataSync()
+        {
+            try
+            {
+                Console.WriteLine("Starting data sync fix...");
+                
+                // Lấy tất cả users có role CUSTOMER
+                var users = await _customerService.GetAllUsersWithCustomerRoleAsync();
+                var customers = await _customerService.GetAllCustomersAsync();
+                
+                var usersWithoutCustomer = users.Where(u => !customers.Any(c => c.UserId == u.UserId)).ToList();
+                var customersWithoutUser = customers.Where(c => !users.Any(u => u.UserId == c.UserId)).ToList();
+                
+                Console.WriteLine($"Found {usersWithoutCustomer.Count} users without customer records");
+                Console.WriteLine($"Found {customersWithoutUser.Count} customer records without users");
+                
+                var fixedCustomers = new List<object>();
+                
+                // Tạo customer cho users chưa có
+                foreach (var user in usersWithoutCustomer)
+                {
+                    var newCustomer = new Customer
+                    {
+                        UserId = user.UserId,
+                        IsGuest = false
+                    };
+                    
+                    var createdCustomer = await _customerRepository.CreateCustomerAsync(newCustomer);
+                    fixedCustomers.Add(new { 
+                        userId = user.UserId, 
+                        customerId = createdCustomer.CustomerId,
+                        action = "created_customer"
+                    });
+                    
+                    Console.WriteLine($"Created customer for UserId: {user.UserId}");
+                }
+                
+                return Ok(new {
+                    success = true,
+                    message = "Data sync completed",
+                    data = new {
+                        usersWithoutCustomer = usersWithoutCustomer.Count,
+                        customersWithoutUser = customersWithoutUser.Count,
+                        fixedCustomers = fixedCustomers
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in FixDataSync: {ex.Message}");
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống khi sửa dữ liệu: " + ex.Message 
+                });
+            }
+        }
+
         private int? GetCurrentUserId()
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            // Thử nhiều loại claim để tìm userId
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                            ?? User.FindFirst("userId")?.Value 
+                            ?? User.FindFirst("sub")?.Value 
+                            ?? User.FindFirst("nameid")?.Value;
+                            
+            Console.WriteLine($"Looking for userId in claims. Found: {userIdClaim}");
+            Console.WriteLine($"All claims: {string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}"))}");
+            
             if (int.TryParse(userIdClaim, out int userId))
                 return userId;
             return null;

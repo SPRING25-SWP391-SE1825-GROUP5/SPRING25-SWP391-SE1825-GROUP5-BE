@@ -86,6 +86,8 @@ namespace EVServiceCenter.Application.Service
 
                 // Lưu user vào database
                 await _authRepository.RegisterAsync(user);
+                
+                Console.WriteLine($"User created with ID: {user.UserId}");
 
                 // Tạo Customer record tương ứng
                 var customer = new Customer
@@ -94,7 +96,9 @@ namespace EVServiceCenter.Application.Service
                     IsGuest = false
                 };
 
+                Console.WriteLine($"Creating customer for UserId: {user.UserId}");
                 await _customerRepository.CreateCustomerAsync(customer);
+                Console.WriteLine($"Customer created successfully for UserId: {user.UserId}");
 
                 // Tạo và gửi mã OTP xác thực email
                 try

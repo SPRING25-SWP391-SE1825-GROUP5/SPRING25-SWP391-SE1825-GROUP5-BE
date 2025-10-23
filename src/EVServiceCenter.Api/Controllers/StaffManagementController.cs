@@ -509,6 +509,77 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         #endregion
 
+        #region Current User APIs
+
+        /// <summary>
+        /// Lấy thông tin staff hiện tại (dựa trên JWT token)
+        /// </summary>
+        /// <returns>Thông tin staff hiện tại</returns>
+        [HttpGet("staff/current")]
+        [Authorize] // Tạm thời bỏ policy để test
+        public async Task<IActionResult> GetCurrentStaff()
+        {
+            try
+            {
+                // Debug: Log tất cả claims để xem có gì
+                var allClaims = User.Claims.Select(c => $"{c.Type}: {c.Value}").ToList();
+                
+                // Lấy userId từ JWT token
+                var userIdClaim = User.FindFirst("userId") ?? User.FindFirst("sub") ?? User.FindFirst("nameid");
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+                {
+                    return Unauthorized(new { 
+                        success = false, 
+                        message = "Không thể xác định người dùng",
+                        debug = new { 
+                            claims = allClaims,
+                            userIdClaim = userIdClaim?.Value 
+                        }
+                    });
+                }
+                
+                // Debug: Log thông tin user và roles
+                var roles = User.Claims.Where(c => c.Type == "role" || c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role").Select(c => c.Value).ToList();
+                var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
+
+                // Tìm staff record của user hiện tại
+                var staff = await _staffManagementService.GetStaffByUserIdAsync(userId);
+                if (staff == null)
+                {
+                    return NotFound(new { 
+                        success = false, 
+                        message = "Không tìm thấy thông tin staff",
+                        debug = new {
+                            userId = userId,
+                            roles = roles,
+                            isAuthenticated = isAuthenticated,
+                            claims = allClaims
+                        }
+                    });
+                }
+
+                return Ok(new {
+                    success = true,
+                    message = "Lấy thông tin staff hiện tại thành công",
+                    data = staff,
+                    debug = new {
+                        userId = userId,
+                        roles = roles,
+                        isAuthenticated = isAuthenticated
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        #endregion
+
         #region Validation APIs
 
         /// <summary>

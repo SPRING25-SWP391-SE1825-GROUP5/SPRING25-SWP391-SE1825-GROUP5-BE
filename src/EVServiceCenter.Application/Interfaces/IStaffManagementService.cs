@@ -9,6 +9,7 @@ namespace EVServiceCenter.Application.Interfaces
         // Staff Management
         Task<StaffResponse> AddStaffToCenterAsync(AddStaffToCenterRequest request);
         Task<StaffResponse> GetStaffByIdAsync(int staffId);
+        Task<StaffResponse> GetStaffByUserIdAsync(int userId);
         Task<StaffListResponse> GetStaffByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null);
         Task<StaffListResponse> GetAllStaffAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null);
         Task<StaffResponse> UpdateStaffAsync(int staffId, UpdateStaffRequest request);

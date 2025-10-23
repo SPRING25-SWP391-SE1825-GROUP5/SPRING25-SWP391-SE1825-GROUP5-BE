@@ -86,6 +86,26 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<StaffResponse> GetStaffByUserIdAsync(int userId)
+        {
+            try
+            {
+                var staff = await _staffRepository.GetStaffByUserIdAsync(userId);
+                if (staff == null)
+                    throw new ArgumentException("Không tìm thấy thông tin staff cho user này.");
+
+                return await MapToStaffResponseAsync(staff.StaffId);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy thông tin staff theo userId: {ex.Message}");
+            }
+        }
+
         public async Task<StaffListResponse> GetStaffByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null)
         {
             try

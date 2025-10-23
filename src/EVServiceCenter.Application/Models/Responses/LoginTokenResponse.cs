@@ -10,6 +10,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public DateTime ExpiresAt { get; set; }
         public required string RefreshToken { get; set; }
         public int UserId { get; set; }
+        public int? CustomerId { get; set; }
         public required string FullName { get; set; }
         public required string Role { get; set; }
         public bool EmailVerified { get; set; }

@@ -87,8 +87,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (hasEmail)
                 {
                     var trimmed = email?.Trim() ?? string.Empty;
-                    if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[a-zA-Z0-9._%+-]+@gmail\.com$"))
-                        return BadRequest(new { success = false, message = "Email không hợp lệ (yêu cầu @gmail.com)" });
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"))
+                        return BadRequest(new { success = false, message = "Email không hợp lệ" });
                     user = await _accountService.GetAccountByEmailAsync(trimmed);
                 }
                 else

@@ -98,6 +98,7 @@ namespace EVServiceCenter.Application.Service
                 var vehicle = new Vehicle
                 {
                     CustomerId = request.CustomerId,
+                    ModelId = request.ModelId,
                     Vin = request.Vin.Trim().ToUpper(),
                     LicensePlate = request.LicensePlate.Trim().ToUpper(),
                     Color = request.Color.Trim(),

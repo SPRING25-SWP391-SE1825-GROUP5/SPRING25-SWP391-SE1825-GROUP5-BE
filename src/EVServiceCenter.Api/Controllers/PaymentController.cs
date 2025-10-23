@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Logging;
 using EVServiceCenter.Application.Service;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
@@ -19,12 +20,14 @@ public class PaymentController : ControllerBase
     // WorkOrderRepository removed - functionality merged into BookingRepository
     private readonly IInvoiceRepository _invoiceRepo;
     private readonly IPaymentRepository _paymentRepo;
+    private readonly ILogger<PaymentController> _logger;
 
     public PaymentController(PaymentService paymentService,
         IPayOSService payOSService,
         IBookingRepository bookingRepo,
         IInvoiceRepository invoiceRepo,
-        IPaymentRepository paymentRepo)
+        IPaymentRepository paymentRepo,
+        ILogger<PaymentController> logger)
 	{
 		_paymentService = paymentService;
         _payOSService = payOSService;
@@ -32,6 +35,7 @@ public class PaymentController : ControllerBase
         // WorkOrderRepository removed - functionality merged into BookingRepository
         _invoiceRepo = invoiceRepo;
         _paymentRepo = paymentRepo;
+        _logger = logger;
 	}
 
 	// Tạo link thanh toán PayOS cho Booking (sử dụng PayOSService mới)
@@ -138,10 +142,18 @@ public class PaymentController : ControllerBase
 			return BadRequest(new { success = false, message = "Thiếu orderCode từ PayOS" });
 		}
 
-		var confirmed = await _paymentService.ConfirmPaymentAsync(orderCode);
+		// Sử dụng PayOSService để xử lý callback
+		var payOSConfirmed = await _payOSService.HandlePaymentCallbackAsync(orderCode);
+		
+		// Nếu PayOS xác nhận thành công, gọi PaymentService để cập nhật DB
+		var confirmed = false;
+		if (payOSConfirmed)
+		{
+			confirmed = await _paymentService.ConfirmPaymentAsync(orderCode);
+		}
 
 		// Trả về HTML đơn giản để người dùng thấy kết quả ngay cả khi không có FE
-		var html = $"<!DOCTYPE html><html><head><meta charset=\"utf-8\"/><title>Kết quả thanh toán</title></head><body style=\"font-family: sans-serif; padding:24px\"><h2>Kết quả thanh toán</h2><p>OrderCode: {orderCode}</p><p>Trạng thái (PayOS): {status ?? "(không có)"}</p><p>Mã (PayOS): {code ?? "(không có)"}</p><p>Mô tả (PayOS): {desc ?? "(không có)"}</p><hr/><p>Cập nhật hệ thống: {(confirmed ? "THÀNH CÔNG" : "KHÔNG THÀNH CÔNG")}</p></body></html>";
+		var html = $"<!DOCTYPE html><html><head><meta charset=\"utf-8\"/><title>Kết quả thanh toán</title></head><body style=\"font-family: sans-serif; padding:24px\"><h2>Kết quả thanh toán</h2><p>OrderCode: {orderCode}</p><p>Trạng thái (PayOS): {status ?? "(không có)"}</p><p>Mã (PayOS): {code ?? "(không có)"}</p><p>Mô tả (PayOS): {desc ?? "(không có)"}</p><hr/><p>Xác nhận PayOS: {(payOSConfirmed ? "THÀNH CÔNG" : "KHÔNG THÀNH CÔNG")}</p><p>Cập nhật hệ thống: {(confirmed ? "THÀNH CÔNG" : "KHÔNG THÀNH CÔNG")}</p></body></html>";
 		return Content(html, "text/html; charset=utf-8");
 	}
 
@@ -202,12 +214,36 @@ public class PaymentController : ControllerBase
         return Ok(new { paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, status = payment.Status, amount = payment.Amount, paymentMethod = payment.PaymentMethod, paidByUserId = payment.PaidByUserID });
     }
 
-	// (Tuỳ chọn) Kiểm tra trạng thái theo orderCode nếu FE cần hỏi lại
+	// API để frontend gọi sau khi PayOS redirect về để confirm payment
 	[HttpGet("check-status/{orderCode}")]
+	[AllowAnonymous] // Cho phép frontend gọi mà không cần auth
 	public async Task<IActionResult> CheckStatus([FromRoute] string orderCode)
 	{
-		var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
-		return Ok(new { orderCode, updated = ok });
+		try
+		{
+			_logger.LogInformation("Frontend gọi API check-status cho orderCode: {OrderCode}", orderCode);
+			
+			var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
+			
+			_logger.LogInformation("Kết quả confirm payment cho orderCode {OrderCode}: {Result}", orderCode, ok);
+			
+			return Ok(new { 
+				success = true,
+				orderCode, 
+				updated = ok,
+				message = ok ? "Thanh toán đã được xác nhận và cập nhật thành công" : "Thanh toán chưa được xác nhận"
+			});
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Lỗi khi check payment status cho orderCode: {OrderCode}", orderCode);
+			return StatusCode(500, new { 
+				success = false,
+				orderCode,
+				updated = false,
+				message = "Có lỗi xảy ra khi xác nhận thanh toán: " + ex.Message
+			});
+		}
 	}
 
 	[HttpGet("return")]

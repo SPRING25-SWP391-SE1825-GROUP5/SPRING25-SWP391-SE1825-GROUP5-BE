@@ -153,6 +153,22 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
+        [HttpPost("search")]
+        public async Task<IActionResult> Search([FromBody] SearchMessagesRequest request)
+        {
+            try
+            {
+                var validationResult = ValidateModelState();
+                if (validationResult != null) return validationResult;
+
+                var result = await _messageService.SearchMessagesAsync(request);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Tìm kiếm tin nhắn");
+            }
+        }
 
 
     }

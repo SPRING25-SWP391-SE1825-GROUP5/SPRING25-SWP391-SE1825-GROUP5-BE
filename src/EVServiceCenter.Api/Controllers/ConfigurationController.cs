@@ -23,10 +23,6 @@ namespace EVServiceCenter.Api.Controllers
             _settingsService = settingsService;
         }
 
-        /// <summary>
-        /// Lấy cấu hình Login Lockout hiện tại
-        /// </summary>
-        /// <returns>Cấu hình Login Lockout</returns>
         [HttpGet("login-lockout/config")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetConfig()
@@ -42,11 +38,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật cấu hình Login Lockout
-        /// </summary>
-        /// <param name="request">Thông tin cấu hình mới</param>
-        /// <returns>Kết quả cập nhật</returns>
         [HttpPut("login-lockout/config")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> UpdateConfig([FromBody] LoginLockoutConfigRequest request)
@@ -65,7 +56,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        // ------------------- Admin Config: BookingRealtime -------------------
         [HttpGet("booking-realtime")] 
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetBookingRealtime()
@@ -83,7 +73,6 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, message = "Cập nhật BookingRealtime thành công" });
         }
 
-        // ------------------- Admin Config: PayOS -------------------
         [HttpGet("payos")] 
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetPayOs()
@@ -101,7 +90,6 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, message = "Cập nhật PayOS thành công" });
         }
 
-        // ------------------- Admin Config: GuestSession -------------------
         [HttpGet("guest-session")] 
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetGuestSession()
@@ -119,7 +107,6 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, message = "Cập nhật GuestSession thành công" });
         }
 
-        // ------------------- Admin Config: MaintenanceReminder -------------------
         [HttpGet("maintenance-reminder")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetMaintenanceReminder()
@@ -137,11 +124,6 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, message = "Cập nhật MaintenanceReminder thành công" });
         }
 
-        /// <summary>
-        /// Kiểm tra trạng thái lockout của một email
-        /// </summary>
-        /// <param name="email">Email cần kiểm tra</param>
-        /// <returns>Thông tin lockout</returns>
         [HttpGet("login-lockout/status/{email}")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetLockoutStatus(string email)
@@ -176,11 +158,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Xóa lockout của một email (chỉ dành cho Admin)
-        /// </summary>
-        /// <param name="email">Email cần xóa lockout</param>
-        /// <returns>Kết quả xóa lockout</returns>
         [HttpDelete("login-lockout/unlock/{email}")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> UnlockAccount(string email)
@@ -205,14 +182,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        // ============================================================================
-        // PUBLIC CONFIG ENDPOINTS FOR FRONTEND
-        // ============================================================================
-
-        /// <summary>
-        /// Lấy feature flags cho frontend (public endpoint)
-        /// </summary>
-        /// <returns>Danh sách feature flags</returns>
         [HttpGet("features")]
         [AllowAnonymous]
         public IActionResult GetFeatures()
@@ -256,10 +225,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy business rules cho frontend (public endpoint)
-        /// </summary>
-        /// <returns>Danh sách business rules</returns>
         [HttpGet("rules")]
         [AllowAnonymous]
         public IActionResult GetRules()
@@ -329,10 +294,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy public settings cho frontend (public endpoint)
-        /// </summary>
-        /// <returns>Public settings</returns>
         [HttpGet("public")]
         [AllowAnonymous]
         public IActionResult GetPublicSettings()

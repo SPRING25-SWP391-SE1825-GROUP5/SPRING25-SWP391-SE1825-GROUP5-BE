@@ -11,7 +11,7 @@ namespace EVServiceCenter.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "AuthenticatedUser")] // Tất cả user đã đăng nhập
+    [Authorize(Policy = "AuthenticatedUser")]
     public class InventoryController : ControllerBase
     {
         private readonly IInventoryService _inventoryService;
@@ -21,14 +21,6 @@ namespace EVServiceCenter.Api.Controllers
             _inventoryService = inventoryService;
         }
 
-        /// <summary>
-        /// Lấy danh sách tồn kho với phân trang và tìm kiếm
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="centerId">Lọc theo trung tâm</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm (mã phụ tùng, tên, thương hiệu, tên trung tâm)</param>
-        /// <returns>Danh sách tồn kho</returns>
         [HttpGet]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetInventories(
@@ -39,7 +31,6 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -60,11 +51,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo tồn kho mới (chỉ MANAGER)
-        /// </summary>
-        /// <param name="request">Thông tin tồn kho mới</param>
-        /// <returns>Thông tin tồn kho đã tạo</returns>
         [HttpPost]
         [Authorize(Roles = "MANAGER")]
         public async Task<IActionResult> CreateInventory([FromBody] CreateInventoryRequest request)
@@ -102,11 +88,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách phụ tùng (parts) thuộc một inventory
-        /// </summary>
-        /// <param name="inventoryId">ID tồn kho</param>
-        /// <returns>Danh sách phụ tùng của tồn kho</returns>
         [HttpGet("{inventoryId}/parts")]
         public async Task<IActionResult> GetInventoryParts(int inventoryId)
         {
@@ -134,11 +115,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thông tin tồn kho theo ID
-        /// </summary>
-        /// <param name="id">ID tồn kho</param>
-        /// <returns>Thông tin tồn kho</returns>
         [HttpGet("{id}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetInventoryById(int id)
@@ -169,14 +145,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy tồn kho theo trung tâm (1 trung tâm = 1 kho)
-        /// </summary>
-        /// <param name="centerId">ID trung tâm</param>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
-        /// <returns>Danh sách tồn kho của trung tâm</returns>
         [HttpGet("by-center/{centerId}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetInventoryByCenter(int centerId)
@@ -199,39 +167,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        // ========== INVENTORY PART MANAGEMENT (Cấu trúc mới) ==========
-
-        // Removed inventory-part management endpoints
-
-        // ========== AVAILABILITY METHODS ==========
-
-        /// <summary>
-        /// Lấy tồn kho theo center và danh sách partIds
-        /// </summary>
-        /// <param name="centerId">ID trung tâm</param>
-        /// <param name="partIds">Danh sách ID phụ tùng (cách nhau bởi dấu phẩy)</param>
-        /// <returns>Danh sách tồn kho</returns>
-        // Removed availability endpoint (per center + partIds)
-
-        /// <summary>
-        /// Lấy tồn kho toàn cục theo danh sách partIds
-        /// </summary>
-        /// <param name="partIds">Danh sách ID phụ tùng (cách nhau bởi dấu phẩy)</param>
-        /// <returns>Danh sách tồn kho toàn cục</returns>
-        // Removed global-availability endpoint
-
-        /// <summary>
-        /// Lấy tồn kho toàn cục cho tất cả phụ tùng
-        /// </summary>
-        /// <returns>Danh sách tồn kho toàn cục</returns>
-        // Removed global-availability-all endpoint
-
-        /// <summary>
-        /// Lấy toàn bộ parts available theo từng center (phân trang, tìm kiếm)
-        /// </summary>
-        /// <param name="pageNumber">Số trang</param>
-        /// <param name="pageSize">Kích thước trang</param>
-        /// <param name="searchTerm">Từ khóa (tên trung tâm, mã/tên/brand)</param>
         [HttpGet("centers-availability")]
         [Authorize(Policy = "AuthenticatedUser")]
         public async Task<IActionResult> GetCentersAvailability(
@@ -253,8 +188,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
     }
-
-    // ========== REQUEST MODELS ==========
 
     public class AddPartToInventoryRequest
     {

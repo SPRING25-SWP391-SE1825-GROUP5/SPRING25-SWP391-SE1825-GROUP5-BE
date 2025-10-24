@@ -19,7 +19,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore EVServiceBE.sln
 
       - name: Build
         run: dotnet build -c Release --no-restore
@@ -40,6 +40,26 @@ jobs:
             echo "RENDER_DEPLOY_HOOK secret is not set" >&2
             exit 1
           fi
-          curl -fsS -X POST "$DEPLOY_HOOK"
-
-
+          
+          echo "Triggering deploy hook: $DEPLOY_HOOK"
+          
+          # Try with different curl options for better error handling
+          curl -v -X POST "$DEPLOY_HOOK" \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: GitHub-Actions" \
+            --connect-timeout 30 \
+            --max-time 60 \
+            --retry 3 \
+            --retry-delay 5 \
+            --fail-with-body || {
+              echo "Deploy hook failed with exit code: $?"
+              echo "Response body:"
+              curl -X POST "$DEPLOY_HOOK" \
+                -H "Content-Type: application/json" \
+                -H "User-Agent: GitHub-Actions" \
+                --connect-timeout 30 \
+                --max-time 60 || true
+              exit 1
+            }
+          
+          echo "Deploy hook triggered successfully"

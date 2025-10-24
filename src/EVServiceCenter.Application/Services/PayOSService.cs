@@ -53,9 +53,9 @@ namespace EVServiceCenter.Application.Services
                 var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var orderCode = int.Parse($"{bookingId}{timestamp.ToString().Substring(timestamp.ToString().Length - 6)}"); // Lấy 6 số cuối của timestamp
 
-                // Lấy URL callback từ config
-                var returnUrl = _configuration["PayOS:ReturnUrl"];
-                var cancelUrl = _configuration["PayOS:CancelUrl"];
+                // Lấy URL callback từ config và thêm bookingId
+                var returnUrl = $"{_configuration["PayOS:ReturnUrl"]}?bookingId={bookingId}";
+                var cancelUrl = $"{_configuration["PayOS:CancelUrl"]}?bookingId={bookingId}";
 
                 _logger.LogInformation($"ReturnURL: {returnUrl}, CancelURL: {cancelUrl}");
 
@@ -93,7 +93,7 @@ namespace EVServiceCenter.Application.Services
                 _logger.LogInformation($"PayOS Headers - ClientId: {_clientId}, ApiKey: {_apiKey.Substring(0, 8)}...");
 
                 // Gọi API PayOS
-                var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v2/payment-requests");
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/payment-requests");
                 request.Headers.Add("x-client-id", _clientId);
                 request.Headers.Add("x-api-key", _apiKey);
                 
@@ -166,29 +166,49 @@ namespace EVServiceCenter.Application.Services
         {
             try
             {
+                _logger.LogInformation("=== GET PAYMENT INFO START ===");
                 _logger.LogInformation($"Lấy thông tin thanh toán cho orderCode: {orderCode}");
+                _logger.LogInformation($"BaseUrl: {_baseUrl}");
+                _logger.LogInformation($"Full URL: {_baseUrl}/payment-requests/{orderCode}");
 
                 var request = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/payment-requests/{orderCode}");
                 request.Headers.Add("x-client-id", _clientId);
                 request.Headers.Add("x-api-key", _apiKey);
 
+                _logger.LogInformation($"Request Headers - ClientId: {_clientId}, ApiKey: {_apiKey.Substring(0, 8)}...");
+
                 var response = await _httpClient.SendAsync(request);
                 var responseContent = await response.Content.ReadAsStringAsync();
 
+                _logger.LogInformation($"Response Status: {response.StatusCode}");
                 _logger.LogInformation($"PayOS Payment Info Response: {responseContent}");
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    _logger.LogError($"PayOS API error: {response.StatusCode} - {responseContent}");
                     throw new Exception($"PayOS API error: {response.StatusCode} - {responseContent}");
                 }
 
                 var payosResponse = JsonSerializer.Deserialize<PayOSResponse>(responseContent);
+                _logger.LogInformation($"Deserialized response - Code: {payosResponse?.Code}, Message: {payosResponse?.Message}");
+                
+                if (payosResponse?.Data != null)
+                {
+                    _logger.LogInformation($"Payment Data - Status: {payosResponse.Data.Status}, Amount: {payosResponse.Data.Amount}");
+                }
+                else
+                {
+                    _logger.LogWarning("Payment Data is null");
+                }
+
+                _logger.LogInformation("=== GET PAYMENT INFO END ===");
                 return payosResponse?.Data;
 
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Lỗi khi lấy payment info cho orderCode {orderCode}");
+                _logger.LogInformation("=== GET PAYMENT INFO END (ERROR) ===");
                 throw new Exception($"Không thể lấy thông tin thanh toán: {ex.Message}");
             }
         }
@@ -241,29 +261,41 @@ namespace EVServiceCenter.Application.Services
         {
             try
             {
+                _logger.LogInformation("=== PAYOS CALLBACK HANDLER START ===");
                 _logger.LogInformation($"Xử lý callback thanh toán cho orderCode: {orderCode}");
                 
                 // Lấy thông tin thanh toán từ PayOS
+                _logger.LogInformation($"Bắt đầu gọi GetPaymentInfoAsync cho orderCode: {orderCode}");
                 var paymentInfo = await GetPaymentInfoAsync(int.Parse(orderCode));
+                
                 if (paymentInfo == null)
                 {
                     _logger.LogWarning($"Không tìm thấy thông tin thanh toán cho orderCode: {orderCode}");
+                    _logger.LogInformation("=== PAYOS CALLBACK HANDLER END (NO PAYMENT INFO) ===");
                     return false;
                 }
+
+                _logger.LogInformation($"Đã lấy được payment info cho orderCode: {orderCode}");
+                _logger.LogInformation($"Payment Status: {paymentInfo.Status}");
+                _logger.LogInformation($"Payment Amount: {paymentInfo.Amount}");
+                _logger.LogInformation($"Payment Description: {paymentInfo.Description}");
 
                 // Kiểm tra trạng thái thanh toán
                 if (paymentInfo.Status != "PAID")
                 {
                     _logger.LogInformation($"Thanh toán chưa thành công cho orderCode: {orderCode}, status: {paymentInfo.Status}");
+                    _logger.LogInformation("=== PAYOS CALLBACK HANDLER END (NOT PAID) ===");
                     return false;
                 }
 
                 _logger.LogInformation($"Thanh toán thành công cho orderCode: {orderCode}");
+                _logger.LogInformation("=== PAYOS CALLBACK HANDLER END (SUCCESS) ===");
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Lỗi khi xử lý callback thanh toán cho orderCode: {orderCode}");
+                _logger.LogInformation("=== PAYOS CALLBACK HANDLER END (ERROR) ===");
                 return false;
             }
         }

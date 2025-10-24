@@ -86,7 +86,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
                 // WorkOrders removed - functionality merged into Booking
-                .Where(b => b.CreatedAt.Date == date.ToDateTime(TimeOnly.MinValue).Date)
+                .Where(b => b.CreatedAt.Date == date.ToDateTime(TimeOnly.MinValue).Date 
+                         && b.TechnicianTimeSlot != null 
+                         && b.TechnicianTimeSlot.TechnicianId == technicianId)
                 .OrderBy(b => b.TechnicianTimeSlot!.Slot!.SlotTime)
                 .ToListAsync();
         }

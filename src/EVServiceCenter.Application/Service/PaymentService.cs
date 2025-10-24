@@ -261,46 +261,33 @@ public class PaymentService
 		return sb.ToString();
 	}
 
-	public async Task<bool> ConfirmPaymentAsync(string orderCode)
+	public async Task<bool> ConfirmPaymentAsync(int bookingId)
 	{
-		if (string.IsNullOrWhiteSpace(orderCode)) 
+		if (bookingId <= 0) 
 		{
-			_logger.LogWarning("ConfirmPaymentAsync called with empty orderCode");
+			_logger.LogWarning("ConfirmPaymentAsync called with invalid bookingId: {BookingId}", bookingId);
 			return false;
 		}
 
 		_logger.LogInformation("=== BẮT ĐẦU CONFIRM PAYMENT ===");
-		_logger.LogInformation("ConfirmPaymentAsync called with orderCode: {OrderCode}", orderCode);
+		_logger.LogInformation("ConfirmPaymentAsync called with bookingId: {BookingId}", bookingId);
 
-		var getUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
-		using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(getUrl));
-		request.Headers.Add("x-client-id", _options.ClientId);
-		request.Headers.Add("x-api-key", _options.ApiKey);
+		// Không cần gọi PayOS API nữa vì đã xác nhận từ ReturnUrl parameters
+		_logger.LogInformation("Bỏ qua PayOS API call vì đã xác nhận từ ReturnUrl parameters");
 
-		_logger.LogInformation("Gọi PayOS API: {Url}", getUrl);
-		var response = await _httpClient.SendAsync(request);
-		response.EnsureSuccessStatusCode();
-		var json = await response.Content.ReadFromJsonAsync<JsonElement>();
-		var status = json.GetProperty("data").GetProperty("status").GetString();
-		
-		_logger.LogInformation("PayOS trả về status cho orderCode {OrderCode}: {Status}", orderCode, status);
-
-		Domain.Entities.Booking? booking = null;
-		if (int.TryParse(orderCode, out var bookingIdFromOrder))
+		// Tìm booking trực tiếp bằng bookingId
+		_logger.LogInformation("Tìm booking với ID: {BookingId}", bookingId);
+		var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
+		if (booking != null)
 		{
-			_logger.LogInformation("Tìm booking với ID: {BookingId}", bookingIdFromOrder);
-			booking = await _bookingRepository.GetBookingByIdAsync(bookingIdFromOrder);
-			if (booking != null)
-			{
-				_logger.LogInformation("Tìm thấy booking {BookingId} với status hiện tại: {CurrentStatus}", bookingIdFromOrder, booking.Status);
-			}
-			else
-			{
-				_logger.LogWarning("Không tìm thấy booking với ID: {BookingId}", bookingIdFromOrder);
-			}
+			_logger.LogInformation("Tìm thấy booking {BookingId} với status hiện tại: {CurrentStatus}", bookingId, booking.Status);
+		}
+		else
+		{
+			_logger.LogWarning("Không tìm thấy booking với ID: {BookingId}", bookingId);
 		}
 
-		if (status == "PAID" && booking != null)
+		if (booking != null)
 		{
 			_logger.LogInformation("=== BẮT ĐẦU CẬP NHẬT DATABASE ===");
 			_logger.LogInformation("Thanh toán thành công cho booking {BookingId}, đang cập nhật database...", booking.BookingId);
@@ -366,7 +353,7 @@ public class PaymentService
 				Amount = (int)Math.Round(paymentAmount),
 				PaymentMethod = "PAYOS",
 				Status = "COMPLETED",
-				PaymentCode = orderCode,
+				PaymentCode = bookingId.ToString(),
 				CreatedAt = DateTime.UtcNow,
 				PaidAt = DateTime.UtcNow
 			};
@@ -402,11 +389,14 @@ public class PaymentService
 			// Gửi email invoice PDF với template
 			try
 			{
+				_logger.LogInformation("=== BẮT ĐẦU GỬI EMAIL INVOICE ===");
 				var customerEmail = booking.Customer?.User?.Email;
 				if (!string.IsNullOrEmpty(customerEmail))
 				{
+					_logger.LogInformation("Customer email found: {Email} for booking {BookingId}", customerEmail, booking.BookingId);
 					var subject = $"Hóa đơn thanh toán - Booking #{booking.BookingId}";
 					
+					_logger.LogInformation("Rendering email template for booking {BookingId}", booking.BookingId);
 					// Sử dụng template email thay vì hardcode
 					var body = await _emailService.RenderInvoiceEmailTemplateAsync(
 						customerName: booking.Customer?.User?.FullName ?? "Khách hàng",
@@ -420,15 +410,20 @@ public class PaymentService
 						hasDiscount: booking.AppliedCreditId.HasValue,
 						discountAmount: booking.AppliedCreditId.HasValue ? (payment.Amount * 0.1m).ToString("N0") : "0"
 					);
+					_logger.LogInformation("Email template rendered successfully for booking {BookingId}", booking.BookingId);
 					
+					_logger.LogInformation("Generating PDF invoice for booking {BookingId}", booking.BookingId);
         // Generate PDF invoice content
         var invoicePdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
+        _logger.LogInformation("PDF invoice generated successfully for booking {BookingId}, size: {Size} bytes", booking.BookingId, invoicePdfContent.Length);
         
         // Generate PDF maintenance report content (if available)
         byte[]? maintenancePdfContent = null;
         try
         {
+            _logger.LogInformation("Generating maintenance report PDF for booking {BookingId}", booking.BookingId);
             maintenancePdfContent = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(booking.BookingId);
+            _logger.LogInformation("Maintenance report PDF generated successfully for booking {BookingId}, size: {Size} bytes", booking.BookingId, maintenancePdfContent?.Length ?? 0);
         }
         catch (Exception ex)
         {
@@ -438,6 +433,7 @@ public class PaymentService
         // Send email with attachments
         if (maintenancePdfContent != null)
         {
+            _logger.LogInformation("Sending email with both attachments for booking {BookingId}", booking.BookingId);
             // Send with both attachments
             var attachments = new List<(string fileName, byte[] content, string mimeType)>
             {
@@ -450,9 +446,11 @@ public class PaymentService
                 subject, 
                 body, 
                 attachments);
+            _logger.LogInformation("Email with multiple attachments sent successfully for booking {BookingId}", booking.BookingId);
         }
         else
         {
+            _logger.LogInformation("Sending email with invoice attachment only for booking {BookingId}", booking.BookingId);
             // Send with invoice only
             await _emailService.SendEmailWithAttachmentAsync(
                 customerEmail, 
@@ -461,18 +459,21 @@ public class PaymentService
                 $"Invoice_Booking_{booking.BookingId}.pdf", 
                 invoicePdfContent, 
                 "application/pdf");
+            _logger.LogInformation("Email with invoice attachment sent successfully for booking {BookingId}", booking.BookingId);
         }
 					
+					_logger.LogInformation("=== EMAIL INVOICE SENT SUCCESSFULLY ===");
 					_logger.LogInformation("Invoice email sent for booking {BookingId} to {Email}", booking.BookingId, customerEmail);
 				}
 				else
 				{
-					_logger.LogWarning("Customer email not found for booking {BookingId}. Cannot send invoice email.", booking.BookingId);
+					_logger.LogWarning("Customer email is null or empty for booking {BookingId}", booking.BookingId);
 				}
 			}
 			catch (Exception ex)
 			{
-				_logger.LogError(ex, "Failed to send invoice email for booking {BookingId}", booking.BookingId);
+				_logger.LogError(ex, "=== ERROR SENDING INVOICE EMAIL ===");
+				_logger.LogError(ex, "Error sending invoice email for booking {BookingId}", booking.BookingId);
 			}
 
 			_logger.LogInformation("=== HOÀN THÀNH CẬP NHẬT DATABASE ===");
@@ -481,7 +482,7 @@ public class PaymentService
 	}
 		else
 		{
-			_logger.LogInformation("Thanh toán chưa thành công hoặc không tìm thấy booking. Status: {Status}, Booking: {BookingFound}", status, booking != null ? "Found" : "Not Found");
+			_logger.LogInformation("Thanh toán chưa thành công hoặc không tìm thấy booking. Booking: {BookingFound}", booking != null ? "Found" : "Not Found");
 		return false;
 		}
 	}

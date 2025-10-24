@@ -125,22 +125,86 @@ public class PaymentController : ControllerBase
 
 	[AllowAnonymous]
 	[HttpGet("/payment/result")]
-	public async Task<IActionResult> PaymentResult([FromQuery] string orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] string? desc = null)
+	public async Task<IActionResult> PaymentResult([FromQuery] int bookingId, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] string? desc = null)
 	{
-		if (string.IsNullOrWhiteSpace(orderCode))
+		_logger.LogInformation("=== PAYMENT RESULT RETURN URL START ===");
+		_logger.LogInformation("BookingId: {BookingId}", bookingId);
+		_logger.LogInformation("Status: {Status}", status);
+		_logger.LogInformation("Code: {Code}", code);
+		_logger.LogInformation("Description: {Description}", desc);
+
+		if (bookingId <= 0)
 		{
-			return BadRequest(new { success = false, message = "Thiếu orderCode từ PayOS" });
+			_logger.LogError("Thiếu bookingId từ PayOS");
+			return BadRequest(new { success = false, message = "Thiếu bookingId từ PayOS" });
 		}
 
-		var payOSConfirmed = await _payOSService.HandlePaymentCallbackAsync(orderCode);
-		
+		var payOSConfirmed = false;
 		var confirmed = false;
+		string payOSError = "";
+		string systemError = "";
+
+		// Kiểm tra trực tiếp từ PayOS parameters thay vì gọi API
+		if (status == "PAID" && code == "00")
+		{
+			_logger.LogInformation("PayOS báo thanh toán thành công từ ReturnUrl parameters");
+			payOSConfirmed = true;
+		}
+		else
+		{
+			_logger.LogWarning("PayOS parameters không cho thấy thanh toán thành công - Status: {Status}, Code: {Code}", status, code);
+			payOSError = $"Status: {status}, Code: {code}";
+		}
+		
 		if (payOSConfirmed)
 		{
-			confirmed = await _paymentService.ConfirmPaymentAsync(orderCode);
+			try
+			{
+				_logger.LogInformation("Bắt đầu cập nhật hệ thống cho bookingId: {BookingId}", bookingId);
+				confirmed = await _paymentService.ConfirmPaymentAsync(bookingId);
+				_logger.LogInformation("System update result: {Result}", confirmed);
+			}
+			catch (Exception ex)
+			{
+				systemError = ex.Message;
+				_logger.LogError(ex, "Lỗi khi cập nhật hệ thống cho bookingId: {BookingId}", bookingId);
+			}
+		}
+		else
+		{
+			_logger.LogWarning("PayOS confirmation failed, không thể cập nhật hệ thống cho bookingId: {BookingId}", bookingId);
 		}
 
-		var html = $"<!DOCTYPE html><html><head><meta charset=\"utf-8\"/><title>Kết quả thanh toán</title></head><body style=\"font-family: sans-serif; padding:24px\"><h2>Kết quả thanh toán</h2><p>OrderCode: {orderCode}</p><p>Trạng thái (PayOS): {status ?? "(không có)"}</p><p>Mã (PayOS): {code ?? "(không có)"}</p><p>Mô tả (PayOS): {desc ?? "(không có)"}</p><hr/><p>Xác nhận PayOS: {(payOSConfirmed ? "THÀNH CÔNG" : "KHÔNG THÀNH CÔNG")}</p><p>Cập nhật hệ thống: {(confirmed ? "THÀNH CÔNG" : "KHÔNG THÀNH CÔNG")}</p></body></html>";
+		_logger.LogInformation("=== PAYMENT RESULT RETURN URL END ===");
+		_logger.LogInformation("Final results - PayOS: {PayOS}, System: {System}", payOSConfirmed, confirmed);
+
+		var html = $@"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""utf-8""/>
+    <title>Kết quả thanh toán</title>
+    <style>
+        body {{ font-family: sans-serif; padding: 24px; }}
+        .error {{ color: red; }}
+        .success {{ color: green; }}
+        .info {{ background: #f0f0f0; padding: 10px; margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <h2>Kết quả thanh toán</h2>
+    <div class=""info"">
+        <p><strong>BookingId:</strong> {bookingId}</p>
+        <p><strong>Trạng thái (PayOS):</strong> {status ?? "(không có)"}</p>
+        <p><strong>Mã (PayOS):</strong> {code ?? "(không có)"}</p>
+        <p><strong>Mô tả (PayOS):</strong> {desc ?? "(không có)"}</p>
+    </div>
+    <hr/>
+    <p><strong>Xác nhận PayOS:</strong> <span class=""{(payOSConfirmed ? "success" : "error")}"">{(payOSConfirmed ? "THÀNH CÔNG" : "KHÔNG THÀNH CÔNG")}</span></p>
+    <p><strong>Cập nhật hệ thống:</strong> <span class=""{(confirmed ? "success" : "error")}"">{(confirmed ? "THÀNH CÔNG" : "KHÔNG THÀNH CÔNG")}</span></p>
+    {(string.IsNullOrEmpty(payOSError) ? "" : $"<p class=\"error\"><strong>Lỗi PayOS:</strong> {payOSError}</p>")}
+    {(string.IsNullOrEmpty(systemError) ? "" : $"<p class=\"error\"><strong>Lỗi hệ thống:</strong> {systemError}</p>")}
+</body>
+</html>";
 		return Content(html, "text/html; charset=utf-8");
 	}
 
@@ -197,31 +261,31 @@ public class PaymentController : ControllerBase
         return Ok(new { paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, status = payment.Status, amount = payment.Amount, paymentMethod = payment.PaymentMethod, paidByUserId = payment.PaidByUserID });
     }
 
-	[HttpGet("check-status/{orderCode}")]
+	[HttpGet("check-status/{bookingId}")]
 	[AllowAnonymous]
-	public async Task<IActionResult> CheckStatus([FromRoute] string orderCode)
+	public async Task<IActionResult> CheckStatus([FromRoute] int bookingId)
 	{
 		try
 		{
-			_logger.LogInformation("Frontend gọi API check-status cho orderCode: {OrderCode}", orderCode);
+			_logger.LogInformation("Frontend gọi API check-status cho bookingId: {BookingId}", bookingId);
 			
-			var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
+			var ok = await _paymentService.ConfirmPaymentAsync(bookingId);
 			
-			_logger.LogInformation("Kết quả confirm payment cho orderCode {OrderCode}: {Result}", orderCode, ok);
+			_logger.LogInformation("Kết quả confirm payment cho bookingId {BookingId}: {Result}", bookingId, ok);
 			
 			return Ok(new { 
 				success = true,
-				orderCode, 
+				bookingId, 
 				updated = ok,
 				message = ok ? "Thanh toán đã được xác nhận và cập nhật thành công" : "Thanh toán chưa được xác nhận"
 			});
 		}
 		catch (Exception ex)
 		{
-			_logger.LogError(ex, "Lỗi khi check payment status cho orderCode: {OrderCode}", orderCode);
+			_logger.LogError(ex, "Lỗi khi check payment status cho bookingId: {BookingId}", bookingId);
 			return StatusCode(500, new { 
 				success = false,
-				orderCode,
+				bookingId,
 				updated = false,
 				message = "Có lỗi xảy ra khi xác nhận thanh toán: " + ex.Message
 			});
@@ -230,17 +294,17 @@ public class PaymentController : ControllerBase
 
 	[HttpGet("return")]
 	[AllowAnonymous]
-	public async Task<IActionResult> Return([FromQuery] string orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = false)
+	public async Task<IActionResult> Return([FromQuery] int bookingId, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = false)
 	{
-		var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
-		return Ok(new { success = ok, message = ok ? "Payment success processed" : "Payment not confirmed", orderCode, status, code, cancel });
+		var ok = await _paymentService.ConfirmPaymentAsync(bookingId);
+		return Ok(new { success = ok, message = ok ? "Payment success processed" : "Payment not confirmed", bookingId, status, code, cancel });
 	}
 
 	[HttpGet("cancel")]
 	[AllowAnonymous]
-	public async Task<IActionResult> Cancel([FromQuery] string orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = true)
+	public async Task<IActionResult> Cancel([FromQuery] int bookingId, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = true)
 	{
-		var _ = await _paymentService.ConfirmPaymentAsync(orderCode);
-		return Ok(new { success = true, message = "Payment cancelled", orderCode, status, code, cancel });
+		var _ = await _paymentService.ConfirmPaymentAsync(bookingId);
+		return Ok(new { success = true, message = "Payment cancelled", bookingId, status, code, cancel });
 	}
 }

@@ -462,7 +462,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         public async Task<IActionResult> ConfirmBookingInvoice([FromRoute] int bookingId, [FromQuery] string orderCode)
         {
             if (string.IsNullOrWhiteSpace(orderCode)) orderCode = bookingId.ToString();
-            var ok = await _paymentService.ConfirmPaymentAsync(orderCode);
+            var ok = await _paymentService.ConfirmPaymentAsync(bookingId);
             if (!ok) return BadRequest(new { success = false, message = "Xác nhận thanh toán không thành công" });
             return Ok(new { success = true });
         }

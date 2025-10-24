@@ -31,12 +31,14 @@ namespace EVServiceCenter.Application.Service
         private readonly IJwtService _jwtService;
         private readonly IConfiguration _configuration;
         private readonly ICustomerRepository _customerRepository;
+        private readonly IStaffRepository _staffRepository;
+        private readonly ITechnicianRepository _technicianRepository;
         private readonly IAccountRepository _accountRepository;
         private readonly IOtpCodeRepository _otpRepository;
         private readonly IMemoryCache _cache;
         private readonly ILoginLockoutService _loginLockoutService;
         
-        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache, ILoginLockoutService loginLockoutService)
+        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache, ILoginLockoutService loginLockoutService)
         {
             _accountService = accountService;
             _authRepository = authRepository;
@@ -45,6 +47,8 @@ namespace EVServiceCenter.Application.Service
             _jwtService = jwtService;
             _configuration = configuration;
             _customerRepository = customerRepository;
+            _staffRepository = staffRepository;
+            _technicianRepository = technicianRepository;
             _accountRepository = accountRepository;
             _otpRepository = otpRepository;
             _cache = cache;
@@ -283,12 +287,25 @@ namespace EVServiceCenter.Application.Service
             user.UpdatedAt = DateTime.UtcNow;
             await _authRepository.UpdateUserAsync(user);
 
-            // Lấy CustomerId từ database
+            // Lấy CustomerId, StaffId, TechnicianId từ database
             int? customerId = null;
+            int? staffId = null;
+            int? technicianId = null;
+            
             if (user.Role == "CUSTOMER")
             {
                 var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
                 customerId = customer?.CustomerId;
+            }
+            else if (user.Role == "STAFF")
+            {
+                var staff = await _staffRepository.GetStaffByUserIdAsync(user.UserId);
+                staffId = staff?.StaffId;
+            }
+            else if (user.Role == "TECHNICIAN")
+            {
+                var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);
+                technicianId = technician?.TechnicianId;
             }
 
             return new LoginTokenResponse
@@ -300,6 +317,8 @@ namespace EVServiceCenter.Application.Service
                 RefreshToken = refreshToken,
                 UserId = user.UserId,
                 CustomerId = customerId,
+                StaffId = staffId,
+                TechnicianId = technicianId,
                 FullName = user.FullName,
                 Role = user.Role ?? "CUSTOMER",
                 EmailVerified = user.EmailVerified,

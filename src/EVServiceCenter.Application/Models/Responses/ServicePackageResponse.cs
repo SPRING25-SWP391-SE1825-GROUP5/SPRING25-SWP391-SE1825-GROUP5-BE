@@ -4,18 +4,73 @@ namespace EVServiceCenter.Application.Models.Responses;
 
 public class ServicePackageResponse
 {
-    public required int PackageId { get; set; }
-    public required string PackageName { get; set; }
-    public required string PackageCode { get; set; }
+    /// <summary>
+    /// ID gói dịch vụ
+    /// </summary>
+    public int PackageId { get; set; }
+
+    /// <summary>
+    /// Tên gói dịch vụ
+    /// </summary>
+    public string PackageName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Mã gói dịch vụ
+    /// </summary>
+    public string PackageCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Mô tả gói dịch vụ
+    /// </summary>
     public string? Description { get; set; }
-    public required int ServiceId { get; set; }
-    public required string ServiceName { get; set; }
-    public required int TotalCredits { get; set; }
-    public required decimal Price { get; set; }
+
+    /// <summary>
+    /// ID dịch vụ
+    /// </summary>
+    public int ServiceId { get; set; }
+
+    /// <summary>
+    /// Tên dịch vụ
+    /// </summary>
+    public string? ServiceName { get; set; }
+
+    /// <summary>
+    /// Tổng số credit
+    /// </summary>
+    public int TotalCredits { get; set; }
+
+    /// <summary>
+    /// Giá gói dịch vụ
+    /// </summary>
+    public decimal Price { get; set; }
+
+    /// <summary>
+    /// Phần trăm giảm giá
+    /// </summary>
     public decimal? DiscountPercent { get; set; }
-    public required bool IsActive { get; set; }
+
+    /// <summary>
+    /// Trạng thái hoạt động
+    /// </summary>
+    public bool? IsActive { get; set; }
+
+    /// <summary>
+    /// Ngày bắt đầu hiệu lực
+    /// </summary>
     public DateTime? ValidFrom { get; set; }
+
+    /// <summary>
+    /// Ngày kết thúc hiệu lực
+    /// </summary>
     public DateTime? ValidTo { get; set; }
-    public required DateTime CreatedAt { get; set; }
-    public required DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Ngày tạo
+    /// </summary>
+    public DateTime? CreatedAt { get; set; }
+
+    /// <summary>
+    /// Ngày cập nhật
+    /// </summary>
+    public DateTime? UpdatedAt { get; set; }
 }

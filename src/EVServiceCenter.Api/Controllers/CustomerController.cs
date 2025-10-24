@@ -272,63 +272,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        [HttpPost("fix-data-sync")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> FixDataSync()
-        {
-            try
-            {
-                Console.WriteLine("Starting data sync fix...");
-                
-                var users = await _customerService.GetAllUsersWithCustomerRoleAsync();
-                var customers = await _customerService.GetAllCustomersAsync();
-                
-                var usersWithoutCustomer = users.Where(u => !customers.Any(c => c.UserId == u.UserId)).ToList();
-                var customersWithoutUser = customers.Where(c => !users.Any(u => u.UserId == c.UserId)).ToList();
-                
-                Console.WriteLine($"Found {usersWithoutCustomer.Count} users without customer records");
-                Console.WriteLine($"Found {customersWithoutUser.Count} customer records without users");
-                
-                var fixedCustomers = new List<object>();
-                
-                foreach (var user in usersWithoutCustomer)
-                {
-                    var newCustomer = new Customer
-                    {
-                        UserId = user.UserId,
-                        IsGuest = false
-                    };
-                    
-                    var createdCustomer = await _customerRepository.CreateCustomerAsync(newCustomer);
-                    fixedCustomers.Add(new { 
-                        userId = user.UserId, 
-                        customerId = createdCustomer.CustomerId,
-                        action = "created_customer"
-                    });
-                    
-                    Console.WriteLine($"Created customer for UserId: {user.UserId}");
-                }
-                
-                return Ok(new {
-                    success = true,
-                    message = "Data sync completed",
-                    data = new {
-                        usersWithoutCustomer = usersWithoutCustomer.Count,
-                        customersWithoutUser = customersWithoutUser.Count,
-                        fixedCustomers = fixedCustomers
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error in FixDataSync: {ex.Message}");
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống khi sửa dữ liệu: " + ex.Message 
-                });
-                
-            }
-        }
 
         private int? GetCurrentUserId()
         {

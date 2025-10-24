@@ -280,48 +280,5 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Kích hoạt/Vô hiệu hóa trung tâm
-        /// </summary>
-        /// <param name="id">ID trung tâm</param>
-        /// <returns>Kết quả thay đổi trạng thái</returns>
-        [HttpPatch("{id}/toggle-active")]
-        [Authorize(Roles = "ADMIN")] // Chỉ Admin mới được thay đổi trạng thái
-        public async Task<IActionResult> ToggleActiveCenter(int id)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
-
-                var result = await _centerService.ToggleActiveAsync(id);
-                
-                if (result)
-                {
-                    return Ok(new { 
-                        success = true, 
-                        message = "Thay đổi trạng thái trung tâm thành công" 
-                    });
-                }
-                else
-                {
-                    return StatusCode(500, new { 
-                        success = false, 
-                        message = "Không thể thay đổi trạng thái trung tâm" 
-                    });
-                }
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
     }
 }

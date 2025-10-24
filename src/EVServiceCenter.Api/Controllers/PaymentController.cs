@@ -65,7 +65,11 @@ public class PaymentController : ControllerBase
 				customerName
 			);
 
-			return Ok(new { checkoutUrl });
+			return Ok(new { 
+				success = true, 
+				message = "Tạo link thanh toán thành công", 
+				data = new { checkoutUrl } 
+			});
 		}
 		catch (Exception ex)
 		{

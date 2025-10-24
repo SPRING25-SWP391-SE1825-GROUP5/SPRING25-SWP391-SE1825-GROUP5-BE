@@ -49,8 +49,9 @@ namespace EVServiceCenter.Application.Services
             {
                 _logger.LogInformation($"Tạo link thanh toán cho booking {bookingId} với số tiền {amount}");
 
-                // Tạo orderCode từ bookingId (giống code cũ)
-                var orderCode = bookingId; // PayOS yêu cầu là số
+                // Tạo orderCode duy nhất bằng cách kết hợp bookingId + timestamp
+                var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var orderCode = int.Parse($"{bookingId}{timestamp.ToString().Substring(timestamp.ToString().Length - 6)}"); // Lấy 6 số cuối của timestamp
 
                 // Lấy URL callback từ config
                 var returnUrl = _configuration["PayOS:ReturnUrl"];
@@ -120,7 +121,20 @@ namespace EVServiceCenter.Application.Services
                 {
                     if (root.TryGetProperty("data", out var dataElement) && dataElement.ValueKind != JsonValueKind.Null)
                     {
-                        // Get qrCode for banking apps (VietQR)
+                        // Get checkoutUrl first (web payment link)
+                        if (dataElement.TryGetProperty("checkoutUrl", out var checkoutUrlElement))
+                        {
+                            var checkoutUrl = checkoutUrlElement.GetString();
+                            _logger.LogInformation($"PayOS Checkout URL: {checkoutUrl}");
+                            
+                            if (!string.IsNullOrEmpty(checkoutUrl))
+                            {
+                                _logger.LogInformation($"Đã tạo thành công checkout URL cho booking {bookingId}");
+                                return checkoutUrl; // Return web payment link
+                            }
+                        }
+                        
+                        // Fallback to qrCode for banking apps (VietQR)
                         if (dataElement.TryGetProperty("qrCode", out var qrCodeElement))
                         {
                             var qrCode = qrCodeElement.GetString();
@@ -131,14 +145,6 @@ namespace EVServiceCenter.Application.Services
                                 _logger.LogInformation($"Đã tạo thành công VietQR cho booking {bookingId}");
                                 return qrCode; // Return VietQR string for banking apps
                             }
-                        }
-                        
-                        // Fallback to checkoutUrl (for PayOS app)
-                        if (dataElement.TryGetProperty("checkoutUrl", out var checkoutUrlElement))
-                        {
-                            var checkoutUrl = checkoutUrlElement.GetString();
-                            _logger.LogInformation($"PayOS Checkout URL: {checkoutUrl}");
-                            return checkoutUrl ?? string.Empty;
                         }
                     }
                 }

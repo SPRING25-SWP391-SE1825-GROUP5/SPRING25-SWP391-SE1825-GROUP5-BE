@@ -153,6 +153,51 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
+        [HttpPost("search")]
+        public async Task<IActionResult> Search([FromBody] SearchMessagesRequest request)
+        {
+            try
+            {
+                var validationResult = ValidateModelState();
+                if (validationResult != null) return validationResult;
+
+                var result = await _messageService.SearchMessagesAsync(request);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Tìm kiếm tin nhắn");
+            }
+        }
+
+        [HttpPost("send")]
+        public async Task<IActionResult> Send([FromBody] SendMessageRequest request)
+        {
+            try
+            {
+                var validationResult = ValidateModelState();
+                if (validationResult != null) return validationResult;
+
+                // Fallback to current user if sender not provided
+                if (!request.SenderUserId.HasValue && string.IsNullOrEmpty(request.SenderGuestSessionId))
+                {
+                    var currentUserId = GetCurrentUserId();
+                    if (currentUserId.HasValue)
+                    {
+                        request.SenderUserId = currentUserId.Value;
+                    }
+                }
+
+                var result = await _messageService.SendMessageAsync(request);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+
+                return HandleException(ex, "Gửi tin nhắn");
+            }
+        }
+
 
 
     }

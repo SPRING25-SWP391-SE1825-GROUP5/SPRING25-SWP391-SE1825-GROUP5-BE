@@ -18,17 +18,20 @@ namespace EVServiceCenter.Application.Service
         private readonly IConversationRepository _conversationRepository;
         private readonly IAccountRepository _accountRepository;
         private readonly ILogger<MessageService> _logger;
+        private readonly IChatHubService _chatHubService;
 
         public MessageService(
             IMessageRepository messageRepository,
             IConversationRepository conversationRepository,
             IAccountRepository accountRepository,
-            ILogger<MessageService> logger)
+            ILogger<MessageService> logger,
+            IChatHubService chatHubService)
         {
             _messageRepository = messageRepository;
             _conversationRepository = conversationRepository;
             _accountRepository = accountRepository;
             _logger = logger;
+            _chatHubService = chatHubService;
         }
 
         public async Task<MessageResponse> CreateMessageAsync(CreateMessageRequest request)
@@ -65,6 +68,9 @@ namespace EVServiceCenter.Application.Service
                     request.ConversationId, 
                     createdMessage.MessageId, 
                     createdMessage.CreatedAt);
+
+                // Broadcast message to all conversation members via SignalR
+                await BroadcastMessageToConversationAsync(createdMessage);
 
                 return await MapToMessageResponseAsync(createdMessage);
             }
@@ -414,6 +420,48 @@ namespace EVServiceCenter.Application.Service
             }
 
             return response;
+        }
+
+       
+        private async Task BroadcastMessageToConversationAsync(Message message)
+        {
+            try
+            {
+             
+                var messageData = new
+                {
+                    MessageId = message.MessageId,
+                    ConversationId = message.ConversationId,
+                    Content = message.Content,
+                    AttachmentUrl = message.AttachmentUrl,
+                    ReplyToMessageId = message.ReplyToMessageId,
+                    SenderUserId = message.SenderUserId,
+                    SenderGuestSessionId = message.SenderGuestSessionId,
+                    SenderName = message.SenderUserId.HasValue && message.SenderUser != null 
+                        ? message.SenderUser.FullName 
+                        : "Guest User",
+                    SenderEmail = message.SenderUserId.HasValue && message.SenderUser != null 
+                        ? message.SenderUser.Email 
+                        : null,
+                    SenderAvatar = message.SenderUserId.HasValue && message.SenderUser != null 
+                        ? message.SenderUser.AvatarUrl 
+                        : null,
+                    CreatedAt = message.CreatedAt,
+                    IsGuest = !message.SenderUserId.HasValue
+                };
+
+                
+                await _chatHubService.BroadcastMessageToConversationAsync(message.ConversationId, messageData);
+                
+                _logger.LogInformation("Broadcasted message {MessageId} to conversation {ConversationId}", 
+                    message.MessageId, message.ConversationId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error broadcasting message {MessageId} to conversation {ConversationId}", 
+                    message.MessageId, message.ConversationId);
+                
+            }
         }
     }
 }

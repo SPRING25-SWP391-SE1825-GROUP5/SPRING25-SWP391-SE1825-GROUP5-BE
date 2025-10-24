@@ -4,43 +4,51 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Domain.Interfaces;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "AuthenticatedUser")] // Tất cả user đã đăng nhập
+    [Authorize(Policy = "AuthenticatedUser")]
     public class CustomerController : ControllerBase
     {
         private readonly ICustomerService _customerService;
         private readonly IVehicleService _vehicleService;
         private readonly ICustomerServiceCreditService _customerServiceCreditService;
+        private readonly ICustomerRepository _customerRepository;
 
-        public CustomerController(ICustomerService customerService, IVehicleService vehicleService, ICustomerServiceCreditService customerServiceCreditService)
+        public CustomerController(ICustomerService customerService, IVehicleService vehicleService, ICustomerServiceCreditService customerServiceCreditService, ICustomerRepository customerRepository)
         {
             _customerService = customerService;
             _vehicleService = vehicleService;
             _customerServiceCreditService = customerServiceCreditService;
+            _customerRepository = customerRepository;
         }
 
-        /// <summary>
-        /// Lấy thông tin khách hàng hiện tại (map từ User)
-        /// </summary>
-        /// <returns>Thông tin khách hàng hiện tại</returns>
         [HttpGet("me")]
         public async Task<IActionResult> GetCurrentCustomer()
         {
             try
             {
                 var userId = GetCurrentUserId();
+                Console.WriteLine($"GetCurrentCustomer API called, userId: {userId}");
+                
                 if (userId == null)
+                {
+                    Console.WriteLine("UserId is null, returning Unauthorized");
                     return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+                }
 
+                Console.WriteLine($"Calling GetCurrentCustomerAsync with userId: {userId}");
                 var customer = await _customerService.GetCurrentCustomerAsync(userId.Value);
                 
+                Console.WriteLine($"GetCurrentCustomerAsync completed successfully");
                 return Ok(new { 
                     success = true, 
                     message = "Lấy thông tin khách hàng thành công",
@@ -60,16 +68,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        // [Removed] POST /api/Customer tạo theo phone/isGuest đã bị loại bỏ để tránh trùng chức năng với quick-create.
-
-        /// <summary>
-        /// Lấy danh sách phương tiện của khách hàng
-        /// </summary>
-        /// <param name="id">ID khách hàng</param>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
-        /// <returns>Danh sách phương tiện của khách hàng</returns>
         [HttpGet("{id}/vehicles")]
         public async Task<IActionResult> GetCustomerVehicles(
             int id,
@@ -82,7 +80,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (id <= 0)
                     return BadRequest(new { success = false, message = "ID khách hàng không hợp lệ" });
 
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -103,10 +100,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Liệt kê các gói dịch vụ khách đã mua (credits)
-        /// </summary>
-        /// <param name="customerId">ID khách hàng</param>
         [HttpGet("{customerId}/credits")]
         public async Task<IActionResult> GetCustomerCredits(int customerId)
         {
@@ -134,56 +127,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thông tin chi tiết xe của khách hàng
-        /// </summary>
-        /// <param name="customerId">ID khách hàng</param>
-        /// <param name="vehicleId">ID xe</param>
-        /// <returns>Thông tin chi tiết xe của khách hàng</returns>
-        [HttpGet("{customerId}/vehicles/{vehicleId}")]
-        public async Task<IActionResult> GetCustomerVehicleDetail(int customerId, int vehicleId)
-        {
-            try
-            {
-                if (customerId <= 0)
-                    return BadRequest(new { success = false, message = "ID khách hàng không hợp lệ" });
-                
-                if (vehicleId <= 0)
-                    return BadRequest(new { success = false, message = "ID xe không hợp lệ" });
 
-                // Lấy thông tin xe
-                var vehicle = await _vehicleService.GetVehicleByIdAsync(vehicleId);
-                if (vehicle == null)
-                    return NotFound(new { success = false, message = "Không tìm thấy xe" });
-
-                // Kiểm tra xe có thuộc về customer không
-                if (vehicle.CustomerId != customerId)
-                    return Forbid("Xe không thuộc về khách hàng này");
-
-                return Ok(new { 
-                    success = true, 
-                    message = $"Lấy thông tin chi tiết xe {vehicleId} của khách hàng {customerId} thành công",
-                    data = vehicle
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
-
-        // [Removed] PUT /api/Customer/{id} cập nhật nhanh theo phone/isGuest đã bị loại bỏ để đơn giản hóa API.
-
-        /// <summary>
-        /// STAFF/TECHNICIAN/ADMIN tạo nhanh tài khoản CUSTOMER với 3 trường cơ bản
-        /// </summary>
         [HttpPost("quick-create")]
         [Authorize(Roles = "STAFF,TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> QuickCreateCustomer([FromBody] QuickCreateCustomerRequest request)
@@ -217,9 +161,128 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        [HttpGet("service-packages")]
+        public async Task<IActionResult> GetCustomerServicePackages()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+
+                var servicePackages = await _customerServiceCreditService.GetCustomerServicePackagesAsync(userId.Value);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Tìm thấy {servicePackages.Count()} service package",
+                    data = servicePackages
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        [HttpGet("service-packages/{packageId:int}")]
+        public async Task<IActionResult> GetServicePackageDetail(int packageId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+
+                var servicePackage = await _customerServiceCreditService.GetServicePackageDetailAsync(packageId, userId.Value);
+                
+                if (servicePackage == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy service package hoặc bạn không có quyền truy cập" });
+
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy chi tiết service package thành công",
+                    data = servicePackage
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        [HttpGet("service-packages/{packageId:int}/usage-history")]
+        public async Task<IActionResult> GetServicePackageUsageHistory(int packageId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+
+                var usageHistory = await _customerServiceCreditService.GetServicePackageUsageHistoryAsync(packageId, userId.Value);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Tìm thấy {usageHistory.Count()} lần sử dụng",
+                    data = usageHistory
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        [HttpGet("service-packages/statistics")]
+        public async Task<IActionResult> GetServicePackageStatistics()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+
+                var statistics = await _customerServiceCreditService.GetCustomerServicePackageStatisticsAsync(userId.Value);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy thống kê service package thành công",
+                    data = statistics
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+
         private int? GetCurrentUserId()
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                            ?? User.FindFirst("userId")?.Value 
+                            ?? User.FindFirst("sub")?.Value 
+                            ?? User.FindFirst("nameid")?.Value;
+                            
+            Console.WriteLine($"Looking for userId in claims. Found: {userIdClaim}");
+            Console.WriteLine($"All claims: {string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}"))}");
+            
             if (int.TryParse(userIdClaim, out int userId))
                 return userId;
             return null;

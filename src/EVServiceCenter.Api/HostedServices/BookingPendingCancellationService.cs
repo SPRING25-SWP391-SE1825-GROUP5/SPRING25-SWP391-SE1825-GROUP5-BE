@@ -74,7 +74,8 @@ public class BookingPendingCancellationService : BackgroundService
                                         tts.WorkDate,
                                         tts.SlotId);
                                 }
-                                full.TechnicianSlotId = null;
+                                // ✅ KHÔNG XÓA TechnicianSlotId để giữ history
+                                // full.TechnicianSlotId = null; // ❌ XÓA DÒNG NÀY
                             }
                             
                             full.Status = "CANCELLED";

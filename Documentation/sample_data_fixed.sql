@@ -292,6 +292,10 @@ VALUES
 (N'Động cơ và Truyền động', N'Động cơ điện, hộp số, bộ truyền động', NULL, 1, GETDATE(), GETDATE()),
 (N'Hệ thống Làm mát', N'Bộ tản nhiệt, quạt làm mát, chất làm mát', NULL, 1, GETDATE(), GETDATE()),
 (N'Phanh và Hệ thống An toàn', N'Phanh đĩa, phanh tay, hệ thống ABS', NULL, 1, GETDATE(), GETDATE()),
+(N'Lốp và Vành', N'Lốp xe, vành xe, ruột xe', NULL, 1, GETDATE(), GETDATE()),
+(N'Đèn và Điện tử', N'Đèn pha, đèn hậu, xi nhan, còi', NULL, 1, GETDATE(), GETDATE()),
+(N'Cảm biến và Đo lường', N'Cảm biến tốc độ, nhiệt độ, dòng điện, đồng hồ', NULL, 1, GETDATE(), GETDATE()),
+(N'Phụ kiện và Linh kiện', N'Dây cáp, công tắc, cầu chì, relay', NULL, 1, GETDATE(), GETDATE()),
 (N'Pin Lithium', N'Pin lithium-ion cho xe điện', 1, 1, GETDATE(), GETDATE()),
 (N'Bộ sạc', N'Bộ sạc nhanh và sạc thường', 1, 1, GETDATE(), GETDATE()),
 (N'Động cơ AC', N'Động cơ xoay chiều', 2, 1, GETDATE(), GETDATE()),
@@ -344,22 +348,58 @@ GO
 -- =====================================================
 INSERT INTO [dbo].[PartCategoryMaps] ([PartId], [CategoryId], [IsPrimary], [CreatedAt])
 VALUES 
--- Pin và Hệ thống Điện
-(1, 1, 1, GETDATE()),  -- Pin Lithium 60kWh
-(2, 1, 1, GETDATE()),  -- Pin Lithium 80kWh
-(3, 5, 1, GETDATE()),  -- Pin Lithium-ion 100kWh (sub-category)
-(4, 6, 1, GETDATE()),  -- Bộ sạc nhanh 50kW (sub-category)
--- Động cơ và Truyền động
-(5, 2, 1, GETDATE()),  -- Động cơ AC 150kW
-(6, 2, 1, GETDATE()),  -- Động cơ AC 200kW
-(7, 7, 1, GETDATE()),  -- Động cơ AC 250kW (sub-category)
-(8, 8, 1, GETDATE()),  -- Động cơ DC 100kW (sub-category)
--- Hệ thống Làm mát
-(9, 3, 1, GETDATE()),  -- Bộ tản nhiệt động cơ
-(10, 3, 1, GETDATE()), -- Quạt làm mát pin
--- Phanh và Hệ thống An toàn
-(11, 4, 1, GETDATE()), -- Phanh đĩa trước
-(12, 4, 1, GETDATE()); -- Phanh đĩa sau
+-- Pin và Hệ thống Điện (CategoryId = 1)
+(1, 1, 1, GETDATE()),   -- Pin Lithium-ion 48V 20Ah
+(2, 1, 1, GETDATE()),   -- Pin Lithium-ion 60V 30Ah
+(3, 1, 1, GETDATE()),   -- Pin Lithium-ion 72V 40Ah
+(4, 1, 1, GETDATE()),   -- Ắc quy chì 12V 7Ah
+(13, 1, 1, GETDATE()),  -- Bộ sạc 48V 5A
+(14, 1, 1, GETDATE()),  -- Bộ sạc 60V 6A
+(15, 1, 1, GETDATE()),  -- Bộ sạc 72V 8A
+(16, 1, 1, GETDATE()),  -- Cổng sạc Type-C
+
+-- Động cơ và Truyền động (CategoryId = 2)
+(5, 2, 1, GETDATE()),   -- Động cơ điện 48V 1000W
+(6, 2, 1, GETDATE()),   -- Động cơ điện 60V 1500W
+(7, 2, 1, GETDATE()),   -- Động cơ điện 72V 2000W
+(8, 2, 1, GETDATE()),   -- Bộ truyền động xích
+(9, 2, 1, GETDATE()),   -- Bộ điều khiển 48V 30A
+(10, 2, 1, GETDATE()),  -- Bộ điều khiển 60V 40A
+(11, 2, 1, GETDATE()),  -- Bộ điều khiển 72V 50A
+(12, 2, 1, GETDATE()),  -- ECU điều khiển trung tâm
+
+-- Hệ thống Làm mát (CategoryId = 3) - Không có parts phù hợp trong data hiện tại
+-- Có thể thêm sau khi có parts làm mát
+
+-- Phanh và Hệ thống An toàn (CategoryId = 4)
+(17, 4, 1, GETDATE()),  -- Phanh đĩa trước 220mm
+(18, 4, 1, GETDATE()),  -- Phanh đĩa sau 180mm
+(19, 4, 1, GETDATE()),  -- Má phanh đĩa
+(20, 4, 1, GETDATE()),  -- Dầu phanh DOT4
+
+-- Lốp và vành (CategoryId = 5) - Tạo category mới
+(21, 5, 1, GETDATE()),  -- Lốp trước 3.00-10
+(22, 5, 1, GETDATE()),  -- Lốp sau 3.50-10
+(23, 5, 1, GETDATE()),  -- Vành nhôm 10 inch
+(24, 5, 1, GETDATE()),  -- Ruột xe 10 inch
+
+-- Đèn và điện tử (CategoryId = 6) - Tạo category mới
+(25, 6, 1, GETDATE()),  -- Đèn pha LED 12V
+(26, 6, 1, GETDATE()),  -- Đèn hậu LED
+(27, 6, 1, GETDATE()),  -- Xi nhan LED
+(28, 6, 1, GETDATE()),  -- Còi điện 12V
+
+-- Cảm biến và đo lường (CategoryId = 7) - Tạo category mới
+(29, 7, 1, GETDATE()),  -- Cảm biến tốc độ
+(30, 7, 1, GETDATE()),  -- Cảm biến nhiệt độ pin
+(31, 7, 1, GETDATE()),  -- Cảm biến dòng điện
+(32, 7, 1, GETDATE()),  -- Đồng hồ hiển thị
+
+-- Phụ kiện và linh kiện (CategoryId = 8) - Tạo category mới
+(33, 8, 1, GETDATE()),  -- Dây cáp điện 16AWG
+(34, 8, 1, GETDATE()),  -- Công tắc chính
+(35, 8, 1, GETDATE()),  -- Cầu chì 30A
+(36, 8, 1, GETDATE());  -- Relay 12V 30A
 GO
 
 -- =====================================================

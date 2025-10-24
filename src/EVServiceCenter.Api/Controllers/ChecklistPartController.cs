@@ -11,16 +11,13 @@ namespace EVServiceCenter.Api.Controllers
     [Route("api/checklist-parts")]
     public class ChecklistPartController : ControllerBase
     {
-        private readonly IChecklistPartService _checklistPartService; // May be deprecated if ServiceParts removed
+        private readonly IChecklistPartService _checklistPartService;
 
         public ChecklistPartController(IChecklistPartService checklistPartService)
         {
             _checklistPartService = checklistPartService;
         }
 
-        /// <summary>
-        /// Lấy danh sách Parts theo Service ID
-        /// </summary>
         [HttpGet("service/{serviceId:int}")]
         public async Task<IActionResult> GetPartsByServiceId(int serviceId)
         {
@@ -39,9 +36,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Thêm Parts vào Checklist
-        /// </summary>
         [HttpPost("add-parts")]
         public async Task<IActionResult> AddPartsToChecklist([FromBody] AddPartsToChecklistRequest request)
         {
@@ -65,9 +59,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Xóa Parts khỏi Checklist
-        /// </summary>
         [HttpPost("remove-parts")]
         public async Task<IActionResult> RemovePartsFromChecklist([FromBody] RemovePartsFromChecklistRequest request)
         {
@@ -92,4 +83,3 @@ namespace EVServiceCenter.Api.Controllers
         }
     }
 }
-

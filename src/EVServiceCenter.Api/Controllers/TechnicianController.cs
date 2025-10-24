@@ -33,6 +33,36 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="searchTerm">Từ khóa tìm kiếm</param>
         /// <param name="centerId">Lọc theo trung tâm</param>
         /// <returns>Danh sách kỹ thuật viên</returns>
+        [HttpGet("by-center/{centerId}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetTechniciansByCenter(int centerId)
+        {
+            try
+            {
+                if (centerId <= 0)
+                    return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
+
+                var technicians = await _technicianService.GetAllTechniciansAsync(1, 100, null, centerId);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Lấy danh sách kỹ thuật viên của trung tâm {centerId} thành công",
+                    data = technicians
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetAllTechnicians(
             [FromQuery] int pageNumber = 1,
@@ -42,7 +72,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 

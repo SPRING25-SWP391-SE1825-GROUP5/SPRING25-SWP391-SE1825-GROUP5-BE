@@ -30,7 +30,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     services = services.Where(s =>
                         s.ServiceName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        s.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        (s.Description != null && s.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
                     ).ToList();
                 }
 
@@ -87,7 +87,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     services = services.Where(s =>
                         s.ServiceName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        s.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        (s.Description != null && s.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
                     ).ToList();
                 }
 

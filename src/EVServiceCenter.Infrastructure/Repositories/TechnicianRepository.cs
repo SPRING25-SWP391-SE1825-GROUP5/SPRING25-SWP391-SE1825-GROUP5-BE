@@ -22,6 +22,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Technicians
                 .Include(t => t.User)
                 .Include(t => t.Center)
+                .Where(t => t.IsActive == true && t.User.Role == "TECHNICIAN") // Chỉ lấy technician đang hoạt động và có role TECHNICIAN
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
         }
@@ -31,6 +32,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Technicians
                 .Include(t => t.User)
                 .Include(t => t.Center)
+                .Where(t => t.IsActive == true && t.User.Role == "TECHNICIAN")
                 .FirstOrDefaultAsync(t => t.TechnicianId == technicianId);
         }
 
@@ -39,6 +41,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Technicians
                 .Include(t => t.User)
                 .Include(t => t.Center)
+                .Where(t => t.IsActive == true && t.User.Role == "TECHNICIAN")
                 .FirstOrDefaultAsync(t => t.UserId == userId);
         }
 
@@ -47,7 +50,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Technicians
                 .Include(t => t.User)
                 .Include(t => t.Center)
-                .Where(t => t.CenterId == centerId)
+                .Where(t => t.CenterId == centerId && t.IsActive == true && t.User.Role == "TECHNICIAN")
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
         }

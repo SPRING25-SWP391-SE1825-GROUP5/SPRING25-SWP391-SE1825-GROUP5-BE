@@ -19,15 +19,11 @@ public class FeedbackController : ControllerBase
     private readonly ICustomerRepository _customerRepository;
     public FeedbackController(EVServiceCenter.Infrastructure.Configurations.EVDbContext db, ICustomerRepository customerRepository) { _db = db; _customerRepository = customerRepository; }
 
-    // Generic POST /api/Feedback endpoint removed: use specific endpoints below
-
-    // Split endpoints
     [HttpPost("orders/{orderId:int}/parts/{partId:int}")]
     [Authorize(Policy = "AuthenticatedUser")]
     public async Task<IActionResult> CreateForOrderPart(int orderId, int partId, [FromBody] CreateOrderPartFeedbackRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
-        // Validate order and require completed status before allowing feedback
         var order = await _db.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.OrderId == orderId);
         if (order == null) return BadRequest(new { success = false, message = $"orderId {orderId} không tồn tại" });
         var completedStatuses = new[] { "COMPLETED", "DONE", "FINISHED" };
@@ -37,19 +33,17 @@ public class FeedbackController : ControllerBase
         }
         var partExists = await _db.Parts.AsNoTracking().AnyAsync(p => p.PartId == partId);
         if (!partExists) return BadRequest(new { success = false, message = $"partId {partId} không tồn tại" });
-        // Ensure part belongs to the order
         var partInOrder = await _db.OrderItems.AsNoTracking().AnyAsync(oi => oi.OrderId == orderId && oi.PartId == partId);
         if (!partInOrder) return BadRequest(new { success = false, message = "Phụ tùng không thuộc đơn hàng này" });
-        // Customer check
         var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
         if (customer == null) return BadRequest(new { success = false, message = $"customerId {request.CustomerId} không tồn tại" });
 
         var fb = new Feedback
         {
             CustomerId = request.CustomerId,
-            OrderId = orderId,        // Từ path parameter
+            OrderId = orderId,
             BookingId = null,
-            PartId = partId,          // Từ path parameter
+            PartId = partId,
             TechnicianId = null,
             Rating = (byte)request.Rating,
             Comment = request.Comment?.Trim(),
@@ -67,7 +61,6 @@ public class FeedbackController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
         
-        // Validate booking and require completed status before allowing feedback
         var booking = await _db.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.BookingId == bookingId);
         if (booking == null) return BadRequest(new { success = false, message = $"bookingId {bookingId} không tồn tại" });
         
@@ -80,26 +73,22 @@ public class FeedbackController : ControllerBase
         var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
         if (customer == null) return BadRequest(new { success = false, message = $"customerId {request.CustomerId} không tồn tại" });
 
-        // Validate technician if provided
         if (request.TechnicianId.HasValue)
         {
             var techExists = await _db.Technicians.AsNoTracking().AnyAsync(t => t.TechnicianId == request.TechnicianId.Value);
             if (!techExists) return BadRequest(new { success = false, message = $"technicianId {request.TechnicianId} không tồn tại" });
             
-            // Ensure technician matches the booking
             if (booking.TechnicianTimeSlot?.TechnicianId != request.TechnicianId.Value)
             {
                 return BadRequest(new { success = false, message = "Kỹ thuật viên không phụ trách booking này" });
             }
         }
 
-        // Validate part if provided
         if (request.PartId.HasValue)
         {
             var partExists = await _db.Parts.AsNoTracking().AnyAsync(p => p.PartId == request.PartId.Value);
             if (!partExists) return BadRequest(new { success = false, message = $"partId {request.PartId} không tồn tại" });
             
-            // Ensure part belongs to the booking
             var partInBooking = await _db.WorkOrderParts.AsNoTracking().AnyAsync(wop => wop.BookingId == bookingId && wop.PartId == request.PartId.Value);
             if (!partInBooking) return BadRequest(new { success = false, message = "Phụ tùng không thuộc booking này" });
         }
@@ -129,7 +118,6 @@ public class FeedbackController : ControllerBase
         if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
         var fb = await _db.Feedbacks.FirstOrDefaultAsync(x => x.FeedbackId == feedbackId);
         if (fb == null) return NotFound(new { success = false, message = "Feedback không tồn tại" });
-        // Ownership check: only owner or Admin
         var isAdmin = User.IsInRole("Admin") || User.Claims.Any(c => (c.Type == "role" || c.Type == System.Security.Claims.ClaimTypes.Role) && string.Equals(c.Value, "ADMIN", StringComparison.OrdinalIgnoreCase));
         if (!isAdmin)
         {
@@ -234,7 +222,6 @@ public class FeedbackController : ControllerBase
         return Ok(new { success = true, data = new { avgRating = Math.Round(avg,2), count } });
     }
 
-    // ===== Public feedback (không yêu cầu mua hàng) =====
     [HttpPost("parts/{partId:int}/public")]
     [AllowAnonymous]
     public async Task<IActionResult> PublicForPart(int partId, [FromBody] PublicPartFeedbackRequest request)
@@ -307,5 +294,3 @@ public class FeedbackController : ControllerBase
         return Ok(new { success = true, data });
     }
 }
-
-

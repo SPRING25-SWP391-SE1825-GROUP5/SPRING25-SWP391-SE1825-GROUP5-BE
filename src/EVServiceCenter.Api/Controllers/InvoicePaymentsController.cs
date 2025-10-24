@@ -98,7 +98,6 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(resp);
     }
 
-    // GET api/invoices (tất cả hóa đơn)
     [HttpGet("/api/invoices")]
     [Authorize]
     public async Task<IActionResult> GetAllInvoices()
@@ -117,7 +116,6 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(resp);
     }
 
-    // GET api/invoices/customers/{customerId}
     [HttpGet("/api/invoices/customers/{customerId:int}")]
     [Authorize]
     public async Task<IActionResult> GetInvoicesByCustomer([FromRoute] int customerId)
@@ -136,7 +134,6 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(resp);
     }
 
-    // ----------- Invoice details & finders -----------
     [HttpGet("/api/invoices/{invoiceId:int}")]
     [Authorize]
     public async Task<IActionResult> GetInvoiceById([FromRoute] int invoiceId)
@@ -154,8 +151,6 @@ public class InvoicePaymentsController : ControllerBase
         if (inv == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho booking" });
         return Ok(new { success = true, data = inv });
     }
-
-    // GetInvoiceByWorkOrder removed - WorkOrder functionality merged into Booking
 
     [HttpGet("/api/invoices/by-order/{orderId:int}")]
     [Authorize]
@@ -177,7 +172,6 @@ public class InvoicePaymentsController : ControllerBase
         
         var subject = $"Hóa đơn #{inv.InvoiceId}";
         
-        // Sử dụng template thay vì hardcode
         var body = await _email.RenderInvoiceEmailTemplateAsync(
             customerName: "Khách hàng",
             invoiceId: inv.InvoiceId.ToString(),
@@ -195,5 +189,3 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(new { success = true, message = "Đã gửi email hóa đơn" });
     }
 }
-
-

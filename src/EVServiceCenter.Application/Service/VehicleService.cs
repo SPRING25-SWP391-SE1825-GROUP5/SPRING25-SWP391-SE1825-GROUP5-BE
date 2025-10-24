@@ -98,6 +98,7 @@ namespace EVServiceCenter.Application.Service
                 var vehicle = new Vehicle
                 {
                     CustomerId = request.CustomerId,
+                    ModelId = request.ModelId,
                     Vin = request.Vin.Trim().ToUpper(),
                     LicensePlate = request.LicensePlate.Trim().ToUpper(),
                     Color = request.Color.Trim(),
@@ -207,11 +208,31 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Validate customer exists
+            // Debug logging
+            _logger.LogInformation($"Validating vehicle creation for CustomerId: {request.CustomerId}");
+
+            // Validate customer exists - thử cả 2 cách
             var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
+            var customerDebug = await _customerRepository.GetCustomerByIdDebugAsync(request.CustomerId);
+            
+            _logger.LogInformation($"Customer debug check - ID: {request.CustomerId}, Found: {customerDebug != null}, UserId: {customerDebug?.UserId}, IsGuest: {customerDebug?.IsGuest}");
+            
             if (customer == null)
             {
-                errors.Add("Khách hàng không tồn tại.");
+                if (customerDebug == null)
+                {
+                    _logger.LogWarning($"Customer not found with ID: {request.CustomerId}");
+                    errors.Add("Khách hàng không tồn tại.");
+                }
+                else
+                {
+                    _logger.LogWarning($"Customer exists but User is null - CustomerId: {customerDebug.CustomerId}, UserId: {customerDebug.UserId}");
+                    errors.Add("Thông tin người dùng của khách hàng không hợp lệ.");
+                }
+            }
+            else
+            {
+                _logger.LogInformation($"Customer found: {customer.CustomerId}, UserId: {customer.UserId}, IsGuest: {customer.IsGuest}");
             }
 
             // Check for duplicate VIN

@@ -97,6 +97,7 @@ builder.Services.AddScoped<IPdfInvoiceService, PdfInvoiceService>();
 // Business Services
 builder.Services.AddScoped<ICenterService, CenterService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
+builder.Services.AddScoped<IServiceCategoryService, ServiceCategoryService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ITechnicianService, TechnicianService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
@@ -177,6 +178,7 @@ builder.Services.AddScoped<IVehicleModelPartRepository, VehicleModelPartReposito
 // Service Package & Credit Repositories
 builder.Services.AddScoped<IServicePackageRepository, ServicePackageRepository>();
 builder.Services.AddScoped<ICustomerServiceCreditRepository, CustomerServiceCreditRepository>();
+builder.Services.AddScoped<IServiceCategoryRepository, ServiceCategoryRepository>();
 builder.Services.AddScoped<IServiceChecklistRepository, ServiceChecklistRepository>();
 
 // E-commerce repositories

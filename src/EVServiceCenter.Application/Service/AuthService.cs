@@ -31,12 +31,14 @@ namespace EVServiceCenter.Application.Service
         private readonly IJwtService _jwtService;
         private readonly IConfiguration _configuration;
         private readonly ICustomerRepository _customerRepository;
+        private readonly IStaffRepository _staffRepository;
+        private readonly ITechnicianRepository _technicianRepository;
         private readonly IAccountRepository _accountRepository;
         private readonly IOtpCodeRepository _otpRepository;
         private readonly IMemoryCache _cache;
         private readonly ILoginLockoutService _loginLockoutService;
         
-        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache, ILoginLockoutService loginLockoutService)
+        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache, ILoginLockoutService loginLockoutService)
         {
             _accountService = accountService;
             _authRepository = authRepository;
@@ -45,6 +47,8 @@ namespace EVServiceCenter.Application.Service
             _jwtService = jwtService;
             _configuration = configuration;
             _customerRepository = customerRepository;
+            _staffRepository = staffRepository;
+            _technicianRepository = technicianRepository;
             _accountRepository = accountRepository;
             _otpRepository = otpRepository;
             _cache = cache;
@@ -86,6 +90,8 @@ namespace EVServiceCenter.Application.Service
 
                 // Lưu user vào database
                 await _authRepository.RegisterAsync(user);
+                
+                Console.WriteLine($"User created with ID: {user.UserId}");
 
                 // Tạo Customer record tương ứng
                 var customer = new Customer
@@ -94,7 +100,9 @@ namespace EVServiceCenter.Application.Service
                     IsGuest = false
                 };
 
+                Console.WriteLine($"Creating customer for UserId: {user.UserId}");
                 await _customerRepository.CreateCustomerAsync(customer);
+                Console.WriteLine($"Customer created successfully for UserId: {user.UserId}");
 
                 // Tạo và gửi mã OTP xác thực email
                 try
@@ -279,6 +287,27 @@ namespace EVServiceCenter.Application.Service
             user.UpdatedAt = DateTime.UtcNow;
             await _authRepository.UpdateUserAsync(user);
 
+            // Lấy CustomerId, StaffId, TechnicianId từ database
+            int? customerId = null;
+            int? staffId = null;
+            int? technicianId = null;
+            
+            if (user.Role == "CUSTOMER")
+            {
+                var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
+                customerId = customer?.CustomerId;
+            }
+            else if (user.Role == "STAFF")
+            {
+                var staff = await _staffRepository.GetStaffByUserIdAsync(user.UserId);
+                staffId = staff?.StaffId;
+            }
+            else if (user.Role == "TECHNICIAN")
+            {
+                var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);
+                technicianId = technician?.TechnicianId;
+            }
+
             return new LoginTokenResponse
             {
                 AccessToken = accessToken,
@@ -287,6 +316,9 @@ namespace EVServiceCenter.Application.Service
                 ExpiresAt = expiresAt,
                 RefreshToken = refreshToken,
                 UserId = user.UserId,
+                CustomerId = customerId,
+                StaffId = staffId,
+                TechnicianId = technicianId,
                 FullName = user.FullName,
                 Role = user.Role ?? "CUSTOMER",
                 EmailVerified = user.EmailVerified,
@@ -388,7 +420,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Validate email format
                 if (!IsValidEmail(email))
-                    throw new ArgumentException("Email phải có đuôi @gmail.com");
+                    throw new ArgumentException("Email không hợp lệ");
 
                 // Kiểm tra user có tồn tại không
                 var user = await _accountService.GetAccountByEmailAsync(email);
@@ -425,7 +457,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Validate email format
                 if (!IsValidEmail(request.Email))
-                    throw new ArgumentException("Email phải có đuôi @gmail.com");
+                    throw new ArgumentException("Email không hợp lệ");
 
                 // Validate password strength
                 if (!IsValidPassword(request.NewPassword))
@@ -731,9 +763,8 @@ namespace EVServiceCenter.Application.Service
                 if (payload == null || string.IsNullOrEmpty(payload.Email))
                     throw new ArgumentException("Không đọc được thông tin email từ Google");
 
-                // Check if email is Gmail (as per our system requirement)
-                if (!payload.Email.EndsWith("@gmail.com"))
-                    throw new ArgumentException("Chỉ hỗ trợ đăng nhập bằng tài khoản Gmail");
+                // Accept all Google OAuth emails (Gmail, Google Workspace, etc.)
+                // Removed Gmail-only restriction for better user experience
 
                 // Find or create user
                 var email = payload.Email.ToLowerInvariant();
@@ -798,6 +829,14 @@ namespace EVServiceCenter.Application.Service
                 user.UpdatedAt = DateTime.UtcNow;
                 await _authRepository.UpdateUserAsync(user);
 
+                // Lấy CustomerId từ database
+                int? customerId = null;
+                if (user.Role == "CUSTOMER")
+                {
+                    var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
+                    customerId = customer?.CustomerId;
+                }
+
                 return new LoginTokenResponse
                 {
                     AccessToken = accessToken,
@@ -806,6 +845,7 @@ namespace EVServiceCenter.Application.Service
                     ExpiresAt = expiresAt,
                     RefreshToken = refreshToken,
                     UserId = user.UserId,
+                    CustomerId = customerId,
                     FullName = user.FullName,
                     Role = user.Role ?? "CUSTOMER",
                     EmailVerified = user.EmailVerified,

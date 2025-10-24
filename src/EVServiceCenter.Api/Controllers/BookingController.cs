@@ -119,66 +119,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        [AllowAnonymous]
-        [HttpPost("intent")]
-        public IActionResult Intent([FromQuery] int centerId, [FromQuery] string date, [FromQuery] int? slotId = null)
-        {
-            if (centerId <= 0) return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
-            if (!DateOnly.TryParse(date, out _)) return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
-            return Ok(new { success = true, message = "Intent recorded" });
-        }
-
-        [HttpGet("available-times")]
-        public async Task<IActionResult> GetAvailableTimes(
-            [FromQuery] int centerId,
-            [FromQuery] string date,
-            [FromQuery] int? technicianId = null,
-            [FromQuery] string? serviceIds = null)
-        {
-            try
-            {
-                if (centerId <= 0)
-                    return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
-
-                if (!DateOnly.TryParse(date, out var bookingDate))
-                    return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
-
-                if (bookingDate < DateOnly.FromDateTime(DateTime.Today))
-                    return BadRequest(new { success = false, message = "Không thể đặt lịch cho ngày trong quá khứ" });
-
-                var serviceIdList = new List<int>();
-                if (!string.IsNullOrWhiteSpace(serviceIds))
-                {
-                    var serviceIdStrings = serviceIds.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var serviceIdString in serviceIdStrings)
-                    {
-                        if (int.TryParse(serviceIdString.Trim(), out var serviceId))
-                        {
-                            serviceIdList.Add(serviceId);
-                        }
-                    }
-                }
-
-                var availableTimes = await _bookingService.GetAvailableTimesAsync(centerId, bookingDate, technicianId, serviceIdList);
-
-                return Ok(new { 
-                    success = true, 
-                    message = "Lấy danh sách thời gian khả dụng thành công",
-                    data = availableTimes
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
 
         [HttpPost("reserve-slot")]
         public async Task<IActionResult> ReserveTimeSlot(
@@ -389,128 +329,13 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        [HttpPatch("{id}/cancel")]
-        public async Task<IActionResult> CancelBooking(int id)
-        {
-            try
-            {
-                var req = new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = "CANCELLED" };
-                var updated = await _bookingService.UpdateBookingStatusAsync(id, req);
-                return Ok(new { success = true, message = "Hủy đặt lịch thành công", data = updated });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
-            }
-        }
 
-        [HttpGet("Customer/{customerId}/booking-history")]
-        public async Task<ActionResult<BookingHistoryListResponse>> GetBookingHistory(
-            [FromRoute] int customerId,
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 10,
-            [FromQuery] string? status = null,
-            [FromQuery] DateTime? fromDate = null,
-            [FromQuery] DateTime? toDate = null,
-            [FromQuery] string sortBy = "bookingDate",
-            [FromQuery] string sortOrder = "desc")
-        {
-            var result = await _bookingHistoryService.GetBookingHistoryAsync(
-                customerId, page, pageSize, status, fromDate, toDate, sortBy, sortOrder);
-            return Ok(result);
-        }
 
-        [HttpGet("Customer/{customerId}/booking-history/{bookingId}")]
-        public async Task<ActionResult<BookingHistoryResponse>> GetBookingHistoryById(
-            [FromRoute] int customerId,
-            [FromRoute] int bookingId)
-        {
-            var result = await _bookingHistoryService.GetBookingHistoryByIdAsync(customerId, bookingId);
-            return Ok(result);
-        }
 
-        [HttpGet("Customer/{customerId}/booking-history/stats")]
-        public async Task<ActionResult<BookingHistoryStatsResponse>> GetBookingHistoryStats(
-            [FromRoute] int customerId,
-            [FromQuery] string period = "all")
-        {
-            var result = await _bookingHistoryService.GetBookingHistoryStatsAsync(customerId, period);
-            return Ok(result);
-        }
         
-        [HttpGet("{bookingId:int}/invoice")]
-        public async Task<IActionResult> GetBookingInvoice([FromRoute] int bookingId)
-        {
-            var invoice = await _invoiceRepository.GetByBookingIdAsync(bookingId);
-            if (invoice == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho booking" });
-            return Ok(new { success = true, data = new { invoice.InvoiceId, invoice.BookingId, invoice.Status, invoice.Email, invoice.Phone, invoice.CreatedAt } });
-        }
 
-        [HttpPost("{bookingId:int}/invoice/link")]
-        public async Task<IActionResult> CreateBookingInvoiceLink([FromRoute] int bookingId)
-        {
-            var checkoutUrl = await _paymentService.CreateBookingPaymentLinkAsync(bookingId);
-            return Ok(new { success = true, checkoutUrl });
-        }
 
-        [HttpPost("{bookingId:int}/invoice/confirm")]
-        [AllowAnonymous]
-        public async Task<IActionResult> ConfirmBookingInvoice([FromRoute] int bookingId, [FromQuery] string orderCode)
-        {
-            if (string.IsNullOrWhiteSpace(orderCode)) orderCode = bookingId.ToString();
-            var ok = await _paymentService.ConfirmPaymentAsync(bookingId);
-            if (!ok) return BadRequest(new { success = false, message = "Xác nhận thanh toán không thành công" });
-            return Ok(new { success = true });
-        }
 
-        public class CreateOfflinePaymentForBookingRequest
-        {
-            public int Amount { get; set; }
-            public int PaidByUserId { get; set; }
-            public string Note { get; set; } = string.Empty;
-        }
-
-        [HttpPost("{bookingId:int}/invoice/offline")]
-        public async Task<IActionResult> CreateOfflinePaymentForBooking([FromRoute] int bookingId, [FromBody] CreateOfflinePaymentForBookingRequest req)
-        {
-            if (req == null || req.Amount <= 0 || req.PaidByUserId <= 0)
-                return BadRequest(new { success = false, message = "amount và paidByUserId là bắt buộc" });
-
-            var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
-            if (booking == null) return NotFound(new { success = false, message = "Không tìm thấy booking" });
-
-            var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
-            if (invoice == null)
-            {
-                invoice = await _invoiceRepository.CreateMinimalAsync(new EVServiceCenter.Domain.Entities.Invoice
-                {
-                    BookingId = booking.BookingId,
-                    CustomerId = booking.CustomerId,
-                    Email = booking.Customer?.User?.Email,
-                    Phone = booking.Customer?.User?.PhoneNumber,
-                    Status = "PAID",
-                    CreatedAt = DateTime.UtcNow
-                });
-            }
-
-            var payment = await _paymentRepository.CreateAsync(new EVServiceCenter.Domain.Entities.Payment
-            {
-                PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{bookingId}",
-                InvoiceId = invoice.InvoiceId,
-                PaymentMethod = "CASH",
-                Amount = req.Amount,
-                Status = "PAID",
-                PaidAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                PaidByUserID = req.PaidByUserId
-            });
-
-            return Ok(new { success = true, paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, amount = payment.Amount });
-        }
 
         [HttpPost("{bookingId:int}/apply-package")]
         public async Task<IActionResult> ApplyPackageToBooking([FromRoute] int bookingId, [FromBody] ApplyPackageRequest request)

@@ -24,7 +24,6 @@ namespace EVServiceCenter.Api.Controllers
             _conversationService = conversationService;
         }
 
-
         [HttpPost]
         public async Task<IActionResult> CreateConversation([FromBody] CreateConversationRequest request)
         {
@@ -41,7 +40,6 @@ namespace EVServiceCenter.Api.Controllers
                 return HandleException(ex, "Tạo cuộc trò chuyện");
             }
         }
-
 
         [HttpGet("{conversationId}")]
         public async Task<IActionResult> GetConversation(long conversationId)
@@ -62,7 +60,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-
         [HttpPut("{conversationId}")]
         public async Task<IActionResult> UpdateConversation(long conversationId, [FromBody] UpdateConversationRequest request)
         {
@@ -79,7 +76,6 @@ namespace EVServiceCenter.Api.Controllers
                 return HandleException(ex, "Cập nhật cuộc trò chuyện");
             }
         }
-
 
         [HttpDelete("{conversationId}")]
         public async Task<IActionResult> DeleteConversation(long conversationId)
@@ -100,7 +96,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-
         [HttpPost("get-or-create")]
         public async Task<IActionResult> GetOrCreateConversation([FromBody] GetOrCreateConversationRequest request)
         {
@@ -117,7 +112,6 @@ namespace EVServiceCenter.Api.Controllers
                 return HandleException(ex, "Lấy hoặc tạo cuộc trò chuyện");
             }
         }
-
 
         [HttpGet("my-conversations")]
         public async Task<IActionResult> GetMyConversations([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
@@ -138,9 +132,6 @@ namespace EVServiceCenter.Api.Controllers
                 return HandleException(ex, "Lấy danh sách cuộc trò chuyện");
             }
         }
-
-
-
 
         [HttpGet("all")]
         [Authorize(Roles = "ADMIN")]
@@ -207,7 +198,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-
         [HttpPut("{conversationId}/last-read")]
         public async Task<IActionResult> UpdateLastReadTime(long conversationId)
         {
@@ -222,7 +212,5 @@ namespace EVServiceCenter.Api.Controllers
                 return HandleException(ex, "Cập nhật thời gian đọc cuối cùng");
             }
         }
-        
     }
 }
-

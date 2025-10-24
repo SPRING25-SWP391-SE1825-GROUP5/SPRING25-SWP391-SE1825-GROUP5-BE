@@ -15,7 +15,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "AuthenticatedUser")] // Tất cả user đã đăng nhập
+    [Authorize(Policy = "AuthenticatedUser")]
     public class CustomerController : ControllerBase
     {
         private readonly ICustomerService _customerService;
@@ -31,10 +31,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             _customerRepository = customerRepository;
         }
 
-        /// <summary>
-        /// Lấy thông tin khách hàng hiện tại (map từ User)
-        /// </summary>
-        /// <returns>Thông tin khách hàng hiện tại</returns>
         [HttpGet("me")]
         public async Task<IActionResult> GetCurrentCustomer()
         {
@@ -72,16 +68,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        // [Removed] POST /api/Customer tạo theo phone/isGuest đã bị loại bỏ để tránh trùng chức năng với quick-create.
-
-        /// <summary>
-        /// Lấy danh sách phương tiện của khách hàng
-        /// </summary>
-        /// <param name="id">ID khách hàng</param>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
-        /// <returns>Danh sách phương tiện của khách hàng</returns>
         [HttpGet("{id}/vehicles")]
         public async Task<IActionResult> GetCustomerVehicles(
             int id,
@@ -94,7 +80,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (id <= 0)
                     return BadRequest(new { success = false, message = "ID khách hàng không hợp lệ" });
 
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -115,10 +100,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Liệt kê các gói dịch vụ khách đã mua (credits)
-        /// </summary>
-        /// <param name="customerId">ID khách hàng</param>
         [HttpGet("{customerId}/credits")]
         public async Task<IActionResult> GetCustomerCredits(int customerId)
         {
@@ -146,56 +127,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thông tin chi tiết xe của khách hàng
-        /// </summary>
-        /// <param name="customerId">ID khách hàng</param>
-        /// <param name="vehicleId">ID xe</param>
-        /// <returns>Thông tin chi tiết xe của khách hàng</returns>
-        [HttpGet("{customerId}/vehicles/{vehicleId}")]
-        public async Task<IActionResult> GetCustomerVehicleDetail(int customerId, int vehicleId)
-        {
-            try
-            {
-                if (customerId <= 0)
-                    return BadRequest(new { success = false, message = "ID khách hàng không hợp lệ" });
-                
-                if (vehicleId <= 0)
-                    return BadRequest(new { success = false, message = "ID xe không hợp lệ" });
 
-                // Lấy thông tin xe
-                var vehicle = await _vehicleService.GetVehicleByIdAsync(vehicleId);
-                if (vehicle == null)
-                    return NotFound(new { success = false, message = "Không tìm thấy xe" });
-
-                // Kiểm tra xe có thuộc về customer không
-                if (vehicle.CustomerId != customerId)
-                    return Forbid("Xe không thuộc về khách hàng này");
-
-                return Ok(new { 
-                    success = true, 
-                    message = $"Lấy thông tin chi tiết xe {vehicleId} của khách hàng {customerId} thành công",
-                    data = vehicle
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
-
-        // [Removed] PUT /api/Customer/{id} cập nhật nhanh theo phone/isGuest đã bị loại bỏ để đơn giản hóa API.
-
-        /// <summary>
-        /// STAFF/TECHNICIAN/ADMIN tạo nhanh tài khoản CUSTOMER với 3 trường cơ bản
-        /// </summary>
         [HttpPost("quick-create")]
         [Authorize(Roles = "STAFF,TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> QuickCreateCustomer([FromBody] QuickCreateCustomerRequest request)
@@ -229,10 +161,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách service package của khách hàng hiện tại
-        /// </summary>
-        /// <returns>Danh sách service package đã mua</returns>
         [HttpGet("service-packages")]
         public async Task<IActionResult> GetCustomerServicePackages()
         {
@@ -260,11 +188,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy chi tiết service package theo ID
-        /// </summary>
-        /// <param name="packageId">ID của service package</param>
-        /// <returns>Chi tiết service package</returns>
         [HttpGet("service-packages/{packageId:int}")]
         public async Task<IActionResult> GetServicePackageDetail(int packageId)
         {
@@ -295,11 +218,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy lịch sử sử dụng service package
-        /// </summary>
-        /// <param name="packageId">ID của service package</param>
-        /// <returns>Lịch sử sử dụng</returns>
         [HttpGet("service-packages/{packageId:int}/usage-history")]
         public async Task<IActionResult> GetServicePackageUsageHistory(int packageId)
         {
@@ -327,10 +245,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thống kê service package của khách hàng
-        /// </summary>
-        /// <returns>Thống kê tổng quan</returns>
         [HttpGet("service-packages/statistics")]
         public async Task<IActionResult> GetServicePackageStatistics()
         {
@@ -358,9 +272,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// API để sửa dữ liệu không đồng bộ giữa Users và Customers
-        /// </summary>
-        /// <returns>Kết quả sửa dữ liệu</returns>
         [HttpPost("fix-data-sync")]
         [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> FixDataSync()
@@ -369,7 +280,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             {
                 Console.WriteLine("Starting data sync fix...");
                 
-                // Lấy tất cả users có role CUSTOMER
                 var users = await _customerService.GetAllUsersWithCustomerRoleAsync();
                 var customers = await _customerService.GetAllCustomersAsync();
                 
@@ -381,7 +291,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 
                 var fixedCustomers = new List<object>();
                 
-                // Tạo customer cho users chưa có
                 foreach (var user in usersWithoutCustomer)
                 {
                     var newCustomer = new Customer
@@ -423,7 +332,6 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         private int? GetCurrentUserId()
         {
-            // Thử nhiều loại claim để tìm userId
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
                             ?? User.FindFirst("userId")?.Value 
                             ?? User.FindFirst("sub")?.Value 

@@ -376,9 +376,9 @@ namespace EVServiceCenter.Application.Service
                         appliedCreditId = availableCredit.CreditId;
                         _logger.LogInformation("Using existing CustomerServiceCredit {CreditId} for customer {CustomerId} with package {PackageId}", 
                             availableCredit.CreditId, request.CustomerId, selectedPackage.PackageId);
-                    }
-                    else
-                    {
+                }
+                else
+                {
                         // Tạo credit mới nếu không có credit khả dụng
                         var customerServiceCredit = new CustomerServiceCredit
                         {
@@ -597,7 +597,8 @@ namespace EVServiceCenter.Application.Service
                             tts.WorkDate,
                             tts.SlotId);
                     }
-                    booking.TechnicianSlotId = null;
+                    // ✅ KHÔNG XÓA TechnicianSlotId để giữ history
+                    // booking.TechnicianSlotId = null; // ❌ XÓA DÒNG NÀY
                 }
 
                 // Update MaintenanceChecklist and MaintenanceChecklistResult when booking is cancelled
@@ -781,7 +782,7 @@ namespace EVServiceCenter.Application.Service
 
             // Validate technician slot exists & belongs to center & matches date
             if (errors.Count == 0)
-            {
+                {
                 var timeSlot = await _technicianTimeSlotRepository.GetByIdAsync(request.TechnicianSlotId);
                 if (timeSlot == null)
                 {

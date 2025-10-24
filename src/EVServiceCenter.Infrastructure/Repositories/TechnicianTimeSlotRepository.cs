@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Domain.Enums;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Infrastructure.Configurations;
 using Microsoft.EntityFrameworkCore;
@@ -133,7 +134,26 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
 
     public async Task<bool> ReserveSlotAsync(int technicianId, DateTime date, int slotId, int? bookingId)
     {
-        // Force reserve: update regardless of current availability (allows rebooking cancelled slots)
+        // Kiểm tra slot hiện tại trước khi reserve
+        var existingSlot = await _context.TechnicianTimeSlots
+            .FirstOrDefaultAsync(t => t.TechnicianId == technicianId &&
+                                     t.WorkDate.Date == date.Date &&
+                                     t.SlotId == slotId);
+
+        if (existingSlot != null)
+        {
+            // Kiểm tra trạng thái slot
+            var status = existingSlot.GetStatus();
+            
+            // Chỉ reserve nếu slot available hoặc released
+            if (status != TechnicianTimeSlotStatus.Available && 
+                status != TechnicianTimeSlotStatus.Released)
+            {
+                return false; // Slot đang được sử dụng
+            }
+        }
+
+        // Reserve slot
         var rows = await _context.Database.ExecuteSqlInterpolatedAsync($@"
             UPDATE [dbo].[TechnicianTimeSlots]
             SET [IsAvailable] = 0, [BookingID] = {bookingId}

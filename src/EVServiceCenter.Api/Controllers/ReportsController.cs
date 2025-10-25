@@ -6,6 +6,8 @@ using EVServiceCenter.Infrastructure.Configurations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Application.Models;
 
 namespace EVServiceCenter.Api.Controllers
 {
@@ -15,9 +17,14 @@ namespace EVServiceCenter.Api.Controllers
 	public class ReportsController : ControllerBase
 	{
 		private readonly EVServiceCenter.Infrastructure.Configurations.EVDbContext _db;
-		public ReportsController(EVServiceCenter.Infrastructure.Configurations.EVDbContext db)
+		private readonly IBookingStatisticsService _bookingStatisticsService;
+		
+		public ReportsController(
+			EVServiceCenter.Infrastructure.Configurations.EVDbContext db,
+			IBookingStatisticsService bookingStatisticsService)
 		{
 			_db = db;
+			_bookingStatisticsService = bookingStatisticsService;
 		}
 
 		// GET /api/reports/revenue?from=...&to=...&method=PAYOS|CASH
@@ -251,6 +258,140 @@ namespace EVServiceCenter.Api.Controllers
 				total = total,
 				items
 			});
+		}
+
+		// ===================== BOOKING STATISTICS =====================
+
+		/// <summary>
+		/// Lấy thống kê tổng quan booking
+		/// </summary>
+		/// <param name="request">Tham số lọc thống kê</param>
+		/// <returns>Thống kê booking</returns>
+		[HttpPost("bookings/overview")]
+		public async Task<ActionResult<BookingStatisticsResponse>> GetBookingStatistics([FromBody] BookingStatisticsRequest request)
+		{
+			if (request == null)
+			{
+				return BadRequest(new BookingStatisticsResponse
+				{
+					Success = false,
+					Message = "Request không hợp lệ"
+				});
+			}
+
+			var result = await _bookingStatisticsService.GetBookingStatisticsAsync(request);
+			
+			if (!result.Success)
+			{
+				return BadRequest(result);
+			}
+
+			return Ok(result);
+		}
+
+		/// <summary>
+		/// Lấy thống kê booking theo CenterId
+		/// </summary>
+		/// <param name="centerId">ID của center</param>
+		/// <param name="request">Tham số lọc thống kê</param>
+		/// <returns>Thống kê booking của center</returns>
+		[HttpPost("bookings/center/{centerId}")]
+		public async Task<ActionResult<BookingStatisticsResponse>> GetCenterBookingStatistics(
+			int centerId, 
+			[FromBody] CenterBookingStatisticsRequest request)
+		{
+			if (request == null)
+			{
+				return BadRequest(new BookingStatisticsResponse
+				{
+					Success = false,
+					Message = "Request không hợp lệ"
+				});
+			}
+
+			// Ensure CenterId matches
+			request.CenterId = centerId;
+
+			var result = await _bookingStatisticsService.GetCenterBookingStatisticsAsync(request);
+			
+			if (!result.Success)
+			{
+				return BadRequest(result);
+			}
+
+			return Ok(result);
+		}
+
+		/// <summary>
+		/// Lấy thống kê booking nhanh (GET method)
+		/// </summary>
+		/// <param name="startDate">Ngày bắt đầu (optional)</param>
+		/// <param name="endDate">Ngày kết thúc (optional)</param>
+		/// <param name="centerId">ID center (optional)</param>
+		/// <param name="status">Trạng thái booking (optional)</param>
+		/// <returns>Thống kê booking</returns>
+		[HttpGet("bookings/quick")]
+		public async Task<ActionResult<BookingStatisticsResponse>> GetQuickBookingStatistics(
+			[FromQuery] DateTime? startDate = null,
+			[FromQuery] DateTime? endDate = null,
+			[FromQuery] int? centerId = null,
+			[FromQuery] string? status = null)
+		{
+			var request = new BookingStatisticsRequest
+			{
+				StartDate = startDate,
+				EndDate = endDate,
+				CenterId = centerId,
+				Status = status,
+				IncludeMonthlyStats = true,
+				IncludeDailyStats = false,
+				IncludeServiceTypeStats = true
+			};
+
+			var result = await _bookingStatisticsService.GetBookingStatisticsAsync(request);
+			
+			if (!result.Success)
+			{
+				return BadRequest(result);
+			}
+
+			return Ok(result);
+		}
+
+		/// <summary>
+		/// Lấy thống kê booking của center nhanh (GET method)
+		/// </summary>
+		/// <param name="centerId">ID của center</param>
+		/// <param name="startDate">Ngày bắt đầu (optional)</param>
+		/// <param name="endDate">Ngày kết thúc (optional)</param>
+		/// <param name="status">Trạng thái booking (optional)</param>
+		/// <returns>Thống kê booking của center</returns>
+		[HttpGet("bookings/center/{centerId}/quick")]
+		public async Task<ActionResult<BookingStatisticsResponse>> GetQuickCenterBookingStatistics(
+			int centerId,
+			[FromQuery] DateTime? startDate = null,
+			[FromQuery] DateTime? endDate = null,
+			[FromQuery] string? status = null)
+		{
+			var request = new CenterBookingStatisticsRequest
+			{
+				CenterId = centerId,
+				StartDate = startDate,
+				EndDate = endDate,
+				Status = status,
+				IncludeMonthlyStats = true,
+				IncludeDailyStats = false,
+				IncludeServiceTypeStats = true
+			};
+
+			var result = await _bookingStatisticsService.GetCenterBookingStatisticsAsync(request);
+			
+			if (!result.Success)
+			{
+				return BadRequest(result);
+			}
+
+			return Ok(result);
 		}
 	}
 }

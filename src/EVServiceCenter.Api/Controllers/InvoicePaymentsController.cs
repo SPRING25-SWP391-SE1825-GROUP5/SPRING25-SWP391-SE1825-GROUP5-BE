@@ -116,23 +116,6 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(resp);
     }
 
-    [HttpGet("/api/invoices/customers/{customerId:int}")]
-    [Authorize]
-    public async Task<IActionResult> GetInvoicesByCustomer([FromRoute] int customerId)
-    {
-        var items = await _invoiceRepo.GetByCustomerIdAsync(customerId);
-        var resp = items.Select(i => new {
-            invoiceId = i.InvoiceId,
-            customerId = i.CustomerId,
-            bookingId = i.BookingId,
-            orderId = i.OrderId,
-            status = i.Status,
-            email = i.Email,
-            phone = i.Phone,
-            createdAt = i.CreatedAt
-        });
-        return Ok(resp);
-    }
 
     [HttpGet("/api/invoices/{invoiceId:int}")]
     [Authorize]
@@ -143,23 +126,7 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(new { success = true, data = inv });
     }
 
-    [HttpGet("/api/invoices/by-booking/{bookingId:int}")]
-    [Authorize]
-    public async Task<IActionResult> GetInvoiceByBooking([FromRoute] int bookingId)
-    {
-        var inv = await _invoiceRepo.GetByBookingIdAsync(bookingId);
-        if (inv == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho booking" });
-        return Ok(new { success = true, data = inv });
-    }
 
-    [HttpGet("/api/invoices/by-order/{orderId:int}")]
-    [Authorize]
-    public async Task<IActionResult> GetInvoiceByOrder([FromRoute] int orderId)
-    {
-        var inv = await _invoiceRepo.GetByOrderIdAsync(orderId);
-        if (inv == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho order" });
-        return Ok(new { success = true, data = inv });
-    }
 
     [HttpPost("/api/invoices/{invoiceId:int}/send")]
     [Authorize]

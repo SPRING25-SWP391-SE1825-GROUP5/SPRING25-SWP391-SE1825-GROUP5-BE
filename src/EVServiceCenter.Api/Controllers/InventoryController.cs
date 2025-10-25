@@ -145,48 +145,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        [HttpGet("by-center/{centerId}")]
-        [Authorize(Roles = "MANAGER,ADMIN")]
-        public async Task<IActionResult> GetInventoryByCenter(int centerId)
-        {
-            try
-            {
-                if (centerId <= 0)
-                    return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
 
-                var inventory = await _inventoryService.GetInventoryByCenterIdAsync(centerId);
-                return Ok(new { success = true, message = "Lấy tồn kho theo trung tâm thành công", data = inventory });
-            }
-            catch (ArgumentException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
-            }
-        }
-
-        [HttpGet("centers-availability")]
-        [Authorize(Policy = "AuthenticatedUser")]
-        public async Task<IActionResult> GetCentersAvailability(
-            [FromQuery] int pageNumber = 1,
-            [FromQuery] int pageSize = 50,
-            [FromQuery] string? searchTerm = null)
-        {
-            try
-            {
-                if (pageNumber < 1) pageNumber = 1;
-                if (pageSize < 1 || pageSize > 200) pageSize = 50;
-
-                var result = await _inventoryService.GetInventoriesAsync(pageNumber, pageSize, null, searchTerm);
-                return Ok(new { success = true, message = "Lấy parts theo từng center thành công", data = result });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
-            }
-        }
     }
 
     public class AddPartToInventoryRequest

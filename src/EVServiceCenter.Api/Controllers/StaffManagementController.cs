@@ -107,41 +107,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo staff từ userId và gán vào center (đồng bộ hồ sơ Staff)
-        /// </summary>
-        [HttpPost("staff/from-user")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> CreateStaffFromUser([FromBody] CreateStaffFromUserRequest request)
-        {
-            if (request == null || request.UserId <= 0 || request.CenterId <= 0)
-                return BadRequest(new { success = false, message = "userId và centerId bắt buộc" });
-
-            try
-            {
-                // Kiểm tra user có tồn tại và có role STAFF không
-                var canAssign = await _staffManagementService.CanUserBeAssignedAsStaffAsync(request.UserId, request.CenterId);
-                if (!canAssign)
-                    return BadRequest(new { success = false, message = "User không tồn tại hoặc không có quyền làm nhân viên. Chỉ user có role STAFF mới được phép." });
-
-                var staff = await _staffManagementService.AddStaffToCenterAsync(new AddStaffToCenterRequest
-                {
-                    UserId = request.UserId,
-                    CenterId = request.CenterId
-                });
-                return CreatedAtAction(nameof(GetStaffById), new { id = staff.StaffId }, new { success = true, data = staff });
-            }
-            catch (Microsoft.EntityFrameworkCore.DbUpdateException)
-            {
-                return Conflict(new { success = false, message = "Vi phạm ràng buộc: user chỉ được có 1 staff active." });
-            }
-            catch (System.ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-        }
-
-        public class CreateStaffFromUserRequest { public int UserId { get; set; } public int CenterId { get; set; } }
 
         /// <summary>
         /// Lấy danh sách nhân viên theo trung tâm hoặc tất cả nhân viên
@@ -352,47 +317,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo kỹ thuật viên từ userId và gán vào center (đồng bộ hồ sơ Technician)
-        /// </summary>
-        [HttpPost("technician/from-user")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> CreateTechnicianFromUser([FromBody] CreateTechnicianFromUserRequest request)
-        {
-            if (request == null || request.UserId <= 0 || request.CenterId <= 0)
-                return BadRequest(new { success = false, message = "userId và centerId bắt buộc" });
-
-            try
-            {
-                // Kiểm tra user có tồn tại và có role TECHNICIAN không
-                var canAssign = await _staffManagementService.CanUserBeAssignedAsTechnicianAsync(request.UserId, request.CenterId);
-                if (!canAssign)
-                    return BadRequest(new { success = false, message = "User không tồn tại hoặc không có quyền làm kỹ thuật viên. Chỉ user có role TECHNICIAN mới được phép." });
-
-                // Nếu user đã là technician active ở center khác -> 409
-                var exists = await _staffManagementService.IsUserAlreadyTechnicianAsync(request.UserId);
-                if (exists)
-                    return Conflict(new { success = false, message = "User đã có hồ sơ kỹ thuật viên." });
-
-                // Tạo technician entity trực tiếp qua repository/service hiện có
-                var tech = await _technicianRepository.CreateTechnicianAsync(new EVServiceCenter.Domain.Entities.Technician
-                {
-                    UserId = request.UserId,
-                    CenterId = request.CenterId,
-                    Position = string.IsNullOrWhiteSpace(request.Position) ? "GENERAL" : request.Position,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                });
-
-                return CreatedAtAction(nameof(GetTechnicianById), new { id = tech.TechnicianId }, new { success = true, data = new { tech.TechnicianId, tech.UserId, tech.CenterId, tech.Position, tech.IsActive } });
-            }
-            catch (Microsoft.EntityFrameworkCore.DbUpdateException)
-            {
-                return Conflict(new { success = false, message = "Vi phạm ràng buộc: user chỉ được có 1 technician active." });
-            }
-        }
-
-        public class CreateTechnicianFromUserRequest { public int UserId { get; set; } public int CenterId { get; set; } public string Position { get; set; } = string.Empty; }
 
         /// <summary>
         /// Lấy danh sách kỹ thuật viên theo trung tâm
@@ -511,110 +435,11 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         #region Current User APIs
 
-        /// <summary>
-        /// Lấy thông tin staff hiện tại (dựa trên JWT token)
-        /// </summary>
-        /// <returns>Thông tin staff hiện tại</returns>
-        [HttpGet("staff/current")]
-        [Authorize] // Tạm thời bỏ policy để test
-        public async Task<IActionResult> GetCurrentStaff()
-        {
-            try
-            {
-                // Debug: Log tất cả claims để xem có gì
-                var allClaims = User.Claims.Select(c => $"{c.Type}: {c.Value}").ToList();
-                
-                // Lấy userId từ JWT token
-                var userIdClaim = User.FindFirst("userId") ?? User.FindFirst("sub") ?? User.FindFirst("nameid");
-                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-                {
-                    return Unauthorized(new { 
-                        success = false, 
-                        message = "Không thể xác định người dùng",
-                        debug = new { 
-                            claims = allClaims,
-                            userIdClaim = userIdClaim?.Value 
-                        }
-                    });
-                }
-                
-                // Debug: Log thông tin user và roles
-                var roles = User.Claims.Where(c => c.Type == "role" || c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role").Select(c => c.Value).ToList();
-                var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
-
-                // Tìm staff record của user hiện tại
-                var staff = await _staffManagementService.GetStaffByUserIdAsync(userId);
-                if (staff == null)
-                {
-                    return NotFound(new { 
-                        success = false, 
-                        message = "Không tìm thấy thông tin staff",
-                        debug = new {
-                            userId = userId,
-                            roles = roles,
-                            isAuthenticated = isAuthenticated,
-                            claims = allClaims
-                        }
-                    });
-                }
-
-                return Ok(new {
-                    success = true,
-                    message = "Lấy thông tin staff hiện tại thành công",
-                    data = staff,
-                    debug = new {
-                        userId = userId,
-                        roles = roles,
-                        isAuthenticated = isAuthenticated
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
 
         #endregion
 
         #region Validation APIs
 
-        /// <summary>
-        /// Kiểm tra người dùng có thể được gán vào trung tâm không
-        /// </summary>
-        /// <param name="userId">ID người dùng</param>
-        /// <param name="centerId">ID trung tâm</param>
-        /// <returns>Kết quả kiểm tra</returns>
-        [HttpGet("validate/user-assignment")]
-        public async Task<IActionResult> ValidateUserAssignment([FromQuery] int userId, [FromQuery] int centerId)
-        {
-            try
-            {
-                if (userId <= 0)
-                    return BadRequest(new { success = false, message = "ID người dùng không hợp lệ" });
-
-                if (centerId <= 0)
-                    return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
-
-                var canAssign = await _staffManagementService.CanUserBeAssignedToCenterAsync(userId, centerId);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Kiểm tra khả năng gán người dùng thành công",
-                    data = new { canAssign, userId, centerId }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
 
         #endregion
     }

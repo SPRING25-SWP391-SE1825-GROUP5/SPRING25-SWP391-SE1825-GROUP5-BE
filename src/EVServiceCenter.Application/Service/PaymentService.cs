@@ -13,6 +13,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Globalization;
+using System.Transactions;
 
 namespace EVServiceCenter.Application.Service;
 
@@ -291,98 +292,119 @@ public class PaymentService
 		{
 			_logger.LogInformation("=== BẮT ĐẦU CẬP NHẬT DATABASE ===");
 			_logger.LogInformation("Thanh toán thành công cho booking {BookingId}, đang cập nhật database...", booking.BookingId);
-			// Cập nhật trạng thái booking
-			_logger.LogInformation("Cập nhật booking {BookingId} từ {OldStatus} thành PAID", booking.BookingId, booking.Status);
-			booking.Status = "PAID";
-			booking.UpdatedAt = DateTime.UtcNow;
-			await _bookingRepository.UpdateBookingAsync(booking);
-			_logger.LogInformation("Đã cập nhật booking {BookingId} thành PAID", booking.BookingId);
-
-			// Tạo hoặc cập nhật invoice
-			_logger.LogInformation("Tạo/cập nhật invoice cho booking {BookingId}", booking.BookingId);
-			var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
-			if (invoice == null)
+			
+			// Khai báo variables bên ngoài scope để sử dụng sau
+			Domain.Entities.Invoice? invoice = null;
+			Domain.Entities.Payment? payment = null;
+			
+			// Sử dụng TransactionScope để đảm bảo tất cả thao tác database được commit cùng lúc
+			using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
 			{
-				_logger.LogInformation("Tạo invoice mới cho booking {BookingId}", booking.BookingId);
-				invoice = new Domain.Entities.Invoice
+				try
 				{
-					BookingId = booking.BookingId,
-					CustomerId = booking.CustomerId,
-					Email = booking.Customer?.User?.Email,
-					Phone = booking.Customer?.User?.PhoneNumber,
-					Status = "PAID",
-					PackageDiscountAmount = 0,
-					PromotionDiscountAmount = 0,
-					CreatedAt = DateTime.UtcNow
-				};
-				await _invoiceRepository.CreateMinimalAsync(invoice);
-				_logger.LogInformation("Đã tạo invoice {InvoiceId} cho booking {BookingId}", invoice.InvoiceId, booking.BookingId);
-			}
-			else
-			{
-				_logger.LogInformation("Cập nhật invoice {InvoiceId} cho booking {BookingId}", invoice.InvoiceId, booking.BookingId);
-				invoice.Status = "PAID";
-				// Note: IInvoiceRepository doesn't have UpdateAsync method
-				// Invoice will be updated when booking is updated
-			}
+					// Cập nhật trạng thái booking
+					_logger.LogInformation("Cập nhật booking {BookingId} từ {OldStatus} thành PAID", booking.BookingId, booking.Status);
+					booking.Status = "PAID";
+					booking.UpdatedAt = DateTime.UtcNow;
+					await _bookingRepository.UpdateBookingAsync(booking);
+					_logger.LogInformation("Đã cập nhật booking {BookingId} thành PAID", booking.BookingId);
 
-            // Tính các khoản theo logic mới
-            var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
-            decimal packageDiscountAmount = 0m;
-            decimal promotionDiscountAmount = 0m; // hook khuyến mãi sau
-            decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
-                .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
-
-            if (booking.AppliedCreditId.HasValue)
-            {
-                var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
-                if (appliedCredit?.ServicePackage != null)
-                {
-                    packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
-                }
-            }
-
-            decimal paymentAmount = (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice)
-                                      - promotionDiscountAmount + partsAmount;
-
-			// Tạo payment record
-			_logger.LogInformation("Tạo payment record cho booking {BookingId} với amount {Amount}", booking.BookingId, paymentAmount);
-            var payment = new Domain.Entities.Payment
-			{
-				InvoiceId = invoice.InvoiceId,
-				Amount = (int)Math.Round(paymentAmount),
-				PaymentMethod = "PAYOS",
-				Status = "COMPLETED",
-				PaymentCode = bookingId.ToString(),
-				CreatedAt = DateTime.UtcNow,
-				PaidAt = DateTime.UtcNow
-			};
-			await _paymentRepository.CreateAsync(payment);
-			_logger.LogInformation("Đã tạo payment {PaymentId} cho booking {BookingId}", payment.PaymentId, booking.BookingId);
-
-            // Cập nhật số liệu vào invoice
-            await _invoiceRepository.UpdateAmountsAsync(invoice.InvoiceId, packageDiscountAmount, promotionDiscountAmount, partsAmount);
-
-			// CustomerServiceCredit đã được tạo với status ACTIVE khi tạo booking
-			// Trừ credit khi thanh toán thành công
-			if (booking.AppliedCreditId.HasValue)
-			{
-				var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
-				if (appliedCredit != null)
-				{
-					// Trừ 1 credit khi sử dụng dịch vụ
-					appliedCredit.UsedCredits += 1;
-					appliedCredit.UpdatedAt = DateTime.UtcNow;
-					
-					// Cập nhật status nếu hết credit
-					if (appliedCredit.UsedCredits >= appliedCredit.TotalCredits)
+					// Tạo hoặc cập nhật invoice
+					_logger.LogInformation("Tạo/cập nhật invoice cho booking {BookingId}", booking.BookingId);
+					invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
+					if (invoice == null)
 					{
-						appliedCredit.Status = "USED_UP";
+						_logger.LogInformation("Tạo invoice mới cho booking {BookingId}", booking.BookingId);
+						invoice = new Domain.Entities.Invoice
+						{
+							BookingId = booking.BookingId,
+							CustomerId = booking.CustomerId,
+							Email = booking.Customer?.User?.Email,
+							Phone = booking.Customer?.User?.PhoneNumber,
+							Status = "PAID",
+							PackageDiscountAmount = 0,
+							PromotionDiscountAmount = 0,
+							CreatedAt = DateTime.UtcNow
+						};
+						await _invoiceRepository.CreateMinimalAsync(invoice);
+						_logger.LogInformation("Đã tạo invoice {InvoiceId} cho booking {BookingId}", invoice.InvoiceId, booking.BookingId);
 					}
-					
-					await _customerServiceCreditRepository.UpdateAsync(appliedCredit);
-					_logger.LogInformation("Used 1 credit from CustomerServiceCredit {CreditId} for customer {CustomerId}, package {PackageId}. UsedCredits: {UsedCredits}/{TotalCredits}", 
-						appliedCredit.CreditId, booking.CustomerId, appliedCredit.PackageId, appliedCredit.UsedCredits, appliedCredit.TotalCredits);
+					else
+					{
+						_logger.LogInformation("Cập nhật invoice {InvoiceId} cho booking {BookingId}", invoice.InvoiceId, booking.BookingId);
+						invoice.Status = "PAID";
+						// Note: IInvoiceRepository doesn't have UpdateAsync method
+						// Invoice will be updated when booking is updated
+					}
+
+					// Tính các khoản theo logic mới
+					var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+					decimal packageDiscountAmount = 0m;
+					decimal promotionDiscountAmount = 0m; // hook khuyến mãi sau
+					decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
+						.Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
+
+					if (booking.AppliedCreditId.HasValue)
+					{
+						var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+						if (appliedCredit?.ServicePackage != null)
+						{
+							packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+						}
+					}
+
+					decimal paymentAmount = (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice)
+											  - promotionDiscountAmount + partsAmount;
+
+					// Tạo payment record
+					_logger.LogInformation("Tạo payment record cho booking {BookingId} với amount {Amount}", booking.BookingId, paymentAmount);
+					payment = new Domain.Entities.Payment
+					{
+						InvoiceId = invoice.InvoiceId,
+						Amount = (int)Math.Round(paymentAmount),
+						PaymentMethod = "PAYOS",
+						Status = "COMPLETED",
+						PaymentCode = bookingId.ToString(),
+						CreatedAt = DateTime.UtcNow,
+						PaidAt = DateTime.UtcNow
+					};
+					await _paymentRepository.CreateAsync(payment);
+					_logger.LogInformation("Đã tạo payment {PaymentId} cho booking {BookingId}", payment.PaymentId, booking.BookingId);
+
+					// Cập nhật số liệu vào invoice
+					await _invoiceRepository.UpdateAmountsAsync(invoice.InvoiceId, packageDiscountAmount, promotionDiscountAmount, partsAmount);
+
+					// CustomerServiceCredit đã được tạo với status ACTIVE khi tạo booking
+					// Trừ credit khi thanh toán thành công
+					if (booking.AppliedCreditId.HasValue)
+					{
+						var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+						if (appliedCredit != null)
+						{
+							// Trừ 1 credit khi sử dụng dịch vụ
+							appliedCredit.UsedCredits += 1;
+							appliedCredit.UpdatedAt = DateTime.UtcNow;
+							
+							// Cập nhật status nếu hết credit
+							if (appliedCredit.UsedCredits >= appliedCredit.TotalCredits)
+							{
+								appliedCredit.Status = "USED_UP";
+							}
+							
+							await _customerServiceCreditRepository.UpdateAsync(appliedCredit);
+							_logger.LogInformation("Used 1 credit from CustomerServiceCredit {CreditId} for customer {CustomerId}, package {PackageId}. UsedCredits: {UsedCredits}/{TotalCredits}", 
+								appliedCredit.CreditId, booking.CustomerId, appliedCredit.PackageId, appliedCredit.UsedCredits, appliedCredit.TotalCredits);
+						}
+					}
+
+					// Commit transaction - tất cả thao tác database sẽ được lưu cùng lúc
+					scope.Complete();
+					_logger.LogInformation("=== TRANSACTION COMMITTED SUCCESSFULLY ===");
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "=== TRANSACTION ROLLBACK - Lỗi cập nhật database ===");
+					throw; // Re-throw để caller biết có lỗi
 				}
 			}
 

@@ -23,6 +23,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System;
 using System.Threading.Tasks;
+using System.Net.Http;
 using EVServiceCenter.Api.Extensions;
 using EVServiceCenter.Api.Middleware;
 using Microsoft.AspNetCore.Http;
@@ -109,6 +110,7 @@ builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IBookingHistoryService, BookingHistoryService>();
 builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
 builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
+builder.Services.AddScoped<IBookingStatisticsService, EVServiceCenter.Application.Service.BookingStatisticsService>();
 // Removed: MaintenancePolicyService no longer used
 // Removed: IMaintenanceChecklistItemService
 // Note: ChecklistPartService may be deprecated if not needed without ServiceParts

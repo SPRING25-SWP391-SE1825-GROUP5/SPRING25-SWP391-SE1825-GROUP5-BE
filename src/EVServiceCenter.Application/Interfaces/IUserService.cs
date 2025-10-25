@@ -11,6 +11,7 @@ namespace EVServiceCenter.Application.Interfaces
         Task<UserResponse> CreateUserAsync(CreateUserRequest request);
         Task<bool> ActivateUserAsync(int userId);
         Task<bool> DeactivateUserAsync(int userId);
+        Task<bool> UpdateUserStatusAsync(int userId, bool isActive);
         Task<bool> AssignUserRoleAsync(int userId, string role);
     }
 }

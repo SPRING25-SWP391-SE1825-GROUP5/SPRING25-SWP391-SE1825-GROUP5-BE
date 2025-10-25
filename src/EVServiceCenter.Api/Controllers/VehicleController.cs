@@ -119,39 +119,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        [HttpGet("{vehicleId:int}/next-service-due")]
-        public async Task<IActionResult> GetNextServiceDue(int vehicleId, [FromQuery] int? serviceId = null)
-        {
-            try
-            {
-                var vehicle = await _vehicleRepository.GetVehicleByIdAsync(vehicleId);
-                if (vehicle == null) return NotFound(new { success = false, message = "Không tìm thấy xe" });
-
-                DateTime? lastDate = vehicle.LastServiceDate?.ToDateTime(TimeOnly.MinValue);
-                int? lastMileage = vehicle.CurrentMileage;
-                int? effectiveServiceId = serviceId;
-
-                // WorkOrder functionality merged into Booking - get last completed booking instead
-                // This would need to be implemented in BookingRepository if needed
-                // For now, using vehicle's own data
-
-                if (!effectiveServiceId.HasValue)
-                {
-                    return Ok(new { success = true, message = "Chưa xác định được dịch vụ để tính chu kỳ", data = new { vehicleId, next = (object?)null } });
-                }
-
-                // Policy feature removed
-                if (true)
-                {
-                    return Ok(new { success = true, message = "Chưa cấu hình chính sách bảo trì (đã loại bỏ)", data = new { vehicleId, serviceId = effectiveServiceId } });
-                }
-                
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
-            }
-        }
 
         /// <summary>
         /// Lấy thông tin xe theo ID
@@ -187,71 +154,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Kiểm tra customer có tồn tại không
-        /// </summary>
-        /// <param name="customerId">ID của customer</param>
-        /// <returns>Thông tin customer</returns>
-        [HttpGet("check-customer/{customerId}")]
-        public async Task<IActionResult> CheckCustomerExists(int customerId)
-        {
-            try
-            {
-                _logger.LogInformation($"Checking customer existence for ID: {customerId}");
-                
-                // Kiểm tra customer với và không có User
-                var customer = await _customerRepository.GetCustomerByIdAsync(customerId);
-                var customerDebug = await _customerRepository.GetCustomerByIdDebugAsync(customerId);
-                
-                if (customerDebug == null)
-                {
-                    return NotFound(new { 
-                        success = false, 
-                        message = "Khách hàng không tồn tại",
-                        customerId = customerId
-                    });
-                }
-
-                if (customer == null)
-                {
-                    return Ok(new {
-                        success = true,
-                        message = "Khách hàng tồn tại nhưng thiếu thông tin User",
-                        data = new {
-                            customerId = customerDebug.CustomerId,
-                            userId = customerDebug.UserId,
-                            isGuest = customerDebug.IsGuest,
-                            userExists = false,
-                            fullName = "N/A",
-                            email = "N/A",
-                            phoneNumber = "N/A"
-                        }
-                    });
-                }
-
-                return Ok(new {
-                    success = true,
-                    message = "Khách hàng tồn tại và có đầy đủ thông tin",
-                    data = new {
-                        customerId = customer.CustomerId,
-                        userId = customer.UserId,
-                        isGuest = customer.IsGuest,
-                        userExists = true,
-                        fullName = customer.User?.FullName,
-                        email = customer.User?.Email,
-                        phoneNumber = customer.User?.PhoneNumber
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error checking customer existence for ID: {customerId}");
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống khi kiểm tra khách hàng" 
-                });
-            }
-        }
 
         /// <summary>
         /// Tạo xe mới
@@ -378,46 +280,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
 
-        /// <summary>
-        /// Debug endpoint để kiểm tra dữ liệu vehicle và customer
-        /// </summary>
-        /// <param name="vehicleId">ID xe</param>
-        /// <returns>Thông tin debug</returns>
-        [HttpGet("{vehicleId:int}/debug")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> DebugVehicleData(int vehicleId)
-        {
-            try
-            {
-                var vehicle = await _vehicleRepository.GetVehicleByIdAsync(vehicleId);
-                if (vehicle == null)
-                    return NotFound(new { success = false, message = "Không tìm thấy xe" });
-
-                var customer = await _customerRepository.GetCustomerByIdAsync(vehicle.CustomerId);
-                
-                return Ok(new { 
-                    success = true, 
-                    data = new {
-                        vehicleId = vehicle.VehicleId,
-                        vehicleCustomerId = vehicle.CustomerId,
-                        customerId = customer?.CustomerId,
-                        customerUserId = customer?.UserId,
-                        customerName = customer?.User?.FullName,
-                        customerEmail = customer?.User?.Email,
-                        customerPhone = customer?.User?.PhoneNumber,
-                        vehicleVin = vehicle.Vin,
-                        vehicleLicensePlate = vehicle.LicensePlate
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
 
         /// <summary>
         /// Tìm xe theo VIN hoặc biển số xe

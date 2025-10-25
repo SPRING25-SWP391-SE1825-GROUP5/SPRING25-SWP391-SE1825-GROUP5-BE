@@ -113,6 +113,9 @@ builder.Services.AddScoped<IPayOSService, EVServiceCenter.Application.Services.P
 builder.Services.AddHttpClient<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
+builder.Services.AddScoped<ITechnicianAvailabilityService, EVServiceCenter.Application.Service.TechnicianAvailabilityService>();
+builder.Services.AddScoped<ICenterRevenueService, EVServiceCenter.Application.Service.CenterRevenueService>();
+builder.Services.AddScoped<IPaymentMethodRevenueService, EVServiceCenter.Application.Service.PaymentMethodRevenueService>();
 // WorkOrderService removed - functionality merged into BookingService
 
 // E-commerce services

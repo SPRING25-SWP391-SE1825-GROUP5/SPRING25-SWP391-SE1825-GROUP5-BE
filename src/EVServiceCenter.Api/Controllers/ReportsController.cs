@@ -18,13 +18,19 @@ namespace EVServiceCenter.Api.Controllers
 	{
 		private readonly EVServiceCenter.Infrastructure.Configurations.EVDbContext _db;
 		private readonly IBookingStatisticsService _bookingStatisticsService;
+		private readonly ICenterRevenueService _centerRevenueService;
+		private readonly IPaymentMethodRevenueService _paymentMethodRevenueService;
 		
 		public ReportsController(
 			EVServiceCenter.Infrastructure.Configurations.EVDbContext db,
-			IBookingStatisticsService bookingStatisticsService)
+			IBookingStatisticsService bookingStatisticsService,
+			ICenterRevenueService centerRevenueService,
+			IPaymentMethodRevenueService paymentMethodRevenueService)
 		{
 			_db = db;
 			_bookingStatisticsService = bookingStatisticsService;
+			_centerRevenueService = centerRevenueService;
+			_paymentMethodRevenueService = paymentMethodRevenueService;
 		}
 
 		// GET /api/reports/revenue?from=...&to=...&method=PAYOS|CASH
@@ -392,6 +398,149 @@ namespace EVServiceCenter.Api.Controllers
 			}
 
 			return Ok(result);
+		}
+
+		/// <summary>
+		/// Lấy doanh thu của tất cả trung tâm
+		/// </summary>
+		/// <param name="startDate">Ngày bắt đầu (optional)</param>
+		/// <param name="endDate">Ngày kết thúc (optional)</param>
+		/// <param name="page">Trang hiện tại (default: 1)</param>
+		/// <param name="pageSize">Số bản ghi mỗi trang (default: 30)</param>
+		/// <returns>Danh sách doanh thu của tất cả trung tâm</returns>
+		[HttpGet("centers/revenue")]
+		public async Task<IActionResult> GetAllCentersRevenue(
+			[FromQuery] DateTime? startDate = null,
+			[FromQuery] DateTime? endDate = null,
+			[FromQuery] int page = 1,
+			[FromQuery] int pageSize = 30)
+		{
+			try
+			{
+				if (page <= 0)
+				{
+					return BadRequest(new CenterRevenueResponse
+					{
+						Success = false,
+						Message = "Page phải lớn hơn 0"
+					});
+				}
+
+				if (pageSize <= 0 || pageSize > 100)
+				{
+					return BadRequest(new CenterRevenueResponse
+					{
+						Success = false,
+						Message = "PageSize phải từ 1 đến 100"
+					});
+				}
+
+				var result = await _centerRevenueService.GetAllCentersRevenueAsync(
+					startDate, endDate, page, pageSize);
+
+				if (!result.Success)
+				{
+					return BadRequest(result);
+				}
+
+				return Ok(result);
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new CenterRevenueResponse
+				{
+					Success = false,
+					Message = $"Lỗi hệ thống: {ex.Message}"
+				});
+			}
+		}
+
+		/// <summary>
+		/// Lấy doanh thu của 1 trung tâm cụ thể
+		/// </summary>
+		/// <param name="centerId">ID của trung tâm</param>
+		/// <param name="startDate">Ngày bắt đầu (optional)</param>
+		/// <param name="endDate">Ngày kết thúc (optional)</param>
+		/// <returns>Doanh thu của trung tâm</returns>
+		[HttpGet("centers/{centerId}/revenue")]
+		public async Task<IActionResult> GetCenterRevenue(
+			[FromRoute] int centerId,
+			[FromQuery] DateTime? startDate = null,
+			[FromQuery] DateTime? endDate = null)
+		{
+			try
+			{
+				if (centerId <= 0)
+				{
+					return BadRequest(new CenterRevenueResponse
+					{
+						Success = false,
+						Message = "CenterId phải lớn hơn 0"
+					});
+				}
+
+				var result = await _centerRevenueService.GetCenterRevenueAsync(
+					centerId, startDate, endDate);
+
+				if (!result.Success)
+				{
+					return BadRequest(result);
+				}
+
+				return Ok(result);
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new CenterRevenueResponse
+				{
+					Success = false,
+					Message = $"Lỗi hệ thống: {ex.Message}"
+				});
+			}
+		}
+
+		/// <summary>
+		/// Lấy doanh thu theo phương thức thanh toán
+		/// </summary>
+		/// <param name="centerId">ID của trung tâm (optional - null = tất cả center)</param>
+		/// <param name="startDate">Ngày bắt đầu (optional)</param>
+		/// <param name="endDate">Ngày kết thúc (optional)</param>
+		/// <returns>Doanh thu theo phương thức thanh toán</returns>
+		[HttpGet("payment-methods")]
+		public async Task<IActionResult> GetPaymentMethodRevenue(
+			[FromQuery] int? centerId = null,
+			[FromQuery] DateTime? startDate = null,
+			[FromQuery] DateTime? endDate = null)
+		{
+			try
+			{
+				if (centerId.HasValue && centerId <= 0)
+				{
+					return BadRequest(new PaymentMethodRevenueResponse
+					{
+						Success = false,
+						Message = "CenterId phải lớn hơn 0"
+					});
+				}
+
+				var result = await _paymentMethodRevenueService.GetPaymentMethodRevenueAsync(
+					centerId, startDate, endDate);
+
+				if (!result.Success)
+				{
+					return BadRequest(result);
+				}
+
+				return Ok(result);
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new PaymentMethodRevenueResponse
+				{
+					Success = false,
+					Message = $"Lỗi hệ thống: {ex.Message}"
+				});
+			}
 		}
 	}
 }

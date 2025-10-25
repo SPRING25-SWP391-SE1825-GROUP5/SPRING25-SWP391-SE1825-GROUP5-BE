@@ -243,11 +243,10 @@ namespace EVServiceCenter.Application.Service
                 throw new ArgumentException("Email hoặc mật khẩu không đúng");
             }
 
-            // Note: Email verification is optional - users can login without verification
-            // Just log for tracking purposes
+            // Bắt buộc email verification trước khi login
             if (!user.EmailVerified)
             {
-                // User logged in without email verification
+                throw new ArgumentException("Vui lòng verify email trước khi đăng nhập. Kiểm tra email để lấy mã OTP.");
             }
             
             // Kiểm tra tài khoản có active không
@@ -812,6 +811,12 @@ namespace EVServiceCenter.Application.Service
                         user.UpdatedAt = DateTime.UtcNow;
                         await _authRepository.UpdateUserAsync(user);
                     }
+                }
+
+                // Bắt buộc email verification trước khi login
+                if (!user.EmailVerified)
+                {
+                    throw new ArgumentException("Vui lòng verify email trước khi đăng nhập. Kiểm tra email để lấy mã OTP.");
                 }
 
                 // Check if account is active

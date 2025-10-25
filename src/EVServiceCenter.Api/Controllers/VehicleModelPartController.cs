@@ -53,39 +53,7 @@ public class VehicleModelPartController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get compatible parts for a vehicle model
-    /// </summary>
-    [HttpGet("model/{modelId}/compatible")]
-    public async Task<ActionResult<IEnumerable<VehicleModelPartResponse>>> GetCompatibleParts(int modelId)
-    {
-        try
-        {
-            var parts = await _vehicleModelPartService.GetCompatiblePartsAsync(modelId);
-            return Ok(parts);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
-        }
-    }
 
-    /// <summary>
-    /// Get incompatible parts for a vehicle model
-    /// </summary>
-    [HttpGet("model/{modelId}/incompatible")]
-    public async Task<ActionResult<IEnumerable<VehicleModelPartResponse>>> GetIncompatibleParts(int modelId)
-    {
-        try
-        {
-            var parts = await _vehicleModelPartService.GetIncompatiblePartsAsync(modelId);
-            return Ok(parts);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
-        }
-    }
 
     /// <summary>
     /// Create vehicle model part relationship
@@ -159,23 +127,4 @@ public class VehicleModelPartController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Toggle compatibility status
-    /// </summary>
-    [HttpPatch("{id}/toggle-compatibility")]
-    public async Task<ActionResult> ToggleCompatibility(int id)
-    {
-        try
-        {
-            var result = await _vehicleModelPartService.ToggleCompatibilityAsync(id);
-            if (!result)
-                return NotFound(new { message = "Vehicle model part relationship not found" });
-
-            return Ok(new { message = "Compatibility status updated successfully" });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
-        }
-    }
 }

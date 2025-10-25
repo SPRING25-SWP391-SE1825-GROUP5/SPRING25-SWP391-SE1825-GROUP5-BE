@@ -515,6 +515,42 @@ namespace EVServiceCenter.Application.Service
         // GenerateTechnicianCode removed
 
         /// <summary>
+        /// Cập nhật trạng thái người dùng (activate/deactivate)
+        /// </summary>
+        /// <param name="userId">ID người dùng</param>
+        /// <param name="isActive">Trạng thái mới (true = activate, false = deactivate)</param>
+        /// <returns>Kết quả cập nhật</returns>
+        public async Task<bool> UpdateUserStatusAsync(int userId, bool isActive)
+        {
+            try
+            {
+                // Lấy thông tin user
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                {
+                    throw new ArgumentException("Không tìm thấy người dùng với ID này.");
+                }
+
+                // Cập nhật trạng thái
+                user.IsActive = isActive;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                // Lưu thay đổi
+                await _authRepository.UpdateUserAsync(user);
+
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi cập nhật trạng thái người dùng: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Gán vai trò cho người dùng (chỉ Admin)
         /// </summary>
         /// <param name="userId">ID người dùng</param>

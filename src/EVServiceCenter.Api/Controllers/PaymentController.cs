@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Service;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Application.Models.Requests;
 
 namespace EVServiceCenter.Api.Controllers;
 
@@ -80,6 +81,7 @@ public class PaymentController : ControllerBase
 
 
 
+
 	[AllowAnonymous]
 	[HttpGet("/api/payment/result")]
 	public async Task<IActionResult> PaymentResult([FromQuery] int bookingId, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] string? desc = null)
@@ -93,9 +95,9 @@ public class PaymentController : ControllerBase
 		var confirmed = false;
 		
 		if (payOSConfirmed)
+	{
+		try
 		{
-			try
-			{
 				confirmed = await _paymentService.ConfirmPaymentAsync(bookingId);
 			}
 			catch (Exception)
@@ -191,4 +193,5 @@ public class PaymentController : ControllerBase
 		var frontendCancelUrl = $"{frontendUrl}{cancelledPath}?bookingId={bookingId}&status={status}&code={code}";
 		return Redirect(frontendCancelUrl);
 	}
+
 }

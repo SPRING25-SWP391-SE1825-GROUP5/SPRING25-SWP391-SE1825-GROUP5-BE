@@ -41,7 +41,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 // Validate center exists
-                var center = await _centerRepository.GetByIdAsync(centerId);
+                var center = await _centerRepository.GetCenterByIdAsync(centerId);
                 if (center == null)
                 {
                     return new TechnicianAvailabilityResponse
@@ -52,7 +52,7 @@ namespace EVServiceCenter.Application.Service
                 }
 
                 // Get all technicians in center
-                var technicians = await _technicianRepository.GetByCenterIdAsync(centerId);
+                var technicians = await _technicianRepository.GetTechniciansByCenterIdAsync(centerId);
                 if (!technicians.Any())
                 {
                     return new TechnicianAvailabilityResponse
@@ -60,7 +60,7 @@ namespace EVServiceCenter.Application.Service
                         Success = true,
                         Message = "Không có technician nào trong trung tâm này",
                         Data = new List<TechnicianAvailabilityData>(),
-                        Summary = new SummaryInfo
+                               Summary = new AvailabilitySummary
                         {
                             CenterId = centerId,
                             CenterName = center.CenterName,
@@ -104,7 +104,7 @@ namespace EVServiceCenter.Application.Service
                         TotalPages = totalPages,
                         TotalRecords = totalRecords
                     },
-                    Summary = new SummaryInfo
+                               Summary = new AvailabilitySummary
                     {
                         CenterId = centerId,
                         CenterName = center.CenterName,
@@ -140,7 +140,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 // Validate center exists
-                var center = await _centerRepository.GetByIdAsync(centerId);
+                var center = await _centerRepository.GetCenterByIdAsync(centerId);
                 if (center == null)
                 {
                     return new TechnicianAvailabilityResponse
@@ -151,8 +151,8 @@ namespace EVServiceCenter.Application.Service
                 }
 
                 // Validate technician exists and belongs to center
-                var technician = await _technicianRepository.GetByIdAsync(technicianId);
-                if (technician == null || technician.CenterID != centerId)
+                var technician = await _technicianRepository.GetTechnicianByIdAsync(technicianId);
+                if (technician == null || technician.CenterId != centerId)
                 {
                     return new TechnicianAvailabilityResponse
                     {
@@ -196,7 +196,7 @@ namespace EVServiceCenter.Application.Service
                         TotalPages = totalPages,
                         TotalRecords = totalRecords
                     },
-                    Summary = new SummaryInfo
+                               Summary = new AvailabilitySummary
                     {
                         CenterId = centerId,
                         CenterName = center.CenterName,
@@ -250,19 +250,19 @@ namespace EVServiceCenter.Application.Service
 
             foreach (var technician in technicians)
             {
-                var technicianSlots = await _technicianTimeSlotRepository.GetByTechnicianAndDateAsync(technician.TechnicianID, date);
+                var technicianSlots = await _technicianTimeSlotRepository.GetTechnicianTimeSlotsByTechnicianAndDateAsync(technician.TechnicianId, date);
                 var technicianBookedSlots = technicianSlots.Count(ts => !ts.IsAvailable);
                 
-                totalSlots += technicianSlots.Count;
+                totalSlots += technicianSlots.Count();
                 bookedSlots += technicianBookedSlots;
 
                 technicianInfos.Add(new TechnicianInfo
                 {
-                    TechnicianId = technician.TechnicianID,
+                    TechnicianId = technician.TechnicianId,
                     Name = technician.User?.FullName ?? "Unknown",
-                    IsAvailable = technicianBookedSlots < technicianSlots.Count,
+                    IsAvailable = technicianBookedSlots < technicianSlots.Count(),
                     BookedSlots = technicianBookedSlots,
-                    TotalSlots = technicianSlots.Count
+                    TotalSlots = technicianSlots.Count()
                 });
             }
 
@@ -282,9 +282,9 @@ namespace EVServiceCenter.Application.Service
             Domain.Entities.Technician technician,
             DateTime date)
         {
-            var technicianSlots = await _technicianTimeSlotRepository.GetByTechnicianAndDateAsync(technician.TechnicianID, date);
+                var technicianSlots = await _technicianTimeSlotRepository.GetTechnicianTimeSlotsByTechnicianAndDateAsync(technician.TechnicianId, date);
             var bookedSlots = technicianSlots.Count(ts => !ts.IsAvailable);
-            var totalSlots = technicianSlots.Count;
+            var totalSlots = technicianSlots.Count();
 
             // Get time slot details
             var timeSlots = new List<TimeSlotInfo>();
@@ -294,14 +294,14 @@ namespace EVServiceCenter.Application.Service
                 {
                     Time = slot.Slot?.SlotTime.ToString(@"hh\:mm") ?? "Unknown",
                     IsAvailable = slot.IsAvailable,
-                    BookingId = slot.BookingID
+                    BookingId = slot.BookingId
                 });
             }
 
             return new TechnicianAvailabilityData
             {
                 Date = date.ToString("yyyy-MM-dd"),
-                TechnicianId = technician.TechnicianID,
+                TechnicianId = technician.TechnicianId,
                 TechnicianName = technician.User?.FullName ?? "Unknown",
                 IsFullyBooked = bookedSlots == totalSlots && totalSlots > 0,
                 TotalSlots = totalSlots,

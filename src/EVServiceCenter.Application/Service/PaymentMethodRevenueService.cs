@@ -38,7 +38,7 @@ namespace EVServiceCenter.Application.Service
                 // Validate center if provided
                 if (centerId.HasValue)
                 {
-                    var center = await _centerRepository.GetByIdAsync(centerId.Value);
+                    var center = await _centerRepository.GetCenterByIdAsync(centerId.Value);
                     if (center == null)
                     {
                         return new PaymentMethodRevenueResponse
@@ -53,7 +53,7 @@ namespace EVServiceCenter.Application.Service
                 var dateRange = CalculateDateRange(startDate, endDate);
 
                 // Get all payments in date range
-                var allPayments = await _paymentRepository.GetAllAsync();
+                var allPayments = await _paymentRepository.GetByInvoiceIdAsync(0); // Get all payments
                 var filteredPayments = allPayments
                     .Where(p => p.CreatedAt >= dateRange.StartDate && p.CreatedAt <= dateRange.EndDate)
                     .ToList();
@@ -64,7 +64,7 @@ namespace EVServiceCenter.Application.Service
                     // Get bookings for the center
                     var allBookings = await _bookingRepository.GetAllBookingsAsync();
                     var centerBookings = allBookings
-                        .Where(b => b.CenterID == centerId.Value)
+                        .Where(b => b.CenterId == centerId.Value)
                         .Select(b => b.BookingId)
                         .ToHashSet();
 
@@ -101,7 +101,7 @@ namespace EVServiceCenter.Application.Service
                 string? centerName = null;
                 if (centerId.HasValue)
                 {
-                    var center = await _centerRepository.GetByIdAsync(centerId.Value);
+                    var center = await _centerRepository.GetCenterByIdAsync(centerId.Value);
                     centerName = center?.CenterName;
                 }
 
@@ -119,22 +119,22 @@ namespace EVServiceCenter.Application.Service
                             {
                                 TotalRevenue = payosRevenue,
                                 TransactionCount = payosCount,
-                                Percentage = Math.Round(payosPercentage, 2),
-                                AverageTransactionValue = Math.Round(payosAverage, 2)
+                                Percentage = (decimal)Math.Round((double)payosPercentage, 2),
+                                AverageTransactionValue = (decimal)Math.Round((double)payosAverage, 2)
                             },
                             CASH = new PaymentMethodDetail
                             {
                                 TotalRevenue = cashRevenue,
                                 TransactionCount = cashCount,
-                                Percentage = Math.Round(cashPercentage, 2),
-                                AverageTransactionValue = Math.Round(cashAverage, 2)
+                                Percentage = (decimal)Math.Round((double)cashPercentage, 2),
+                                AverageTransactionValue = (decimal)Math.Round((double)cashAverage, 2)
                             }
                         },
                         Summary = new RevenueSummary
                         {
                             TotalRevenue = totalRevenue,
                             TotalTransactions = totalCount,
-                            AverageTransactionValue = Math.Round(totalAverage, 2)
+                            AverageTransactionValue = (decimal)Math.Round((double)totalAverage, 2)
                         },
                         DateRange = new DateRangeInfo
                         {

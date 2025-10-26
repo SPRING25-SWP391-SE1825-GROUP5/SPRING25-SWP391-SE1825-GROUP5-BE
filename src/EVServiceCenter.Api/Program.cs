@@ -187,6 +187,11 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
 builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 builder.Services.AddScoped<IConversationMemberRepository, ConversationMemberRepository>();
+
+// Notification Repository & Service
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<INotificationHub, EVServiceCenter.Api.Services.NotificationHubService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 builder.Services.AddHostedService<SlotAvailabilityUpdateService>();
@@ -279,7 +284,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("ADMIN"));
-    options.AddPolicy("StaffOrAdmin", policy => policy.RequireRole("ADMIN", "STAFF"));
+    options.AddPolicy("StaffOrAdmin", policy => policy.RequireRole("ADMIN", "STAFF", "TECHNICIAN"));
     options.AddPolicy("TechnicianOrAdmin", policy => policy.RequireRole("ADMIN", "TECHNICIAN"));
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });

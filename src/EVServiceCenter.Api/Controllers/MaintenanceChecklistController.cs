@@ -232,6 +232,64 @@ namespace EVServiceCenter.Api.Controllers
         { 
             public string Status { get; set; } = string.Empty; 
         }
+
+        // POST /api/maintenance-checklist/{bookingId}/confirm
+        [HttpPost("{bookingId:int}/confirm")]
+        public async Task<IActionResult> ConfirmCompletion(int bookingId)
+        {
+            var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
+            if (checklist == null) 
+                return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
+
+            // Lấy tất cả results của checklist
+            var results = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
+            
+            if (results == null || !results.Any())
+                return BadRequest(new { success = false, message = "Checklist chưa có phụ tùng nào" });
+
+            // Kiểm tra xem tất cả items đã được đánh giá chưa
+            var pendingItems = results.Where(r => 
+                string.IsNullOrEmpty(r.Result) || 
+                string.Equals(r.Result, "PENDING", StringComparison.OrdinalIgnoreCase) ||
+                r.Status == "PENDING"
+            ).ToList();
+
+            if (pendingItems.Any())
+            {
+                return BadRequest(new { 
+                    success = false, 
+                    message = $"Không thể xác nhận hoàn thành. Còn {pendingItems.Count} phụ tùng chưa được đánh giá",
+                    pendingItems = pendingItems.Select(item => new {
+                        partId = item.PartId,
+                        partName = item.Part?.PartName,
+                        status = item.Status
+                    })
+                });
+            }
+
+            // Tất cả items đã được đánh giá (PASS hoặc FAIL)
+            checklist.Status = "COMPLETED";
+            await _checkRepo.UpdateAsync(checklist);
+
+            // Đếm số lượng PASS, FAIL, NA
+            var passCount = results.Count(r => string.Equals(r.Result, "PASS", StringComparison.OrdinalIgnoreCase));
+            var failCount = results.Count(r => string.Equals(r.Result, "FAIL", StringComparison.OrdinalIgnoreCase));
+            var naCount = results.Count(r => string.Equals(r.Result, "NA", StringComparison.OrdinalIgnoreCase));
+            var totalCount = results.Count;
+
+            return Ok(new { 
+                success = true, 
+                message = "Xác nhận hoàn thành checklist thành công",
+                checklistId = checklist.ChecklistId,
+                status = checklist.Status,
+                statistics = new {
+                    total = totalCount,
+                    pass = passCount,
+                    fail = failCount,
+                    na = naCount
+                }
+            });
+        }
     }
 }
 

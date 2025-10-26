@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Application.Models;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
@@ -51,12 +52,10 @@ namespace EVServiceCenter.Application.Service
             var totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
             var pagination = new PaginationInfo
             {
-                CurrentPage = page,
+                Page = page,
                 PageSize = pageSize,
-                TotalItems = totalItems,
-                TotalPages = totalPages,
-                HasNextPage = page < totalPages,
-                HasPreviousPage = page > 1
+                TotalRecords = totalItems,
+                TotalPages = totalPages
             };
 
             var filters = new FilterInfo
@@ -221,9 +220,9 @@ namespace EVServiceCenter.Application.Service
                 },
                 TimeSlotInfo = new TimeSlotInfo
                 {
-                    SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
-                    StartTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString(@"hh\:mm") ?? "",
-                    EndTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.AddMinutes(60).ToString(@"hh\:mm") ?? "" // Assume 1 hour duration
+                    Time = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString(@"hh\:mm") ?? "",
+                    IsAvailable = booking.TechnicianTimeSlot?.IsAvailable ?? false,
+                    BookingId = booking.TechnicianTimeSlot?.BookingId
                 },
                 CostInfo = new CostInfo
                 {

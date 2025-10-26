@@ -92,20 +92,36 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+
         /// <summary>
-        /// Danh sách booking theo ngày của kỹ thuật viên (kèm WorkOrder)
+        /// Danh sách booking của kỹ thuật viên
         /// </summary>
         [HttpGet("{technicianId}/bookings")]
-        [Authorize(Policy = "TechnicianOrAdmin")]
-        public async Task<IActionResult> GetBookingsByDate(int technicianId, [FromQuery] string date)
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> GetBookings(int technicianId)
         {
             if (technicianId <= 0)
                 return BadRequest(new { success = false, message = "TechnicianId không hợp lệ" });
-            if (!DateOnly.TryParse(date, out var d))
-                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
 
-            var data = await _technicianService.GetBookingsByDateAsync(technicianId, d);
-            return Ok(new { success = true, message = "Lấy danh sách booking theo ngày thành công", data });
+            var data = await _technicianService.GetAllBookingsAsync(technicianId);
+            return Ok(new { success = true, message = "Lấy danh sách booking thành công", data });
+        }
+
+        /// <summary>
+        /// Chi tiết booking của kỹ thuật viên
+        /// </summary>
+        [HttpGet("{technicianId}/bookings/{bookingId}")]
+        [Authorize(Policy = "TechnicianOrAdmin")]
+        public async Task<IActionResult> GetBookingDetail(int technicianId, int bookingId)
+        {
+            if (technicianId <= 0)
+                return BadRequest(new { success = false, message = "TechnicianId không hợp lệ" });
+
+            if (bookingId <= 0)
+                return BadRequest(new { success = false, message = "BookingId không hợp lệ" });
+
+            var data = await _technicianService.GetBookingDetailAsync(technicianId, bookingId);
+            return Ok(new { success = true, message = "Lấy thông tin chi tiết booking thành công", data });
         }
 
         /// <summary>
@@ -141,8 +157,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
-
-
 
 
         /// <summary>

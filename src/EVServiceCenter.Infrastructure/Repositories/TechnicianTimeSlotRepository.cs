@@ -142,12 +142,8 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
 
         if (existingSlot != null)
         {
-            // Kiểm tra trạng thái slot
-            var status = existingSlot.GetStatus();
-            
-            // Chỉ reserve nếu slot available hoặc released
-            if (status != TechnicianTimeSlotStatus.Available && 
-                status != TechnicianTimeSlotStatus.Released)
+            // Kiểm tra trạng thái slot - chỉ reserve nếu available và chưa có booking
+            if (!existingSlot.IsAvailable || existingSlot.BookingId != null)
             {
                 return false; // Slot đang được sử dụng
             }
@@ -160,6 +156,8 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
             WHERE [TechnicianID] = {technicianId}
               AND CONVERT(date, [WorkDate]) = {date.Date}
               AND [SlotID] = {slotId}
+              AND [IsAvailable] = 1
+              AND [BookingID] IS NULL
         ");
 
         if (rows == 1)
@@ -201,14 +199,15 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
         var timeSlot = await _context.TechnicianTimeSlots
             .FirstOrDefaultAsync(t => t.TechnicianId == technicianId &&
                                      t.WorkDate.Date == date.Date &&
-                                     t.SlotId == slotId &&
-                                     !t.IsAvailable);
+                                     t.SlotId == slotId);
         
         if (timeSlot == null)
             return false;
 
+        // Release slot regardless of IsAvailable status
         timeSlot.IsAvailable = true;
         timeSlot.BookingId = null;
+        timeSlot.Notes = null; // Clear any notes
         await _context.SaveChangesAsync();
         return true;
     }
@@ -248,5 +247,19 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
                        t.IsAvailable == true &&
                        t.Slot.SlotTime < currentTime)
             .ToListAsync();
+    }
+
+    public async Task<bool> IsSlotTrulyAvailableAsync(int technicianId, DateTime date, int slotId)
+    {
+        var tts = await _context.TechnicianTimeSlots
+            .FirstOrDefaultAsync(t => t.TechnicianId == technicianId &&
+                                     t.WorkDate.Date == date.Date &&
+                                     t.SlotId == slotId);
+
+        // Nếu chưa có bản ghi → coi như còn trống (mặc định available)
+        if (tts == null) return true;
+        
+        // Kiểm tra cả IsAvailable và BookingId
+        return tts.IsAvailable && tts.BookingId == null;
     }
 }

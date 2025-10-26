@@ -23,4 +23,5 @@ public interface ITechnicianTimeSlotRepository
     Task<bool> UpdateSlotBookingIdAsync(int technicianId, DateTime date, int slotId, int bookingId);
     Task<List<TechnicianTimeSlot>> GetTechnicianTimeSlotsByTechnicianAndDateAsync(int technicianId, DateTime date);
     Task<List<TechnicianTimeSlot>> GetExpiredAvailableSlotsAsync(DateOnly workDate, TimeOnly currentTime);
+    Task<bool> IsSlotTrulyAvailableAsync(int technicianId, DateTime date, int slotId);
 }

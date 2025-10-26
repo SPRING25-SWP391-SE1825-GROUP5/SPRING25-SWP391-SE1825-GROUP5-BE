@@ -9,7 +9,7 @@ namespace EVServiceCenter.Application.Models
         public string Message { get; set; } = string.Empty;
         public List<TechnicianAvailabilityData>? Data { get; set; }
         public PaginationInfo? Pagination { get; set; }
-        public SummaryInfo? Summary { get; set; }
+        public AvailabilitySummary? Summary { get; set; }
     }
 
     public class TechnicianAvailabilityData
@@ -51,7 +51,7 @@ namespace EVServiceCenter.Application.Models
         public int TotalRecords { get; set; }
     }
 
-    public class SummaryInfo
+    public class AvailabilitySummary
     {
         public int CenterId { get; set; }
         public string CenterName { get; set; } = string.Empty;

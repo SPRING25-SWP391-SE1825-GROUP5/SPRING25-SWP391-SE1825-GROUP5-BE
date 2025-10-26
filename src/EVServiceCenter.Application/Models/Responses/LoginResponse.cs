@@ -19,5 +19,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public required string AvatarUrl { get; set; }
         public bool IsActive { get; set; }
         public bool EmailVerified { get; set; }
+        public int? CenterId { get; set; }
+        public string? CenterName { get; set; }
     }
 }

@@ -43,7 +43,7 @@ namespace EVServiceCenter.Application.Service
                 var dateRange = CalculateDateRange(startDate, endDate);
 
                 // Get all centers
-                var centers = await _centerRepository.GetAllAsync();
+                var centers = await _centerRepository.GetAllCentersAsync();
                 if (!centers.Any())
                 {
                     return new CenterRevenueResponse
@@ -65,7 +65,7 @@ namespace EVServiceCenter.Application.Service
                 var revenueData = new List<CenterRevenueData>();
                 foreach (var center in centers)
                 {
-                    var centerData = await CalculateCenterRevenue(center.CenterID, dateRange.StartDate, dateRange.EndDate);
+                    var centerData = await CalculateCenterRevenue(center.CenterId, dateRange.StartDate, dateRange.EndDate);
                     revenueData.Add(centerData);
                 }
 
@@ -114,7 +114,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 // Validate center exists
-                var center = await _centerRepository.GetByIdAsync(centerId);
+                var center = await _centerRepository.GetCenterByIdAsync(centerId);
                 if (center == null)
                 {
                     return new CenterRevenueResponse
@@ -171,12 +171,12 @@ namespace EVServiceCenter.Application.Service
         private async Task<CenterRevenueData> CalculateCenterRevenue(int centerId, DateTime startDate, DateTime endDate)
         {
             // Get center info
-            var center = await _centerRepository.GetByIdAsync(centerId);
+            var center = await _centerRepository.GetCenterByIdAsync(centerId);
 
             // Get all bookings for center in date range
             var allBookings = await _bookingRepository.GetAllBookingsAsync();
             var centerBookings = allBookings
-                .Where(b => b.CenterID == centerId && 
+                .Where(b => b.CenterId == centerId && 
                            b.CreatedAt >= startDate && 
                            b.CreatedAt <= endDate)
                 .ToList();
@@ -200,7 +200,7 @@ namespace EVServiceCenter.Application.Service
                 // Revenue by service
                 if (booking.Service != null)
                 {
-                    var serviceId = booking.Service.ServiceID;
+                    var serviceId = booking.Service.ServiceId;
                     var serviceName = booking.Service.ServiceName;
                     
                     if (revenueByService.ContainsKey(serviceId))

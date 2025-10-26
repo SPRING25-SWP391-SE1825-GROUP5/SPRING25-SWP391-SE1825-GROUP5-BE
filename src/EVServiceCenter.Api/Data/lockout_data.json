@@ -4,11 +4,5 @@
     "FailedAttempts": 1,
     "FirstFailedAttempt": "2025-10-22T01:46:55.3949015Z",
     "LockoutUntil": null
-  },
-  "manager1@evservice.com": {
-    "Email": "manager1@evservice.com",
-    "FailedAttempts": 2,
-    "FirstFailedAttempt": "2025-10-23T03:58:33.8783132Z",
-    "LockoutUntil": null
   }
 }

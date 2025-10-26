@@ -18,12 +18,14 @@ namespace EVServiceCenter.Application.Service
         private readonly ICustomerRepository _customerRepository;
         private readonly IAccountRepository _accountRepository;
         private readonly IEmailService _emailService;
+        private readonly IBookingRepository _bookingRepository;
 
-        public CustomerService(ICustomerRepository customerRepository, IAccountRepository accountRepository, IEmailService emailService)
+        public CustomerService(ICustomerRepository customerRepository, IAccountRepository accountRepository, IEmailService emailService, IBookingRepository bookingRepository)
         {
             _customerRepository = customerRepository;
             _accountRepository = accountRepository;
             _emailService = emailService;
+            _bookingRepository = bookingRepository;
         }
 
         public async Task<List<User>> GetAllUsersWithCustomerRoleAsync()
@@ -283,6 +285,61 @@ namespace EVServiceCenter.Application.Service
             return digits.StartsWith("0") ? digits : "0" + digits;
         }
 
-        
+        public async Task<CustomerBookingsResponse> GetCustomerBookingsAsync(int customerId)
+        {
+            var response = new CustomerBookingsResponse
+            {
+                CustomerId = customerId,
+                Bookings = new List<CustomerBookingItem>()
+            };
+
+            try
+            {
+                var bookings = await _bookingRepository.GetByCustomerIdAsync(customerId);
+
+                foreach (var booking in bookings)
+                {
+                    response.Bookings.Add(new CustomerBookingItem
+                    {
+                        BookingId = booking.BookingId,
+                        Status = booking.Status ?? "N/A",
+                        Date = booking.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd") ?? "N/A",
+                        SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
+                        SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel ?? "N/A", // Thêm SlotLabel
+                        ServiceName = booking.Service?.ServiceName ?? "N/A",
+                        CenterName = booking.Center?.CenterName ?? "N/A",
+                        VehiclePlate = booking.Vehicle?.LicensePlate ?? "N/A",
+                        SpecialRequests = booking.SpecialRequests ?? "N/A",
+                        CreatedAt = booking.CreatedAt
+                    });
+                }
+                return response;
+            }
+            catch (Exception ex)
+            {
+                // Log error if needed
+                Console.WriteLine($"Error getting customer bookings: {ex.Message}");
+                return new CustomerBookingsResponse
+                {
+                    CustomerId = customerId,
+                    Bookings = new List<CustomerBookingItem>()
+                };
+            }
+        }
+
+        public async Task<int?> GetCustomerUserIdAsync(int customerId)
+        {
+            try
+            {
+                var customer = await _customerRepository.GetCustomerByIdAsync(customerId);
+                return customer?.UserId;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting customer user ID: {ex.Message}");
+                return null;
+            }
+        }
     }
 }
+

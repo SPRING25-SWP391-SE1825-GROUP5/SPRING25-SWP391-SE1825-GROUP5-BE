@@ -83,3 +83,33 @@ public class UpdateFeedbackRequest
 }
 
 
+// Public feedback (không yêu cầu mua hàng): cho phụ tùng
+public class PublicPartFeedbackRequest
+{
+    [Range(1,5)]
+    public int Rating { get; set; }
+
+    [MaxLength(1000)]
+    public string? Comment { get; set; }
+
+    public bool IsAnonymous { get; set; }
+
+    // Cho phép ẩn danh nên CustomerId có thể null
+    public int? CustomerId { get; set; }
+}
+
+// Public feedback (không yêu cầu mua hàng): cho kỹ thuật viên
+public class PublicTechnicianFeedbackRequest
+{
+    [Range(1,5)]
+    public int Rating { get; set; }
+
+    [MaxLength(1000)]
+    public string? Comment { get; set; }
+
+    public bool IsAnonymous { get; set; }
+
+    public int? CustomerId { get; set; }
+}
+
+

@@ -15,7 +15,7 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
 
         entity.Property(e => e.InvoiceId).HasColumnName("InvoiceID");
         entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
-        entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
+        // WorkOrderId removed - functionality merged into Booking
         entity.Property(e => e.OrderId).HasColumnName("OrderID");
 
         entity.Property(e => e.Email).HasMaxLength(255);
@@ -29,14 +29,24 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .HasPrecision(0)
             .HasDefaultValueSql("(sysdatetime())");
 
+        // New discount columns
+        entity.Property(e => e.PackageDiscountAmount)
+            .HasColumnType("decimal(12, 2)")
+            .HasDefaultValue(0);
+        entity.Property(e => e.PromotionDiscountAmount)
+            .HasColumnType("decimal(12, 2)")
+            .HasDefaultValue(0);
+
+        // New: PartsAmount snapshot on invoice
+        entity.Property(e => e.PartsAmount)
+            .HasColumnType("decimal(12, 2)")
+            .HasDefaultValue(0);
+
         entity.HasOne(d => d.Customer)
             .WithMany(p => p.Invoices)
             .HasForeignKey(d => d.CustomerId);
 
-        entity.HasOne(d => d.WorkOrder)
-            .WithMany(p => p.Invoices)
-            .HasForeignKey(d => d.WorkOrderId)
-            .OnDelete(DeleteBehavior.ClientSetNull);
+        // WorkOrder relationship removed - functionality merged into Booking
 
         entity.HasOne(d => d.Order)
             .WithMany(p => p.Invoices)

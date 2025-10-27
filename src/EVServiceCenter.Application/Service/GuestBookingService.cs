@@ -56,7 +56,7 @@ public class GuestBookingService : IGuestBookingService
         var service = await _serviceRepository.GetServiceByIdAsync(request.ServiceId) ?? throw new ArgumentException("Dịch vụ không tồn tại.");
         if (!service.IsActive) throw new ArgumentException("Dịch vụ không hoạt động.");
         if (request.BookingDate < DateOnly.FromDateTime(DateTime.Today)) throw new ArgumentException("Ngày đặt lịch không được là ngày trong quá khứ.");
-        var slot = await _timeSlotRepository.GetByIdAsync(request.SlotId) ?? throw new ArgumentException("SlotId không tồn tại.");
+        var slot = await _timeSlotRepository.GetByIdAsync(request.TechnicianSlotId) ?? throw new ArgumentException("SlotId không tồn tại.");
 
         // CenterSchedule removed: chỉ kiểm tra Slot tồn tại & trung tâm active
 
@@ -94,7 +94,6 @@ public class GuestBookingService : IGuestBookingService
                 LicensePlate = request.LicensePlate,
                 Color = request.Color,
                 CurrentMileage = request.CurrentMileage,
-                PurchaseDate = request.PurchaseDate,
                 CreatedAt = DateTime.UtcNow
             };
             vehicle = await _vehicleRepository.CreateVehicleAsync(vehicle);
@@ -103,31 +102,18 @@ public class GuestBookingService : IGuestBookingService
         {
             vehicle.Color = request.Color ?? vehicle.Color;
             vehicle.CurrentMileage = request.CurrentMileage > 0 ? request.CurrentMileage : vehicle.CurrentMileage;
-            vehicle.PurchaseDate = request.PurchaseDate ?? vehicle.PurchaseDate;
             await _vehicleRepository.UpdateVehicleAsync(vehicle);
         }
 
-        // Pick technician
-        int? technicianId = null;
-        if (request.TechnicianId.HasValue)
-        {
-            var tech = await _technicianRepository.GetTechnicianByIdAsync(request.TechnicianId.Value);
-            if (tech == null || !tech.IsActive || tech.CenterId != request.CenterId)
-                throw new ArgumentException("Technician không hợp lệ cho trung tâm đã chọn.");
-            var available = await _technicianTimeSlotRepository.IsSlotAvailableAsync(tech.TechnicianId, request.BookingDate.ToDateTime(TimeOnly.MinValue), request.SlotId);
-            if (!available) throw new ArgumentException("Kỹ thuật viên đã bận ở khung giờ này.");
-            technicianId = tech.TechnicianId;
-        }
-        else
-        {
-            var techs = await _technicianRepository.GetTechniciansByCenterIdAsync(request.CenterId) ?? new System.Collections.Generic.List<Technician>();
-            foreach (var t in techs.Where(t => t.IsActive))
-            {
-                var available = await _technicianTimeSlotRepository.IsSlotAvailableAsync(t.TechnicianId, request.BookingDate.ToDateTime(TimeOnly.MinValue), request.SlotId);
-                if (available) { technicianId = t.TechnicianId; break; }
-            }
-            if (!technicianId.HasValue) throw new ArgumentException("Không có kỹ thuật viên khả dụng cho khung giờ này.");
-        }
+        // Validate technician time slot exists and is available
+        var timeSlot = await _technicianTimeSlotRepository.GetByIdAsync(request.TechnicianSlotId);
+        if (timeSlot == null)
+            throw new ArgumentException("Slot thời gian không tồn tại");
+
+        if (!timeSlot.IsAvailable)
+            throw new ArgumentException($"Khung giờ {timeSlot.Slot?.SlotLabel} ({timeSlot.Slot?.SlotTime}) của kỹ thuật viên {timeSlot.Technician?.User?.FullName} đã được đặt. Vui lòng chọn khung giờ khác.");
+
+        var technicianId = timeSlot.TechnicianId;
 
         // Create booking PENDING
         var booking = new Booking
@@ -135,9 +121,8 @@ public class GuestBookingService : IGuestBookingService
             CustomerId = customer.CustomerId,
             VehicleId = vehicle.VehicleId,
             CenterId = request.CenterId,
-            SlotId = request.SlotId,
+            TechnicianSlotId = null, // Will be set after technician assignment
             Status = "PENDING",
-            TotalCost = service.BasePrice,
             ServiceId = request.ServiceId,
             SpecialRequests = request.SpecialRequests?.Trim(),
             CreatedAt = DateTime.UtcNow,
@@ -148,10 +133,19 @@ public class GuestBookingService : IGuestBookingService
         // centerScheduleId
         // CenterScheduleId removed
 
-        booking = await _bookingRepository.CreateBookingAsync(booking);
+        try
+        {
+            booking = await _bookingRepository.CreateBookingAsync(booking);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx) when (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sql && (sql.Number == 2601 || sql.Number == 2627))
+        {
+            throw new ArgumentException("Slot đã được đặt bởi người khác. Vui lòng chọn khung giờ khác.");
+        }
 
-        // Reserve slot
-        try { await _technicianTimeSlotRepository.ReserveSlotAsync(technicianId!.Value, request.BookingDate.ToDateTime(TimeOnly.MinValue), request.SlotId, booking.BookingId); } catch { }
+        // Reserve slot using actual SlotId of the TechnicianTimeSlot and record BookingId
+        var reserveOk = await _technicianTimeSlotRepository.ReserveSlotAsync(technicianId, request.BookingDate.ToDateTime(TimeOnly.MinValue), timeSlot.SlotId, booking.BookingId);
+        if (!reserveOk)
+            throw new ArgumentException($"Khung giờ {timeSlot.Slot?.SlotLabel} ({timeSlot.Slot?.SlotTime}) của kỹ thuật viên {timeSlot.Technician?.User?.FullName} vừa được người khác giữ. Vui lòng chọn khung giờ khác.");
 
         // Create PayOS checkout link
         var checkoutUrl = await _paymentService.CreateBookingPaymentLinkAsync(booking.BookingId);
@@ -185,5 +179,6 @@ public class GuestBookingService : IGuestBookingService
         return $"BK{timestamp}{random}";
     }
 }
+
 
 

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
@@ -9,6 +10,7 @@ namespace EVServiceCenter.Application.Interfaces
         // Staff Management
         Task<StaffResponse> AddStaffToCenterAsync(AddStaffToCenterRequest request);
         Task<StaffResponse> GetStaffByIdAsync(int staffId);
+        Task<StaffResponse> GetStaffByUserIdAsync(int userId);
         Task<StaffListResponse> GetStaffByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null);
         Task<StaffListResponse> GetAllStaffAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null);
         Task<StaffResponse> UpdateStaffAsync(int staffId, UpdateStaffRequest request);
@@ -21,9 +23,19 @@ namespace EVServiceCenter.Application.Interfaces
         Task<TechnicianResponse> UpdateTechnicianAsync(int technicianId, UpdateTechnicianRequest request);
         Task<bool> RemoveTechnicianFromCenterAsync(int technicianId);
 
+        // Employee Management (Staff + Technician)
+        Task<EmployeeListResponse> GetCenterEmployeesAsync(int? centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, bool? isActive = null);
+        Task<EmployeeListResponse> GetUnassignedEmployeesAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, bool? isActive = null);
+        Task<EmployeeListResponse> GetAvailableUsersForEmployeeAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, bool? isActive = null);
+        
+        // Assignment APIs
+        Task<List<object>> AssignEmployeesToCenterAsync(List<int> userIds, int centerId);
+        
         // Validation
         Task<bool> IsUserAlreadyStaffAsync(int userId);
         Task<bool> IsUserAlreadyTechnicianAsync(int userId);
         Task<bool> CanUserBeAssignedToCenterAsync(int userId, int centerId);
+        Task<bool> CanUserBeAssignedAsStaffAsync(int userId, int centerId);
+        Task<bool> CanUserBeAssignedAsTechnicianAsync(int userId, int centerId);
     }
 }

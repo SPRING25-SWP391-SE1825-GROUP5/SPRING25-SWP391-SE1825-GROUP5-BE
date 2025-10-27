@@ -66,6 +66,15 @@ namespace EVServiceCenter.Infrastructure.Repositories
         }
 
         // InventoryPart methods (cấu trúc mới)
+        public async Task<List<InventoryPart>> GetAllInventoryPartsAsync()
+        {
+            return await _context.InventoryParts
+                .Include(ip => ip.Part)
+                .Include(ip => ip.Inventory)
+                .OrderBy(ip => ip.Part.PartName)
+                .ToListAsync();
+        }
+
         public async Task<List<InventoryPart>> GetInventoryPartsByInventoryIdAsync(int inventoryId)
         {
             return await _context.InventoryParts

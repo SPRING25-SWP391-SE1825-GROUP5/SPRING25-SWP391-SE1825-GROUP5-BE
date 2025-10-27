@@ -18,7 +18,7 @@ namespace EVServiceCenter.Application.Models.Requests
         public decimal DiscountValue { get; set; }
 
         [Required(ErrorMessage = "Loại giảm giá là bắt buộc")]
-        [RegularExpression("^(PERCENTAGE|FIXED)$", ErrorMessage = "Loại giảm giá phải là PERCENTAGE hoặc FIXED")]
+        [RegularExpression("^(PERCENT|FIXED)$", ErrorMessage = "Loại giảm giá phải là PERCENT hoặc FIXED")]
         public required string DiscountType { get; set; }
 
         [Range(0, double.MaxValue, ErrorMessage = "Số tiền đơn hàng tối thiểu phải là số lớn hơn hoặc bằng 0")]
@@ -35,7 +35,7 @@ namespace EVServiceCenter.Application.Models.Requests
         public decimal? MaxDiscount { get; set; }
 
         [Required(ErrorMessage = "Trạng thái là bắt buộc")]
-        [RegularExpression("^(ACTIVE|INACTIVE|EXPIRED)$", ErrorMessage = "Trạng thái phải là ACTIVE, INACTIVE hoặc EXPIRED")]
+        [RegularExpression("^(ACTIVE|CANCELLED|EXPIRED)$", ErrorMessage = "Trạng thái phải là ACTIVE, CANCELLED hoặc EXPIRED")]
         public required string Status { get; set; }
 
         [Range(1, int.MaxValue, ErrorMessage = "Giới hạn sử dụng phải là số nguyên lớn hơn 0")]

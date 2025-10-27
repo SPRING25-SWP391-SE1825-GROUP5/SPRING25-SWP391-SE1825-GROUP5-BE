@@ -192,5 +192,46 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="id">ID phụ tùng</param>
         /// <returns>Danh sách dịch vụ tương thích</returns>
         // Removed: GET /{id}/services (ServiceParts dependency)
+
+        /// <summary>
+        /// Lấy danh sách phụ tùng chưa có trong kho nào
+        /// </summary>
+        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
+        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
+        /// <param name="searchTerm">Từ khóa tìm kiếm (mã, tên, thương hiệu)</param>
+        /// <returns>Danh sách phụ tùng chưa có trong kho nào</returns>
+        [HttpGet("not-in-any-inventory")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
+        public async Task<IActionResult> GetPartsNotInAnyInventory(
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string? searchTerm = null)
+        {
+            try
+            {
+                // Validate pagination parameters
+                if (pageNumber < 1) pageNumber = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+                var result = await _partService.GetPartsNotInInventoryAsync(0, pageNumber, pageSize, searchTerm);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy danh sách phụ tùng chưa có trong kho nào thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
     }
 }

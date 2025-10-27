@@ -6,6 +6,7 @@ using EVServiceCenter.Application.Models.Responses;
 using System;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -17,12 +18,18 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly ITechnicianService _technicianService;
         private readonly ITimeSlotService _timeSlotService;
         private readonly IBookingService _bookingService;
+        private readonly ITechnicianDashboardService _dashboardService;
 
-        public TechnicianController(ITechnicianService technicianService, ITimeSlotService timeSlotService, IBookingService bookingService)
+        public TechnicianController(
+            ITechnicianService technicianService, 
+            ITimeSlotService timeSlotService, 
+            IBookingService bookingService,
+            ITechnicianDashboardService dashboardService)
         {
             _technicianService = technicianService;
             _timeSlotService = timeSlotService;
             _bookingService = bookingService;
+            _dashboardService = dashboardService;
         }
 
         /// <summary>
@@ -33,6 +40,36 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="searchTerm">Từ khóa tìm kiếm</param>
         /// <param name="centerId">Lọc theo trung tâm</param>
         /// <returns>Danh sách kỹ thuật viên</returns>
+        [HttpGet("by-center/{centerId}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetTechniciansByCenter(int centerId)
+        {
+            try
+            {
+                if (centerId <= 0)
+                    return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
+
+                var technicians = await _technicianService.GetAllTechniciansAsync(1, 100, null, centerId);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Lấy danh sách kỹ thuật viên của trung tâm {centerId} thành công",
+                    data = technicians
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetAllTechnicians(
             [FromQuery] int pageNumber = 1,
@@ -42,7 +79,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -63,20 +99,36 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+
         /// <summary>
-        /// Danh sách booking theo ngày của kỹ thuật viên (kèm WorkOrder)
+        /// Danh sách booking của kỹ thuật viên
         /// </summary>
         [HttpGet("{technicianId}/bookings")]
-        [Authorize(Policy = "TechnicianOrAdmin")]
-        public async Task<IActionResult> GetBookingsByDate(int technicianId, [FromQuery] string date)
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> GetBookings(int technicianId)
         {
             if (technicianId <= 0)
                 return BadRequest(new { success = false, message = "TechnicianId không hợp lệ" });
-            if (!DateOnly.TryParse(date, out var d))
-                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
 
-            var data = await _technicianService.GetBookingsByDateAsync(technicianId, d);
-            return Ok(new { success = true, message = "Lấy danh sách booking theo ngày thành công", data });
+            var data = await _technicianService.GetAllBookingsAsync(technicianId);
+            return Ok(new { success = true, message = "Lấy danh sách booking thành công", data });
+        }
+
+        /// <summary>
+        /// Chi tiết booking của kỹ thuật viên
+        /// </summary>
+        [HttpGet("{technicianId}/bookings/{bookingId}")]
+        [Authorize(Policy = "TechnicianOrAdmin")]
+        public async Task<IActionResult> GetBookingDetail(int technicianId, int bookingId)
+        {
+            if (technicianId <= 0)
+                return BadRequest(new { success = false, message = "TechnicianId không hợp lệ" });
+
+            if (bookingId <= 0)
+                return BadRequest(new { success = false, message = "BookingId không hợp lệ" });
+
+            var data = await _technicianService.GetBookingDetailAsync(technicianId, bookingId);
+            return Ok(new { success = true, message = "Lấy thông tin chi tiết booking thành công", data });
         }
 
         /// <summary>
@@ -113,105 +165,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy lịch làm việc của kỹ thuật viên theo ngày
-        /// </summary>
-        /// <param name="id">ID kỹ thuật viên</param>
-        /// <param name="date">Ngày cần xem lịch (YYYY-MM-DD)</param>
-        /// <returns>Lịch làm việc của kỹ thuật viên</returns>
-        [HttpGet("{id}/availability")]
-        public async Task<IActionResult> GetTechnicianAvailability(int id, [FromQuery] string date)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID kỹ thuật viên không hợp lệ" });
-
-                if (string.IsNullOrWhiteSpace(date))
-                    return BadRequest(new { success = false, message = "Ngày là bắt buộc (YYYY-MM-DD)" });
-
-                if (!DateOnly.TryParse(date, out DateOnly workDate))
-                    return BadRequest(new { success = false, message = "Định dạng ngày không hợp lệ. Vui lòng sử dụng YYYY-MM-DD" });
-
-                var availability = await _technicianService.GetTechnicianAvailabilityAsync(id, workDate);
-                
-                return Ok(new { 
-                    success = true, 
-                    message = "Lấy lịch làm việc thành công",
-                    data = availability
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
-
-        /// <summary>
-        /// Khả dụng của kỹ thuật viên theo dịch vụ trong 1 ngày (lọc theo center + service)
-        /// </summary>
-        [HttpGet("{technicianId}/availability-by-service")]
-        public async Task<IActionResult> GetTechnicianAvailabilityByService(
-            int technicianId,
-            [FromQuery] int centerId,
-            [FromQuery] string date,
-            [FromQuery] int serviceId)
-        {
-            if (technicianId <= 0 || centerId <= 0 || serviceId <= 0)
-                return BadRequest(new { success = false, message = "Thiếu tham số hoặc không hợp lệ" });
-            if (!DateOnly.TryParse(date, out var d))
-                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
-
-            var availability = await _bookingService.GetAvailabilityAsync(centerId, d, new System.Collections.Generic.List<int> { serviceId });
-            var slots = availability?.TimeSlots ?? new System.Collections.Generic.List<EVServiceCenter.Application.Models.Responses.TimeSlotAvailability>();
-            var availableSlotIds = slots
-                .Where(ts => ts.IsAvailable && ts.AvailableTechnicians.Any(t => t.TechnicianId == technicianId && t.IsAvailable))
-                .Select(ts => ts.SlotId)
-                .ToList();
-
-            return Ok(new { success = true, data = new { technicianId, centerId, serviceId, date = d, slotIds = availableSlotIds } });
-        }
-
-        /// <summary>
-        /// Khả dụng của kỹ thuật viên theo trung tâm trong 1 ngày (gom theo technician)
-        /// </summary>
-        [HttpGet("centers/{centerId}/technicians/availability")]
-        public async Task<IActionResult> GetCenterTechniciansAvailability(
-            int centerId,
-            [FromQuery] string date,
-            [FromQuery] int serviceId)
-        {
-            if (centerId <= 0 || serviceId <= 0)
-                return BadRequest(new { success = false, message = "Thiếu tham số hoặc không hợp lệ" });
-            if (!DateOnly.TryParse(date, out var d))
-                return BadRequest(new { success = false, message = "Ngày không hợp lệ (YYYY-MM-DD)" });
-
-            var availability = await _bookingService.GetAvailabilityAsync(centerId, d, new System.Collections.Generic.List<int> { serviceId });
-            var slots = availability?.TimeSlots ?? new System.Collections.Generic.List<EVServiceCenter.Application.Models.Responses.TimeSlotAvailability>();
-
-            var dict = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
-            foreach (var ts in slots.Where(s => s.IsAvailable))
-            {
-                foreach (var tech in ts.AvailableTechnicians.Where(t => t.IsAvailable))
-                {
-                    if (!dict.TryGetValue(tech.TechnicianId, out var list))
-                    {
-                        list = new System.Collections.Generic.List<int>();
-                        dict[tech.TechnicianId] = list;
-                    }
-                    list.Add(ts.SlotId);
-                }
-            }
-
-            return Ok(new { success = true, data = new { centerId, serviceId, date = d, technicians = dict } });
-        }
 
         /// <summary>
         /// Lấy danh sách timeslots của kỹ thuật viên
@@ -317,84 +270,213 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        // ============================================================================
+        // TECHNICIAN DASHBOARD APIs
+        // ============================================================================
+
         /// <summary>
-        /// Thêm/cập nhật danh sách kỹ năng cho kỹ thuật viên (ADMIN)
+        /// Lấy thông tin dashboard cho kỹ thuật viên
         /// </summary>
-        [HttpPost("{technicianId}/skills")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> UpsertSkills(int technicianId, [FromBody] UpsertTechnicianSkillsRequest request)
+        /// <param name="technicianId">ID kỹ thuật viên</param>
+        /// <returns>Dashboard overview</returns>
+        [HttpGet("{technicianId}/dashboard")]
+        [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
+        public async Task<IActionResult> GetDashboard(int technicianId)
         {
             try
             {
-                if (!ModelState.IsValid || request == null)
+                var result = await _dashboardService.GetDashboardAsync(technicianId);
+                
+                return Ok(new
                 {
-                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
-                }
-                await _technicianService.UpsertSkillsAsync(technicianId, request);
-                return Ok(new { success = true, message = "Cập nhật kỹ năng thành công" });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Xoá một kỹ năng của kỹ thuật viên (ADMIN)
-        /// </summary>
-        [HttpDelete("{technicianId}/skills/{skillId}")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> RemoveSkill(int technicianId, int skillId)
-        {
-            try
-            {
-                await _technicianService.RemoveSkillAsync(technicianId, skillId);
-                return Ok(new { success = true, message = "Xoá kỹ năng thành công" });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Lấy danh sách kỹ năng của technician
-        /// </summary>
-        /// <param name="technicianId">ID của technician</param>
-        /// <returns>Danh sách kỹ năng</returns>
-        [HttpGet("{technicianId}/skills")]
-        [Authorize(Policy = "StaffOrAdmin")]
-        public async Task<IActionResult> GetTechnicianSkills(int technicianId)
-        {
-            try
-            {
-                var skills = await _technicianService.GetTechnicianSkillsAsync(technicianId);
-                return Ok(new 
-                { 
-                    success = true, 
-                    message = "Lấy danh sách kỹ năng technician thành công",
-                    data = skills, 
-                    total = skills.Count 
+                    success = true,
+                    message = "Lấy thông tin dashboard thành công",
+                    data = result
                 });
             }
-            catch (ArgumentException ex)
+            catch (Exception ex)
             {
-                return BadRequest(new { success = false, message = ex.Message });
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách booking hôm nay của kỹ thuật viên
+        /// </summary>
+        /// <param name="technicianId">ID kỹ thuật viên</param>
+        /// <returns>Danh sách booking hôm nay</returns>
+        [HttpGet("{technicianId}/bookings/today")]
+        [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
+        public async Task<IActionResult> GetTodayBookings(int technicianId)
+        {
+            try
+            {
+                var result = await _dashboardService.GetTodayBookingsAsync(technicianId);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách booking hôm nay thành công",
+                    data = result
+                });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
             }
         }
+
+        /// <summary>
+        /// Lấy danh sách booking đang chờ của kỹ thuật viên
+        /// </summary>
+        /// <param name="technicianId">ID kỹ thuật viên</param>
+        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
+        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
+        /// <returns>Danh sách booking đang chờ</returns>
+        [HttpGet("{technicianId}/bookings/pending")]
+        [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
+        public async Task<IActionResult> GetPendingBookings(int technicianId, 
+            [FromQuery] int pageNumber = 1, 
+            [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                if (pageNumber < 1) pageNumber = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+                var result = await _dashboardService.GetPendingBookingsAsync(technicianId, pageNumber, pageSize);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách booking đang chờ thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách booking đang xử lý của kỹ thuật viên
+        /// </summary>
+        /// <param name="technicianId">ID kỹ thuật viên</param>
+        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
+        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
+        /// <returns>Danh sách booking đang xử lý</returns>
+        [HttpGet("{technicianId}/bookings/in-progress")]
+        [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
+        public async Task<IActionResult> GetInProgressBookings(int technicianId, 
+            [FromQuery] int pageNumber = 1, 
+            [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                if (pageNumber < 1) pageNumber = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+                var result = await _dashboardService.GetInProgressBookingsAsync(technicianId, pageNumber, pageSize);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách booking đang xử lý thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách booking đã hoàn thành của kỹ thuật viên
+        /// </summary>
+        /// <param name="technicianId">ID kỹ thuật viên</param>
+        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
+        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
+        /// <returns>Danh sách booking đã hoàn thành</returns>
+        [HttpGet("{technicianId}/bookings/completed")]
+        [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
+        public async Task<IActionResult> GetCompletedBookings(int technicianId, 
+            [FromQuery] int pageNumber = 1, 
+            [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                if (pageNumber < 1) pageNumber = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 10;
+
+                var result = await _dashboardService.GetCompletedBookingsAsync(technicianId, pageNumber, pageSize);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách booking đã hoàn thành thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy thống kê của kỹ thuật viên
+        /// </summary>
+        /// <param name="technicianId">ID kỹ thuật viên</param>
+        /// <returns>Thống kê</returns>
+        [HttpGet("{technicianId}/stats")]
+        [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
+        public async Task<IActionResult> GetStats(int technicianId)
+        {
+            try
+            {
+                var result = await _dashboardService.GetStatsAsync(technicianId);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy thống kê thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy hiệu suất của kỹ thuật viên
+        /// </summary>
+        /// <param name="technicianId">ID kỹ thuật viên</param>
+        /// <returns>Hiệu suất</returns>
+        [HttpGet("{technicianId}/performance")]
+        [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
+        public async Task<IActionResult> GetPerformance(int technicianId)
+        {
+            try
+            {
+                var result = await _dashboardService.GetPerformanceAsync(technicianId);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy hiệu suất thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
     }
 
 }

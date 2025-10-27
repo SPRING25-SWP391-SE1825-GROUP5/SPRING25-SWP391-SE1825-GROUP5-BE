@@ -38,7 +38,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="pageNumber">Số trang (mặc định: 1)</param>
         /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
         /// <param name="searchTerm">Từ khóa tìm kiếm (mã, mô tả)</param>
-        /// <param name="status">Lọc theo trạng thái (ACTIVE, INACTIVE, EXPIRED)</param>
+        /// <param name="status">Lọc theo trạng thái (ACTIVE, CANCELLED, EXPIRED)</param>
         /// <param name="promotionType">Lọc theo loại khuyến mãi (GENERAL, FIRST_TIME, BIRTHDAY, LOYALTY)</param>
         /// <returns>Danh sách khuyến mãi</returns>
         [HttpGet]
@@ -94,7 +94,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             var validate = await _promotionService.ValidatePromotionAsync(new ValidatePromotionRequest
             {
                 Code = request.Code.Trim().ToUpper(),
-                OrderAmount = booking.TotalCost ?? 0,
+                OrderAmount = booking.Service?.BasePrice ?? 0,
                 OrderType = "BOOKING"
             });
             if (!validate.IsValid)
@@ -208,24 +208,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             return Ok(new { success = true, message = "Áp dụng khuyến mãi thành công", data = validate });
         }
 
-        // ===== Usage (migrated from PromotionUsageController) =====
-        [HttpGet("promotions/usage")]
-        public async Task<IActionResult> GetUsage([FromQuery] int customerId)
-        {
-            if (customerId <= 0) return BadRequest(new { success = false, message = "customerId không hợp lệ" });
-            var items = await _promotionRepo.GetUserPromotionsByCustomerAsync(customerId);
-            var result = items.Select(x => new
-            {
-                code = x.Promotion?.Code,
-                description = x.Promotion?.Description,
-                bookingId = x.BookingId,
-                orderId = x.OrderId,
-                discountAmount = x.DiscountAmount,
-                usedAt = x.UsedAt,
-                status = x.Status
-            });
-            return Ok(new { success = true, data = result });
-        }
 
         [HttpDelete("orders/{orderId:int}/{promotionCode}")]
         public async Task<IActionResult> RemoveFromOrder(int orderId, string promotionCode)
@@ -452,96 +434,10 @@ namespace EVServiceCenter.WebAPI.Controllers
             return Ok(new { success = true, message = "Đã lưu khuyến mãi cho khách hàng" });
         }
 
-        /// <summary>
-        /// Kích hoạt khuyến mãi (chỉ ADMIN)
-        /// </summary>
-        /// <param name="id">ID khuyến mãi</param>
-        /// <returns>Kết quả kích hoạt</returns>
-        [HttpPut("{id}/activate")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> ActivatePromotion(int id)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID khuyến mãi không hợp lệ" });
 
-                var result = await _promotionService.ActivatePromotionAsync(id);
-                
-                if (result)
-                {
-                    return Ok(new { 
-                        success = true, 
-                        message = "Kích hoạt khuyến mãi thành công" 
-                    });
-                }
-                else
-                {
-                    return StatusCode(500, new { 
-                        success = false, 
-                        message = "Không thể kích hoạt khuyến mãi" 
-                    });
-                }
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
 
         /// <summary>
-        /// Vô hiệu hóa khuyến mãi (chỉ ADMIN)
-        /// </summary>
-        /// <param name="id">ID khuyến mãi</param>
-        /// <returns>Kết quả vô hiệu hóa</returns>
-        [HttpPut("{id}/deactivate")]
-        [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> DeactivatePromotion(int id)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID khuyến mãi không hợp lệ" });
-
-                var result = await _promotionService.DeactivatePromotionAsync(id);
-                
-                if (result)
-                {
-                    return Ok(new { 
-                        success = true, 
-                        message = "Vô hiệu hóa khuyến mãi thành công" 
-                    });
-                }
-                else
-                {
-                    return StatusCode(500, new { 
-                        success = false, 
-                        message = "Không thể vô hiệu hóa khuyến mãi" 
-                    });
-                }
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
-
-        /// <summary>
-        /// Lấy danh sách khuyến mãi đang hoạt động cho user
+        /// Lấy danh sách khuyến mãi đang hoạt động cho user (Public - không cần đăng nhập)
         /// </summary>
         /// <param name="pageNumber">Số trang (mặc định: 1)</param>
         /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
@@ -549,6 +445,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="promotionType">Lọc theo loại khuyến mãi (GENERAL, FIRST_TIME, BIRTHDAY, LOYALTY)</param>
         /// <returns>Danh sách khuyến mãi đang hoạt động</returns>
         [HttpGet("active")]
+        [AllowAnonymous] // ✅ Cho phép người chưa đăng nhập xem
         public async Task<IActionResult> GetActivePromotions(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,

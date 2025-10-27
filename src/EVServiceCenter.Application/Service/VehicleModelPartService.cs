@@ -41,11 +41,8 @@ public class VehicleModelPartService : IVehicleModelPartService
                 Id = modelPart.Id,
                 ModelId = modelPart.ModelId,
                 PartId = modelPart.PartId,
-                IsCompatible = modelPart.IsCompatible,
-                // CompatibilityNotes removed - using IsCompatible boolean instead
                 CreatedAt = modelPart.CreatedAt,
                 ModelName = model?.ModelName,
-                Brand = model?.Brand,
                 PartName = part?.PartName,
                 PartNumber = part?.PartNumber,
                 PartBrand = part?.Brand,
@@ -71,11 +68,8 @@ public class VehicleModelPartService : IVehicleModelPartService
                 Id = modelPart.Id,
                 ModelId = modelPart.ModelId,
                 PartId = modelPart.PartId,
-                IsCompatible = modelPart.IsCompatible,
-                // CompatibilityNotes removed - using IsCompatible boolean instead
                 CreatedAt = modelPart.CreatedAt,
                 ModelName = model?.ModelName,
-                Brand = model?.Brand,
                 PartName = part?.PartName,
                 PartNumber = part?.PartNumber,
                 PartBrand = part?.Brand,
@@ -107,8 +101,6 @@ public class VehicleModelPartService : IVehicleModelPartService
         {
             ModelId = request.ModelId,
             PartId = request.PartId,
-            IsCompatible = request.IsCompatible,
-            // CompatibilityNotes removed - using IsCompatible boolean instead
             CreatedAt = DateTime.Now
         };
 
@@ -119,11 +111,8 @@ public class VehicleModelPartService : IVehicleModelPartService
             Id = createdModelPart.Id,
             ModelId = createdModelPart.ModelId,
             PartId = createdModelPart.PartId,
-            IsCompatible = createdModelPart.IsCompatible,
-            // CompatibilityNotes removed - using IsCompatible boolean instead
             CreatedAt = createdModelPart.CreatedAt,
             ModelName = model.ModelName,
-            Brand = model.Brand,
             PartName = part.PartName,
             PartNumber = part.PartNumber,
             PartBrand = part.Brand,
@@ -137,9 +126,7 @@ public class VehicleModelPartService : IVehicleModelPartService
         if (modelPart == null)
             throw new KeyNotFoundException($"Vehicle model part relationship with ID {id} not found.");
 
-        if (request.IsCompatible.HasValue)
-            modelPart.IsCompatible = request.IsCompatible.Value;
-        // CompatibilityNotes removed - using IsCompatible boolean instead
+        // IsCompatible removed
 
         var updatedModelPart = await _vehicleModelPartRepository.UpdateAsync(modelPart);
 
@@ -151,11 +138,8 @@ public class VehicleModelPartService : IVehicleModelPartService
             Id = updatedModelPart.Id,
             ModelId = updatedModelPart.ModelId,
             PartId = updatedModelPart.PartId,
-            IsCompatible = updatedModelPart.IsCompatible,
-            // CompatibilityNotes removed - using IsCompatible boolean instead
             CreatedAt = updatedModelPart.CreatedAt,
             ModelName = model?.ModelName,
-            Brand = model?.Brand,
             PartName = part?.PartName,
             PartNumber = part?.PartNumber,
             PartBrand = part?.Brand,
@@ -178,14 +162,14 @@ public class VehicleModelPartService : IVehicleModelPartService
         if (modelPart == null)
             return false;
 
-        modelPart.IsCompatible = !modelPart.IsCompatible;
+        // ToggleCompatibility not applicable without IsCompatible
         await _vehicleModelPartRepository.UpdateAsync(modelPart);
         return true;
     }
 
     public async Task<IEnumerable<VehicleModelPartResponse>> GetCompatiblePartsAsync(int modelId)
     {
-        var modelParts = await _vehicleModelPartRepository.GetCompatiblePartsByModelIdAsync(modelId);
+        var modelParts = await _vehicleModelPartRepository.GetByModelIdAsync(modelId);
         var responses = new List<VehicleModelPartResponse>();
 
         foreach (var modelPart in modelParts)
@@ -198,11 +182,8 @@ public class VehicleModelPartService : IVehicleModelPartService
                 Id = modelPart.Id,
                 ModelId = modelPart.ModelId,
                 PartId = modelPart.PartId,
-                IsCompatible = modelPart.IsCompatible,
-                // CompatibilityNotes removed - using IsCompatible boolean instead
                 CreatedAt = modelPart.CreatedAt,
                 ModelName = model?.ModelName,
-                Brand = model?.Brand,
                 PartName = part?.PartName,
                 PartNumber = part?.PartNumber,
                 PartBrand = part?.Brand,
@@ -215,7 +196,7 @@ public class VehicleModelPartService : IVehicleModelPartService
 
     public async Task<IEnumerable<VehicleModelPartResponse>> GetIncompatiblePartsAsync(int modelId)
     {
-        var modelParts = await _vehicleModelPartRepository.GetIncompatiblePartsByModelIdAsync(modelId);
+        var modelParts = await _vehicleModelPartRepository.GetByModelIdAsync(modelId);
         var responses = new List<VehicleModelPartResponse>();
 
         foreach (var modelPart in modelParts)
@@ -228,11 +209,8 @@ public class VehicleModelPartService : IVehicleModelPartService
                 Id = modelPart.Id,
                 ModelId = modelPart.ModelId,
                 PartId = modelPart.PartId,
-                IsCompatible = modelPart.IsCompatible,
-                // CompatibilityNotes removed - using IsCompatible boolean instead
                 CreatedAt = modelPart.CreatedAt,
                 ModelName = model?.ModelName,
-                Brand = model?.Brand,
                 PartName = part?.PartName,
                 PartNumber = part?.PartNumber,
                 PartBrand = part?.Brand,

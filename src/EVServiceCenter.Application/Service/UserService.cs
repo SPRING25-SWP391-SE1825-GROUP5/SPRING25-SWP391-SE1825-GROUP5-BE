@@ -114,12 +114,12 @@ namespace EVServiceCenter.Application.Service
                 {
                     Email = request.Email.ToLower().Trim(),
                     FullName = request.FullName.Trim(),
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(GenerateTempPassword(out var tempPassword)),
                     PhoneNumber = request.PhoneNumber.Trim(),
                     Address = !string.IsNullOrWhiteSpace(request.Address) ? request.Address.Trim() : null,
                     DateOfBirth = request.DateOfBirth,
                     Gender = request.Gender,
-                    Role = "CUSTOMER", // Luôn mặc định là CUSTOMER
+                    Role = request.Role?.Trim().ToUpper(),
                     IsActive = true, // Mặc định là active
                     EmailVerified = false, // Luôn cần verify email
                     CreatedAt = DateTime.UtcNow,
@@ -141,10 +141,16 @@ namespace EVServiceCenter.Application.Service
                     await _customerRepository.CreateCustomerAsync(customer);
                 }
 
-                // Tạo và gửi mã OTP xác thực email
-                var otpCode = _otpService.GenerateOtp();
-                await _otpService.CreateOtpAsync(user.UserId, otpCode, "EMAIL_VERIFICATION");
-                await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
+                // Gửi email mật khẩu tạm cho user
+                await _emailService.SendEmailAsync(user.Email, "Tài khoản của bạn đã được tạo", GenerateTempPasswordEmailBody(user.FullName, tempPassword));
+
+                // Nếu admin đã đánh dấu emailVerified=true thì bỏ qua OTP; ngược lại gửi OTP
+                if (!request.EmailVerified)
+                {
+                    var otpCode = _otpService.GenerateOtp();
+                    await _otpService.CreateOtpAsync(user.UserId, otpCode, "EMAIL_VERIFICATION");
+                    await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
+                }
 
                 return MapToUserResponse(user);
             }
@@ -305,11 +311,7 @@ namespace EVServiceCenter.Application.Service
                 errors.Add("Email không đúng định dạng");
             }
 
-            // Check password strength
-            if (!IsValidPassword(request.Password))
-            {
-                errors.Add("Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.");
-            }
+            // Password không yêu cầu khi tạo (dùng mật khẩu tạm gửi email)
 
             // Check phone number format
             if (!IsValidPhoneNumber(request.PhoneNumber))
@@ -329,17 +331,13 @@ namespace EVServiceCenter.Application.Service
                 errors.Add("Giới tính phải là MALE hoặc FEMALE.");
             }
 
-            // Validate role - chỉ cho phép CUSTOMER (default value đã là CUSTOMER)
-            if (request.Role != "CUSTOMER")
+            // Validate role cho ADMIN: cho phép ADMIN/STAFF/TECHNICIAN/CUSTOMER
+            if (!IsValidRole(request.Role))
             {
-                errors.Add("Chỉ được tạo tài khoản CUSTOMER. Vai trò khác phải được tạo bởi Admin.");
+                errors.Add("Vai trò không hợp lệ. Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
             }
 
-            // Validate emailVerified - phải là false
-            if (request.EmailVerified)
-            {
-                errors.Add("Email chưa được xác thực. Vui lòng để emailVerified = false.");
-            }
+            // EmailVerified: cho phép ADMIN đánh dấu đã xác thực để bỏ qua bước OTP
 
             // Check email uniqueness
             var existingUserByEmail = await _accountRepository.GetAccountByEmailAsync(request.Email);
@@ -386,7 +384,7 @@ namespace EVServiceCenter.Application.Service
             // Check role
             if (!IsValidRole(request.Role))
             {
-                errors.Add("Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
+                errors.Add("Vai trò phải là ADMIN, MANAGER, STAFF, TECHNICIAN hoặc CUSTOMER.");
             }
 
             // Check phone uniqueness (excluding current user)
@@ -457,7 +455,7 @@ namespace EVServiceCenter.Application.Service
             if (string.IsNullOrWhiteSpace(role))
                 return false;
 
-            var validRoles = new[] { "ADMIN", "STAFF", "TECHNICIAN", "CUSTOMER" };
+            var validRoles = new[] { "ADMIN", "MANAGER", "STAFF", "TECHNICIAN", "CUSTOMER" };
             return validRoles.Contains(role, StringComparer.Ordinal);
         }
 
@@ -494,8 +492,63 @@ namespace EVServiceCenter.Application.Service
             var random = new Random().Next(10, 99);
             return $"ST{timestamp}{random}";
         }
+        private string GenerateTempPassword(out string plain)
+        {
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789@$!%*?&";
+            var rnd = new Random();
+            plain = new string(Enumerable.Range(0, 12).Select(_ => chars[rnd.Next(chars.Length)]).ToArray());
+            return plain;
+        }
+
+        private string GenerateTempPasswordEmailBody(string fullName, string tempPwd)
+        {
+            return $@"<!DOCTYPE html><html><body style='font-family:Arial,sans-serif'>
+<h2>EV Service Center - Tài khoản được tạo</h2>
+<p>Xin chào {fullName},</p>
+<p>Tài khoản của bạn đã được tạo thành công. Mật khẩu tạm thời của bạn là: <strong>{tempPwd}</strong></p>
+<p>Vui lòng đăng nhập và đổi mật khẩu ngay để đảm bảo an toàn.</p>
+<p>Trân trọng,</p>
+<p>EV Service Center</p>
+</body></html>";
+        }
 
         // GenerateTechnicianCode removed
+
+        /// <summary>
+        /// Cập nhật trạng thái người dùng (activate/deactivate)
+        /// </summary>
+        /// <param name="userId">ID người dùng</param>
+        /// <param name="isActive">Trạng thái mới (true = activate, false = deactivate)</param>
+        /// <returns>Kết quả cập nhật</returns>
+        public async Task<bool> UpdateUserStatusAsync(int userId, bool isActive)
+        {
+            try
+            {
+                // Lấy thông tin user
+                var user = await _authRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                {
+                    throw new ArgumentException("Không tìm thấy người dùng với ID này.");
+                }
+
+                // Cập nhật trạng thái
+                user.IsActive = isActive;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                // Lưu thay đổi
+                await _authRepository.UpdateUserAsync(user);
+
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi cập nhật trạng thái người dùng: {ex.Message}");
+            }
+        }
 
         /// <summary>
         /// Gán vai trò cho người dùng (chỉ Admin)

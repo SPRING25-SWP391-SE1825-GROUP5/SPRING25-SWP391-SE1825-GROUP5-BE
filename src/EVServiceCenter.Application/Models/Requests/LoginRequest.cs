@@ -9,11 +9,12 @@ namespace EVServiceCenter.Application.Models.Requests
 {
     public class LoginRequest
     {
-        [Required(ErrorMessage = "Email ho?c s? di?n tho?i l� b?t bu?c")]
-        public required string EmailOrPhone { get; set; }
+        [Required(ErrorMessage = "Email là bắt buộc")]
+        [EmailAddress(ErrorMessage = "Email không đúng định dạng")]
+        public required string Email { get; set; }
 
-        [Required(ErrorMessage = "M?t kh?u l� b?t bu?c")]
-        [StringLength(100, MinimumLength = 1, ErrorMessage = "M?t kh?u kh�ng du?c d? tr?ng")]
+        [Required(ErrorMessage = "Mật khẩu là bắt buộc")]
+        [StringLength(100, MinimumLength = 1, ErrorMessage = "Mật khẩu không được để trống")]
         public required string Password { get; set; }
     }
 }

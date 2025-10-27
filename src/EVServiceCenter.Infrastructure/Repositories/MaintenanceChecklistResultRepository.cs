@@ -16,26 +16,38 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<List<MaintenanceChecklistResult>> GetByChecklistIdAsync(int checklistId)
         {
             return await _db.MaintenanceChecklistResults
+                .Include(r => r.Part) // Include Part entity để lấy PartName và Description
                 .Where(r => r.ChecklistId == checklistId)
                 .ToListAsync();
         }
 
         public async Task UpsertAsync(MaintenanceChecklistResult result)
         {
-            var existing = result.ResultId != 0
-                ? await _db.MaintenanceChecklistResults.FirstOrDefaultAsync(r => r.ResultId == result.ResultId)
-                : null;
+            // Ưu tiên cập nhật theo ResultId nếu có
+            MaintenanceChecklistResult? existing = null;
+            if (result.ResultId != 0)
+            {
+                existing = await _db.MaintenanceChecklistResults
+                    .FirstOrDefaultAsync(r => r.ResultId == result.ResultId);
+            }
+            else
+            {
+                // Nếu không có ResultId, dùng khóa tự nhiên (ChecklistId, PartId)
+                existing = await _db.MaintenanceChecklistResults
+                    .FirstOrDefaultAsync(r => r.ChecklistId == result.ChecklistId && r.PartId == result.PartId);
+            }
+
             if (existing == null)
             {
                 // đảm bảo không set ResultId thủ công cho identity
                 result.ResultId = 0;
-                _db.MaintenanceChecklistResults.Add(result);
+                await _db.MaintenanceChecklistResults.AddAsync(result);
             }
             else
             {
                 existing.Description = result.Description;
                 existing.Result = result.Result;
-                existing.Comment = result.Comment;
+                existing.Status = result.Status;
             }
             await _db.SaveChangesAsync();
         }
@@ -46,6 +58,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
             {
                 await UpsertAsync(r);
             }
+        }
+
+        public async Task UpdateAsync(MaintenanceChecklistResult result)
+        {
+            _db.MaintenanceChecklistResults.Update(result);
+            await _db.SaveChangesAsync();
         }
     }
 }

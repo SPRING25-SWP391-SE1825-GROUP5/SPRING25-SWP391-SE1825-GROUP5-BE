@@ -16,9 +16,7 @@ namespace EVServiceCenter.Application.Models.Requests
         [Range(0, double.MaxValue, ErrorMessage = "Giá dịch vụ phải lớn hơn hoặc bằng 0")]
         public decimal BasePrice { get; set; }
 
-        // Với mô hình mỗi booking 1 slot cố định, không yêu cầu thời gian ước tính
-
-        // Loại bỏ notes khỏi request vì DB không có cột tương ứng
+        
 
         public bool IsActive { get; set; } = true;
     }

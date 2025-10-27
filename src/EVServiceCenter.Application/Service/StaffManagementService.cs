@@ -86,6 +86,26 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<StaffResponse> GetStaffByUserIdAsync(int userId)
+        {
+            try
+            {
+                var staff = await _staffRepository.GetStaffByUserIdAsync(userId);
+                if (staff == null)
+                    throw new ArgumentException("Không tìm thấy thông tin staff cho user này.");
+
+                return await MapToStaffResponseAsync(staff.StaffId);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy thông tin staff theo userId: {ex.Message}");
+            }
+        }
+
         public async Task<StaffListResponse> GetStaffByCenterAsync(int centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, string? position = null, bool? isActive = null)
         {
             try
@@ -468,6 +488,52 @@ namespace EVServiceCenter.Application.Service
             return !isAlreadyStaff && !isAlreadyTechnician;
         }
 
+        public async Task<bool> CanUserBeAssignedAsStaffAsync(int userId, int centerId)
+        {
+            // Check if user exists
+            var user = await _userRepository.GetUserByIdAsync(userId);
+            if (user == null)
+                return false;
+
+            // Check if user has STAFF role
+            if (user.Role != "STAFF")
+                return false;
+
+            // Check if center exists
+            var center = await _centerRepository.GetCenterByIdAsync(centerId);
+            if (center == null)
+                return false;
+
+            // Check if user is already staff or technician
+            var isAlreadyStaff = await IsUserAlreadyStaffAsync(userId);
+            var isAlreadyTechnician = await IsUserAlreadyTechnicianAsync(userId);
+
+            return !isAlreadyStaff && !isAlreadyTechnician;
+        }
+
+        public async Task<bool> CanUserBeAssignedAsTechnicianAsync(int userId, int centerId)
+        {
+            // Check if user exists
+            var user = await _userRepository.GetUserByIdAsync(userId);
+            if (user == null)
+                return false;
+
+            // Check if user has TECHNICIAN role
+            if (user.Role != "TECHNICIAN")
+                return false;
+
+            // Check if center exists
+            var center = await _centerRepository.GetCenterByIdAsync(centerId);
+            if (center == null)
+                return false;
+
+            // Check if user is already staff or technician
+            var isAlreadyStaff = await IsUserAlreadyStaffAsync(userId);
+            var isAlreadyTechnician = await IsUserAlreadyTechnicianAsync(userId);
+
+            return !isAlreadyStaff && !isAlreadyTechnician;
+        }
+
         #endregion
 
         #region Private Helper Methods
@@ -562,6 +628,420 @@ namespace EVServiceCenter.Application.Service
         // GenerateStaffCode removed
 
         // GenerateTechnicianCode removed
+
+        #endregion
+
+        #region Employee Management (Staff + Technician)
+
+        public async Task<EmployeeListResponse> GetUnassignedEmployeesAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, bool? isActive = null)
+        {
+            try
+            {
+                // Get staff and technicians with CenterId = 0 (unassigned)
+                var allStaff = await _staffRepository.GetStaffByCenterIdAsync(0);
+                var allTechnicians = await _technicianRepository.GetTechniciansByCenterIdAsync(0);
+
+                // Combine and map to EmployeeResponse
+                var allEmployees = new List<EmployeeResponse>();
+
+                // Map Staff to EmployeeResponse
+                foreach (var staff in allStaff)
+                {
+                    allEmployees.Add(new EmployeeResponse
+                    {
+                        Type = "STAFF",
+                        StaffId = staff.StaffId,
+                        TechnicianId = null,
+                        UserId = staff.UserId,
+                        FullName = staff.User?.FullName ?? "N/A",
+                        Email = staff.User?.Email ?? "N/A",
+                        PhoneNumber = staff.User?.PhoneNumber ?? "N/A",
+                        Role = "STAFF",
+                        IsActive = staff.IsActive,
+                        CenterId = staff.CenterId,
+                        CenterName = "Chưa gán trung tâm",
+                        Position = null,
+                        Rating = null,
+                        CreatedAt = staff.CreatedAt
+                    });
+                }
+
+                // Map Technician to EmployeeResponse
+                foreach (var technician in allTechnicians)
+                {
+                    allEmployees.Add(new EmployeeResponse
+                    {
+                        Type = "TECHNICIAN",
+                        StaffId = null,
+                        TechnicianId = technician.TechnicianId,
+                        UserId = technician.UserId,
+                        FullName = technician.User?.FullName ?? "N/A",
+                        Email = technician.User?.Email ?? "N/A",
+                        PhoneNumber = technician.User?.PhoneNumber ?? "N/A",
+                        Role = "TECHNICIAN",
+                        IsActive = technician.IsActive,
+                        CenterId = technician.CenterId,
+                        CenterName = "Chưa gán trung tâm",
+                        Position = technician.Position,
+                        Rating = technician.Rating,
+                        CreatedAt = technician.CreatedAt
+                    });
+                }
+
+                // Apply filters
+                var filteredEmployees = allEmployees.AsQueryable();
+
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    var searchLower = searchTerm.ToLower();
+                    filteredEmployees = filteredEmployees.Where(e => 
+                        e.FullName.ToLower().Contains(searchLower) ||
+                        e.Email.ToLower().Contains(searchLower) ||
+                        e.PhoneNumber.Contains(searchTerm));
+                }
+
+                if (isActive.HasValue)
+                {
+                    filteredEmployees = filteredEmployees.Where(e => e.IsActive == isActive.Value);
+                }
+
+                // Apply pagination
+                var totalCount = filteredEmployees.Count();
+                var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+                
+                var pagedEmployees = filteredEmployees
+                    .OrderByDescending(e => e.CreatedAt)
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return new EmployeeListResponse
+                {
+                    Employees = pagedEmployees,
+                    TotalCount = totalCount,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    TotalPages = totalPages
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy danh sách nhân viên chưa có centerId: {ex.Message}");
+            }
+        }
+
+        public async Task<EmployeeListResponse> GetAvailableUsersForEmployeeAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, bool? isActive = null)
+        {
+            try
+            {
+                // Get all users with role STAFF or TECHNICIAN
+                var allUsers = await _userRepository.GetAllUsersAsync();
+                var staffTechnicianUsers = allUsers.Where(u => u.Role == "STAFF" || u.Role == "TECHNICIAN").ToList();
+
+                // Get existing staff and technician user IDs
+                var existingStaffUserIds = (await _staffRepository.GetAllStaffAsync()).Select(s => s.UserId).ToHashSet();
+                var existingTechnicianUserIds = (await _technicianRepository.GetAllTechniciansAsync()).Select(t => t.UserId).ToHashSet();
+
+                // Filter users who don't have staff or technician records
+                var availableUsers = staffTechnicianUsers.Where(u => 
+                    !existingStaffUserIds.Contains(u.UserId) && 
+                    !existingTechnicianUserIds.Contains(u.UserId)).ToList();
+
+                // Map to EmployeeResponse
+                var allEmployees = new List<EmployeeResponse>();
+                foreach (var user in availableUsers)
+                {
+                    allEmployees.Add(new EmployeeResponse
+                    {
+                        Type = user.Role ?? "N/A",
+                        StaffId = null,
+                        TechnicianId = null,
+                        UserId = user.UserId,
+                        FullName = user.FullName ?? "N/A",
+                        Email = user.Email ?? "N/A",
+                        PhoneNumber = user.PhoneNumber ?? "N/A",
+                        Role = user.Role ?? "N/A",
+                        IsActive = user.IsActive,
+                        CenterId = 0,
+                        CenterName = "Chưa tạo bản ghi nhân viên",
+                        Position = null,
+                        Rating = null,
+                        CreatedAt = user.CreatedAt
+                    });
+                }
+
+                // Apply filters
+                var filteredEmployees = allEmployees.AsQueryable();
+
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    var searchLower = searchTerm.ToLower();
+                    filteredEmployees = filteredEmployees.Where(e => 
+                        e.FullName.ToLower().Contains(searchLower) ||
+                        e.Email.ToLower().Contains(searchLower) ||
+                        e.PhoneNumber.Contains(searchTerm));
+                }
+
+                if (isActive.HasValue)
+                {
+                    filteredEmployees = filteredEmployees.Where(e => e.IsActive == isActive.Value);
+                }
+
+                // Apply pagination
+                var totalCount = filteredEmployees.Count();
+                var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+                
+                var pagedEmployees = filteredEmployees
+                    .OrderByDescending(e => e.CreatedAt)
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return new EmployeeListResponse
+                {
+                    Employees = pagedEmployees,
+                    TotalCount = totalCount,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    TotalPages = totalPages
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy danh sách user có thể làm nhân viên: {ex.Message}");
+            }
+        }
+
+        public async Task<EmployeeListResponse> GetCenterEmployeesAsync(int? centerId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null, bool? isActive = null)
+        {
+            try
+            {
+                // Validate center exists if centerId is provided
+                if (centerId.HasValue)
+                {
+                    var center = await _centerRepository.GetCenterByIdAsync(centerId.Value);
+                    if (center == null)
+                        throw new ArgumentException("Trung tâm không tồn tại.");
+                }
+
+                // Get staff and technicians
+                var allStaff = centerId.HasValue 
+                    ? await _staffRepository.GetStaffByCenterIdAsync(centerId.Value)
+                    : await _staffRepository.GetStaffByCenterIdAsync(null); // Get unassigned staff
+                
+                var allTechnicians = centerId.HasValue 
+                    ? await _technicianRepository.GetTechniciansByCenterIdAsync(centerId.Value)
+                    : await _technicianRepository.GetTechniciansByCenterIdAsync(null); // Get unassigned technicians
+
+                // Combine and map to EmployeeResponse
+                var allEmployees = new List<EmployeeResponse>();
+
+                // Map Staff to EmployeeResponse
+                foreach (var staff in allStaff)
+                {
+                    allEmployees.Add(new EmployeeResponse
+                    {
+                        Type = "STAFF",
+                        StaffId = staff.StaffId,
+                        TechnicianId = null,
+                        UserId = staff.UserId,
+                        FullName = staff.User?.FullName ?? "N/A",
+                        Email = staff.User?.Email ?? "N/A",
+                        PhoneNumber = staff.User?.PhoneNumber ?? "N/A",
+                        Role = "STAFF",
+                        IsActive = staff.IsActive,
+                        CenterId = staff.CenterId,
+                        CenterName = staff.Center?.CenterName ?? "N/A",
+                        Position = null,
+                        Rating = null,
+                        CreatedAt = staff.CreatedAt
+                    });
+                }
+
+                // Map Technician to EmployeeResponse
+                foreach (var technician in allTechnicians)
+                {
+                    allEmployees.Add(new EmployeeResponse
+                    {
+                        Type = "TECHNICIAN",
+                        StaffId = null,
+                        TechnicianId = technician.TechnicianId,
+                        UserId = technician.UserId,
+                        FullName = technician.User?.FullName ?? "N/A",
+                        Email = technician.User?.Email ?? "N/A",
+                        PhoneNumber = technician.User?.PhoneNumber ?? "N/A",
+                        Role = "TECHNICIAN",
+                        IsActive = technician.IsActive,
+                        CenterId = technician.CenterId,
+                        CenterName = technician.Center?.CenterName ?? "N/A",
+                        Position = technician.Position,
+                        Rating = technician.Rating,
+                        CreatedAt = technician.CreatedAt
+                    });
+                }
+
+                // Apply search filter
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    var searchLower = searchTerm.ToLower();
+                    allEmployees = allEmployees.Where(e =>
+                        e.FullName.ToLower().Contains(searchLower) ||
+                        e.Email.ToLower().Contains(searchLower) ||
+                        e.PhoneNumber.ToLower().Contains(searchLower)
+                    ).ToList();
+                }
+
+                // Apply isActive filter
+                if (isActive.HasValue)
+                {
+                    allEmployees = allEmployees.Where(e => e.IsActive == isActive.Value).ToList();
+                }
+
+                // Calculate pagination
+                var totalCount = allEmployees.Count;
+                var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+                // Apply pagination
+                var pagedEmployees = allEmployees
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return new EmployeeListResponse
+                {
+                    Employees = pagedEmployees,
+                    TotalCount = totalCount,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    TotalPages = totalPages
+                };
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy danh sách nhân viên: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region Assignment APIs
+
+        public async Task<List<object>> AssignEmployeesToCenterAsync(List<int> userIds, int centerId)
+        {
+            var results = new List<object>();
+            var errors = new List<string>();
+
+            // Kiểm tra center tồn tại
+            var center = await _centerRepository.GetCenterByIdAsync(centerId);
+            if (center == null)
+                throw new ArgumentException("Trung tâm không tồn tại.");
+
+            foreach (var userId in userIds)
+            {
+                try
+                {
+                    // Lấy user
+                    var user = await _userRepository.GetUserByIdAsync(userId);
+                    if (user == null)
+                    {
+                        errors.Add($"User ID {userId} không tồn tại.");
+                        continue;
+                    }
+
+                    // Kiểm tra role phải là STAFF hoặc TECHNICIAN
+                    if (user.Role != "STAFF" && user.Role != "TECHNICIAN")
+                    {
+                        errors.Add($"User ID {userId} không phải là STAFF hoặc TECHNICIAN.");
+                        continue;
+                    }
+
+                    // Xử lý theo role
+                    if (user.Role == "STAFF")
+                    {
+                        var staff = await _staffRepository.GetStaffByUserIdAsync(userId);
+                        
+                        if (staff == null)
+                        {
+                            // Tạo mới staff
+                            staff = new Staff
+                            {
+                                UserId = userId,
+                                CenterId = centerId,
+                                IsActive = true,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                            await _staffRepository.CreateStaffAsync(staff);
+                        }
+                        else
+                        {
+                            // Kiểm tra staff đã có center chưa (chỉ cho phép nếu CenterId = 0 hoặc bằng centerId hiện tại)
+                            if (staff.CenterId != 0 && staff.CenterId != centerId)
+                            {
+                                errors.Add($"Nhân viên (User ID {userId}) đã được gán vào trung tâm khác.");
+                                continue;
+                            }
+
+                            // Cập nhật center
+                            staff.CenterId = centerId;
+                            staff.IsActive = true;
+
+                            await _staffRepository.UpdateStaffAsync(staff);
+                        }
+
+                        results.Add(await MapToStaffResponseAsync(staff.StaffId));
+                    }
+                    else // TECHNICIAN
+                    {
+                        var technician = await _technicianRepository.GetTechnicianByUserIdAsync(userId);
+                        
+                        if (technician == null)
+                        {
+                            // Tạo mới technician
+                            technician = new Technician
+                            {
+                                UserId = userId,
+                                CenterId = centerId,
+                                Position = "Kỹ thuật viên", // Set default position
+                                Rating = 0, // Set default rating
+                                IsActive = true,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                            await _technicianRepository.CreateTechnicianAsync(technician);
+                        }
+                        else
+                        {
+                            // Kiểm tra technician đã có center chưa (chỉ cho phép nếu CenterId = 0 hoặc bằng centerId hiện tại)
+                            if (technician.CenterId != 0 && technician.CenterId != centerId)
+                            {
+                                errors.Add($"Kỹ thuật viên (User ID {userId}) đã được gán vào trung tâm khác.");
+                                continue;
+                            }
+
+                            // Cập nhật center
+                            technician.CenterId = centerId;
+                            technician.IsActive = true;
+
+                            await _technicianRepository.UpdateTechnicianAsync(technician);
+                        }
+
+                        results.Add(await MapToTechnicianResponseAsync(technician.TechnicianId));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"Lỗi với User ID {userId}: {ex.Message}");
+                }
+            }
+
+            if (errors.Any() && results.Count == 0)
+                throw new ArgumentException(string.Join("; ", errors));
+
+            return results;
+        }
 
         #endregion
     }

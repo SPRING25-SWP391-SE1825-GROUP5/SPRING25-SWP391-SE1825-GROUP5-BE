@@ -11,8 +11,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public required string Color { get; set; }
         public int CurrentMileage { get; set; }
         public DateOnly? LastServiceDate { get; set; }
-        public DateOnly? PurchaseDate { get; set; }
-        public DateOnly? NextServiceDue { get; set; }
+        // PurchaseDate, NextServiceDue removed
         public DateTime CreatedAt { get; set; }
         
         // Related data

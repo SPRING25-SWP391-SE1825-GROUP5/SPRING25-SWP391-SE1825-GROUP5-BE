@@ -15,6 +15,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<bool> CenterHasInventoryAsync(int centerId);
         
         // InventoryPart methods
+        Task<List<InventoryPart>> GetAllInventoryPartsAsync();
         Task<List<InventoryPart>> GetInventoryPartsByInventoryIdAsync(int inventoryId);
         Task<InventoryPart?> GetInventoryPartByInventoryAndPartAsync(int inventoryId, int partId);
         Task<InventoryPart> AddInventoryPartAsync(InventoryPart inventoryPart);

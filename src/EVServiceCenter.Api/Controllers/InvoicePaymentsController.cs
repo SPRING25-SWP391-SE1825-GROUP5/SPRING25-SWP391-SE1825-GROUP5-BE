@@ -98,7 +98,6 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(resp);
     }
 
-    // GET api/invoices (tất cả hóa đơn)
     [HttpGet("/api/invoices")]
     [Authorize]
     public async Task<IActionResult> GetAllInvoices()
@@ -108,7 +107,6 @@ public class InvoicePaymentsController : ControllerBase
             invoiceId = i.InvoiceId,
             customerId = i.CustomerId,
             bookingId = i.BookingId,
-            workOrderId = i.WorkOrderId,
             orderId = i.OrderId,
             status = i.Status,
             email = i.Email,
@@ -118,27 +116,7 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(resp);
     }
 
-    // GET api/invoices/customers/{customerId}
-    [HttpGet("/api/invoices/customers/{customerId:int}")]
-    [Authorize]
-    public async Task<IActionResult> GetInvoicesByCustomer([FromRoute] int customerId)
-    {
-        var items = await _invoiceRepo.GetByCustomerIdAsync(customerId);
-        var resp = items.Select(i => new {
-            invoiceId = i.InvoiceId,
-            customerId = i.CustomerId,
-            bookingId = i.BookingId,
-            workOrderId = i.WorkOrderId,
-            orderId = i.OrderId,
-            status = i.Status,
-            email = i.Email,
-            phone = i.Phone,
-            createdAt = i.CreatedAt
-        });
-        return Ok(resp);
-    }
 
-    // ----------- Invoice details & finders -----------
     [HttpGet("/api/invoices/{invoiceId:int}")]
     [Authorize]
     public async Task<IActionResult> GetInvoiceById([FromRoute] int invoiceId)
@@ -148,32 +126,7 @@ public class InvoicePaymentsController : ControllerBase
         return Ok(new { success = true, data = inv });
     }
 
-    [HttpGet("/api/invoices/by-booking/{bookingId:int}")]
-    [Authorize]
-    public async Task<IActionResult> GetInvoiceByBooking([FromRoute] int bookingId)
-    {
-        var inv = await _invoiceRepo.GetByBookingIdAsync(bookingId);
-        if (inv == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho booking" });
-        return Ok(new { success = true, data = inv });
-    }
 
-    [HttpGet("/api/invoices/by-workorder/{workOrderId:int}")]
-    [Authorize]
-    public async Task<IActionResult> GetInvoiceByWorkOrder([FromRoute] int workOrderId)
-    {
-        var inv = await _invoiceRepo.GetByWorkOrderIdAsync(workOrderId);
-        if (inv == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho workorder" });
-        return Ok(new { success = true, data = inv });
-    }
-
-    [HttpGet("/api/invoices/by-order/{orderId:int}")]
-    [Authorize]
-    public async Task<IActionResult> GetInvoiceByOrder([FromRoute] int orderId)
-    {
-        var inv = await _invoiceRepo.GetByOrderIdAsync(orderId);
-        if (inv == null) return NotFound(new { success = false, message = "Chưa có hóa đơn cho order" });
-        return Ok(new { success = true, data = inv });
-    }
 
     [HttpPost("/api/invoices/{invoiceId:int}/send")]
     [Authorize]
@@ -183,11 +136,23 @@ public class InvoicePaymentsController : ControllerBase
         if (inv == null) return NotFound(new { success = false, message = "Không tìm thấy hóa đơn" });
         var email = inv.Email;
         if (string.IsNullOrWhiteSpace(email)) return BadRequest(new { success = false, message = "Hóa đơn không có email" });
+        
         var subject = $"Hóa đơn #{inv.InvoiceId}";
-        var body = $"<p>Xin chào, hóa đơn của bạn đã được phát hành.</p>";
+        
+        var body = await _email.RenderInvoiceEmailTemplateAsync(
+            customerName: "Khách hàng",
+            invoiceId: inv.InvoiceId.ToString(),
+            bookingId: inv.OrderId?.ToString() ?? "N/A",
+            createdDate: inv.CreatedAt.ToString("dd/MM/yyyy HH:mm"),
+            customerEmail: email,
+            serviceName: "Dịch vụ",
+            servicePrice: "0",
+            totalAmount: "0",
+            hasDiscount: false,
+            discountAmount: "0"
+        );
+        
         await _email.SendEmailAsync(email, subject, body);
         return Ok(new { success = true, message = "Đã gửi email hóa đơn" });
     }
 }
-
-

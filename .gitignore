@@ -15,6 +15,10 @@ api-worker-windows.exe
 tmp
 src.sln
 
+# MCP Server files
+EVServiceCenter.McpServer.csproj
+McpServer.cs
+
 # Test files and results
 tests/test-results/
 tests/test-reports/
@@ -39,6 +43,7 @@ allureConfig.json
 
 # Mono auto generated files
 mono_crash.*
+*.cursor/ 
 
 # Build results
 [Dd]ebug/

@@ -17,7 +17,7 @@ public sealed class VehicleModelPartConfiguration : IEntityTypeConfiguration<Veh
         entity.Property(e => e.ModelId).HasColumnName("ModelID");
         entity.Property(e => e.PartId).HasColumnName("PartID");
 
-        entity.Property(e => e.IsCompatible).HasDefaultValue(true);
+        // IsCompatible removed
         entity.Property(e => e.CreatedAt)
             .HasPrecision(0)
             .HasDefaultValueSql("(getdate())");

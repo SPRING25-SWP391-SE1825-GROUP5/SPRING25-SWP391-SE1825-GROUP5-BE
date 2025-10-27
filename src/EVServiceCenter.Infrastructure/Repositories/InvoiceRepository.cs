@@ -15,13 +15,10 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<Invoice?> GetByBookingIdAsync(int bookingId)
         {
-            return await _db.Invoices.FirstOrDefaultAsync(i => i.WorkOrder != null && i.WorkOrder.BookingId == bookingId);
+            return await _db.Invoices.FirstOrDefaultAsync(i => i.BookingId == bookingId);
         }
 
-        public async Task<Invoice?> GetByWorkOrderIdAsync(int workOrderId)
-        {
-            return await _db.Invoices.FirstOrDefaultAsync(i => i.WorkOrderId == workOrderId);
-        }
+        // GetByWorkOrderIdAsync removed - WorkOrder functionality merged into Booking
 
         public async Task<Invoice?> GetByOrderIdAsync(int orderId)
         {
@@ -35,12 +32,24 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return invoice;
         }
 
+        public async Task UpdateAmountsAsync(int invoiceId, decimal packageDiscountAmount, decimal promotionDiscountAmount, decimal partsAmount)
+        {
+            // Tránh OUTPUT clause khi có trigger: dùng UPDATE thủ công
+            await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE [dbo].[Invoices]
+                SET [PackageDiscountAmount] = {packageDiscountAmount},
+                    [PromotionDiscountAmount] = {promotionDiscountAmount},
+                    [PartsAmount] = {partsAmount}
+                WHERE [InvoiceID] = {invoiceId}
+            ");
+        }
+
 
         public async Task<Invoice?> GetByIdAsync(int invoiceId)
         {
             return await _db.Invoices
                 .Include(i => i.Customer)
-                .Include(i => i.WorkOrder)
+                // WorkOrder removed - functionality merged into Booking
                 .Include(i => i.Booking)
                 .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId);
         }
@@ -49,7 +58,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _db.Invoices
                 .Include(i => i.Customer)
-                .Include(i => i.WorkOrder)
+                // WorkOrder removed - functionality merged into Booking
                 .Include(i => i.Booking)
                 .ToListAsync();
         }
@@ -58,7 +67,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _db.Invoices
                 .Include(i => i.Customer)
-                .Include(i => i.WorkOrder)
+                // WorkOrder removed - functionality merged into Booking
                 .Include(i => i.Booking)
                 .Where(i => i.CustomerId == customerId)
                 .ToListAsync();

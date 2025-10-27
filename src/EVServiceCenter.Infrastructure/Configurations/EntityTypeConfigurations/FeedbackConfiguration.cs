@@ -14,7 +14,7 @@ public sealed class FeedbackConfiguration : IEntityTypeConfiguration<Feedback>
         entity.Property(e => e.FeedbackId).HasColumnName("FeedbackID");
         entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
         entity.Property(e => e.OrderId).HasColumnName("OrderID");
-        entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
+        entity.Property(e => e.BookingId).HasColumnName("BookingID");
         entity.Property(e => e.PartId).HasColumnName("PartID");
         entity.Property(e => e.TechnicianId).HasColumnName("TechnicianID");
 
@@ -34,9 +34,9 @@ public sealed class FeedbackConfiguration : IEntityTypeConfiguration<Feedback>
             .HasForeignKey(d => d.OrderId)
             .OnDelete(DeleteBehavior.ClientSetNull);
 
-        entity.HasOne(d => d.WorkOrder)
-            .WithMany(p => p.Feedbacks)
-            .HasForeignKey(d => d.WorkOrderId)
+        entity.HasOne(d => d.Booking)
+            .WithMany()
+            .HasForeignKey(d => d.BookingId)
             .OnDelete(DeleteBehavior.ClientSetNull);
         
         entity.HasOne(d => d.Part)

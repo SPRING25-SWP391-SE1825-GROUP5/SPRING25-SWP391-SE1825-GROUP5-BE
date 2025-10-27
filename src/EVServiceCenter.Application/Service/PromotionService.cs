@@ -335,7 +335,7 @@ namespace EVServiceCenter.Application.Service
 
                 // Calculate discount amount
                 decimal discountAmount = 0;
-                if (promotion.DiscountType == "PERCENTAGE")
+                if (promotion.DiscountType == "PERCENT")
                 {
                     discountAmount = request.OrderAmount * (promotion.DiscountValue / 100);
                     if (promotion.MaxDiscount.HasValue && discountAmount > promotion.MaxDiscount.Value)
@@ -401,7 +401,7 @@ namespace EVServiceCenter.Application.Service
                 if (promotion == null)
                     throw new ArgumentException("Khuyến mãi không tồn tại.");
 
-                promotion.Status = "INACTIVE";
+                promotion.Status = "CANCELLED";
                 promotion.UpdatedAt = DateTime.UtcNow;
 
                 await _promotionRepository.UpdatePromotionAsync(promotion);
@@ -476,7 +476,7 @@ namespace EVServiceCenter.Application.Service
                 errors.Add("Loại giảm giá không được trống.");
 
             var discountType = (request.DiscountType ?? string.Empty).ToUpper();
-            if (discountType == "PERCENTAGE")
+            if (discountType == "PERCENT")
             {
                 if (request.DiscountValue <= 0 || request.DiscountValue > 100)
                     errors.Add("Giá trị giảm giá phần trăm phải trong khoảng 0 < giá trị ≤ 100.");
@@ -492,7 +492,7 @@ namespace EVServiceCenter.Application.Service
             }
             else
             {
-                errors.Add("Loại giảm giá không hợp lệ. Chỉ hỗ trợ PERCENTAGE hoặc FIXED.");
+                errors.Add("Loại giảm giá không hợp lệ. Chỉ hỗ trợ PERCENT hoặc FIXED.");
             }
 
             // Validate min order amount
@@ -525,7 +525,7 @@ namespace EVServiceCenter.Application.Service
 
             // Validate discount logic
             var discountType = (request.DiscountType ?? string.Empty).ToUpper();
-            if (discountType == "PERCENTAGE")
+            if (discountType == "PERCENT")
             {
                 if (request.DiscountValue <= 0 || request.DiscountValue > 100)
                     errors.Add("Giá trị giảm giá phần trăm phải trong khoảng 0 < giá trị ≤ 100.");
@@ -541,7 +541,7 @@ namespace EVServiceCenter.Application.Service
             }
             else
             {
-                errors.Add("Loại giảm giá không hợp lệ. Chỉ hỗ trợ PERCENTAGE hoặc FIXED.");
+                errors.Add("Loại giảm giá không hợp lệ. Chỉ hỗ trợ PERCENT hoặc FIXED.");
             }
 
             // Validate min order amount

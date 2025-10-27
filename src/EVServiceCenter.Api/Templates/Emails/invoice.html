@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Service Center - Hóa đơn dịch vụ</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f8f9fa; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background-color: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+        .header { background: linear-gradient(135deg, #007bff, #0056b3); color: white; padding: 30px 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: bold; }
+        .content { padding: 30px; }
+        .invoice-info { background: #f8f9fa; border-radius: 12px; padding: 20px; margin: 20px 0; }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px 0; border-bottom: 1px solid #e9ecef; }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { font-weight: bold; color: #495057; }
+        .info-value { color: #007bff; font-weight: 500; }
+        .service-details { background: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .service-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f3f4; }
+        .service-item:last-child { border-bottom: none; }
+        .service-name { font-weight: 500; color: #212529; }
+        .service-price { color: #28a745; font-weight: bold; }
+        .total-section { background: linear-gradient(135deg, #28a745, #20c997); color: white; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center; }
+        .total-amount { font-size: 28px; font-weight: bold; margin: 10px 0; }
+        .attachment-notice { background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 16px; margin-top: 20px; text-align: center; }
+        .attachment-notice .icon { font-size: 24px; margin-bottom: 8px; }
+        .footer { background-color: #f8f9fa; padding: 18px; text-align: center; font-size: 12px; color: #666; }
+        .thank-you { text-align: center; margin: 20px 0; font-size: 16px; color: #007bff; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="{{logoUrl}}" alt="EV Service Center" style="height:64px; display:block; margin:0 auto 12px auto;" />
+            <h1>Hóa đơn dịch vụ</h1>
+        </div>
+        <div class="content">
+            <p>Xin chào <strong>{{customerName}}</strong>,</p>
+            <p>Cảm ơn bạn đã sử dụng dịch vụ của EV Service Center. Dưới đây là thông tin chi tiết về hóa đơn của bạn:</p>
+            
+            <div class="invoice-info">
+                <div class="info-row">
+                    <span class="info-label">Mã hóa đơn:</span>
+                    <span class="info-value">#{{invoiceId}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Mã booking:</span>
+                    <span class="info-value">#{{bookingId}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Ngày tạo:</span>
+                    <span class="info-value">{{createdDate}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value">{{customerEmail}}</span>
+                </div>
+            </div>
+
+            <div class="service-details">
+                <h3 style="margin-top: 0; color: #007bff;">Chi tiết dịch vụ</h3>
+                <div class="service-item">
+                    <span class="service-name">{{serviceName}}</span>
+                    <span class="service-price">{{servicePrice}} VNĐ</span>
+                </div>
+                {{#if hasDiscount}}
+                <div class="service-item">
+                    <span class="service-name" style="color: #dc3545;">Giảm giá</span>
+                    <span class="service-price" style="color: #dc3545;">-{{discountAmount}} VNĐ</span>
+                </div>
+                {{/if}}
+            </div>
+
+            <div class="total-section">
+                <div>Tổng cộng</div>
+                <div class="total-amount">{{totalAmount}} VNĐ</div>
+            </div>
+
+            <div class="attachment-notice">
+                <div class="icon">📄</div>
+                <div><strong>Hóa đơn chi tiết</strong></div>
+                <div>File PDF đính kèm chứa thông tin đầy đủ về hóa đơn của bạn</div>
+            </div>
+
+            <div class="thank-you">
+                <p>Trân trọng cảm ơn!</p>
+                <p>EV Service Center</p>
+            </div>
+        </div>
+        <div class="footer">
+            <div>© {{year}} EV Service Center</div>
+            <div>Hỗ trợ: support@evservicecenter.com | {{supportPhone}}</div>
+            <div>Địa chỉ: {{centerAddress}}</div>
+        </div>
+    </div>
+</body>
+</html>

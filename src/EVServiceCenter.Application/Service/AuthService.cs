@@ -31,12 +31,15 @@ namespace EVServiceCenter.Application.Service
         private readonly IJwtService _jwtService;
         private readonly IConfiguration _configuration;
         private readonly ICustomerRepository _customerRepository;
+        private readonly IStaffRepository _staffRepository;
+        private readonly ITechnicianRepository _technicianRepository;
         private readonly IAccountRepository _accountRepository;
         private readonly IOtpCodeRepository _otpRepository;
         private readonly IMemoryCache _cache;
         private readonly ILoginLockoutService _loginLockoutService;
+        private readonly ICenterRepository _centerRepository;
         
-        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache, ILoginLockoutService loginLockoutService)
+        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache, ILoginLockoutService loginLockoutService, ICenterRepository centerRepository)
         {
             _accountService = accountService;
             _authRepository = authRepository;
@@ -45,10 +48,13 @@ namespace EVServiceCenter.Application.Service
             _jwtService = jwtService;
             _configuration = configuration;
             _customerRepository = customerRepository;
+            _staffRepository = staffRepository;
+            _technicianRepository = technicianRepository;
             _accountRepository = accountRepository;
             _otpRepository = otpRepository;
             _cache = cache;
             _loginLockoutService = loginLockoutService;
+            _centerRepository = centerRepository;
         }
         private bool IsValidUrl(string? url)
         {
@@ -86,6 +92,8 @@ namespace EVServiceCenter.Application.Service
 
                 // Lưu user vào database
                 await _authRepository.RegisterAsync(user);
+                
+                Console.WriteLine($"User created with ID: {user.UserId}");
 
                 // Tạo Customer record tương ứng
                 var customer = new Customer
@@ -94,7 +102,9 @@ namespace EVServiceCenter.Application.Service
                     IsGuest = false
                 };
 
+                Console.WriteLine($"Creating customer for UserId: {user.UserId}");
                 await _customerRepository.CreateCustomerAsync(customer);
+                Console.WriteLine($"Customer created successfully for UserId: {user.UserId}");
 
                 // Tạo và gửi mã OTP xác thực email
                 try
@@ -208,23 +218,10 @@ namespace EVServiceCenter.Application.Service
         public async Task<LoginTokenResponse> LoginAsync(LoginRequest request)
         {
             User? user = null;
-            string email = string.Empty;
+            string email = request.Email;
 
-            // Kiểm tra xem input là email hay phone number
-            if (IsValidEmail(request.EmailOrPhone))
-            {
-                user = await _accountService.GetAccountByEmailAsync(request.EmailOrPhone);
-                email = request.EmailOrPhone;
-            }
-            else if (IsValidPhoneNumber(request.EmailOrPhone))
-            {
-                user = await _accountService.GetAccountByPhoneNumberAsync(request.EmailOrPhone);
-                email = user?.Email ?? string.Empty;
-            }
-            else
-            {
-                throw new ArgumentException("Vui lòng nhập email (@gmail.com) hoặc số điện thoại hợp lệ");
-            }
+            // Chỉ sử dụng email để đăng nhập
+            user = await _accountService.GetAccountByEmailAsync(email);
 
             // Kiểm tra lockout trước khi xử lý login
             if (!string.IsNullOrEmpty(email))
@@ -245,14 +242,13 @@ namespace EVServiceCenter.Application.Service
                 {
                     await _loginLockoutService.RecordFailedAttemptAsync(email);
                 }
-                throw new ArgumentException("Email/số điện thoại hoặc mật khẩu không đúng");
+                throw new ArgumentException("Email hoặc mật khẩu không đúng");
             }
 
-            // Note: Email verification is optional - users can login without verification
-            // Just log for tracking purposes
+            // Bắt buộc email verification trước khi login
             if (!user.EmailVerified)
             {
-                // User logged in without email verification
+                throw new ArgumentException("Vui lòng verify email trước khi đăng nhập. Kiểm tra email để lấy mã OTP.");
             }
             
             // Kiểm tra tài khoản có active không
@@ -268,7 +264,7 @@ namespace EVServiceCenter.Application.Service
                 var remainingAttempts = await _loginLockoutService.GetRemainingAttemptsAsync(user.Email);
                 if (remainingAttempts > 0)
                 {
-                    throw new ArgumentException($"Email/số điện thoại hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
+                    throw new ArgumentException($"Email hoặc mật khẩu không đúng. Còn {remainingAttempts} lần thử.");
                 }
                 else
                 {
@@ -292,6 +288,38 @@ namespace EVServiceCenter.Application.Service
             user.UpdatedAt = DateTime.UtcNow;
             await _authRepository.UpdateUserAsync(user);
 
+            // Lấy CustomerId, StaffId, TechnicianId từ database
+            int? customerId = null;
+            int? staffId = null;
+            int? technicianId = null;
+            int? centerId = null;
+            
+            if (user.Role == "CUSTOMER")
+            {
+                var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
+                customerId = customer?.CustomerId;
+            }
+            else if (user.Role == "STAFF")
+            {
+                var staff = await _staffRepository.GetStaffByUserIdAsync(user.UserId);
+                staffId = staff?.StaffId;
+                centerId = staff?.CenterId;
+            }
+            else if (user.Role == "TECHNICIAN")
+            {
+                var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);
+                technicianId = technician?.TechnicianId;
+                centerId = technician?.CenterId;
+            }
+
+            // Lấy center name nếu có centerId
+            string? centerName = null;
+            if (centerId.HasValue)
+            {
+                var center = await _centerRepository.GetCenterByIdAsync(centerId.Value);
+                centerName = center?.CenterName;
+            }
+
             return new LoginTokenResponse
             {
                 AccessToken = accessToken,
@@ -300,6 +328,9 @@ namespace EVServiceCenter.Application.Service
                 ExpiresAt = expiresAt,
                 RefreshToken = refreshToken,
                 UserId = user.UserId,
+                CustomerId = customerId,
+                StaffId = staffId,
+                TechnicianId = technicianId,
                 FullName = user.FullName,
                 Role = user.Role ?? "CUSTOMER",
                 EmailVerified = user.EmailVerified,
@@ -310,6 +341,8 @@ namespace EVServiceCenter.Application.Service
                 Gender = user.Gender,
                 AvatarUrl = user.AvatarUrl,
                 IsActive = user.IsActive,
+                CenterId = centerId,
+                CenterName = centerName,
                 CreatedAt = user.CreatedAt,
                 UpdatedAt = user.UpdatedAt
             };
@@ -369,7 +402,7 @@ namespace EVServiceCenter.Application.Service
             {
                 var user = await _accountService.GetAccountByEmailAsync(email);
                 if (user == null)
-                throw new ArgumentException("Email không tồn tại trong hệ thống.");
+                    throw new ArgumentException("Email không tồn tại trong hệ thống.");
 
                 if (user.EmailVerified)
                     return "Email đã được xác thực. Không cần gửi lại mã.";
@@ -401,7 +434,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Validate email format
                 if (!IsValidEmail(email))
-                    throw new ArgumentException("Email phải có đuôi @gmail.com");
+                    throw new ArgumentException("Email không hợp lệ");
 
                 // Kiểm tra user có tồn tại không
                 var user = await _accountService.GetAccountByEmailAsync(email);
@@ -438,7 +471,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Validate email format
                 if (!IsValidEmail(request.Email))
-                    throw new ArgumentException("Email phải có đuôi @gmail.com");
+                    throw new ArgumentException("Email không hợp lệ");
 
                 // Validate password strength
                 if (!IsValidPassword(request.NewPassword))
@@ -744,9 +777,8 @@ namespace EVServiceCenter.Application.Service
                 if (payload == null || string.IsNullOrEmpty(payload.Email))
                     throw new ArgumentException("Không đọc được thông tin email từ Google");
 
-                // Check if email is Gmail (as per our system requirement)
-                if (!payload.Email.EndsWith("@gmail.com"))
-                    throw new ArgumentException("Chỉ hỗ trợ đăng nhập bằng tài khoản Gmail");
+                // Accept all Google OAuth emails (Gmail, Google Workspace, etc.)
+                // Removed Gmail-only restriction for better user experience
 
                 // Find or create user
                 var email = payload.Email.ToLowerInvariant();
@@ -796,6 +828,12 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
+                // Bắt buộc email verification trước khi login
+                if (!user.EmailVerified)
+                {
+                    throw new ArgumentException("Vui lòng verify email trước khi đăng nhập. Kiểm tra email để lấy mã OTP.");
+                }
+
                 // Check if account is active
                 if (!user.IsActive)
                     throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên");
@@ -811,6 +849,34 @@ namespace EVServiceCenter.Application.Service
                 user.UpdatedAt = DateTime.UtcNow;
                 await _authRepository.UpdateUserAsync(user);
 
+                // Lấy CustomerId từ database
+                int? customerId = null;
+                if (user.Role == "CUSTOMER")
+                {
+                    var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
+                    customerId = customer?.CustomerId;
+                }
+
+                // Lấy center info cho staff/technician
+                int? centerId = null;
+                string? centerName = null;
+                if (user.Role == "STAFF")
+                {
+                    var staff = await _staffRepository.GetStaffByUserIdAsync(user.UserId);
+                    centerId = staff?.CenterId;
+                }
+                else if (user.Role == "TECHNICIAN")
+                {
+                    var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);
+                    centerId = technician?.CenterId;
+                }
+
+                if (centerId.HasValue)
+                {
+                    var center = await _centerRepository.GetCenterByIdAsync(centerId.Value);
+                    centerName = center?.CenterName;
+                }
+
                 return new LoginTokenResponse
                 {
                     AccessToken = accessToken,
@@ -819,6 +885,7 @@ namespace EVServiceCenter.Application.Service
                     ExpiresAt = expiresAt,
                     RefreshToken = refreshToken,
                     UserId = user.UserId,
+                    CustomerId = customerId,
                     FullName = user.FullName,
                     Role = user.Role ?? "CUSTOMER",
                     EmailVerified = user.EmailVerified,
@@ -829,6 +896,8 @@ namespace EVServiceCenter.Application.Service
                     Gender = user.Gender,
                     AvatarUrl = user.AvatarUrl,
                     IsActive = user.IsActive,
+                    CenterId = centerId,
+                    CenterName = centerName,
                     CreatedAt = user.CreatedAt,
                     UpdatedAt = user.UpdatedAt
                 };

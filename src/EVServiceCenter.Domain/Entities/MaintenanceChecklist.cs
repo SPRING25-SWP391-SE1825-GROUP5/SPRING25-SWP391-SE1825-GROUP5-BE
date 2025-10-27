@@ -7,9 +7,11 @@ public partial class MaintenanceChecklist
 {
     public int ChecklistId { get; set; }
 
-    public int WorkOrderId { get; set; }
+    public int BookingId { get; set; }
 
     public int TemplateId { get; set; }
+
+    public string Status { get; set; } = "PENDING";
 
     public DateTime CreatedAt { get; set; }
 
@@ -17,5 +19,5 @@ public partial class MaintenanceChecklist
 
     public virtual ICollection<MaintenanceChecklistResult> MaintenanceChecklistResults { get; set; } = new List<MaintenanceChecklistResult>();
 
-    public virtual WorkOrder WorkOrder { get; set; }
+    public virtual Booking Booking { get; set; }
 }

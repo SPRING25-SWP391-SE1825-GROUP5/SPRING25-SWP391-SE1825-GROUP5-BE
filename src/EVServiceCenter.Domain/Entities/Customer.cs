@@ -21,7 +21,6 @@ public partial class Customer
 
     public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
 
-    public virtual ICollection<ServiceCredit> ServiceCredits { get; set; } = new List<ServiceCredit>();
 
     // E-commerce navigation properties
     
@@ -31,6 +30,4 @@ public partial class Customer
     
 
     public virtual ICollection<Feedback> Feedbacks { get; set; } = new List<Feedback>();
-
-    public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
 }

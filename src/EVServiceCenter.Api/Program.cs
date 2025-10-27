@@ -23,6 +23,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System;
 using System.Threading.Tasks;
+using System.Net.Http;
 using EVServiceCenter.Api.Extensions;
 using EVServiceCenter.Api.Middleware;
 using Microsoft.AspNetCore.Http;
@@ -55,7 +56,12 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 // CORE SERVICES REGISTRATION
 // ============================================================================
 builder.Services.AddControllers();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true;
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+});
 builder.Services.Configure<BookingRealtimeOptions>(builder.Configuration.GetSection("BookingRealtime"));
 // Cache configuration
 builder.Services.AddMemoryCache();
@@ -87,10 +93,12 @@ builder.Services.AddScoped<ILoginLockoutService, LoginLockoutService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IEmailTemplateRenderer, FileEmailTemplateRenderer>();
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
+builder.Services.AddScoped<IPdfInvoiceService, PdfInvoiceService>();
 
 // Business Services
 builder.Services.AddScoped<ICenterService, CenterService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
+builder.Services.AddScoped<IServiceCategoryService, ServiceCategoryService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ITechnicianService, TechnicianService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
@@ -102,23 +110,43 @@ builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IBookingHistoryService, BookingHistoryService>();
 builder.Services.AddScoped<IOrderHistoryService, OrderHistoryService>();
 builder.Services.AddScoped<IGuestBookingService, GuestBookingService>();
-builder.Services.AddScoped<ISkillService, SkillService>();
+builder.Services.AddScoped<IBookingStatisticsService, EVServiceCenter.Application.Service.BookingStatisticsService>();
 // Removed: MaintenancePolicyService no longer used
 // Removed: IMaintenanceChecklistItemService
 // Note: ChecklistPartService may be deprecated if not needed without ServiceParts
 // Payment service removed from DI per requirement
+builder.Services.AddScoped<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
+builder.Services.AddHttpClient<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
-builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
+builder.Services.AddScoped<ITechnicianAvailabilityService, EVServiceCenter.Application.Service.TechnicianAvailabilityService>();
+builder.Services.AddScoped<ICenterRevenueService, EVServiceCenter.Application.Service.CenterRevenueService>();
+builder.Services.AddScoped<IPaymentMethodRevenueService, EVServiceCenter.Application.Service.PaymentMethodRevenueService>();
+builder.Services.AddScoped<IPartsUsageReportService, EVServiceCenter.Application.Service.PartsUsageReportService>();
+builder.Services.AddScoped<IRevenueReportService, EVServiceCenter.Application.Service.RevenueReportService>();
+builder.Services.AddScoped<IBookingReportsService, EVServiceCenter.Application.Service.BookingReportsService>();
+builder.Services.AddScoped<ITechnicianReportsService, EVServiceCenter.Application.Service.TechnicianReportsService>();
+builder.Services.AddScoped<IInventoryReportsService, EVServiceCenter.Application.Service.InventoryReportsService>();
+builder.Services.AddScoped<ITechnicianDashboardService, EVServiceCenter.Application.Service.TechnicianDashboardService>();
+// WorkOrderService removed - functionality merged into BookingService
 
 // E-commerce services
 builder.Services.AddScoped<IOrderService, OrderService>();
 // Wishlist removed
 // removed: ProductReviewService deprecated
 
+// Service Package & Credit Services
+builder.Services.AddScoped<IServicePackageService, ServicePackageService>();
+builder.Services.AddScoped<ICustomerServiceCreditService, CustomerServiceCreditService>();
+
 // Vehicle Model Services
 builder.Services.AddScoped<IVehicleModelService, VehicleModelService>();
 builder.Services.AddScoped<IVehicleModelPartService, VehicleModelPartService>();
+
+// Chat Services
+builder.Services.AddScoped<IConversationService, ConversationService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddScoped<EVServiceCenter.Application.Interfaces.IChatHubService, EVServiceCenter.Api.Services.ChatHubService>();
 
 // ============================================================================
 // REPOSITORY REGISTRATION
@@ -141,7 +169,7 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IPartRepository, PartRepository>();
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
-builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
+// WorkOrderRepository removed - functionality merged into BookingRepository
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 // Removed: MaintenancePolicyRepository no longer used
 // Removed: IServicePartRepository registration (ServiceParts deprecated)
@@ -153,19 +181,34 @@ builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 // IOtpCodeRepository already registered above
 builder.Services.AddScoped<ITechnicianTimeSlotRepository, TechnicianTimeSlotRepository>();
-builder.Services.AddScoped<ISkillRepository, SkillRepository>();
-builder.Services.AddScoped<IServiceRequiredSkillRepository, ServiceRequiredSkillRepository>();
 
 // Vehicle Model Repositories
 builder.Services.AddScoped<IVehicleModelRepository, VehicleModelRepository>();
 builder.Services.AddScoped<IVehicleModelPartRepository, VehicleModelPartRepository>();
 
+// Service Package & Credit Repositories
+builder.Services.AddScoped<IServicePackageRepository, ServicePackageRepository>();
+builder.Services.AddScoped<ICustomerServiceCreditRepository, CustomerServiceCreditRepository>();
+builder.Services.AddScoped<IServiceCategoryRepository, ServiceCategoryRepository>();
+builder.Services.AddScoped<IServiceChecklistRepository, ServiceChecklistRepository>();
+
 // E-commerce repositories
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 // Wishlist repository removed
 // removed: ProductReviewRepository deprecated
+
+// Chat repositories
+builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
+builder.Services.AddScoped<IMessageRepository, MessageRepository>();
+builder.Services.AddScoped<IConversationMemberRepository, ConversationMemberRepository>();
+
+// Notification Repository & Service
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<INotificationHub, EVServiceCenter.Api.Services.NotificationHubService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
+builder.Services.AddHostedService<SlotAvailabilityUpdateService>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");
@@ -255,7 +298,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("ADMIN"));
-    options.AddPolicy("StaffOrAdmin", policy => policy.RequireRole("ADMIN", "STAFF"));
+    options.AddPolicy("StaffOrAdmin", policy => policy.RequireRole("ADMIN", "STAFF", "TECHNICIAN"));
     options.AddPolicy("TechnicianOrAdmin", policy => policy.RequireRole("ADMIN", "TECHNICIAN"));
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });
@@ -299,7 +342,7 @@ builder.Services.AddCors(options =>
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials() // Quan trọng cho JWT/Authentication
+              .AllowCredentials() // Quan trọng cho JWT/Authentication và SignalR
               .SetIsOriginAllowedToAllowWildcardSubdomains(); // Hỗ trợ Google OAuth
     });
 
@@ -435,6 +478,12 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<EVServiceCenter.Api.BookingHub>("/hubs/booking");
+app.MapHub<EVServiceCenter.Api.ChatHub>("/hubs/chat", options =>
+{
+    options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets | 
+                       Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
+})
+.RequireAuthorization(); // Add JWT authentication requirement
 
 
 app.Run();

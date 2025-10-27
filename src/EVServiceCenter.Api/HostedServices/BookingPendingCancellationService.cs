@@ -3,6 +3,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Interfaces;
+using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Application.Models.Requests;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -34,8 +36,9 @@ public class BookingPendingCancellationService : BackgroundService
 			{
 				using var scope = _serviceScopeFactory.CreateScope();
 				var bookingRepository = scope.ServiceProvider.GetRequiredService<IBookingRepository>();
+				var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
 				
-				var timeoutMinutes = _configuration.GetValue<int>("Booking:PendingTimeoutMinutes", 30);
+				var timeoutMinutes = _configuration.GetValue<double>("Booking:PendingTimeoutMinutes", 30);
                 // Dùng truy vấn tối giản, tránh include để không đụng các cột NULL bắt buộc từ bảng liên quan
                 var all = await bookingRepository.GetAllForAutoCancelAsync();
                 var now = DateTime.UtcNow;
@@ -53,19 +56,36 @@ public class BookingPendingCancellationService : BackgroundService
 					{
                         var elapsed = (now - created).TotalMinutes;
                         _logger.LogInformation($"Tự động hủy booking #{b.BookingId} sau {elapsed:F1} phút");
-                        // Nạp đầy đủ entity trước khi cập nhật để tránh ghi đè các FK bằng giá trị mặc định 0
-                        var full = await bookingRepository.GetBookingByIdAsync(b.BookingId);
-                        if (full != null)
+                        // Kiểm tra booking còn tồn tại và có thể hủy không
+                        try
                         {
-                            if (full.Customer == null)
+                            var fullBooking = await bookingRepository.GetBookingByIdAsync(b.BookingId);
+                            if (fullBooking == null)
                             {
-                                _logger.LogWarning($"Bỏ qua hủy booking #{b.BookingId} vì thiếu Customer (tránh lỗi FK)");
+                                _logger.LogWarning($"Booking #{b.BookingId} không tồn tại, bỏ qua");
                                 continue;
                             }
-                            full.Status = "CANCELLED";
-                            full.UpdatedAt = now;
-                            await bookingRepository.UpdateBookingAsync(full);
-                            cancelledCount++;
+                            
+                            if (fullBooking.Status != "PENDING")
+                            {
+                                _logger.LogInformation($"Booking #{b.BookingId} đã có status {fullBooking.Status}, bỏ qua");
+                                continue;
+                            }
+                            
+                            var updateRequest = new UpdateBookingStatusRequest
+                            {
+                                Status = "CANCELLED"
+                            };
+                            
+                            var result = await bookingService.UpdateBookingStatusAsync(b.BookingId, updateRequest);
+                            if (result != null)
+                            {
+                                cancelledCount++;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"Lỗi khi tự động hủy booking #{b.BookingId}");
                         }
 					}
 				}

@@ -9,13 +9,13 @@ public partial class VehicleModel
 
     public string ModelName { get; set; } = null!;
 
-    public string Brand { get; set; } = null!;
-
     // Removed specs: BatteryCapacity, MaxRange, MaxSpeed, ChargingTime, Weight, Price, Year
 
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public string? Version { get; set; }
 
     // Navigation properties
     public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();

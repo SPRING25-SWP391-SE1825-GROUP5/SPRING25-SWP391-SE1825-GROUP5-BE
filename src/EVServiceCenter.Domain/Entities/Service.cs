@@ -7,9 +7,9 @@ public partial class Service
 {
     public int ServiceId { get; set; }
 
-    public string ServiceName { get; set; }
+    public string ServiceName { get; set; } = null!;
 
-    public string Description { get; set; }
+    public string? Description { get; set; }
 
     public decimal BasePrice { get; set; }
 
@@ -17,7 +17,10 @@ public partial class Service
 
     public DateTime CreatedAt { get; set; }
 
-    // Removed BookingServices collection in single-service model
+    public int? CategoryId { get; set; }
 
-    public virtual ICollection<ServiceCredit> ServiceCredits { get; set; } = new List<ServiceCredit>();
+    // Navigation properties
+    public virtual ServiceCategory? Category { get; set; }
+
+    // Removed BookingServices collection in single-service model
 }

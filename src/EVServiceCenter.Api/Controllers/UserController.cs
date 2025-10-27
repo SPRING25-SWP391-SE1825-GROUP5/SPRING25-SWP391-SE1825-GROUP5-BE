@@ -87,8 +87,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (hasEmail)
                 {
                     var trimmed = email?.Trim() ?? string.Empty;
-                    if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[a-zA-Z0-9._%+-]+@gmail\.com$"))
-                        return BadRequest(new { success = false, message = "Email không hợp lệ (yêu cầu @gmail.com)" });
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"))
+                        return BadRequest(new { success = false, message = "Email không hợp lệ" });
                     user = await _accountService.GetAccountByEmailAsync(trimmed);
                 }
                 else
@@ -162,7 +162,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="request">Thông tin người dùng mới (role phải là CUSTOMER, emailVerified phải là false)</param>
         /// <returns>Thông tin người dùng đã tạo + gửi OTP verification</returns>
         [HttpPost]
-        [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
+        [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
         {
             try
@@ -199,81 +199,50 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Kích hoạt người dùng (Admin only)
+        /// Cập nhật trạng thái người dùng (Admin only)
         /// </summary>
         /// <param name="id">ID người dùng</param>
-        /// <returns>Kết quả kích hoạt</returns>
-        [HttpPatch("{id}/activate")]
+        /// <param name="request">Thông tin cập nhật trạng thái</param>
+        /// <returns>Kết quả cập nhật</returns>
+        [HttpPatch("{id}/status")]
         [Authorize(Roles = "ADMIN")]
-        public async Task<IActionResult> ActivateUser(int id)
+        public async Task<IActionResult> UpdateUserStatus(int id, [FromBody] UpdateUserStatusRequest request)
         {
             try
             {
                 if (id <= 0)
                     return BadRequest(new { success = false, message = "ID người dùng không hợp lệ" });
 
-                var result = await _userService.ActivateUserAsync(id);
-                
-                if (result)
+                if (!ModelState.IsValid)
                 {
-                    return Ok(new { 
-                        success = true, 
-                        message = "Kích hoạt người dùng thành công" 
-                    });
-                }
-                else
-                {
-                    return StatusCode(500, new { 
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new { 
                         success = false, 
-                        message = "Không thể kích hoạt người dùng" 
+                        message = "Dữ liệu không hợp lệ", 
+                        errors = errors 
                     });
                 }
-            }
-            catch (ArgumentException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
-                });
-            }
-        }
-
-        /// <summary>
-        /// Vô hiệu hóa người dùng (Admin only)
-        /// </summary>
-        /// <param name="id">ID người dùng</param>
-        /// <returns>Kết quả vô hiệu hóa</returns>
-        [HttpPatch("{id}/deactivate")]
-        [Authorize(Roles = "ADMIN")]
-        public async Task<IActionResult> DeactivateUser(int id)
-        {
-            try
-            {
-                if (id <= 0)
-                    return BadRequest(new { success = false, message = "ID người dùng không hợp lệ" });
 
                 // Không cho phép vô hiệu hóa chính mình
-                if (IsCurrentUser(id))
+                if (!request.IsActive && IsCurrentUser(id))
                     return BadRequest(new { success = false, message = "Không thể vô hiệu hóa tài khoản của chính mình" });
 
-                var result = await _userService.DeactivateUserAsync(id);
+                var result = await _userService.UpdateUserStatusAsync(id, request.IsActive);
                 
                 if (result)
                 {
+                    var action = request.IsActive ? "kích hoạt" : "vô hiệu hóa";
                     return Ok(new { 
                         success = true, 
-                        message = "Vô hiệu hóa người dùng thành công" 
+                        message = $"{action} người dùng thành công" 
                     });
                 }
                 else
                 {
+                    var action = request.IsActive ? "kích hoạt" : "vô hiệu hóa";
                     return StatusCode(500, new { 
                         success = false, 
-                        message = "Không thể vô hiệu hóa người dùng" 
+                        message = $"Không thể {action} người dùng" 
                     });
                 }
             }
@@ -301,5 +270,10 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         #endregion
+    }
+
+    public class UpdateUserStatusRequest
+    {
+        public bool IsActive { get; set; }
     }
 }

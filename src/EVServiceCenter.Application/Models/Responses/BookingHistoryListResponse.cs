@@ -20,7 +20,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public VehicleSummary VehicleInfo { get; set; } = null!;
         public required string ServiceName { get; set; } = null!;
         public string? TechnicianName { get; set; }
-        public decimal TotalCost { get; set; }
+        public TimeSlotSummary TimeSlotInfo { get; set; } = null!;
         public DateTime CreatedAt { get; set; }
     }
 
@@ -30,15 +30,13 @@ namespace EVServiceCenter.Application.Models.Responses
         public string? ModelName { get; set; }
     }
 
-    public class PaginationInfo
+    public class TimeSlotSummary
     {
-        public int CurrentPage { get; set; }
-        public int PageSize { get; set; }
-        public int TotalItems { get; set; }
-        public int TotalPages { get; set; }
-        public bool HasNextPage { get; set; }
-        public bool HasPreviousPage { get; set; }
+        public int SlotId { get; set; }
+        public required string StartTime { get; set; } = null!;
+        public required string EndTime { get; set; } = null!;
     }
+
 
     public class FilterInfo
     {

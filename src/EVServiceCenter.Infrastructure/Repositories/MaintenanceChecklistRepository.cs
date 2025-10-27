@@ -12,16 +12,23 @@ namespace EVServiceCenter.Infrastructure.Repositories
         private readonly EVDbContext _db;
         public MaintenanceChecklistRepository(EVDbContext db) { _db = db; }
 
-        public async Task<MaintenanceChecklist?> GetByWorkOrderIdAsync(int workOrderId)
+        public async Task<MaintenanceChecklist?> GetByBookingIdAsync(int bookingId)
         {
             return await _db.MaintenanceChecklists
                 .Include(c => c.MaintenanceChecklistResults)
-                .FirstOrDefaultAsync(c => c.WorkOrderId == workOrderId);
+                .FirstOrDefaultAsync(c => c.BookingId == bookingId);
         }
 
         public async Task<MaintenanceChecklist> CreateAsync(MaintenanceChecklist checklist)
         {
             _db.MaintenanceChecklists.Add(checklist);
+            await _db.SaveChangesAsync();
+            return checklist;
+        }
+
+        public async Task<MaintenanceChecklist> UpdateAsync(MaintenanceChecklist checklist)
+        {
+            _db.MaintenanceChecklists.Update(checklist);
             await _db.SaveChangesAsync();
             return checklist;
         }

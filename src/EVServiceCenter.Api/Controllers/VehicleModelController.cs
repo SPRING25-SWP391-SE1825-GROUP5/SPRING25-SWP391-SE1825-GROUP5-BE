@@ -57,22 +57,7 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get vehicle models by brand
-    /// </summary>
-    [HttpGet("brand/{brand}")]
-    public async Task<ActionResult<IEnumerable<VehicleModelResponse>>> GetByBrand(string brand)
-    {
-        try
-        {
-            var models = await _vehicleModelService.GetByBrandAsync(brand);
-            return Ok(models);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
-        }
-    }
+    // Brand removed - endpoint deleted
 
     /// <summary>
     /// Get active vehicle models
@@ -91,25 +76,6 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Search vehicle models
-    /// </summary>
-    [HttpGet("search")]
-    public async Task<ActionResult<IEnumerable<VehicleModelResponse>>> Search([FromQuery] string searchTerm)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(searchTerm))
-                return BadRequest(new { message = "Search term is required" });
-
-            var models = await _vehicleModelService.SearchAsync(searchTerm);
-            return Ok(models);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
-        }
-    }
 
     /// <summary>
     /// Create new vehicle model
@@ -175,23 +141,4 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Toggle active status of vehicle model
-    /// </summary>
-    [HttpPatch("{id}/toggle-active")]
-    public async Task<ActionResult> ToggleActive(int id)
-    {
-        try
-        {
-            var result = await _vehicleModelService.ToggleActiveAsync(id);
-            if (!result)
-                return NotFound(new { message = "Vehicle model not found" });
-
-            return Ok(new { message = "Status updated successfully" });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
-        }
-    }
 }

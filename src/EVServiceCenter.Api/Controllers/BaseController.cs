@@ -33,7 +33,25 @@ public abstract class BaseController : ControllerBase
             InvalidOperationException => BadRequest(new { success = false, message = ex.Message }),
             UnauthorizedAccessException => Unauthorized(new { success = false, message = ex.Message }),
             NotImplementedException => StatusCode(500, new { success = false, message = "Tính năng chưa được triển khai" }),
-            _ => StatusCode(500, new { success = false, message = "Có lỗi xảy ra trong quá trình xử lý" })
+            Microsoft.EntityFrameworkCore.DbUpdateException dbEx => StatusCode(500, new { 
+                success = false, 
+                message = "Lỗi cơ sở dữ liệu", 
+                details = dbEx.InnerException?.Message ?? dbEx.Message,
+                operation = operation
+            }),
+            Microsoft.Data.SqlClient.SqlException sqlEx => StatusCode(500, new { 
+                success = false, 
+                message = "Lỗi SQL Server", 
+                details = sqlEx.Message,
+                errorNumber = sqlEx.Number,
+                operation = operation
+            }),
+            _ => StatusCode(500, new { 
+                success = false, 
+                message = "Có lỗi xảy ra trong quá trình xử lý", 
+                details = ex.Message,
+                operation = operation
+            })
         };
     }
 
@@ -62,7 +80,11 @@ public abstract class BaseController : ControllerBase
     /// </summary>
     protected int? GetCurrentUserId()
     {
-        var userIdClaim = User.FindFirst("UserId");
+        // Try different claim types for user ID
+        var userIdClaim = User.FindFirst("nameid") 
+                         ?? User.FindFirst("UserId")
+                         ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+        
         return userIdClaim != null && int.TryParse(userIdClaim.Value, out var userId) ? userId : null;
     }
 

@@ -64,7 +64,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Lấy danh sách các dịch vụ đang hoạt động (Services.IsActive = 1 AND ServiceCategories.IsActive = 1)
+        /// Lấy danh sách các dịch vụ đang hoạt động (Services.IsActive = 1 AND ServiceCategories.IsActive = 1) - Public
         /// </summary>
         /// <param name="pageNumber">Số trang (mặc định: 1)</param>
         /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
@@ -72,6 +72,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// <param name="categoryId">Lọc theo danh mục dịch vụ</param>
         /// <returns>Danh sách dịch vụ đang hoạt động</returns>
         [HttpGet("active")]
+        [AllowAnonymous] // ✅ Cho phép người chưa đăng nhập xem
         public async Task<IActionResult> GetActiveServices(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
@@ -89,6 +90,37 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return Ok(new { 
                     success = true, 
                     message = "Lấy danh sách dịch vụ đang hoạt động thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách dịch vụ theo danh mục cho khách hàng chọn (Public API)
+        /// </summary>
+        /// <param name="categoryId">ID danh mục dịch vụ</param>
+        /// <returns>Danh sách dịch vụ trong danh mục</returns>
+        [HttpGet("by-category/{categoryId}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetServicesByCategory(int categoryId)
+        {
+            try
+            {
+                if (categoryId <= 0)
+                    return BadRequest(new { success = false, message = "ID danh mục không hợp lệ" });
+
+                var result = await _serviceService.GetActiveServicesAsync(1, 100, null, categoryId);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Lấy danh sách dịch vụ trong danh mục thành công",
                     data = result
                 });
             }

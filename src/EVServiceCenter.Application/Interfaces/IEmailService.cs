@@ -13,6 +13,8 @@ namespace EVServiceCenter.Application.Interfaces
         Task SendWelcomeEmailAsync(string toEmail, string fullName);
         Task SendResetPasswordEmailAsync(string toEmail, string fullName, string otpCode);
         Task SendEmailWithAttachmentAsync(string to, string subject, string body, string attachmentName, byte[] attachmentContent, string contentType = "application/pdf");
+        Task SendEmailWithMultipleAttachmentsAsync(string to, string subject, string body, List<(string fileName, byte[] content, string mimeType)> attachments);
         Task SendWelcomeCustomerWithPasswordAsync(string toEmail, string fullName, string tempPassword);
+        Task<string> RenderInvoiceEmailTemplateAsync(string customerName, string invoiceId, string bookingId, string createdDate, string customerEmail, string serviceName, string servicePrice, string totalAmount, bool hasDiscount, string discountAmount);
     }
 }

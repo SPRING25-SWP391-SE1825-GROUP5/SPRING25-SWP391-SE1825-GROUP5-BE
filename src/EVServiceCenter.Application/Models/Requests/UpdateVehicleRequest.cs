@@ -14,8 +14,5 @@ namespace EVServiceCenter.Application.Models.Requests
         public int CurrentMileage { get; set; }
 
         public DateOnly? LastServiceDate { get; set; }
-
-        [Range(typeof(DateOnly), "1900-01-01", "2100-12-31", ErrorMessage = "Ngày mua xe phải từ năm 1900 đến năm 2100")]
-        public DateOnly? PurchaseDate { get; set; }
     }
 }

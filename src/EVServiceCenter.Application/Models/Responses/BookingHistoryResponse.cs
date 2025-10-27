@@ -39,7 +39,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public required string LicensePlate { get; set; } = null!;
         public required string Vin { get; set; } = null!;
         public string? ModelName { get; set; }
-        public string? Brand { get; set; }
+        // Brand removed from VehicleModel
         public int? Year { get; set; }
     }
 
@@ -61,12 +61,6 @@ namespace EVServiceCenter.Application.Models.Responses
         public decimal? Rating { get; set; }
     }
 
-    public class TimeSlotInfo
-    {
-        public int SlotId { get; set; }
-        public required string StartTime { get; set; } = null!;
-        public required string EndTime { get; set; } = null!;
-    }
 
     public class CostInfo
     {

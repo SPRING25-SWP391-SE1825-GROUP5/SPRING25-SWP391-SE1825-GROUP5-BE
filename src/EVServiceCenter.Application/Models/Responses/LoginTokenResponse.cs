@@ -10,6 +10,9 @@ namespace EVServiceCenter.Application.Models.Responses
         public DateTime ExpiresAt { get; set; }
         public required string RefreshToken { get; set; }
         public int UserId { get; set; }
+        public int? CustomerId { get; set; }
+        public int? StaffId { get; set; }
+        public int? TechnicianId { get; set; }
         public required string FullName { get; set; }
         public required string Role { get; set; }
         public bool EmailVerified { get; set; }
@@ -22,6 +25,8 @@ namespace EVServiceCenter.Application.Models.Responses
         public string? Gender { get; set; }
         public string? AvatarUrl { get; set; }
         public bool IsActive { get; set; }
+        public int? CenterId { get; set; }
+        public string? CenterName { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

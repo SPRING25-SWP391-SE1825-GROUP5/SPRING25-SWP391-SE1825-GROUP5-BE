@@ -1,13 +1,7 @@
 namespace EVServiceCenter.Api.Constants;
 
-/// <summary>
-/// API constants and configuration values
-/// </summary>
 public static class ApiConstants
 {
-    /// <summary>
-    /// Default pagination settings
-    /// </summary>
     public static class Pagination
     {
         public const int DefaultPageSize = 10;
@@ -15,19 +9,13 @@ public static class ApiConstants
         public const int MinPageSize = 1;
     }
 
-    /// <summary>
-    /// File upload settings
-    /// </summary>
     public static class FileUpload
     {
-        public const long MaxSizeBytes = 10 * 1024 * 1024; // 10MB
+        public const long MaxSizeBytes = 10 * 1024 * 1024;
         public const int MaxFilesPerUpload = 5;
         public static readonly string[] AllowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx" };
     }
 
-    /// <summary>
-    /// Booking settings
-    /// </summary>
     public static class Booking
     {
         public const int MaxAdvanceBookingDays = 30;
@@ -36,9 +24,6 @@ public static class ApiConstants
         public const int AllowCancellationHours = 24;
     }
 
-    /// <summary>
-    /// Validation settings
-    /// </summary>
     public static class Validation
     {
         public const int MinPasswordLength = 8;
@@ -49,9 +34,6 @@ public static class ApiConstants
         public const string LicensePlatePattern = @"^[0-9]{2}[A-Z]{1,2}[0-9]{4,5}$";
     }
 
-    /// <summary>
-    /// Business limits
-    /// </summary>
     public static class Limits
     {
         public const int MaxVehiclesPerCustomer = 5;
@@ -59,9 +41,6 @@ public static class ApiConstants
         public const int MaxPromotionsPerCustomer = 10;
     }
 
-    /// <summary>
-    /// Timeout settings (in minutes)
-    /// </summary>
     public static class Timeouts
     {
         public const int SessionTimeoutMinutes = 30;
@@ -70,9 +49,6 @@ public static class ApiConstants
         public const int LockoutDurationMinutes = 15;
     }
 
-    /// <summary>
-    /// User roles
-    /// </summary>
     public static class Roles
     {
         public const string Admin = "ADMIN";
@@ -81,9 +57,6 @@ public static class ApiConstants
         public const string Staff = "STAFF";
     }
 
-    /// <summary>
-    /// Booking statuses
-    /// </summary>
     public static class BookingStatus
     {
         public const string Pending = "PENDING";
@@ -93,9 +66,6 @@ public static class ApiConstants
         public const string Cancelled = "CANCELLED";
     }
 
-    /// <summary>
-    /// Payment statuses
-    /// </summary>
     public static class PaymentStatus
     {
         public const string Pending = "PENDING";
@@ -104,9 +74,6 @@ public static class ApiConstants
         public const string Refunded = "REFUNDED";
     }
 
-    /// <summary>
-    /// Service types
-    /// </summary>
     public static class ServiceType
     {
         public const string Maintenance = "MAINTENANCE";
@@ -114,18 +81,12 @@ public static class ApiConstants
         public const string Inspection = "INSPECTION";
     }
 
-    /// <summary>
-    /// Promotion discount types
-    /// </summary>
     public static class DiscountType
     {
         public const string Percent = "PERCENT";
         public const string Fixed = "FIXED";
     }
 
-    /// <summary>
-    /// Promotion statuses
-    /// </summary>
     public static class PromotionStatus
     {
         public const string Active = "ACTIVE";
@@ -133,9 +94,6 @@ public static class ApiConstants
         public const string Cancelled = "CANCELLED";
     }
 
-    /// <summary>
-    /// Error messages
-    /// </summary>
     public static class ErrorMessages
     {
         public const string InvalidData = "Dữ liệu không hợp lệ";
@@ -150,9 +108,6 @@ public static class ApiConstants
         public const string PaymentFailed = "Thanh toán thất bại";
     }
 
-    /// <summary>
-    /// Success messages
-    /// </summary>
     public static class SuccessMessages
     {
         public const string Created = "Tạo thành công";
@@ -166,9 +121,6 @@ public static class ApiConstants
         public const string BookingCancelled = "Hủy đặt lịch thành công";
     }
 
-    /// <summary>
-    /// API endpoints
-    /// </summary>
     public static class Endpoints
     {
         public const string Auth = "/api/auth";
@@ -181,9 +133,6 @@ public static class ApiConstants
         public const string Health = "/health";
     }
 
-    /// <summary>
-    /// Support information
-    /// </summary>
     public static class Support
     {
         public const string Email = "support@evservicecenter.com";

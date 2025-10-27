@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -14,11 +15,13 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IVehicleRepository _vehicleRepository;
         private readonly ICustomerRepository _customerRepository;
+        private readonly ILogger<VehicleService> _logger;
 
-        public VehicleService(IVehicleRepository vehicleRepository, ICustomerRepository customerRepository)
+        public VehicleService(IVehicleRepository vehicleRepository, ICustomerRepository customerRepository, ILogger<VehicleService> logger)
         {
             _vehicleRepository = vehicleRepository;
             _customerRepository = customerRepository;
+            _logger = logger;
         }
 
         public async Task<VehicleListResponse> GetVehiclesAsync(int pageNumber = 1, int pageSize = 10, int? customerId = null, string? searchTerm = null)
@@ -95,12 +98,12 @@ namespace EVServiceCenter.Application.Service
                 var vehicle = new Vehicle
                 {
                     CustomerId = request.CustomerId,
+                    ModelId = request.ModelId,
                     Vin = request.Vin.Trim().ToUpper(),
                     LicensePlate = request.LicensePlate.Trim().ToUpper(),
                     Color = request.Color.Trim(),
                     CurrentMileage = request.CurrentMileage,
                     LastServiceDate = request.LastServiceDate,
-                    PurchaseDate = request.PurchaseDate,
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -168,7 +171,6 @@ namespace EVServiceCenter.Application.Service
                 vehicle.Color = request.Color.Trim();
                 vehicle.CurrentMileage = request.CurrentMileage;
                 vehicle.LastServiceDate = request.LastServiceDate;
-                vehicle.PurchaseDate = request.PurchaseDate;
 
                 await _vehicleRepository.UpdateVehicleAsync(vehicle);
 
@@ -196,7 +198,6 @@ namespace EVServiceCenter.Application.Service
                 Color = vehicle.Color,
                 CurrentMileage = vehicle.CurrentMileage,
                 LastServiceDate = vehicle.LastServiceDate,
-                PurchaseDate = vehicle.PurchaseDate,
                 CreatedAt = vehicle.CreatedAt,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
                 CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? string.Empty
@@ -207,11 +208,31 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Validate customer exists
+            // Debug logging
+            _logger.LogInformation($"Validating vehicle creation for CustomerId: {request.CustomerId}");
+
+            // Validate customer exists - thử cả 2 cách
             var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
+            var customerDebug = await _customerRepository.GetCustomerByIdDebugAsync(request.CustomerId);
+            
+            _logger.LogInformation($"Customer debug check - ID: {request.CustomerId}, Found: {customerDebug != null}, UserId: {customerDebug?.UserId}, IsGuest: {customerDebug?.IsGuest}");
+            
             if (customer == null)
             {
-                errors.Add("Khách hàng không tồn tại.");
+                if (customerDebug == null)
+                {
+                    _logger.LogWarning($"Customer not found with ID: {request.CustomerId}");
+                    errors.Add("Khách hàng không tồn tại.");
+                }
+                else
+                {
+                    _logger.LogWarning($"Customer exists but User is null - CustomerId: {customerDebug.CustomerId}, UserId: {customerDebug.UserId}");
+                    errors.Add("Thông tin người dùng của khách hàng không hợp lệ.");
+                }
+            }
+            else
+            {
+                _logger.LogInformation($"Customer found: {customer.CustomerId}, UserId: {customer.UserId}, IsGuest: {customer.IsGuest}");
             }
 
             // Check for duplicate VIN

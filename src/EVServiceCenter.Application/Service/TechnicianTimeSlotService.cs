@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Application.Models;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
@@ -403,10 +404,9 @@ namespace EVServiceCenter.Application.Service
             {
                 var availability = new TechnicianAvailabilityResponse
                 {
-                    TechnicianId = technician.TechnicianId,
-                    TechnicianName = technician.User?.FullName ?? "N/A",
-                    Date = startDate,
-                    AvailableSlots = new List<TimeSlotAvailability>()
+                    Success = true,
+                    Message = "Lấy thông tin availability thành công",
+                    Data = new List<TechnicianAvailabilityData>()
                 };
 
                 // Get available slots for date range by aggregating per day
@@ -444,7 +444,25 @@ namespace EVServiceCenter.Application.Service
                                 }
                             }
                         };
-                        availability.AvailableSlots.Add(timeSlotAvailability);
+                        availability.Data.Add(new TechnicianAvailabilityData
+                        {
+                            Date = currentDate.ToString("yyyy-MM-dd"),
+                            TechnicianId = technician.TechnicianId,
+                            TechnicianName = technician.User?.FullName ?? "N/A",
+                            IsFullyBooked = false,
+                            TotalSlots = 1,
+                            BookedSlots = 0,
+                            AvailableSlots = 1,
+                            TimeSlots = new List<TimeSlotInfo>
+                            {
+                                new TimeSlotInfo
+                                {
+                                    Time = slot.Slot?.SlotTime.ToString(@"hh\:mm") ?? "Unknown",
+                                    IsAvailable = true,
+                                    BookingId = null
+                                }
+                            }
+                        });
                     }
                     
                     currentDate = currentDate.AddDays(1);

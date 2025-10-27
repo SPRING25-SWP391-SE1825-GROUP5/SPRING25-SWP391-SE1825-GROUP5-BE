@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace EVServiceCenter.Application.Models.Responses
 {
@@ -16,7 +17,10 @@ namespace EVServiceCenter.Application.Models.Responses
     public class InventoryPartResponse
     {
         public int InventoryPartId { get; set; }
+        
+        [JsonIgnore]
         public int InventoryId { get; set; }
+        
         public int PartId { get; set; }
         public required string PartNumber { get; set; } = null!;
         public required string PartName { get; set; } = null!;

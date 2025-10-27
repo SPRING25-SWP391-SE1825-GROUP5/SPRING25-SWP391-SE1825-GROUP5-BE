@@ -76,21 +76,36 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         // IsBookingCodeUniqueAsync removed
 
-        public async Task<List<Booking>> GetByTechnicianAndDateAsync(int technicianId, DateOnly date)
+
+        public async Task<List<Booking>> GetByTechnicianAsync(int technicianId)
         {
-            return await _context.Bookings
+            var bookings = await _context.Bookings
                 .Include(b => b.Customer).ThenInclude(c => c.User)
                 .Include(b => b.Vehicle)
                 .Include(b => b.Center)
                 .Include(b => b.TechnicianTimeSlot!)
                 .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
-                // WorkOrders removed - functionality merged into Booking
-                .Where(b => b.CreatedAt.Date == date.ToDateTime(TimeOnly.MinValue).Date 
-                         && b.TechnicianTimeSlot != null 
+                .Where(b => b.TechnicianTimeSlot != null 
                          && b.TechnicianTimeSlot.TechnicianId == technicianId)
-                .OrderBy(b => b.TechnicianTimeSlot!.Slot!.SlotTime)
+                .OrderByDescending(b => b.CreatedAt)
                 .ToListAsync();
+                
+            return bookings;
+        }
+
+        public async Task<Booking?> GetBookingDetailAsync(int bookingId)
+        {
+            var booking = await _context.Bookings
+                .Include(b => b.Customer).ThenInclude(c => c.User)
+                .Include(b => b.Vehicle)
+                .Include(b => b.Center)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
+                .Include(b => b.Service)
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+                
+            return booking;
         }
 
         public async Task<List<Booking>> GetAllForAutoCancelAsync()
@@ -270,6 +285,23 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Invoices)
                 .ThenInclude(i => i.Payments)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+        }
+
+        public async Task<List<Booking>> GetByCustomerIdAsync(int customerId)
+        {
+            return await _context.Bookings
+                .Include(b => b.TechnicianTimeSlot!).ThenInclude(tts => tts.Slot!)
+                .Include(b => b.Service)
+                .Include(b => b.Center)
+                .Include(b => b.Vehicle)
+                .Where(b => b.CustomerId == customerId)
+                .OrderByDescending(b => b.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync()
+        {
+            return await _context.Database.BeginTransactionAsync();
         }
     }
 }

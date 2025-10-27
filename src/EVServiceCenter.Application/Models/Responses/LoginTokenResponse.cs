@@ -25,6 +25,8 @@ namespace EVServiceCenter.Application.Models.Responses
         public string? Gender { get; set; }
         public string? AvatarUrl { get; set; }
         public bool IsActive { get; set; }
+        public int? CenterId { get; set; }
+        public string? CenterName { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

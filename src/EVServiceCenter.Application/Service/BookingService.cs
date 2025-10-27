@@ -354,10 +354,16 @@ namespace EVServiceCenter.Application.Service
                 if (timeSlot == null)
                     throw new ArgumentException("Slot thời gian không tồn tại");
 
-                if (!timeSlot.IsAvailable)
-                    throw new ArgumentException($"Khung giờ {timeSlot.Slot?.SlotLabel} ({timeSlot.Slot?.SlotTime}) của kỹ thuật viên {timeSlot.Technician?.User?.FullName} đã được đặt. Vui lòng chọn khung giờ khác.");
-
                 var selectedTechnicianId = timeSlot.TechnicianId;
+
+                // Kiểm tra slot availability một cách chính xác
+                var isTrulyAvailable = await _technicianTimeSlotRepository.IsSlotTrulyAvailableAsync(
+                    selectedTechnicianId, 
+                    request.BookingDate.ToDateTime(TimeOnly.MinValue), 
+                    timeSlot.SlotId);
+                
+                if (!isTrulyAvailable)
+                    throw new ArgumentException($"Khung giờ {timeSlot.Slot?.SlotLabel} ({timeSlot.Slot?.SlotTime}) của kỹ thuật viên {timeSlot.Technician?.User?.FullName} đã được đặt. Vui lòng chọn khung giờ khác.");
 
                 // Kiểm tra và sử dụng CustomerServiceCredit đã có hoặc tạo mới
                 int? appliedCreditId = null;
@@ -428,8 +434,10 @@ namespace EVServiceCenter.Application.Service
                     request.BookingDate.ToDateTime(TimeOnly.MinValue),
                     timeSlot.SlotId,
                     null); // Reserve without booking ID first
-                // Removed availability check - allow force reserve for rebooking cancelled slots
                 
+                if (!reserveOk)
+                    throw new ArgumentException("Slot đã được đặt bởi người khác. Vui lòng chọn khung giờ khác.");
+
                 // Save booking only after successful slot reservation
                 var createdBooking = await _bookingRepository.CreateBookingAsync(booking);
                 
@@ -439,6 +447,7 @@ namespace EVServiceCenter.Application.Service
                     request.BookingDate.ToDateTime(TimeOnly.MinValue),
                     timeSlot.SlotId,
                     createdBooking.BookingId);
+                
                 _logger.LogDebug("Booking {BookingId} created with status: {Status}", createdBooking.BookingId, createdBooking.Status);
 
                 // Tự động tạo MaintenanceChecklist từ ServiceChecklistTemplate
@@ -586,19 +595,29 @@ namespace EVServiceCenter.Application.Service
                 }
 
                 // Release reserved technician slot when booking is cancelled
-                if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase)
-                    && booking.TechnicianSlotId.HasValue)
+                if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
                 {
-                    var tts = await _technicianTimeSlotRepository.GetByIdAsync(booking.TechnicianSlotId.Value);
-                    if (tts != null)
+                    // Luôn release TechnicianSlotId khi hủy booking (kể cả khi NULL)
+                    if (booking.TechnicianSlotId.HasValue)
                     {
-                        await _technicianTimeSlotRepository.ReleaseSlotAsync(
-                            tts.TechnicianId,
-                            tts.WorkDate,
-                            tts.SlotId);
+                        var tts = await _technicianTimeSlotRepository.GetByIdAsync(booking.TechnicianSlotId.Value);
+                        if (tts != null)
+                        {
+                            var releaseOk = await _technicianTimeSlotRepository.ReleaseSlotAsync(
+                                tts.TechnicianId,
+                                tts.WorkDate,
+                                tts.SlotId);
+                            
+                            if (!releaseOk)
+                            {
+                                _logger.LogWarning("Không thể release slot {SlotId} cho technician {TechnicianId} khi hủy booking {BookingId}", 
+                                    tts.SlotId, tts.TechnicianId, booking.BookingId);
+                            }
+                        }
                     }
-                    // ✅ KHÔNG XÓA TechnicianSlotId để giữ history
-                    // booking.TechnicianSlotId = null; // ❌ XÓA DÒNG NÀY
+                    
+                    // Luôn set TechnicianSlotId = NULL khi hủy booking (đảm bảo không có duplicate key)
+                    booking.TechnicianSlotId = null;
                 }
 
                 // Update MaintenanceChecklist and MaintenanceChecklistResult when booking is cancelled

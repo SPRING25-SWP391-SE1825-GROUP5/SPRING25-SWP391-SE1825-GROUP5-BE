@@ -61,12 +61,6 @@ namespace EVServiceCenter.Application.Models.Responses
         public decimal? Rating { get; set; }
     }
 
-    public class TimeSlotInfo
-    {
-        public int SlotId { get; set; }
-        public required string StartTime { get; set; } = null!;
-        public required string EndTime { get; set; } = null!;
-    }
 
     public class CostInfo
     {

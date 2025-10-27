@@ -11,6 +11,7 @@ namespace EVServiceCenter.Application.Interfaces
         Task<PartResponse> GetPartByIdAsync(int partId);
         Task<PartResponse> CreatePartAsync(CreatePartRequest request);
         Task<PartResponse> UpdatePartAsync(int partId, UpdatePartRequest request);
+        Task<PartListResponse> GetPartsNotInInventoryAsync(int inventoryId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null);
         // Removed: GetServicesByPartIdAsync - ServiceParts deprecated
     }
 }

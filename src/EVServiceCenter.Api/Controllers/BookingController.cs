@@ -20,7 +20,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly IBookingService _bookingService;
         private readonly IBookingHistoryService _bookingHistoryService;
         private readonly IGuestBookingService _guestBookingService;
-        private static readonly string[] AllowedBookingStatuses = new[] { "PENDING", "CONFIRMED", "CANCELLED", "COMPLETED" };
+        private static readonly string[] AllowedBookingStatuses = new[] { "PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "PAID", "CANCELLED" };
 
         private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
         private readonly Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> _hub;
@@ -28,16 +28,20 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         private readonly EVServiceCenter.Application.Service.PaymentService _paymentService;
         private readonly EVServiceCenter.Domain.Interfaces.IInvoiceRepository _invoiceRepository;
+        private readonly INotificationService _notificationService;
         private readonly EVServiceCenter.Domain.Interfaces.IPaymentRepository _paymentRepository;
         private readonly EVServiceCenter.Domain.Interfaces.IBookingRepository _bookingRepository;
         private readonly EVServiceCenter.Domain.Interfaces.ITechnicianRepository _technicianRepository;
+        private readonly ICustomerService _customerService;
+        private readonly ITechnicianService _technicianService;
 
-    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub, Microsoft.Extensions.Options.IOptions<EVServiceCenter.Application.Configurations.BookingRealtimeOptions> realtimeOptions, IGuestBookingService guestBookingService, EVServiceCenter.Application.Service.PaymentService paymentService, EVServiceCenter.Domain.Interfaces.IInvoiceRepository invoiceRepository, EVServiceCenter.Domain.Interfaces.IPaymentRepository paymentRepository, EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepository, EVServiceCenter.Domain.Interfaces.ITechnicianRepository technicianRepository)
+    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub, Microsoft.Extensions.Options.IOptions<EVServiceCenter.Application.Configurations.BookingRealtimeOptions> realtimeOptions, IGuestBookingService guestBookingService, EVServiceCenter.Application.Service.PaymentService paymentService, EVServiceCenter.Domain.Interfaces.IInvoiceRepository invoiceRepository, INotificationService notificationService, EVServiceCenter.Domain.Interfaces.IPaymentRepository paymentRepository, EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepository, EVServiceCenter.Domain.Interfaces.ITechnicianRepository technicianRepository, ICustomerService customerService, ITechnicianService technicianService)
         {
         _bookingService = bookingService;
         _bookingHistoryService = bookingHistoryService;
         _holdStore = holdStore;
         _hub = hub;
+        _notificationService = notificationService;
         _ttlMinutes = realtimeOptions?.Value?.HoldTtlMinutes ?? 5;
         _guestBookingService = guestBookingService;
         _paymentService = paymentService;
@@ -45,6 +49,8 @@ namespace EVServiceCenter.WebAPI.Controllers
         _paymentRepository = paymentRepository;
         _bookingRepository = bookingRepository;
         _technicianRepository = technicianRepository;
+        _customerService = customerService;
+        _technicianService = technicianService;
         }
 
         [HttpGet("availability")]
@@ -171,8 +177,75 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         public class UpdateBookingStatusRequest { public string Status { get; set; } = string.Empty; }
+        public class CancelBookingRequest { public string? Reason { get; set; } }
+
+        [HttpPut("{bookingId}/cancel")]
+        [Authorize(Roles = "CUSTOMER,STAFF,ADMIN,MANAGER,TECHNICIAN")]
+        public async Task<IActionResult> CancelBooking(int bookingId, [FromBody] CancelBookingRequest request)
+        {
+            try
+            {
+                // Validate booking exists
+                var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
+                if (booking == null)
+                {
+                    return NotFound(new { success = false, message = "Booking không tồn tại" });
+                }
+
+                // Check if booking can be cancelled
+                if (booking.Status == "CANCELLED")
+                {
+                    return BadRequest(new { success = false, message = "Booking đã được hủy rồi" });
+                }
+
+                if (booking.Status == "COMPLETED" || booking.Status == "PAID")
+                {
+                    return BadRequest(new { success = false, message = "Không thể hủy booking đã hoàn thành hoặc đã thanh toán" });
+                }
+
+                // Update booking status to CANCELLED
+                var updateRequest = new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest
+                {
+                    Status = "CANCELLED"
+                };
+
+                var result = await _bookingService.UpdateBookingStatusAsync(bookingId, updateRequest);
+
+                // Send notification to technician
+                if (result.TechnicianId.HasValue)
+                {
+                    var technicianUserId = await _technicianService.GetTechnicianUserIdAsync(result.TechnicianId.Value);
+                    if (technicianUserId.HasValue)
+                    {
+                        await _notificationService.SendTechnicianNotificationAsync(
+                            technicianUserId.Value,
+                            "Booking đã bị hủy",
+                            $"Booking #{bookingId} từ {result.CustomerName} đã bị hủy",
+                            "BOOKING"
+                        );
+                    }
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Booking đã được hủy thành công",
+                    data = new
+                    {
+                        bookingId = result.BookingId,
+                        status = result.Status,
+                        cancelledAt = DateTime.UtcNow
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
 
         [HttpPut("{id:int}/status")]
+        [Authorize(Roles = "STAFF,ADMIN,MANAGER,TECHNICIAN")]
         public async Task<IActionResult> ChangeStatus(int id, [FromBody] UpdateBookingStatusRequest request)
         {
             if (string.IsNullOrWhiteSpace(request?.Status))
@@ -183,6 +256,10 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new { success = false, message = "Trạng thái booking không hợp lệ" });
 
             var updated = await _bookingService.UpdateBookingStatusAsync(id, new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = status });
+            
+            // Gửi thông báo khi thay đổi status
+            await SendStatusChangeNotifications(updated, status);
+            
             return Ok(new { success = true, message = "Cập nhật trạng thái booking thành công", data = new { bookingId = updated.BookingId, status = updated.Status } });
         }
 
@@ -248,6 +325,34 @@ namespace EVServiceCenter.WebAPI.Controllers
                 }
 
                 var booking = await _bookingService.CreateBookingAsync(request);
+                
+                // Lấy UserId của customer và technician để gửi notification
+                var customerUserId = await _customerService.GetCustomerUserIdAsync(booking.CustomerId);
+                var technicianUserId = booking.TechnicianId.HasValue 
+                    ? await _technicianService.GetTechnicianUserIdAsync(booking.TechnicianId.Value)
+                    : (int?)null;
+                
+                // Gửi thông báo cho customer
+                if (customerUserId.HasValue)
+                {
+                    await _notificationService.SendBookingNotificationAsync(
+                        customerUserId.Value,
+                        "Đặt lịch thành công",
+                        $"Bạn đã đặt lịch thành công cho dịch vụ vào {booking.BookingDate:dd/MM/yyyy} lúc {booking.SlotTime}. Mã booking: #{booking.BookingId}",
+                        "BOOKING"
+                    );
+                }
+
+                // Gửi thông báo cho kỹ thuật viên khi có booking mới
+                if (technicianUserId.HasValue)
+                {
+                    await _notificationService.SendTechnicianNotificationAsync(
+                        technicianUserId.Value,
+                        "Booking mới",
+                        $"Bạn có booking mới từ {booking.CustomerName} cho dịch vụ vào {booking.BookingDate:dd/MM/yyyy} lúc {booking.SlotTime}",
+                        "BOOKING"
+                    );
+                }
                 
                 var message = (!string.IsNullOrWhiteSpace(request.PackageCode))
                     ? $"Tạo đặt lịch thành công và đã áp dụng gói '{request.PackageCode}'"
@@ -566,6 +671,81 @@ namespace EVServiceCenter.WebAPI.Controllers
                 AppliedCreditId = booking.AppliedCreditId,
                 CreatedAt = booking.CreatedAt,
                 UpdatedAt = booking.UpdatedAt
+            };
+        }
+
+        private async Task SendStatusChangeNotifications(BookingResponse booking, string newStatus)
+        {
+            try
+            {
+                // Lấy thông tin booking chi tiết để gửi thông báo
+                var bookingDetail = await _bookingRepository.GetBookingWithDetailsByIdAsync(booking.BookingId);
+                if (bookingDetail == null) return;
+
+                var customerUserId = bookingDetail.Customer?.UserId;
+                var technicianUserId = bookingDetail.TechnicianTimeSlot?.Technician?.UserId;
+
+                // Thông báo cho customer
+                if (customerUserId.HasValue)
+                {
+                    var customerMessage = GetStatusMessageForCustomer(newStatus, booking.BookingId);
+                    await _notificationService.SendBookingNotificationAsync(
+                        customerUserId.Value,
+                        "Cập nhật trạng thái booking",
+                        customerMessage,
+                        "BOOKING"
+                    );
+                }
+
+                // Thông báo cho kỹ thuật viên
+                if (technicianUserId.HasValue)
+                {
+                    var technicianMessage = GetStatusMessageForTechnician(newStatus, booking.BookingId);
+                    await _notificationService.SendTechnicianNotificationAsync(
+                        technicianUserId.Value,
+                        "Cập nhật trạng thái booking",
+                        technicianMessage,
+                        "BOOKING"
+                    );
+                }
+
+                // Thông báo cho staff/admin
+                await _notificationService.SendStaffNotificationAsync(
+                    "Booking status đã thay đổi",
+                    $"Booking #{booking.BookingId} đã chuyển sang trạng thái {newStatus}",
+                    "BOOKING"
+                );
+            }
+            catch (Exception ex)
+            {
+                // Log error nhưng không throw để không ảnh hưởng đến response chính
+                Console.WriteLine($"Error sending status change notifications: {ex.Message}");
+            }
+        }
+
+        private string GetStatusMessageForCustomer(string status, int bookingId)
+        {
+            return status switch
+            {
+                "CONFIRMED" => $"Booking #{bookingId} của bạn đã được xác nhận. Vui lòng đến đúng giờ hẹn.",
+                "IN_PROGRESS" => $"Booking #{bookingId} đang được thực hiện. Kỹ thuật viên đã bắt đầu làm việc.",
+                "COMPLETED" => $"Booking #{bookingId} đã hoàn thành. Vui lòng thanh toán để hoàn tất.",
+                "PAID" => $"Booking #{bookingId} đã được thanh toán thành công. Cảm ơn bạn!",
+                "CANCELLED" => $"Booking #{bookingId} đã bị hủy. Vui lòng liên hệ trung tâm để biết thêm chi tiết.",
+                _ => $"Booking #{bookingId} đã được cập nhật trạng thái thành {status}."
+            };
+        }
+
+        private string GetStatusMessageForTechnician(string status, int bookingId)
+        {
+            return status switch
+            {
+                "CONFIRMED" => $"Booking #{bookingId} đã được xác nhận. Vui lòng chuẩn bị làm việc.",
+                "IN_PROGRESS" => $"Booking #{bookingId} đang được thực hiện.",
+                "COMPLETED" => $"Booking #{bookingId} đã hoàn thành. Chờ thanh toán.",
+                "PAID" => $"Booking #{bookingId} đã được thanh toán thành công.",
+                "CANCELLED" => $"Booking #{bookingId} đã bị hủy.",
+                _ => $"Booking #{bookingId} đã được cập nhật trạng thái thành {status}."
             };
         }
     }

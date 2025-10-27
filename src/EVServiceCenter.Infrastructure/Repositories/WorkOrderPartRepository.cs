@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -18,6 +19,18 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _db.WorkOrderParts
                 .Include(x => x.Part)
                 .Where(x => x.BookingId == bookingId)
+                .ToListAsync();
+        }
+
+        public async Task<List<WorkOrderPart>> GetByCenterAndDateRangeAsync(int centerId, DateTime startDate, DateTime endDate)
+        {
+            return await _db.WorkOrderParts
+                .Include(x => x.Part)
+                .Include(x => x.Booking)
+                .Where(x => x.Booking.CenterId == centerId && 
+                           x.Booking.Status == "COMPLETED" &&
+                           x.Booking.UpdatedAt >= startDate && 
+                           x.Booking.UpdatedAt <= endDate)
                 .ToListAsync();
         }
 

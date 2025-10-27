@@ -16,6 +16,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<List<MaintenanceChecklistResult>> GetByChecklistIdAsync(int checklistId)
         {
             return await _db.MaintenanceChecklistResults
+                .Include(r => r.Part) // Include Part entity để lấy PartName và Description
                 .Where(r => r.ChecklistId == checklistId)
                 .ToListAsync();
         }

@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using EVServiceCenter.Application.Interfaces;
 
 namespace EVServiceCenter.Api.Controllers
 {
@@ -13,15 +15,18 @@ namespace EVServiceCenter.Api.Controllers
     {
         private readonly IMaintenanceChecklistRepository _checkRepo;
         private readonly IMaintenanceChecklistResultRepository _resultRepo;
+        private readonly IPdfInvoiceService _pdfInvoiceService;
         // WorkOrderRepository removed - functionality merged into BookingRepository
         // Removed: IServicePartRepository _servicePartRepo;
 
         public MaintenanceChecklistController(
             IMaintenanceChecklistRepository checkRepo,
-            IMaintenanceChecklistResultRepository resultRepo)
+            IMaintenanceChecklistResultRepository resultRepo,
+            IPdfInvoiceService pdfInvoiceService)
         {
             _checkRepo = checkRepo;
             _resultRepo = resultRepo;
+            _pdfInvoiceService = pdfInvoiceService;
             // WorkOrderRepository removed - functionality merged into BookingRepository
         }
 
@@ -212,20 +217,24 @@ namespace EVServiceCenter.Api.Controllers
 
         // GET /api/maintenance-checklist/{bookingId}/export
         [HttpGet("{bookingId:int}/export")]
+        [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> ExportPdf(int bookingId)
         {
-            var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
-            if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
-
-            var results = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"Checklist #{checklist.ChecklistId} for Booking #{bookingId}");
-            foreach (var r in results)
+            try
             {
-                sb.AppendLine($"- {r.Description}: {r.Result ?? "N/A"} (Status: {r.Status})");
+                var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
+                if (checklist == null) 
+                    return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
+
+                // Sử dụng PdfInvoiceService để tạo PDF với thông tin maintenance checklist
+                var pdfBytes = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(bookingId);
+                
+                return File(pdfBytes, "application/pdf", $"MaintenanceChecklist_{bookingId}.pdf");
             }
-            var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
-            return File(bytes, "application/octet-stream", $"Checklist_{bookingId}.txt");
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi khi xuất PDF: " + ex.Message });
+            }
         }
 
         public class UpdateStatusRequest 

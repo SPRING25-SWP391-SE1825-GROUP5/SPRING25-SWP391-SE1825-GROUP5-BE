@@ -245,7 +245,7 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
             .Include(t => t.Slot)
             .Where(t => t.WorkDate.Date == workDate.ToDateTime(TimeOnly.MinValue).Date &&
                        t.IsAvailable == true &&
-                       t.Slot.SlotTime < currentTime)
+                       t.Slot != null && t.Slot.SlotTime < currentTime)
             .ToListAsync();
     }
 
@@ -261,5 +261,22 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
         
         // Kiểm tra cả IsAvailable và BookingId
         return tts.IsAvailable && tts.BookingId == null;
+    }
+
+    public async Task<List<TechnicianTimeSlot>> GetByTechnicianAndDateAsync(int technicianId, DateTime date)
+    {
+        return await _context.TechnicianTimeSlots
+            .Where(t => t.TechnicianId == technicianId &&
+                       t.WorkDate.Date == date.Date)
+            .Include(t => t.Slot)
+            .Include(t => t.Technician)
+            .ThenInclude(x => x.User)
+            .Include(t => t.Booking!)
+            .ThenInclude(b => b.Customer)
+            .ThenInclude(c => c.User)
+            .Include(t => t.Booking!)
+            .ThenInclude(b => b.Service)
+            .Where(t => t.Booking != null)
+            .ToListAsync();
     }
 }

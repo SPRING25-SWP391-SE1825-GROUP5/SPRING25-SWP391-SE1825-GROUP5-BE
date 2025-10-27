@@ -13,11 +13,13 @@ namespace EVServiceCenter.Application.Service
     public class PartService : IPartService
     {
         private readonly IPartRepository _partRepository;
+        private readonly IInventoryRepository _inventoryRepository;
         // Removed: IServicePartRepository _servicePartRepository;
 
-        public PartService(IPartRepository partRepository)
+        public PartService(IPartRepository partRepository, IInventoryRepository inventoryRepository)
         {
             _partRepository = partRepository;
+            _inventoryRepository = inventoryRepository;
         }
 
         public async Task<PartListResponse> GetAllPartsAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, bool? isActive = null)
@@ -147,6 +149,56 @@ namespace EVServiceCenter.Application.Service
         }
 
         // Removed: GetServicesByPartIdAsync (ServiceParts dependency dropped)
+
+        public async Task<PartListResponse> GetPartsNotInInventoryAsync(int inventoryId, int pageNumber = 1, int pageSize = 10, string? searchTerm = null)
+        {
+            try
+            {
+                // Get all parts
+                var allParts = await _partRepository.GetAllPartsAsync();
+                
+                // Get all inventory parts across all inventories
+                var allInventoryParts = await _inventoryRepository.GetAllInventoryPartsAsync();
+                var partIdsInAnyInventory = allInventoryParts.Select(ip => ip.PartId).ToHashSet();
+                
+                // Filter out parts that are already in any inventory
+                var partsNotInAnyInventory = allParts.Where(p => !partIdsInAnyInventory.Contains(p.PartId)).ToList();
+
+                // Apply search filter
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    partsNotInAnyInventory = partsNotInAnyInventory.Where(p =>
+                        p.PartNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        p.PartName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                        p.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                    ).ToList();
+                }
+
+                // Pagination
+                var totalCount = partsNotInAnyInventory.Count;
+                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+                var paginatedParts = partsNotInAnyInventory.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+
+                var partResponses = paginatedParts.Select(p => MapToPartResponse(p)).ToList();
+
+                return new PartListResponse
+                {
+                    Parts = partResponses,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    TotalPages = totalPages,
+                    TotalCount = totalCount
+                };
+            }
+            catch (ArgumentException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi lấy danh sách phụ tùng chưa có trong kho nào: {ex.Message}");
+            }
+        }
 
         private PartResponse MapToPartResponse(Part part)
         {

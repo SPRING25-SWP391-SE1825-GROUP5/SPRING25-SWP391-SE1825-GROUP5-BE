@@ -9,7 +9,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<List<Staff>> GetAllStaffAsync();
         Task<Staff?> GetStaffByIdAsync(int staffId);
         Task<Staff?> GetStaffByUserIdAsync(int userId);
-        Task<List<Staff>> GetStaffByCenterIdAsync(int centerId);
+        Task<List<Staff>> GetStaffByCenterIdAsync(int? centerId);
         Task<Staff> CreateStaffAsync(Staff staff);
         Task UpdateStaffAsync(Staff staff);
         Task DeleteStaffAsync(int staffId);

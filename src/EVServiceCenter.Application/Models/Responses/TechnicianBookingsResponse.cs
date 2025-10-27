@@ -28,6 +28,14 @@ public class TechnicianBookingItem
     public required string VehiclePlate { get; set; }
     public DateTime? WorkStartTime { get; set; }
     public DateTime? WorkEndTime { get; set; }
+    
+    // Thêm các field cho dashboard
+    public DateTime BookingDate { get; set; }
+    public string VehicleInfo { get; set; } = string.Empty;
+    public string TimeSlot { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public string CustomerAddress { get; set; } = string.Empty;
 }
 
 

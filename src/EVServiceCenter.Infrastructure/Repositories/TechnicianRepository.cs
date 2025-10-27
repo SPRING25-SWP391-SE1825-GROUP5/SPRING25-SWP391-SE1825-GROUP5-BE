@@ -45,12 +45,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(t => t.UserId == userId);
         }
 
-        public async Task<List<Technician>> GetTechniciansByCenterIdAsync(int centerId)
+        public async Task<List<Technician>> GetTechniciansByCenterIdAsync(int? centerId)
         {
             return await _context.Technicians
                 .Include(t => t.User)
                 .Include(t => t.Center)
-                .Where(t => t.CenterId == centerId && t.IsActive == true && t.User.Role == "TECHNICIAN")
+                .Where(t => (centerId.HasValue ? t.CenterId == centerId.Value : t.CenterId == 0) && t.IsActive == true && t.User.Role == "TECHNICIAN")
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
         }

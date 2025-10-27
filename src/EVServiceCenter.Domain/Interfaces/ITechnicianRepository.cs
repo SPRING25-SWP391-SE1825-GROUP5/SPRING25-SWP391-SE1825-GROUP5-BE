@@ -9,7 +9,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<List<Technician>> GetAllTechniciansAsync();
         Task<Technician?> GetTechnicianByIdAsync(int technicianId);
         Task<Technician?> GetTechnicianByUserIdAsync(int userId);
-        Task<List<Technician>> GetTechniciansByCenterIdAsync(int centerId);
+        Task<List<Technician>> GetTechniciansByCenterIdAsync(int? centerId);
         Task<Technician> CreateTechnicianAsync(Technician technician);
         Task UpdateTechnicianAsync(Technician technician);
         Task DeleteTechnicianAsync(int technicianId);

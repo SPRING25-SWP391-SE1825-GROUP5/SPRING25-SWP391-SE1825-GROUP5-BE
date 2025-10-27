@@ -103,6 +103,37 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Lấy danh sách dịch vụ theo danh mục cho khách hàng chọn (Public API)
+        /// </summary>
+        /// <param name="categoryId">ID danh mục dịch vụ</param>
+        /// <returns>Danh sách dịch vụ trong danh mục</returns>
+        [HttpGet("by-category/{categoryId}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetServicesByCategory(int categoryId)
+        {
+            try
+            {
+                if (categoryId <= 0)
+                    return BadRequest(new { success = false, message = "ID danh mục không hợp lệ" });
+
+                var result = await _serviceService.GetActiveServicesAsync(1, 100, null, categoryId);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Lấy danh sách dịch vụ trong danh mục thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Lỗi hệ thống: " + ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
         /// Lấy thông tin dịch vụ theo ID
         /// </summary>
         /// <param name="id">ID dịch vụ</param>

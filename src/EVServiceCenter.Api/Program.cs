@@ -56,7 +56,12 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 // CORE SERVICES REGISTRATION
 // ============================================================================
 builder.Services.AddControllers();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true;
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+});
 builder.Services.Configure<BookingRealtimeOptions>(builder.Configuration.GetSection("BookingRealtime"));
 // Cache configuration
 builder.Services.AddMemoryCache();
@@ -93,6 +98,7 @@ builder.Services.AddScoped<IPdfInvoiceService, PdfInvoiceService>();
 // Business Services
 builder.Services.AddScoped<ICenterService, CenterService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
+builder.Services.AddScoped<IServiceCategoryService, ServiceCategoryService>();
 builder.Services.AddScoped<ITimeSlotService, TimeSlotService>();
 builder.Services.AddScoped<ITechnicianService, TechnicianService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
@@ -140,6 +146,7 @@ builder.Services.AddScoped<IVehicleModelPartService, VehicleModelPartService>();
 // Chat Services
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddScoped<EVServiceCenter.Application.Interfaces.IChatHubService, EVServiceCenter.Api.Services.ChatHubService>();
 
 // ============================================================================
 // REPOSITORY REGISTRATION
@@ -182,6 +189,7 @@ builder.Services.AddScoped<IVehicleModelPartRepository, VehicleModelPartReposito
 // Service Package & Credit Repositories
 builder.Services.AddScoped<IServicePackageRepository, ServicePackageRepository>();
 builder.Services.AddScoped<ICustomerServiceCreditRepository, CustomerServiceCreditRepository>();
+builder.Services.AddScoped<IServiceCategoryRepository, ServiceCategoryRepository>();
 builder.Services.AddScoped<IServiceChecklistRepository, ServiceChecklistRepository>();
 
 // E-commerce repositories
@@ -334,7 +342,7 @@ builder.Services.AddCors(options =>
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials() // Quan trọng cho JWT/Authentication
+              .AllowCredentials() // Quan trọng cho JWT/Authentication và SignalR
               .SetIsOriginAllowedToAllowWildcardSubdomains(); // Hỗ trợ Google OAuth
     });
 
@@ -470,7 +478,12 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<EVServiceCenter.Api.BookingHub>("/hubs/booking");
-app.MapHub<EVServiceCenter.Api.ChatHub>("/hubs/chat");
+app.MapHub<EVServiceCenter.Api.ChatHub>("/hubs/chat", options =>
+{
+    options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets | 
+                       Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
+})
+.RequireAuthorization(); // Add JWT authentication requirement
 
 
 app.Run();

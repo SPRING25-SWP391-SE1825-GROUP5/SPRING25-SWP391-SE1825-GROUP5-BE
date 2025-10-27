@@ -32,6 +32,7 @@ public partial class EVDbContext : DbContext
     public DbSet<Payment> Payments { get; set; }
     public DbSet<Promotion> Promotions { get; set; }
     public DbSet<Service> Services { get; set; }
+    public DbSet<ServiceCategory> ServiceCategories { get; set; }
     public DbSet<ServiceCenter> ServiceCenters { get; set; }
     public DbSet<ServiceChecklistTemplate> ServiceChecklistTemplates { get; set; }
     public DbSet<ServiceChecklistTemplateItem> ServiceChecklistTemplateItems { get; set; }

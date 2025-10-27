@@ -245,7 +245,7 @@ namespace EVServiceCenter.Application.Service
                     {
                         ServiceId = s.ServiceId,
                         ServiceName = s.ServiceName,
-                        Description = s.Description,
+                        Description = s.Description ?? string.Empty,
                         BasePrice = s.BasePrice,
                         IsActive = s.IsActive
                     }).ToList()

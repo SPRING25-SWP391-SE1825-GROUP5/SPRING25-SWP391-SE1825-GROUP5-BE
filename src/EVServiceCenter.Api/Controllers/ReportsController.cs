@@ -1,399 +1,348 @@
 using System;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using EVServiceCenter.Infrastructure.Configurations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using EVServiceCenter.Application.Interfaces;
-using EVServiceCenter.Application.Models;
+using EVServiceCenter.Application.Models.Requests;
 
 namespace EVServiceCenter.Api.Controllers
 {
 	[ApiController]
-	[Route("api/reports")]
+    [Route("api/[controller]")]
 	[Authorize]
-	public class ReportsController : ControllerBase
-	{
-		private readonly EVServiceCenter.Infrastructure.Configurations.EVDbContext _db;
-		private readonly IBookingStatisticsService _bookingStatisticsService;
+    public class ReportsController : BaseController
+    {
+        private readonly IPartsUsageReportService _partsUsageReportService;
+        private readonly IRevenueReportService _revenueReportService;
+        private readonly IBookingReportsService _bookingReportsService;
+        private readonly ITechnicianReportsService _technicianReportsService;
+        private readonly IInventoryReportsService _inventoryReportsService;
 		
 		public ReportsController(
-			EVServiceCenter.Infrastructure.Configurations.EVDbContext db,
-			IBookingStatisticsService bookingStatisticsService)
-		{
-			_db = db;
-			_bookingStatisticsService = bookingStatisticsService;
+            IPartsUsageReportService partsUsageReportService, 
+            IRevenueReportService revenueReportService,
+            IBookingReportsService bookingReportsService,
+            ITechnicianReportsService technicianReportsService,
+            IInventoryReportsService inventoryReportsService,
+            ILogger<ReportsController> logger)
+            : base(logger)
+        {
+            _partsUsageReportService = partsUsageReportService;
+            _revenueReportService = revenueReportService;
+            _bookingReportsService = bookingReportsService;
+            _technicianReportsService = technicianReportsService;
+            _inventoryReportsService = inventoryReportsService;
 		}
-
-		// GET /api/reports/revenue?from=...&to=...&method=PAYOS|CASH
-		[HttpGet("revenue")]
-		public async Task<IActionResult> GetRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] string? method = null)
-		{
-			var q = _db.Payments.AsQueryable();
-			q = q.Where(p => p.Status == "PAID");
-			// Doanh thu ghi nhận theo thời điểm thanh toán
-			if (from.HasValue) q = q.Where(p => p.PaidAt >= from.Value);
-			if (to.HasValue) q = q.Where(p => p.PaidAt <= to.Value);
-			if (!string.IsNullOrWhiteSpace(method)) q = q.Where(p => p.PaymentMethod == method);
-
-			var total = await System.Threading.Tasks.Task.FromResult(q.Sum(p => (decimal)p.Amount));
-			var count = await System.Threading.Tasks.Task.FromResult(q.Count());
-			var byMethod = await System.Threading.Tasks.Task.FromResult(
-				q.GroupBy(p => p.PaymentMethod)
-				.Select(g => new { method = g.Key, total = (decimal)g.Sum(x => x.Amount), count = g.Count() })
-				.ToList());
-
-			return Ok(new { success = true, data = new { total, count, byMethod } });
-		}
-
-		// GET /api/reports/cashier?from=...&to=...&paidByUserId=...
-		[HttpGet("cashier")]
-		public async Task<IActionResult> GetCashierReport([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] int? paidByUserId)
-		{
-			var q = _db.Payments.AsQueryable();
-			q = q.Where(p => p.Status == "PAID");
-			if (from.HasValue) q = q.Where(p => p.CreatedAt >= from.Value);
-			if (to.HasValue) q = q.Where(p => p.CreatedAt <= to.Value);
-			if (paidByUserId.HasValue) q = q.Where(p => p.PaidByUserID == paidByUserId.Value);
-
-			var total = await System.Threading.Tasks.Task.FromResult(q.Sum(p => (decimal)p.Amount));
-			var count = await System.Threading.Tasks.Task.FromResult(q.Count());
-			var byCashier = await System.Threading.Tasks.Task.FromResult(
-				q.GroupBy(p => p.PaidByUserID)
-				.Select(g => new { paidByUserId = g.Key, total = (decimal)g.Sum(x => x.Amount), count = g.Count() })
-				.ToList());
-
-			return Ok(new { success = true, data = new { total, count, byCashier } });
-		}
-
-		// ===================== ORDERS REPORTS =====================
-
-		// GET /api/reports/orders/revenue?from=...&to=...
-		// Doanh thu theo Order dựa trên Payments (Status=PAID) qua Invoice, tính theo PaidAt
-		[HttpGet("orders/revenue")]
-		public async Task<IActionResult> GetOrdersRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to)
-		{
-			var q = from p in _db.Payments
-			        join i in _db.Invoices on p.InvoiceId equals i.InvoiceId
-			        join o in _db.Orders on i.OrderId equals o.OrderId
-			        where p.Status == "PAID"
-			        select new { o.OrderId, p.Amount, p.PaidAt };
-
-			if (from.HasValue) q = q.Where(x => x.PaidAt >= from.Value);
-			if (to.HasValue) q = q.Where(x => x.PaidAt <= to.Value);
-
-			var list = await q.ToListAsync();
-			var totalRevenue = list.Sum(x => (decimal)x.Amount);
-			var totalOrders = list.Select(x => x.OrderId).Distinct().Count();
-			var aov = totalOrders > 0 ? totalRevenue / totalOrders : 0m;
-
-			return Ok(new { totalRevenue, totalOrders, averageOrderValue = aov });
-		}
-
-		// ===================== AGGREGATE REVENUE =====================
-		// GET /api/reports/revenue/aggregate?from=...&to=...&source=payments|orders&centerIds=1,2&groupBy=date,center&method=CASH
-		[HttpGet("revenue/aggregate")]
-		public async Task<IActionResult> GetRevenueAggregate(
-			[FromQuery] DateTime fromDate,
-			[FromQuery] DateTime toDate,
-			[FromQuery] string? source = "payments",
-			[FromQuery] string? centerIds = null,
-			[FromQuery] string? groupBy = null,
-			[FromQuery] string? method = null)
-		{
-			if (toDate <= fromDate) return BadRequest(new { success = false, message = "to phải lớn hơn from" });
-
-			var wantGroupDate = (groupBy ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains("date", StringComparer.OrdinalIgnoreCase);
-			var wantGroupCenter = (groupBy ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Contains("center", StringComparer.OrdinalIgnoreCase);
-
-			HashSet<int>? centerIdSet = null;
-			if (!string.IsNullOrWhiteSpace(centerIds))
-			{
-				centerIdSet = new HashSet<int>(centerIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-					.Select(s => int.TryParse(s, out var id) ? id : 0)
-					.Where(id => id > 0));
-			}
-
-			source = (source ?? "payments").ToLowerInvariant();
-			if (source != "payments" && source != "orders")
-			{
-				return BadRequest(new { success = false, message = "source chỉ hỗ trợ: payments|orders" });
-			}
-
-			decimal totalRevenue = 0m;
-			int totalCount = 0;
-
-			List<object> series = new();
-
-			if (source == "payments")
-			{
-				// Payments (PAID) theo PaidAt; suy centerId từ Booking của Invoice (nếu có)
-				var q = from p in _db.Payments
-				        join i in _db.Invoices on p.InvoiceId equals i.InvoiceId
-				        join b in _db.Bookings on i.BookingId equals b.BookingId into jb
-				        from b in jb.DefaultIfEmpty()
-					where p.Status == "PAID" && p.PaidAt >= fromDate && p.PaidAt < toDate
-				        select new { p.Amount, p.PaidAt, centerId = (int?)b.CenterId, p.PaymentMethod };
-
-				if (!string.IsNullOrWhiteSpace(method)) q = q.Where(x => x.PaymentMethod == method);
-				if (centerIdSet != null && centerIdSet.Count > 0) q = q.Where(x => x.centerId.HasValue && centerIdSet.Contains(x.centerId.Value));
-
-				var list = await q.ToListAsync();
-				totalRevenue = list.Sum(x => (decimal)x.Amount);
-				totalCount = list.Count;
-
-				IEnumerable<object> enumerated = list.Select(x => new { date = x.PaidAt?.Date ?? DateTime.MinValue, centerId = x.centerId, amount = (decimal)x.Amount });
-
-				if (wantGroupDate && wantGroupCenter)
-				{
-					series = enumerated
-						.GroupBy(x => new { ((dynamic)x).date, ((dynamic)x).centerId })
-						.Select(g => (object)new { date = g.Key.date, centerId = g.Key.centerId, revenue = g.Sum(v => (decimal)((dynamic)v).amount) })
-						.OrderBy(x => ((dynamic)x).date)
-						.ToList();
-				}
-				else if (wantGroupDate)
-				{
-					series = enumerated
-						.GroupBy(x => ((dynamic)x).date)
-						.Select(g => (object)new { date = g.Key, revenue = g.Sum(v => (decimal)((dynamic)v).amount) })
-						.OrderBy(x => ((dynamic)x).date)
-						.ToList();
-				}
-				else if (wantGroupCenter)
-				{
-					series = enumerated
-						.GroupBy(x => ((dynamic)x).centerId)
-						.Select(g => (object)new { centerId = g.Key, revenue = g.Sum(v => (decimal)((dynamic)v).amount) })
-						.ToList();
-				}
-			}
-			else // source == "orders"
-			{
-				// Doanh thu Order = tổng payments theo Invoice của Order (PAID)
-				var q = from p in _db.Payments
-				        join i in _db.Invoices on p.InvoiceId equals i.InvoiceId
-				        join o in _db.Orders on i.OrderId equals o.OrderId
-					where p.Status == "PAID" && p.PaidAt >= fromDate && p.PaidAt < toDate
-				        select new { o.OrderId, p.Amount, p.PaidAt };
-
-				var list = await q.ToListAsync();
-				totalRevenue = list.Sum(x => (decimal)x.Amount);
-				totalCount = list.Select(x => x.OrderId).Distinct().Count();
-
-				if (wantGroupDate)
-				{
-					series = list
-						.GroupBy(x => x.PaidAt?.Date ?? DateTime.MinValue)
-						.Select(g => (object)new { date = g.Key, revenue = g.Sum(v => (decimal)v.Amount) })
-						.OrderBy(x => ((dynamic)x).date)
-						.ToList();
-				}
-			}
-
-			return Ok(new { summary = new { totalRevenue, count = totalCount }, series });
-		}
-
-		// GET /api/reports/orders/top-parts?from=...&to=...&top=10
-		[HttpGet("orders/top-parts")]
-		public async Task<IActionResult> GetOrdersTopParts([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] int top = 10)
-		{
-			if (top <= 0) top = 10;
-			var allowed = new[] { "PAID", "COMPLETED", "DONE", "FINISHED" };
-			var q = from oi in _db.OrderItems
-			        join o in _db.Orders on oi.OrderId equals o.OrderId
-			        join p in _db.Parts on oi.PartId equals p.PartId
-			        where allowed.Contains(o.Status)
-			        select new { oi.PartId, p.PartName, qty = oi.Quantity, revenue = (decimal)oi.Quantity * oi.UnitPrice, o.CreatedAt };
-
-			if (from.HasValue) q = q.Where(x => x.CreatedAt >= from.Value);
-			if (to.HasValue) q = q.Where(x => x.CreatedAt <= to.Value);
-
-			var result = await q
-				.GroupBy(x => new { x.PartId, x.PartName })
-				.Select(g => new { partId = g.Key.PartId, partName = g.Key.PartName, quantity = g.Sum(x => x.qty), revenue = g.Sum(x => x.revenue) })
-				.OrderByDescending(x => x.revenue)
-				.Take(top)
-				.ToListAsync();
-
-			return Ok(result);
-		}
-
-		// GET /api/reports/orders/by-customer?customerId=...&from=...&to=...&page=1&pageSize=20
-		[HttpGet("orders/by-customer")]
-		public async Task<IActionResult> GetOrdersByCustomer([FromQuery] int customerId, [FromQuery] DateTime from, [FromQuery] DateTime to, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
-		{
-			if (customerId <= 0) return BadRequest(new { success = false, message = "customerId bắt buộc" });
-			if (page <= 0) page = 1;
-			if (pageSize <= 0 || pageSize > 200) pageSize = 20;
-
-			var baseQ = _db.Orders.Where(o => o.CustomerId == customerId && o.CreatedAt >= from && o.CreatedAt < to);
-			var total = await baseQ.CountAsync();
-
-			// Tổng hợp doanh thu từ OrderItems
-			var revenue = await (from o in baseQ
-							   join oi in _db.OrderItems on o.OrderId equals oi.OrderId
-							   select (decimal)oi.Quantity * oi.UnitPrice).SumAsync();
-
-			var lastOrderAt = await baseQ.OrderByDescending(o => o.CreatedAt).Select(o => (DateTime?)o.CreatedAt).FirstOrDefaultAsync();
-
-			var items = await baseQ
-				.OrderByDescending(o => o.CreatedAt)
-				.Skip((page - 1) * pageSize)
-				.Take(pageSize)
-				.Select(o => new
-				{
-					orderId = o.OrderId,
-					status = o.Status,
-					createdAt = o.CreatedAt,
-					totalAmount = _db.OrderItems.Where(oi => oi.OrderId == o.OrderId).Select(oi => (decimal)oi.Quantity * oi.UnitPrice).Sum()
-				})
-				.ToListAsync();
-
-			return Ok(new
-			{
-				aggregates = new { orders = total, revenue, lastOrderAt },
-				total = total,
-				items
-			});
-		}
-
-		// ===================== BOOKING STATISTICS =====================
 
 		/// <summary>
-		/// Lấy thống kê tổng quan booking
+        /// Lấy báo cáo sử dụng phụ tùng của chi nhánh
 		/// </summary>
-		/// <param name="request">Tham số lọc thống kê</param>
-		/// <returns>Thống kê booking</returns>
-		[HttpPost("bookings/overview")]
-		public async Task<ActionResult<BookingStatisticsResponse>> GetBookingStatistics([FromBody] BookingStatisticsRequest request)
+        /// <param name="centerId">ID chi nhánh</param>
+        /// <param name="request">Thông tin báo cáo</param>
+        /// <returns>Báo cáo sử dụng phụ tùng</returns>
+        [HttpGet("parts-usage/{centerId}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
+        public async Task<IActionResult> GetPartsUsageReport(int centerId, [FromQuery] PartsUsageReportRequest request)
 		{
-			if (request == null)
+			try
 			{
-				return BadRequest(new BookingStatisticsResponse
+                // Validate center access for MANAGER
+                if (User.IsInRole("MANAGER"))
+                {
+                    // TODO: Implement GetUserCenterId method or use existing method from BaseController
+                    // For now, we'll allow the request to proceed
+                    // var userCenterId = GetUserCenterId();
+                    // if (userCenterId != centerId)
+                    // {
+                    //     return Forbid("Bạn chỉ có thể xem báo cáo của chi nhánh mình");
+                    // }
+                }
+
+                // Validate request
+                if (request.StartDate >= request.EndDate)
+                {
+                    return BadRequest(new { success = false, message = "Ngày bắt đầu phải nhỏ hơn ngày kết thúc" });
+                }
+
+                if (request.StartDate > DateTime.Now)
+                {
+                    return BadRequest(new { success = false, message = "Ngày bắt đầu không được lớn hơn ngày hiện tại" });
+                }
+
+                // Validate pagination
+                if (request.PageNumber < 1) request.PageNumber = 1;
+                if (request.PageSize < 1 || request.PageSize > 100) request.PageSize = 20;
+
+                var result = await _partsUsageReportService.GetPartsUsageReportAsync(centerId, request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy báo cáo sử dụng phụ tùng thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+			}
+			catch (Exception ex)
+			{
+                return StatusCode(500, new
 				{
-					Success = false,
-					Message = "Request không hợp lệ"
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
 				});
 			}
-
-			var result = await _bookingStatisticsService.GetBookingStatisticsAsync(request);
-			
-			if (!result.Success)
-			{
-				return BadRequest(result);
-			}
-
-			return Ok(result);
 		}
 
-		/// <summary>
-		/// Lấy thống kê booking theo CenterId
-		/// </summary>
-		/// <param name="centerId">ID của center</param>
-		/// <param name="request">Tham số lọc thống kê</param>
-		/// <returns>Thống kê booking của center</returns>
-		[HttpPost("bookings/center/{centerId}")]
-		public async Task<ActionResult<BookingStatisticsResponse>> GetCenterBookingStatistics(
-			int centerId, 
-			[FromBody] CenterBookingStatisticsRequest request)
-		{
-			if (request == null)
-			{
-				return BadRequest(new BookingStatisticsResponse
-				{
-					Success = false,
-					Message = "Request không hợp lệ"
-				});
-			}
+        /// <summary>
+        /// Lấy báo cáo doanh thu của chi nhánh
+        /// </summary>
+        /// <param name="centerId">ID chi nhánh</param>
+        /// <param name="request">Thông tin báo cáo</param>
+        /// <returns>Báo cáo doanh thu</returns>
+        [HttpGet("revenue/{centerId}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
+        public async Task<IActionResult> GetRevenueReport(int centerId, [FromQuery] RevenueReportRequest request)
+        {
+            try
+            {
+                // Validate center access for MANAGER
+                if (User.IsInRole("MANAGER"))
+                {
+                    // TODO: Implement GetUserCenterId method or use existing method from BaseController
+                    // For now, we'll allow the request to proceed
+                }
 
-			// Ensure CenterId matches
-			request.CenterId = centerId;
+                // Validate request
+                if (request.StartDate >= request.EndDate)
+                {
+                    return BadRequest(new { success = false, message = "Ngày bắt đầu phải nhỏ hơn ngày kết thúc" });
+                }
 
-			var result = await _bookingStatisticsService.GetCenterBookingStatisticsAsync(request);
-			
-			if (!result.Success)
-			{
-				return BadRequest(result);
-			}
+                if (request.StartDate > DateTime.Now)
+                {
+                    return BadRequest(new { success = false, message = "Ngày bắt đầu không được lớn hơn ngày hiện tại" });
+                }
 
-			return Ok(result);
-		}
+                // Validate period
+                var validPeriods = new[] { "daily", "weekly", "monthly", "quarterly" };
+                if (!validPeriods.Contains(request.Period.ToLower()))
+                {
+                    return BadRequest(new { success = false, message = "Period phải là: daily, weekly, monthly, hoặc quarterly" });
+                }
 
-		/// <summary>
-		/// Lấy thống kê booking nhanh (GET method)
-		/// </summary>
-		/// <param name="startDate">Ngày bắt đầu (optional)</param>
-		/// <param name="endDate">Ngày kết thúc (optional)</param>
-		/// <param name="centerId">ID center (optional)</param>
-		/// <param name="status">Trạng thái booking (optional)</param>
-		/// <returns>Thống kê booking</returns>
-		[HttpGet("bookings/quick")]
-		public async Task<ActionResult<BookingStatisticsResponse>> GetQuickBookingStatistics(
-			[FromQuery] DateTime? startDate = null,
-			[FromQuery] DateTime? endDate = null,
-			[FromQuery] int? centerId = null,
-			[FromQuery] string? status = null)
-		{
-			var request = new BookingStatisticsRequest
-			{
-				StartDate = startDate,
-				EndDate = endDate,
-				CenterId = centerId,
-				Status = status,
-				IncludeMonthlyStats = true,
-				IncludeDailyStats = false,
-				IncludeServiceTypeStats = true
-			};
+                // Validate groupBy
+                var validGroupBy = new[] { "service", "technician", "none" };
+                if (!validGroupBy.Contains(request.GroupBy.ToLower()))
+                {
+                    return BadRequest(new { success = false, message = "GroupBy phải là: service, technician, hoặc none" });
+                }
 
-			var result = await _bookingStatisticsService.GetBookingStatisticsAsync(request);
-			
-			if (!result.Success)
-			{
-				return BadRequest(result);
-			}
+                var result = await _revenueReportService.GetRevenueReportAsync(centerId, request);
 
-			return Ok(result);
-		}
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy báo cáo doanh thu thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
 
-		/// <summary>
-		/// Lấy thống kê booking của center nhanh (GET method)
-		/// </summary>
-		/// <param name="centerId">ID của center</param>
-		/// <param name="startDate">Ngày bắt đầu (optional)</param>
-		/// <param name="endDate">Ngày kết thúc (optional)</param>
-		/// <param name="status">Trạng thái booking (optional)</param>
-		/// <returns>Thống kê booking của center</returns>
-		[HttpGet("bookings/center/{centerId}/quick")]
-		public async Task<ActionResult<BookingStatisticsResponse>> GetQuickCenterBookingStatistics(
-			int centerId,
-			[FromQuery] DateTime? startDate = null,
-			[FromQuery] DateTime? endDate = null,
-			[FromQuery] string? status = null)
-		{
-			var request = new CenterBookingStatisticsRequest
-			{
-				CenterId = centerId,
-				StartDate = startDate,
-				EndDate = endDate,
-				Status = status,
-				IncludeMonthlyStats = true,
-				IncludeDailyStats = false,
-				IncludeServiceTypeStats = true
-			};
+        /// <summary>
+        /// Lấy danh sách booking hôm nay của chi nhánh
+        /// </summary>
+        /// <param name="centerId">ID chi nhánh</param>
+        /// <returns>Danh sách booking hôm nay</returns>
+        [HttpGet("bookings/today/{centerId}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
+        public async Task<IActionResult> GetTodayBookings(int centerId)
+        {
+            try
+            {
+                var result = await _bookingReportsService.GetTodayBookingsAsync(centerId);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách booking hôm nay thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
 
-			var result = await _bookingStatisticsService.GetCenterBookingStatisticsAsync(request);
-			
-			if (!result.Success)
-			{
-				return BadRequest(result);
-			}
+        /// <summary>
+        /// Lấy danh sách booking của chi nhánh
+        /// </summary>
+        /// <param name="centerId">ID chi nhánh</param>
+        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
+        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
+        /// <param name="status">Trạng thái booking (PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, PAID, CANCELLED)</param>
+        /// <returns>Danh sách booking</returns>
+        [HttpGet("bookings/{centerId}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
+        public async Task<IActionResult> GetBookings(int centerId, 
+            [FromQuery] int pageNumber = 1, 
+            [FromQuery] int pageSize = 10, 
+            [FromQuery] string? status = null)
+        {
+            try
+            {
+                // Validate pagination parameters
+                if (pageNumber < 1) pageNumber = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
-			return Ok(result);
-		}
+                var result = await _bookingReportsService.GetBookingsAsync(centerId, pageNumber, pageSize, status);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách booking thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy hiệu suất kỹ thuật viên của chi nhánh
+        /// </summary>
+        /// <param name="centerId">ID chi nhánh</param>
+        /// <param name="period">Khoảng thời gian (week, month, quarter, year)</param>
+        /// <returns>Hiệu suất kỹ thuật viên</returns>
+        [HttpGet("technicians/performance/{centerId}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
+        public async Task<IActionResult> GetTechnicianPerformance(int centerId, 
+            [FromQuery] string period = "month")
+        {
+            try
+            {
+                // Validate period
+                var validPeriods = new[] { "week", "month", "quarter", "year" };
+                if (!validPeriods.Contains(period.ToLower()))
+                {
+                    return BadRequest(new { success = false, message = "Period phải là: week, month, quarter, hoặc year" });
+                }
+
+                var result = await _technicianReportsService.GetTechnicianPerformanceAsync(centerId, period);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy hiệu suất kỹ thuật viên thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy lịch làm việc kỹ thuật viên của chi nhánh
+        /// </summary>
+        /// <param name="centerId">ID chi nhánh</param>
+        /// <param name="date">Ngày cần xem lịch (yyyy-MM-dd)</param>
+        /// <returns>Lịch làm việc kỹ thuật viên</returns>
+        [HttpGet("technicians/schedule/{centerId}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
+        public async Task<IActionResult> GetTechnicianSchedule(int centerId, 
+            [FromQuery] DateTime date)
+        {
+            try
+            {
+                var result = await _technicianReportsService.GetTechnicianScheduleAsync(centerId, date);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy lịch làm việc kỹ thuật viên thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy báo cáo sử dụng kho của chi nhánh
+        /// </summary>
+        /// <param name="centerId">ID chi nhánh</param>
+        /// <param name="period">Khoảng thời gian (week, month, quarter, year)</param>
+        /// <returns>Báo cáo sử dụng kho</returns>
+        [HttpGet("inventory/usage/{centerId}")]
+        [Authorize(Roles = "MANAGER,ADMIN")]
+        public async Task<IActionResult> GetInventoryUsage(int centerId, 
+            [FromQuery] string period = "month")
+        {
+            try
+            {
+                // Validate period
+                var validPeriods = new[] { "week", "month", "quarter", "year" };
+                if (!validPeriods.Contains(period.ToLower()))
+                {
+                    return BadRequest(new { success = false, message = "Period phải là: week, month, quarter, hoặc year" });
+                }
+
+                var result = await _inventoryReportsService.GetInventoryUsageAsync(centerId, period);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy báo cáo sử dụng kho thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
 	}
 }
-
-

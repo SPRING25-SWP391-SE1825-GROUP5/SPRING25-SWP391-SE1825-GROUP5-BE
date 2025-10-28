@@ -42,12 +42,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(s => s.UserId == userId);
         }
 
-        public async Task<List<Staff>> GetStaffByCenterIdAsync(int centerId)
+        public async Task<List<Staff>> GetStaffByCenterIdAsync(int? centerId)
         {
             return await _context.Staff
                 .Include(s => s.User)
                 .Include(s => s.Center)
-                .Where(s => s.CenterId == centerId)
+                .Where(s => centerId.HasValue ? s.CenterId == centerId.Value : s.CenterId == 0)
                 .OrderByDescending(s => s.CreatedAt)
                 .ToListAsync();
         }

@@ -119,6 +119,15 @@ builder.Services.AddScoped<IPayOSService, EVServiceCenter.Application.Services.P
 builder.Services.AddHttpClient<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
+builder.Services.AddScoped<ITechnicianAvailabilityService, EVServiceCenter.Application.Service.TechnicianAvailabilityService>();
+builder.Services.AddScoped<ICenterRevenueService, EVServiceCenter.Application.Service.CenterRevenueService>();
+builder.Services.AddScoped<IPaymentMethodRevenueService, EVServiceCenter.Application.Service.PaymentMethodRevenueService>();
+builder.Services.AddScoped<IPartsUsageReportService, EVServiceCenter.Application.Service.PartsUsageReportService>();
+builder.Services.AddScoped<IRevenueReportService, EVServiceCenter.Application.Service.RevenueReportService>();
+builder.Services.AddScoped<IBookingReportsService, EVServiceCenter.Application.Service.BookingReportsService>();
+builder.Services.AddScoped<ITechnicianReportsService, EVServiceCenter.Application.Service.TechnicianReportsService>();
+builder.Services.AddScoped<IInventoryReportsService, EVServiceCenter.Application.Service.InventoryReportsService>();
+builder.Services.AddScoped<ITechnicianDashboardService, EVServiceCenter.Application.Service.TechnicianDashboardService>();
 // WorkOrderService removed - functionality merged into BookingService
 
 // E-commerce services
@@ -192,6 +201,11 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
 builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 builder.Services.AddScoped<IConversationMemberRepository, ConversationMemberRepository>();
+
+// Notification Repository & Service
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<INotificationHub, EVServiceCenter.Api.Services.NotificationHubService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 builder.Services.AddHostedService<SlotAvailabilityUpdateService>();
@@ -284,7 +298,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("ADMIN"));
-    options.AddPolicy("StaffOrAdmin", policy => policy.RequireRole("ADMIN", "STAFF"));
+    options.AddPolicy("StaffOrAdmin", policy => policy.RequireRole("ADMIN", "STAFF", "TECHNICIAN"));
     options.AddPolicy("TechnicianOrAdmin", policy => policy.RequireRole("ADMIN", "TECHNICIAN"));
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });

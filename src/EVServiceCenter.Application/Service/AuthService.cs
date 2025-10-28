@@ -37,8 +37,9 @@ namespace EVServiceCenter.Application.Service
         private readonly IOtpCodeRepository _otpRepository;
         private readonly IMemoryCache _cache;
         private readonly ILoginLockoutService _loginLockoutService;
+        private readonly ICenterRepository _centerRepository;
         
-        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache, ILoginLockoutService loginLockoutService)
+        public AuthService(IAccountService accountService, IAuthRepository authRepository, IEmailService emailService, IOtpService otpService, IJwtService jwtService, IConfiguration configuration, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IAccountRepository accountRepository, IOtpCodeRepository otpRepository, IMemoryCache cache, ILoginLockoutService loginLockoutService, ICenterRepository centerRepository)
         {
             _accountService = accountService;
             _authRepository = authRepository;
@@ -53,6 +54,7 @@ namespace EVServiceCenter.Application.Service
             _otpRepository = otpRepository;
             _cache = cache;
             _loginLockoutService = loginLockoutService;
+            _centerRepository = centerRepository;
         }
         private bool IsValidUrl(string? url)
         {
@@ -290,6 +292,7 @@ namespace EVServiceCenter.Application.Service
             int? customerId = null;
             int? staffId = null;
             int? technicianId = null;
+            int? centerId = null;
             
             if (user.Role == "CUSTOMER")
             {
@@ -300,11 +303,21 @@ namespace EVServiceCenter.Application.Service
             {
                 var staff = await _staffRepository.GetStaffByUserIdAsync(user.UserId);
                 staffId = staff?.StaffId;
+                centerId = staff?.CenterId;
             }
             else if (user.Role == "TECHNICIAN")
             {
                 var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);
                 technicianId = technician?.TechnicianId;
+                centerId = technician?.CenterId;
+            }
+
+            // Lấy center name nếu có centerId
+            string? centerName = null;
+            if (centerId.HasValue)
+            {
+                var center = await _centerRepository.GetCenterByIdAsync(centerId.Value);
+                centerName = center?.CenterName;
             }
 
             return new LoginTokenResponse
@@ -328,6 +341,8 @@ namespace EVServiceCenter.Application.Service
                 Gender = user.Gender,
                 AvatarUrl = user.AvatarUrl,
                 IsActive = user.IsActive,
+                CenterId = centerId,
+                CenterName = centerName,
                 CreatedAt = user.CreatedAt,
                 UpdatedAt = user.UpdatedAt
             };
@@ -842,6 +857,26 @@ namespace EVServiceCenter.Application.Service
                     customerId = customer?.CustomerId;
                 }
 
+                // Lấy center info cho staff/technician
+                int? centerId = null;
+                string? centerName = null;
+                if (user.Role == "STAFF")
+                {
+                    var staff = await _staffRepository.GetStaffByUserIdAsync(user.UserId);
+                    centerId = staff?.CenterId;
+                }
+                else if (user.Role == "TECHNICIAN")
+                {
+                    var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);
+                    centerId = technician?.CenterId;
+                }
+
+                if (centerId.HasValue)
+                {
+                    var center = await _centerRepository.GetCenterByIdAsync(centerId.Value);
+                    centerName = center?.CenterName;
+                }
+
                 return new LoginTokenResponse
                 {
                     AccessToken = accessToken,
@@ -861,6 +896,8 @@ namespace EVServiceCenter.Application.Service
                     Gender = user.Gender,
                     AvatarUrl = user.AvatarUrl,
                     IsActive = user.IsActive,
+                    CenterId = centerId,
+                    CenterName = centerName,
                     CreatedAt = user.CreatedAt,
                     UpdatedAt = user.UpdatedAt
                 };

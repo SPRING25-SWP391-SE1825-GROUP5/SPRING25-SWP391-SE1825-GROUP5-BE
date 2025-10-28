@@ -272,6 +272,27 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        /// <summary>
+        /// Lấy lịch sử booking của khách hàng
+        /// </summary>
+        [HttpGet("{customerId}/bookings")]
+        [Authorize(Policy = "StaffOrAdmin")]
+        public async Task<IActionResult> GetCustomerBookings(int customerId)
+        {
+            try
+            {
+                if (customerId <= 0)
+                    return BadRequest(new { success = false, message = "CustomerId không hợp lệ" });
+
+                var data = await _customerService.GetCustomerBookingsAsync(customerId);
+                return Ok(new { success = true, message = "Lấy lịch sử booking thành công", data });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
 
         private int? GetCurrentUserId()
         {

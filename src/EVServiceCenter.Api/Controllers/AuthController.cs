@@ -200,6 +200,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                             role = result.Role,
                             isActive = result.IsActive,
                             emailVerified = result.EmailVerified,
+                            centerId = result.CenterId,
+                            centerName = result.CenterName,
                             createdAt = result.CreatedAt,
                             updatedAt = result.UpdatedAt
                         }
@@ -630,6 +632,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                             role = result.Role,
                             isActive = result.IsActive,
                             emailVerified = result.EmailVerified,
+                            centerId = result.CenterId,
+                            centerName = result.CenterName,
                             createdAt = result.CreatedAt,
                             updatedAt = result.UpdatedAt
                         }

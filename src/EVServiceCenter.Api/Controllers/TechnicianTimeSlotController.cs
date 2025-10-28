@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
+using EVServiceCenter.Application.Models;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -17,11 +18,16 @@ namespace EVServiceCenter.Api.Controllers
     {
         private readonly ITechnicianTimeSlotService _technicianTimeSlotService;
         private readonly ITechnicianRepository _technicianRepository;
+        private readonly ITechnicianAvailabilityService _technicianAvailabilityService;
 
-        public TechnicianTimeSlotController(ITechnicianTimeSlotService technicianTimeSlotService, ITechnicianRepository technicianRepository)
+        public TechnicianTimeSlotController(
+            ITechnicianTimeSlotService technicianTimeSlotService, 
+            ITechnicianRepository technicianRepository,
+            ITechnicianAvailabilityService technicianAvailabilityService)
         {
             _technicianTimeSlotService = technicianTimeSlotService;
             _technicianRepository = technicianRepository;
+            _technicianAvailabilityService = technicianAvailabilityService;
         }
 
         /// <summary>
@@ -645,6 +651,149 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        
+        /// <summary>
+        /// Lấy availability của tất cả technician trong center
+        /// </summary>
+        /// <param name="centerId">ID của trung tâm</param>
+        /// <param name="startDate">Ngày bắt đầu (optional)</param>
+        /// <param name="endDate">Ngày kết thúc (optional)</param>
+        /// <param name="page">Trang hiện tại (default: 1)</param>
+        /// <param name="pageSize">Số bản ghi mỗi trang (default: 30)</param>
+        /// <returns>Danh sách availability của tất cả technician</returns>
+        [HttpGet("centers/{centerId}/availability")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetCenterTechniciansAvailability(
+            [FromRoute] int centerId,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 30)
+        {
+            try
+            {
+                if (centerId <= 0)
+                {
+                    return BadRequest(new TechnicianAvailabilityResponse
+                    {
+                        Success = false,
+                        Message = "CenterId phải lớn hơn 0"
+                    });
+                }
+
+                if (page <= 0)
+                {
+                    return BadRequest(new TechnicianAvailabilityResponse
+                    {
+                        Success = false,
+                        Message = "Page phải lớn hơn 0"
+                    });
+                }
+
+                if (pageSize <= 0 || pageSize > 100)
+                {
+                    return BadRequest(new TechnicianAvailabilityResponse
+                    {
+                        Success = false,
+                        Message = "PageSize phải từ 1 đến 100"
+                    });
+                }
+
+                var result = await _technicianAvailabilityService.GetCenterTechniciansAvailabilityAsync(
+                    centerId, startDate, endDate, page, pageSize);
+
+                if (!result.Success)
+                {
+                    return BadRequest(result);
+                }
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new TechnicianAvailabilityResponse
+                {
+                    Success = false,
+                    Message = $"Lỗi hệ thống: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy availability của 1 technician cụ thể trong center
+        /// </summary>
+        /// <param name="centerId">ID của trung tâm</param>
+        /// <param name="technicianId">ID của technician</param>
+        /// <param name="startDate">Ngày bắt đầu (optional)</param>
+        /// <param name="endDate">Ngày kết thúc (optional)</param>
+        /// <param name="page">Trang hiện tại (default: 1)</param>
+        /// <param name="pageSize">Số bản ghi mỗi trang (default: 30)</param>
+        /// <returns>Danh sách availability của technician</returns>
+        [HttpGet("centers/{centerId}/technicians/{technicianId}/availability")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetTechnicianAvailability(
+            [FromRoute] int centerId,
+            [FromRoute] int technicianId,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 30)
+        {
+            try
+            {
+                if (centerId <= 0)
+                {
+                    return BadRequest(new TechnicianAvailabilityResponse
+                    {
+                        Success = false,
+                        Message = "CenterId phải lớn hơn 0"
+                    });
+                }
+
+                if (technicianId <= 0)
+                {
+                    return BadRequest(new TechnicianAvailabilityResponse
+                    {
+                        Success = false,
+                        Message = "TechnicianId phải lớn hơn 0"
+                    });
+                }
+
+                if (page <= 0)
+                {
+                    return BadRequest(new TechnicianAvailabilityResponse
+                    {
+                        Success = false,
+                        Message = "Page phải lớn hơn 0"
+                    });
+                }
+
+                if (pageSize <= 0 || pageSize > 100)
+                {
+                    return BadRequest(new TechnicianAvailabilityResponse
+                    {
+                        Success = false,
+                        Message = "PageSize phải từ 1 đến 100"
+                    });
+                }
+
+                var result = await _technicianAvailabilityService.GetTechnicianAvailabilityAsync(
+                    centerId, technicianId, startDate, endDate, page, pageSize);
+
+                if (!result.Success)
+                {
+                    return BadRequest(result);
+                }
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new TechnicianAvailabilityResponse
+                {
+                    Success = false,
+                    Message = $"Lỗi hệ thống: {ex.Message}"
+                });
+            }
+        }
     }
 }

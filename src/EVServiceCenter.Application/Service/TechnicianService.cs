@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Application.Models;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -15,48 +17,24 @@ namespace EVServiceCenter.Application.Service
         private readonly ITechnicianRepository _technicianRepository;
         private readonly ITimeSlotRepository _timeSlotRepository;
         private readonly IBookingRepository _bookingRepository;
+        private readonly IMaintenanceChecklistRepository _maintenanceChecklistRepository;
+        private readonly IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
+        private readonly ILogger<TechnicianService> _logger;
 
-        public TechnicianService(ITechnicianRepository technicianRepository, ITimeSlotRepository timeSlotRepository, IBookingRepository bookingRepository)
+        public TechnicianService(
+            ITechnicianRepository technicianRepository, 
+            ITimeSlotRepository timeSlotRepository, 
+            IBookingRepository bookingRepository,
+            IMaintenanceChecklistRepository maintenanceChecklistRepository,
+            IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository,
+            ILogger<TechnicianService> logger)
         {
             _technicianRepository = technicianRepository;
             _timeSlotRepository = timeSlotRepository;
             _bookingRepository = bookingRepository;
-        }
-        public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly date)
-        {
-            var result = new TechnicianBookingsResponse
-            {
-                TechnicianId = technicianId,
-                Date = date,
-                Bookings = new List<TechnicianBookingItem>()
-            };
-
-            var bookings = await _bookingRepository.GetByTechnicianAndDateAsync(technicianId, date);
-            foreach (var b in bookings)
-            {
-                // WorkOrder functionality merged into Booking - no separate work order needed
-                result.Bookings.Add(new TechnicianBookingItem
-                {
-                    BookingId = b.BookingId,
-                    BookingCode = string.Empty,
-                    Status = b.Status ?? string.Empty,
-                    ServiceId = b.ServiceId,
-                    ServiceName = b.Service?.ServiceName ?? string.Empty,
-                    CenterId = b.CenterId,
-                    CenterName = b.Center?.CenterName ?? "N/A",
-                    SlotId = b.TechnicianTimeSlot?.SlotId ?? 0,
-                    SlotTime = b.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
-                    CustomerName = b.Customer?.User?.FullName ?? "N/A",
-                    CustomerPhone = b.Customer?.User?.PhoneNumber ?? string.Empty,
-                    VehiclePlate = b.Vehicle?.LicensePlate ?? string.Empty,
-                    WorkOrderId = b.BookingId, // Use BookingId as WorkOrderId
-                    WorkOrderStatus = b.Status ?? string.Empty, // Use Booking status
-                    WorkStartTime = null,
-                    WorkEndTime = null
-                });
-            }
-
-            return result;
+            _maintenanceChecklistRepository = maintenanceChecklistRepository;
+            _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
+            _logger = logger;
         }
 
         public async Task<TechnicianListResponse> GetAllTechniciansAsync(int pageNumber = 1, int pageSize = 10, string? searchTerm = null, int? centerId = null)
@@ -152,10 +130,27 @@ namespace EVServiceCenter.Application.Service
 
                 return new TechnicianAvailabilityResponse
                 {
+                    Success = true,
+                    Message = "Lấy thông tin availability của technician thành công",
+                    Data = new List<TechnicianAvailabilityData>
+                    {
+                        new TechnicianAvailabilityData
+                        {
+                            Date = date.ToString("yyyy-MM-dd"),
                     TechnicianId = technician.TechnicianId,
-                    TechnicianName = technician.User.FullName,
-                    Date = date.ToDateTime(TimeOnly.MinValue),
-                    AvailableSlots = timeSlotAvailability
+                            TechnicianName = technician.User?.FullName ?? "Unknown",
+                            IsFullyBooked = timeSlotAvailability.All(ts => !ts.IsAvailable),
+                            TotalSlots = timeSlotAvailability.Count,
+                            BookedSlots = timeSlotAvailability.Count(ts => !ts.IsAvailable),
+                            AvailableSlots = timeSlotAvailability.Count(ts => ts.IsAvailable),
+                            TimeSlots = timeSlotAvailability.Select(ts => new TimeSlotInfo
+                            {
+                                Time = ts.SlotTime,
+                                IsAvailable = ts.IsAvailable,
+                                BookingId = null // TimeSlotAvailability doesn't have BookingId
+                            }).ToList()
+                        }
+                    }
                 };
             }
             catch (ArgumentException)
@@ -231,5 +226,206 @@ namespace EVServiceCenter.Application.Service
                 // CenterCity = technician.Center?.City
             };
         }
+
+
+        public async Task<TechnicianBookingsResponse> GetAllBookingsAsync(int technicianId)
+        {
+            var result = new TechnicianBookingsResponse
+            {
+                TechnicianId = technicianId,
+                Date = DateOnly.MinValue, // Sử dụng MinValue thay vì null
+                Bookings = new List<TechnicianBookingItem>()
+            };
+
+            try
+            {
+                // Lấy tất cả bookings của technician
+                var bookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
+                
+                foreach (var booking in bookings)
+                {
+                    var bookingItem = new TechnicianBookingItem
+                    {
+                        BookingId = booking.BookingId,
+                        Status = booking.Status ?? "N/A",
+                        Date = booking.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd") ?? "N/A", // Thêm Date từ TechnicianTimeSlot
+                        ServiceId = booking.ServiceId,
+                        ServiceName = booking.Service?.ServiceName ?? "N/A",
+                        CenterId = booking.CenterId,
+                        CenterName = booking.Center?.CenterName ?? "N/A",
+                        SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
+                        TechnicianSlotId = booking.TechnicianTimeSlot?.TechnicianSlotId ?? 0,
+                        SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
+                        SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel ?? "N/A", // Thêm SlotLabel
+                        CustomerName = booking.Customer?.User?.FullName ?? "N/A",
+                        CustomerPhone = booking.Customer?.User?.PhoneNumber ?? "N/A",
+                        VehiclePlate = booking.Vehicle?.LicensePlate ?? "N/A",
+                        WorkStartTime = null, // Booking không có WorkStartTime
+                        WorkEndTime = null   // Booking không có WorkEndTime
+                    };
+                    
+                    result.Bookings.Add(bookingItem);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy tất cả booking cho technician {TechnicianId}", technicianId);
+                return new TechnicianBookingsResponse
+                {
+                    TechnicianId = technicianId,
+                    Date = DateOnly.MinValue,
+                    Bookings = new List<TechnicianBookingItem>()
+                };
+            }
+        }
+
+        public async Task<TechnicianBookingDetailResponse> GetBookingDetailAsync(int technicianId, int bookingId)
+        {
+            try
+            {
+                // Lấy booking detail
+                var booking = await _bookingRepository.GetBookingDetailAsync(bookingId);
+                
+                if (booking == null)
+                {
+                    return new TechnicianBookingDetailResponse
+                    {
+                        TechnicianId = technicianId,
+                        BookingId = bookingId,
+                        Status = "NOT_FOUND"
+                    };
+                }
+
+                // Kiểm tra booking có thuộc về technician này không
+                if (booking.TechnicianTimeSlot?.TechnicianId != technicianId)
+                {
+                    return new TechnicianBookingDetailResponse
+                    {
+                        TechnicianId = technicianId,
+                        BookingId = bookingId,
+                        Status = "UNAUTHORIZED"
+                    };
+                }
+
+                var response = new TechnicianBookingDetailResponse
+                {
+                    TechnicianId = technicianId,
+                    BookingId = bookingId,
+                    Status = booking.Status ?? "N/A",
+                    Date = booking.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd") ?? "N/A",
+                    SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
+                    TechnicianSlotId = booking.TechnicianTimeSlot?.TechnicianSlotId ?? 0,
+                    
+                    // Service Information
+                    ServiceId = booking.ServiceId,
+                    ServiceName = booking.Service?.ServiceName ?? "N/A",
+                    ServiceDescription = booking.Service?.Description ?? "N/A",
+                    ServicePrice = booking.Service?.BasePrice ?? 0,
+                    
+                    // Center Information
+                    CenterId = booking.CenterId,
+                    CenterName = booking.Center?.CenterName ?? "N/A",
+                    CenterAddress = booking.Center?.Address ?? "N/A",
+                    CenterPhone = booking.Center?.PhoneNumber ?? "N/A",
+                    
+                    // Customer Information
+                    CustomerId = booking.CustomerId,
+                    CustomerName = booking.Customer?.User?.FullName ?? "N/A",
+                    CustomerPhone = booking.Customer?.User?.PhoneNumber ?? "N/A",
+                    CustomerAddress = booking.Customer?.User?.Address ?? "N/A",
+                    CustomerEmail = booking.Customer?.User?.Email ?? "N/A",
+                    
+                    // Vehicle Information
+                    VehicleId = booking.VehicleId,
+                    VehiclePlate = booking.Vehicle?.LicensePlate ?? "N/A",
+                    VehicleModel = "VinFast VF8", // Hardcode for now
+                    VehicleColor = booking.Vehicle?.Color ?? "N/A",
+                    CurrentMileage = booking.Vehicle?.CurrentMileage ?? 0,
+                    LastServiceDate = booking.Vehicle?.LastServiceDate?.ToDateTime(TimeOnly.MinValue),
+                    
+                    // Maintenance Checklist
+                    MaintenanceChecklists = await GetMaintenanceChecklistsAsync(bookingId),
+                    
+                    // Additional Information
+                    SpecialRequests = booking.SpecialRequests ?? "N/A",
+                    CreatedAt = booking.CreatedAt,
+                    UpdatedAt = booking.UpdatedAt
+                };
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy chi tiết booking {BookingId} cho technician {TechnicianId}", bookingId, technicianId);
+                return new TechnicianBookingDetailResponse
+                {
+                    TechnicianId = technicianId,
+                    BookingId = bookingId,
+                    Status = "ERROR"
+                };
+            }
+        }
+
+        private async Task<List<MaintenanceChecklistInfo>> GetMaintenanceChecklistsAsync(int bookingId)
+        {
+            try
+            {
+                // Lấy maintenance checklist từ database (single object)
+                var checklist = await _maintenanceChecklistRepository.GetByBookingIdAsync(bookingId);
+                var result = new List<MaintenanceChecklistInfo>();
+
+                if (checklist != null)
+                {
+                    // Lấy results cho checklist
+                    var results = await _maintenanceChecklistResultRepository.GetByChecklistIdAsync(checklist.ChecklistId);
+                    var resultInfos = new List<MaintenanceChecklistResultInfo>();
+
+                    foreach (var resultItem in results)
+                    {
+                        resultInfos.Add(new MaintenanceChecklistResultInfo
+                        {
+                            ResultId = resultItem.ResultId,
+                            PartId = resultItem.PartId ?? 0,
+                            PartName = resultItem.Part?.PartName ?? "N/A",
+                            Description = resultItem.Part?.Brand ?? "N/A", // Sử dụng Brand làm Description
+                            Result = resultItem.Result,
+                            Status = resultItem.Status ?? "PENDING"
+                        });
+                    }
+
+                    result.Add(new MaintenanceChecklistInfo
+                    {
+                        ChecklistId = checklist.ChecklistId,
+                        Status = checklist.Status ?? "PENDING",
+                        Notes = checklist.Notes ?? "Auto-generated from template",
+                        Results = resultInfos
+                    });
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy maintenance checklists cho booking {BookingId}", bookingId);
+                return new List<MaintenanceChecklistInfo>();
+            }
+        }
+
+        public async Task<int?> GetTechnicianUserIdAsync(int technicianId)
+        {
+            try
+            {
+                var technician = await _technicianRepository.GetTechnicianByIdAsync(technicianId);
+                return technician?.UserId;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy technician user ID cho technician {TechnicianId}", technicianId);
+                return null;
+            }
+        }
     }
 }
+

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using EVServiceCenter.Application.Models;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 

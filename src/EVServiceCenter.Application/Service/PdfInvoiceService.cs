@@ -113,19 +113,19 @@ namespace EVServiceCenter.Application.Service
                     .SetPadding(10)
                     .Add(new Paragraph("Đơn vị bán hàng (Seller):").SetFont(boldFont).SetFontSize(12))
                     .Add(new Paragraph("EV SERVICE CENTER").SetFont(font).SetFontSize(11).SetMarginTop(5))
-                    .Add(new Paragraph("Mã số thuế: 0123456789").SetFont(font).SetFontSize(10).SetMarginTop(3))
-                    .Add(new Paragraph("Địa chỉ: 123 Đường ABC, Quận XYZ, TP.HCM").SetFont(font).SetFontSize(10).SetMarginTop(3))
-                    .Add(new Paragraph("Điện thoại: 1900-EVSERVICE").SetFont(font).SetFontSize(10).SetMarginTop(3));
+                    .Add(new Paragraph($"Mã số thuế: Chưa cập nhật").SetFont(font).SetFontSize(10).SetMarginTop(3))
+                    .Add(new Paragraph($"Địa chỉ: {booking.Center?.Address ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3))
+                    .Add(new Paragraph($"Điện thoại: {booking.Center?.PhoneNumber ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3));
 
                 // Người mua hàng
                 var buyerCell = new Cell()
                     .SetBorder(iText.Layout.Borders.Border.NO_BORDER)
                     .SetPadding(10)
                     .Add(new Paragraph("Người mua hàng (Buyer):").SetFont(boldFont).SetFontSize(12))
-                    .Add(new Paragraph(booking.Customer?.User?.FullName ?? "N/A").SetFont(font).SetFontSize(11).SetMarginTop(5))
+                    .Add(new Paragraph(booking.Customer?.User?.FullName ?? "Chưa cập nhật").SetFont(font).SetFontSize(11).SetMarginTop(5))
                     .Add(new Paragraph($"Mã KH: {booking.CustomerId}").SetFont(font).SetFontSize(10).SetMarginTop(3))
-                    .Add(new Paragraph("Địa chỉ: " + (booking.Customer?.User?.Address ?? "N/A")).SetFont(font).SetFontSize(10).SetMarginTop(3))
-                    .Add(new Paragraph("Hình thức thanh toán: Chuyển khoản").SetFont(font).SetFontSize(10).SetMarginTop(3));
+                    .Add(new Paragraph($"Địa chỉ: {booking.Customer?.User?.Address ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3))
+                    .Add(new Paragraph($"Hình thức thanh toán: Chưa xác định").SetFont(font).SetFontSize(10).SetMarginTop(3));
 
                 infoTable.AddCell(sellerCell);
                 infoTable.AddCell(buyerCell);
@@ -136,9 +136,9 @@ namespace EVServiceCenter.Application.Service
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginBottom(20);
 
-                invoiceInfoTable.AddCell(new Cell().Add(new Paragraph("Ký hiệu (Series): 1K25TAA").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER));
+                invoiceInfoTable.AddCell(new Cell().Add(new Paragraph($"Ký hiệu (Series): EVS").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER));
                 invoiceInfoTable.AddCell(new Cell().Add(new Paragraph($"Số (No.): {invoice?.InvoiceId:D8}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER));
-                invoiceInfoTable.AddCell(new Cell().Add(new Paragraph($"Ngày: {DateTime.UtcNow:dd} tháng {DateTime.UtcNow:MM} năm {DateTime.UtcNow:yyyy}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER));
+                invoiceInfoTable.AddCell(new Cell().Add(new Paragraph($"Ngày: {DateTime.Now:dd} tháng {DateTime.Now:MM} năm {DateTime.Now:yyyy}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER));
 
                 document.Add(invoiceInfoTable);
 
@@ -190,15 +190,16 @@ namespace EVServiceCenter.Application.Service
 
                 // Phần tóm tắt thanh toán
                 var totalAmount = finalServicePrice + partsAmount;
-                var vatAmount = 0m; // Không có VAT
-                var finalTotal = totalAmount - promotionDiscountAmount;
+                var vatRate = 0m; // No VAT for now
+                var vatAmount = totalAmount * (vatRate / 100);
+                var finalTotal = totalAmount + vatAmount - promotionDiscountAmount;
 
                 var summaryTable = new Table(2)
                     .SetWidth(UnitValue.CreatePercentValue(60))
                     .SetHorizontalAlignment(HorizontalAlignment.RIGHT)
                     .SetMarginTop(20);
 
-                summaryTable.AddCell(new Cell().Add(new Paragraph("Thuế suất GTGT (VAT rate): KCT").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                summaryTable.AddCell(new Cell().Add(new Paragraph($"Thuế suất GTGT (VAT rate): 0%").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
                 summaryTable.AddCell(new Cell().Add(new Paragraph("").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
 
                 summaryTable.AddCell(new Cell().Add(new Paragraph("Cộng tiền hàng (Total amount):").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
@@ -541,6 +542,17 @@ namespace EVServiceCenter.Application.Service
                 "PENDING" => new DeviceRgb(255, 193, 7), // Vàng
                 "NA" => new DeviceRgb(108, 117, 125), // Xám
                 _ => new DeviceRgb(0, 0, 0) // Đen mặc định
+            };
+        }
+
+        private string GetPaymentMethodText(string? paymentMethod)
+        {
+            return paymentMethod?.ToUpper() switch
+            {
+                "PAYOS" => "Chuyển khoản",
+                "CASH" => "Tiền mặt",
+                "BANK_TRANSFER" => "Chuyển khoản ngân hàng",
+                _ => "Chưa xác định"
             };
         }
     }

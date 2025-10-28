@@ -17,6 +17,13 @@ public sealed class ServiceChecklistTemplateConfiguration : IEntityTypeConfigura
         entity.Property(e => e.Description).HasMaxLength(500);
         entity.Property(e => e.IsActive).HasDefaultValue(true);
         entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
+        
+        // Maintenance recommendation fields
+        entity.Property(e => e.MinKm).HasColumnName("MinKm");
+        entity.Property(e => e.MaxDate).HasColumnName("MaxDate");
+        entity.Property(e => e.IntervalKm).HasColumnName("IntervalKm");
+        entity.Property(e => e.IntervalDays).HasColumnName("IntervalDays");
+        entity.Property(e => e.MaxOverdueDays).HasColumnName("MaxOverdueDays");
 
         entity.HasOne<Service>()
             .WithMany()

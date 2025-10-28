@@ -153,4 +153,177 @@ public class ServiceChecklistRepository : IServiceChecklistRepository
         _db.ServiceChecklistTemplates.Remove(tmpl);
         await _db.SaveChangesAsync();
     }
+
+    public async Task<IReadOnlyList<ServiceChecklistTemplate>> GetRecommendedTemplatesAsync(
+        int currentKm, 
+        DateTime? lastMaintenanceDate, 
+        int? categoryId = null)
+    {
+        var query = _db.ServiceChecklistTemplates
+            .AsNoTracking()
+            .Include(t => t.Service)
+            .Where(t => t.IsActive);
+
+        // Filter by category if provided
+        if (categoryId.HasValue)
+        {
+            query = query.Where(t => t.Service != null && t.Service.CategoryId == categoryId.Value);
+        }
+
+        var templates = await query.ToListAsync();
+
+        // Calculate recommendation scores
+        var scoredTemplates = templates.Select(template => new
+        {
+            Template = template,
+            Score = CalculateRecommendationScore(template, currentKm, lastMaintenanceDate)
+        })
+        .OrderByDescending(x => x.Score)
+        .Select(x => x.Template)
+        .ToList();
+
+        return scoredTemplates.AsReadOnly();
+    }
+
+    private int CalculateRecommendationScore(ServiceChecklistTemplate template, int currentKm, DateTime? lastMaintenanceDate)
+    {
+        int score = 0;
+        bool hasKmConditions = template.MinKm.HasValue;
+        bool hasDateConditions = template.IntervalDays.HasValue;
+        bool hasAnyConditions = hasKmConditions || hasDateConditions;
+
+        // Base score for all active templates (ensures we always have some recommendations)
+        score += 10;
+
+        // 1. Kiểm tra điều kiện MinKm trước
+        if (template.MinKm.HasValue)
+        {
+            if (currentKm >= template.MinKm.Value)
+            {
+                score += 80; // Đạt ngưỡng km tối thiểu
+            }
+            else
+            {
+                // Chưa đạt ngưỡng km tối thiểu - vẫn có điểm nhưng thấp hơn
+                var diff = template.MinKm.Value - currentKm;
+                if (diff <= 2000) // Trong vòng 2000km
+                {
+                    score += 40; // Gần đến ngưỡng
+                }
+                else
+                {
+                    score += 20; // Còn xa ngưỡng
+                }
+            }
+        }
+        else
+        {
+            // Không có điều kiện km - template tổng quát
+            score += 50;
+        }
+
+        // 2. Kiểm tra điều kiện MaxDate (ngày tối đa để hiển thị template)
+        if (lastMaintenanceDate.HasValue && template.MaxDate.HasValue)
+        {
+            var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
+            var maxDate = template.MaxDate.Value;
+
+            if (daysSinceLastMaintenance <= maxDate)
+            {
+                // Ngày bảo dưỡng cuối còn trong phạm vi cho phép
+                score += 60;
+            }
+            else
+            {
+                // Ngày bảo dưỡng cuối quá xa - vẫn hiển thị nhưng điểm thấp
+                var overdueDays = daysSinceLastMaintenance - maxDate;
+                if (overdueDays <= 30) // Trễ dưới 30 ngày
+                {
+                    score += 30; // Vẫn có thể chấp nhận
+                }
+                else
+                {
+                    score += 10; // Quá xa, cần xem xét lại
+                }
+            }
+        }
+        else if (template.MaxDate.HasValue)
+        {
+            // Có MaxDate nhưng không có ngày bảo dưỡng cuối
+            score += 30; // Điểm trung bình
+        }
+
+        // 3. Kiểm tra điều kiện IntervalDays (chu kỳ bảo dưỡng)
+        if (lastMaintenanceDate.HasValue && template.IntervalDays.HasValue)
+        {
+            var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
+            var intervalDays = template.IntervalDays.Value;
+
+            if (daysSinceLastMaintenance >= intervalDays)
+            {
+                // Đã đến chu kỳ bảo dưỡng
+                if (template.MaxOverdueDays.HasValue)
+                {
+                    var overdueDays = daysSinceLastMaintenance - intervalDays;
+                    if (overdueDays <= template.MaxOverdueDays.Value)
+                    {
+                        // Trong phạm vi cho phép trễ - có warning nhưng vẫn chấp nhận
+                        score += 100; // High score nhưng sẽ có warning
+                    }
+                    else
+                    {
+                        // Quá trễ - vẫn hiển thị nhưng điểm thấp và có warning
+                        score += 50; // Lower score for extreme overdue
+                    }
+                }
+                else
+                {
+                    // Không có giới hạn trễ - điểm cao
+                    score += 120;
+                }
+            }
+            else
+            {
+                // Chưa đến chu kỳ bảo dưỡng
+                var remainingDays = intervalDays - daysSinceLastMaintenance;
+                if (remainingDays <= 30) // Trong vòng 30 ngày
+                {
+                    score += 80; // Sắp đến chu kỳ
+                }
+                else if (remainingDays <= 90) // Trong vòng 90 ngày
+                {
+                    score += 60; // Chu kỳ tương lai
+                }
+                else
+                {
+                    score += 40; // Chu kỳ xa
+                }
+            }
+        }
+        else if (template.IntervalDays.HasValue)
+        {
+            // Có chu kỳ nhưng không có ngày bảo dưỡng cuối
+            score += 40;
+        }
+
+        // 4. Bonus cho templates có điều kiện đầy đủ
+        if (hasKmConditions && hasDateConditions)
+        {
+            score += 20; // Bonus cho template comprehensive
+        }
+
+        // 5. Bonus cho IntervalKm
+        if (template.IntervalKm.HasValue)
+        {
+            score += 15; // Bonus cho có định nghĩa chu kỳ km
+        }
+
+        // 6. Đảm bảo điểm tối thiểu cho templates không có điều kiện cụ thể
+        if (!hasAnyConditions)
+        {
+            score = Math.Max(score, 30); // Minimum score for general templates
+        }
+
+        return score;
+    }
 }

@@ -2,274 +2,381 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using EVServiceCenter.Domain.Entities;
-using EVServiceCenter.Domain.Interfaces;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using EVServiceCenter.Domain.Interfaces;
+using EVServiceCenter.Domain.Entities;
 
 namespace EVServiceCenter.Api.Controllers;
 
 [ApiController]
-[Route("api/service-templates")]
+[Route("api/[controller]")]
 public class ServiceChecklistController : ControllerBase
 {
     private readonly IServiceChecklistRepository _repo;
-    public ServiceChecklistController(IServiceChecklistRepository repo) { _repo = repo; }
 
-    [HttpGet]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> Get([FromQuery] int serviceId, [FromQuery] bool activeOnly = false)
+    public ServiceChecklistController(IServiceChecklistRepository repo)
     {
-        if (serviceId <= 0) return BadRequest("serviceId is required");
-        var list = await _repo.GetTemplatesAsync(serviceId, activeOnly);
-        return Ok(new { items = list, total = list.Count });
+        _repo = repo;
+    }
+
+    [HttpGet("templates/{serviceId}")]
+    public async Task<IActionResult> GetTemplates(int serviceId, [FromQuery] bool activeOnly = true)
+    {
+        try
+        {
+            var templates = await _repo.GetTemplatesAsync(serviceId, activeOnly);
+            return Ok(new { success = true, data = templates });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi lấy danh sách template", error = ex.Message });
+        }
     }
 
     [HttpGet("all")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAllTemplates()
     {
-        var list = await _repo.GetAllAsync();
-        return Ok(new { items = list, total = list.Count });
+        try
+        {
+            var templates = await _repo.GetAllAsync();
+            return Ok(new { success = true, data = templates });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi lấy tất cả template", error = ex.Message });
+        }
     }
 
     [HttpGet("active")]
-    public async Task<IActionResult> GetActive([FromQuery] int? serviceId)
+    public async Task<IActionResult> GetActiveTemplates([FromQuery] int? serviceId = null)
     {
-        var list = await _repo.GetActiveAsync(serviceId);
-        return Ok(new { items = list, total = list.Count });
-    }
-
-    public class TemplateCreateRequest
-    {
-        public int ServiceId { get; set; }
-        public string? TemplateName { get; set; }
-        public string? Description { get; set; }
-        public bool IsActive { get; set; } = true;
-        public List<TemplateItemDto> Items { get; set; } = new();
-    }
-    public class TemplateItemDto { public int ItemId { get; set; } public int PartId { get; set; } public decimal? DefaultQuantity { get; set; } }
-
-    [HttpPost]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> Create([FromBody] TemplateCreateRequest req)
-    {
-        if (req == null || req.ServiceId <= 0 || string.IsNullOrWhiteSpace(req.TemplateName)) return BadRequest("Invalid request");
-        var template = new ServiceChecklistTemplate
+        try
         {
-            ServiceID = req.ServiceId,
-            TemplateName = req.TemplateName.Trim(),
-            Description = req.Description,
-            IsActive = req.IsActive
-        };
-        var items = (req.Items ?? new List<TemplateItemDto>())
-            .Select(i => new ServiceChecklistTemplateItem { PartID = i.PartId })
-            .ToList();
-        var id = await _repo.CreateTemplateAsync(template, items);
-        if (req.IsActive) await _repo.SetActiveAsync(id, true);
-        return StatusCode(201, new { templateId = id });
-    }
-
-    public class TemplateUpdateRequest { public string? TemplateName { get; set; } public string? Description { get; set; } }
-
-    [HttpPut("{templateId:int}")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> Update(int templateId, [FromBody] TemplateUpdateRequest req)
-    {
-        var tmpl = await _repo.GetByIdAsync(templateId);
-        if (tmpl == null) return NotFound();
-        if (!string.IsNullOrWhiteSpace(req?.TemplateName)) tmpl.TemplateName = req.TemplateName.Trim();
-        if (req != null) tmpl.Description = req.Description;
-        tmpl.UpdatedAt = System.DateTime.UtcNow;
-        await _repo.UpdateTemplateAsync(tmpl);
-        return Ok(new { templateId });
-    }
-
-    public class UpsertItemsRequest { public List<TemplateItemDto> Items { get; set; } = new(); }
-
-    [HttpPut("{templateId:int}/items")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> UpsertItems(int templateId, [FromBody] UpsertItemsRequest req)
-    {
-        var tmpl = await _repo.GetByIdAsync(templateId);
-        if (tmpl == null) return NotFound();
-        var items = (req?.Items ?? new List<TemplateItemDto>())
-            .Select(i => new ServiceChecklistTemplateItem { ItemID = i.ItemId, PartID = i.PartId, TemplateID = templateId })
-            .ToList();
-        await _repo.UpsertItemsAsync(templateId, items);
-        return Ok(new { updated = true });
-    }
-
-    public class ActivateRequest { public bool IsActive { get; set; } }
-
-    [HttpPut("{templateId:int}/activate")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> Activate(int templateId, [FromBody] ActivateRequest req)
-    {
-        await _repo.SetActiveAsync(templateId, req?.IsActive ?? true);
-        return Ok(new { templateId, isActive = req?.IsActive ?? true });
-    }
-
-    [HttpDelete("{templateId:int}")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> Delete(int templateId)
-    {
-        await _repo.DeleteTemplateAsync(templateId);
-        return NoContent();
-    }
-
-    [HttpGet("{templateId:int}")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> GetById(int templateId)
-    {
-        var tmpl = await _repo.GetByIdAsync(templateId);
-        if (tmpl == null) return NotFound();
-        return Ok(tmpl);
-    }
-
-    // Public: lấy danh sách Part của một template
-    [HttpGet("{templateId:int}/items")] 
-    public async Task<IActionResult> GetItems(int templateId)
-    {
-        var tmpl = await _repo.GetByIdAsync(templateId);
-        if (tmpl == null) return NotFound();
-        var items = await _repo.GetItemsByTemplateAsync(templateId);
-        
-        var response = new
+            var templates = await _repo.GetActiveAsync(serviceId);
+            return Ok(new { success = true, data = templates });
+        }
+        catch (Exception ex)
         {
-            templateId,
-            templateName = tmpl.TemplateName,
-            items = items.Select(i => new
-            {
-                itemId = i.ItemID,
-                partId = i.PartID,
-                partName = i.Part?.PartName,
-                partNumber = i.Part?.PartNumber,
-                brand = i.Part?.Brand,
-                price = i.Part?.Price,
-                createdAt = i.CreatedAt
-            })
-        };
-        
-        return Ok(response);
+            return StatusCode(500, new { success = false, message = "Lỗi khi lấy template active", error = ex.Message });
+        }
     }
 
-    // Thêm part vào template
-    [HttpPost("{templateId:int}/parts/{partId:int}")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> AddPart(int templateId, int partId)
+    [HttpGet("{templateId}")]
+    public async Task<IActionResult> GetTemplate(int templateId)
+    {
+        try
+        {
+            var template = await _repo.GetByIdAsync(templateId);
+            if (template == null)
+                return NotFound(new { success = false, message = "Không tìm thấy template" });
+
+            return Ok(new { success = true, data = template });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi lấy template", error = ex.Message });
+        }
+    }
+
+    [HttpGet("{templateId}/items")]
+    public async Task<IActionResult> GetTemplateItems(int templateId)
+    {
+        try
+        {
+            var items = await _repo.GetItemsByTemplateAsync(templateId);
+            return Ok(new { success = true, data = items });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi lấy danh sách items", error = ex.Message });
+        }
+    }
+
+    [HttpPost("{templateId}/parts/{partId}")]
+    public async Task<IActionResult> AddPartToTemplate(int templateId, int partId)
     {
         try
         {
             await _repo.AddPartToTemplateAsync(templateId, partId);
-            return Ok(new { message = "Đã thêm part vào template thành công", templateId, partId });
+            return Ok(new { success = true, message = "Thêm part vào template thành công" });
         }
-        catch (ArgumentException ex)
+        catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return StatusCode(500, new { success = false, message = "Lỗi khi thêm part vào template", error = ex.Message });
         }
     }
 
-    // Xóa part khỏi template
-    [HttpDelete("{templateId:int}/parts/{partId:int}")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> RemovePart(int templateId, int partId)
+    [HttpDelete("{templateId}/parts/{partId}")]
+    public async Task<IActionResult> RemovePartFromTemplate(int templateId, int partId)
     {
         try
         {
             await _repo.RemovePartFromTemplateAsync(templateId, partId);
-            return Ok(new { message = "Đã xóa part khỏi template thành công", templateId, partId });
+            return Ok(new { success = true, message = "Xóa part khỏi template thành công" });
         }
-        catch (ArgumentException ex)
+        catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return StatusCode(500, new { success = false, message = "Lỗi khi xóa part khỏi template", error = ex.Message });
         }
     }
 
-    // Thêm nhiều part vào template cùng lúc
-    [HttpPost("{templateId:int}/parts/batch")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> AddPartsBatch(int templateId, [FromBody] BatchPartsRequest request)
+    [HttpPost("create")]
+    public async Task<IActionResult> CreateTemplate([FromBody] CreateTemplateRequest request)
     {
         try
         {
-            if (request?.PartIds == null || !request.PartIds.Any())
-                return BadRequest(new { message = "Danh sách PartIds không được rỗng" });
+            if (request.Template == null || request.Items == null)
+                return BadRequest(new { success = false, message = "Dữ liệu template và items không được để trống" });
 
-            var results = new List<object>();
-            var errors = new List<string>();
+            var templateId = await _repo.CreateTemplateAsync(request.Template, request.Items);
+            return Ok(new { success = true, data = new { templateId }, message = "Tạo template thành công" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi tạo template", error = ex.Message });
+        }
+    }
 
-            foreach (var partId in request.PartIds)
+    [HttpPut("{templateId}")]
+    public async Task<IActionResult> UpdateTemplate(int templateId, [FromBody] ServiceChecklistTemplate template)
+    {
+        try
+        {
+            if (template.TemplateID != templateId)
+                return BadRequest(new { success = false, message = "ID template không khớp" });
+
+            await _repo.UpdateTemplateAsync(template);
+            return Ok(new { success = true, message = "Cập nhật template thành công" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi cập nhật template", error = ex.Message });
+        }
+    }
+
+    [HttpPut("{templateId}/items")]
+    public async Task<IActionResult> UpsertItems(int templateId, [FromBody] IEnumerable<ServiceChecklistTemplateItem> items)
+    {
+        try
+        {
+            await _repo.UpsertItemsAsync(templateId, items);
+            return Ok(new { success = true, message = "Cập nhật items thành công" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi cập nhật items", error = ex.Message });
+        }
+    }
+
+    [HttpPatch("{templateId}/active")]
+    public async Task<IActionResult> SetActive(int templateId, [FromBody] SetActiveRequest request)
+    {
+        try
+        {
+            await _repo.SetActiveAsync(templateId, request.IsActive);
+            return Ok(new { success = true, message = "Cập nhật trạng thái template thành công" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi cập nhật trạng thái template", error = ex.Message });
+        }
+    }
+
+    [HttpDelete("{templateId}")]
+    public async Task<IActionResult> DeleteTemplate(int templateId)
+    {
+        try
+        {
+            await _repo.DeleteTemplateAsync(templateId);
+            return Ok(new { success = true, message = "Xóa template thành công" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi xóa template", error = ex.Message });
+        }
+    }
+
+    [HttpGet("recommend")]
+    public async Task<IActionResult> GetRecommendedServices(
+        [FromQuery] int currentKm,
+        [FromQuery] DateTime? lastMaintenanceDate = null,
+        [FromQuery] int? categoryId = null)
+    {
+        if (currentKm < 0)
+            return BadRequest(new { message = "Số km hiện tại phải >= 0" });
+
+        try
+        {
+            var recommendedTemplates = await _repo.GetRecommendedTemplatesAsync(
+                currentKm, 
+                lastMaintenanceDate, 
+                categoryId);
+
+            var response = recommendedTemplates.Select((template, index) => new
             {
-                try
-                {
-                    await _repo.AddPartToTemplateAsync(templateId, partId);
-                    results.Add(new { partId, success = true, message = "Thành công" });
-                }
-                catch (ArgumentException ex)
-                {
-                    errors.Add($"PartId {partId}: {ex.Message}");
-                    results.Add(new { partId, success = false, message = ex.Message });
-                }
-            }
+                templateId = template.TemplateID,
+                serviceId = template.ServiceID,
+                templateName = template.TemplateName,
+                description = template.Description,
+                serviceName = template.Service?.ServiceName,
+                categoryId = template.Service?.CategoryId,
+                categoryName = template.Service?.Category?.CategoryName,
+                minKm = template.MinKm,
+                maxDate = template.MaxDate,
+                intervalKm = template.IntervalKm,
+                intervalDays = template.IntervalDays,
+                maxOverdueDays = template.MaxOverdueDays,
+                createdAt = template.CreatedAt,
+                updatedAt = template.UpdatedAt,
+                recommendationRank = index + 1,
+                recommendationReason = GetRecommendationReason(template, currentKm, lastMaintenanceDate),
+                warnings = GetWarnings(template, currentKm, lastMaintenanceDate)
+            }).ToList();
 
             return Ok(new 
             { 
-                message = $"Đã xử lý {request.PartIds.Count} part", 
-                templateId, 
-                results,
-                errors = errors.Any() ? errors : null
+                success = true,
+                data = response,
+                total = response.Count,
+                message = $"Tìm thấy {response.Count} dịch vụ phù hợp"
             });
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
-        }
-    }
-
-    // Xóa nhiều part khỏi template cùng lúc
-    [HttpDelete("{templateId:int}/parts/batch")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> RemovePartsBatch(int templateId, [FromBody] BatchPartsRequest request)
-    {
-        try
-        {
-            if (request?.PartIds == null || !request.PartIds.Any())
-                return BadRequest(new { message = "Danh sách PartIds không được rỗng" });
-
-            var results = new List<object>();
-            var errors = new List<string>();
-
-            foreach (var partId in request.PartIds)
-            {
-                try
-                {
-                    await _repo.RemovePartFromTemplateAsync(templateId, partId);
-                    results.Add(new { partId, success = true, message = "Thành công" });
-                }
-                catch (ArgumentException ex)
-                {
-                    errors.Add($"PartId {partId}: {ex.Message}");
-                    results.Add(new { partId, success = false, message = ex.Message });
-                }
-            }
-
-            return Ok(new 
+            return StatusCode(500, new 
             { 
-                message = $"Đã xử lý {request.PartIds.Count} part", 
-                templateId, 
-                results,
-                errors = errors.Any() ? errors : null
+                success = false,
+                message = "Lỗi khi tìm kiếm dịch vụ phù hợp",
+                error = ex.Message
             });
         }
-        catch (Exception ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
     }
 
-    public class BatchPartsRequest
+    private string GetRecommendationReason(ServiceChecklistTemplate template, int currentKm, DateTime? lastMaintenanceDate)
     {
-        public List<int> PartIds { get; set; } = new();
+        var reasons = new List<string>();
+
+        // Km-based reasons
+        if (template.MinKm.HasValue)
+        {
+            if (currentKm >= template.MinKm.Value)
+            {
+                reasons.Add($"Số km hiện tại ({currentKm:N0}) đã đạt ngưỡng bảo dưỡng ({template.MinKm:N0} km)");
+            }
+            else
+            {
+                var diff = template.MinKm.Value - currentKm;
+                reasons.Add($"Số km hiện tại ({currentKm:N0}) gần đến ngưỡng bảo dưỡng ({template.MinKm:N0} km) - còn {diff:N0} km");
+            }
+        }
+        else
+        {
+            reasons.Add("Dịch vụ bảo dưỡng tổng quát phù hợp với mọi số km");
+        }
+
+        // Date-based reasons
+        if (lastMaintenanceDate.HasValue && template.IntervalDays.HasValue)
+        {
+            var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
+            var intervalDays = template.IntervalDays.Value;
+
+            if (daysSinceLastMaintenance >= intervalDays)
+            {
+                var overdueDays = daysSinceLastMaintenance - intervalDays;
+                if (template.MaxOverdueDays.HasValue && overdueDays <= template.MaxOverdueDays.Value)
+                {
+                    reasons.Add($"Đã đến chu kỳ bảo dưỡng ({intervalDays} ngày) - trễ {overdueDays} ngày (trong phạm vi cho phép)");
+                }
+                else if (template.MaxOverdueDays.HasValue)
+                {
+                    reasons.Add($"Đã đến chu kỳ bảo dưỡng ({intervalDays} ngày) - trễ {overdueDays} ngày (cần bảo dưỡng gấp)");
+                }
+                else
+                {
+                    reasons.Add($"Đã đến chu kỳ bảo dưỡng ({intervalDays} ngày) - trễ {overdueDays} ngày");
+                }
+            }
+            else
+            {
+                var remainingDays = intervalDays - daysSinceLastMaintenance;
+                if (remainingDays <= 30)
+                {
+                    reasons.Add($"Sắp đến chu kỳ bảo dưỡng ({intervalDays} ngày) - còn {remainingDays} ngày");
+                }
+                else
+                {
+                    reasons.Add($"Chu kỳ bảo dưỡng định kỳ ({intervalDays} ngày) - còn {remainingDays} ngày");
+                }
+            }
+        }
+        else if (template.IntervalDays.HasValue)
+        {
+            reasons.Add($"Chu kỳ bảo dưỡng định kỳ ({template.IntervalDays} ngày)");
+        }
+        else
+        {
+            reasons.Add("Dịch vụ bảo dưỡng linh hoạt theo nhu cầu");
+        }
+
+        return string.Join("; ", reasons);
     }
+
+    private List<string> GetWarnings(ServiceChecklistTemplate template, int currentKm, DateTime? lastMaintenanceDate)
+    {
+        var warnings = new List<string>();
+
+        // Warning cho MaxOverdueDays
+        if (lastMaintenanceDate.HasValue && template.IntervalDays.HasValue && template.MaxOverdueDays.HasValue)
+        {
+            var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
+            var intervalDays = template.IntervalDays.Value;
+            var maxOverdueDays = template.MaxOverdueDays.Value;
+
+            if (daysSinceLastMaintenance > intervalDays)
+            {
+                var overdueDays = daysSinceLastMaintenance - intervalDays;
+                if (overdueDays <= maxOverdueDays)
+                {
+                    warnings.Add($"⚠️ Dịch vụ này đã quá hạn {overdueDays} ngày (cho phép tối đa {maxOverdueDays} ngày). Vui lòng xem xét lại tình trạng xe hiện tại.");
+                }
+                else
+                {
+                    warnings.Add($"🚨 Dịch vụ này đã quá hạn {overdueDays} ngày (vượt quá giới hạn {maxOverdueDays} ngày). Có thể không phù hợp với tình trạng xe hiện tại.");
+                }
+            }
+        }
+
+        // Warning cho MaxDate
+        if (lastMaintenanceDate.HasValue && template.MaxDate.HasValue)
+        {
+            var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
+            var maxDate = template.MaxDate.Value;
+
+            if (daysSinceLastMaintenance > maxDate)
+            {
+                var overdueDays = daysSinceLastMaintenance - maxDate;
+                warnings.Add($"⚠️ Lần bảo dưỡng cuối đã quá {overdueDays} ngày so với ngưỡng cho phép ({maxDate} ngày). Dịch vụ này có thể không phù hợp.");
+            }
+        }
+
+        // Warning cho MinKm
+        if (template.MinKm.HasValue && currentKm < template.MinKm.Value)
+        {
+            var diff = template.MinKm.Value - currentKm;
+            warnings.Add($"ℹ️ Xe chưa đạt ngưỡng km tối thiểu ({template.MinKm:N0} km). Còn thiếu {diff:N0} km. Dịch vụ này có thể chưa cần thiết.");
+        }
+
+        return warnings;
+    }
+}
+
+public class CreateTemplateRequest
+{
+    public ServiceChecklistTemplate Template { get; set; } = null!;
+    public IEnumerable<ServiceChecklistTemplateItem> Items { get; set; } = null!;
+}
+
+public class SetActiveRequest
+{
+    public bool IsActive { get; set; }
 }

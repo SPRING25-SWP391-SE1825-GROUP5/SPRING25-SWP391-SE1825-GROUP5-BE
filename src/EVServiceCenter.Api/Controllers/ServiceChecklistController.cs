@@ -9,7 +9,7 @@ using EVServiceCenter.Domain.Entities;
 namespace EVServiceCenter.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/service-templates")]
 public class ServiceChecklistController : ControllerBase
 {
     private readonly IServiceChecklistRepository _repo;
@@ -223,8 +223,6 @@ public class ServiceChecklistController : ControllerBase
                 categoryName = template.Service?.Category?.CategoryName,
                 minKm = template.MinKm,
                 maxDate = template.MaxDate,
-                intervalKm = template.IntervalKm,
-                intervalDays = template.IntervalDays,
                 maxOverdueDays = template.MaxOverdueDays,
                 createdAt = template.CreatedAt,
                 updatedAt = template.UpdatedAt,
@@ -274,48 +272,37 @@ public class ServiceChecklistController : ControllerBase
             reasons.Add("Dịch vụ bảo dưỡng tổng quát phù hợp với mọi số km");
         }
 
-        // Date-based reasons
-        if (lastMaintenanceDate.HasValue && template.IntervalDays.HasValue)
+        // Date-based reasons (chỉ dùng MaxDate vì database không có IntervalDays)
+        if (lastMaintenanceDate.HasValue && template.MaxDate.HasValue)
         {
             var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
-            var intervalDays = template.IntervalDays.Value;
+            var maxDate = template.MaxDate.Value;
 
-            if (daysSinceLastMaintenance >= intervalDays)
+            if (daysSinceLastMaintenance <= maxDate)
             {
-                var overdueDays = daysSinceLastMaintenance - intervalDays;
-                if (template.MaxOverdueDays.HasValue && overdueDays <= template.MaxOverdueDays.Value)
-                {
-                    reasons.Add($"Đã đến chu kỳ bảo dưỡng ({intervalDays} ngày) - trễ {overdueDays} ngày (trong phạm vi cho phép)");
-                }
-                else if (template.MaxOverdueDays.HasValue)
-                {
-                    reasons.Add($"Đã đến chu kỳ bảo dưỡng ({intervalDays} ngày) - trễ {overdueDays} ngày (cần bảo dưỡng gấp)");
-                }
-                else
-                {
-                    reasons.Add($"Đã đến chu kỳ bảo dưỡng ({intervalDays} ngày) - trễ {overdueDays} ngày");
-                }
+                reasons.Add($"Ngày bảo dưỡng cuối ({daysSinceLastMaintenance} ngày trước) trong phạm vi cho phép ({maxDate} ngày)");
             }
             else
             {
-                var remainingDays = intervalDays - daysSinceLastMaintenance;
-                if (remainingDays <= 30)
+                var overdueDays = daysSinceLastMaintenance - maxDate;
+                if (template.MaxOverdueDays.HasValue && overdueDays <= template.MaxOverdueDays.Value)
                 {
-                    reasons.Add($"Sắp đến chu kỳ bảo dưỡng ({intervalDays} ngày) - còn {remainingDays} ngày");
+                    reasons.Add($"Ngày bảo dưỡng cuối ({daysSinceLastMaintenance} ngày trước) đã quá {overdueDays} ngày so với ngưỡng cho phép");
                 }
                 else
                 {
-                    reasons.Add($"Chu kỳ bảo dưỡng định kỳ ({intervalDays} ngày) - còn {remainingDays} ngày");
+                    reasons.Add($"Ngày bảo dưỡng cuối ({daysSinceLastMaintenance} ngày trước) đã quá xa - cần xem xét lại");
                 }
             }
         }
-        else if (template.IntervalDays.HasValue)
+        else if (lastMaintenanceDate.HasValue)
         {
-            reasons.Add($"Chu kỳ bảo dưỡng định kỳ ({template.IntervalDays} ngày)");
+            var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
+            reasons.Add($"Lần bảo dưỡng cuối cách đây {daysSinceLastMaintenance} ngày");
         }
         else
         {
-            reasons.Add("Dịch vụ bảo dưỡng linh hoạt theo nhu cầu");
+            reasons.Add("Không có thông tin về lần bảo dưỡng cuối");
         }
 
         return string.Join("; ", reasons);
@@ -325,19 +312,19 @@ public class ServiceChecklistController : ControllerBase
     {
         var warnings = new List<string>();
 
-        // Warning cho MaxOverdueDays
-        if (lastMaintenanceDate.HasValue && template.IntervalDays.HasValue && template.MaxOverdueDays.HasValue)
+        // Warning cho MaxOverdueDays - chỉ dùng MaxDate, không dùng IntervalDays
+        if (lastMaintenanceDate.HasValue && template.MaxDate.HasValue && template.MaxOverdueDays.HasValue)
         {
             var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
-            var intervalDays = template.IntervalDays.Value;
+            var maxDate = template.MaxDate.Value;
             var maxOverdueDays = template.MaxOverdueDays.Value;
 
-            if (daysSinceLastMaintenance > intervalDays)
+            if (daysSinceLastMaintenance > maxDate)
             {
-                var overdueDays = daysSinceLastMaintenance - intervalDays;
+                var overdueDays = daysSinceLastMaintenance - maxDate;
                 if (overdueDays <= maxOverdueDays)
                 {
-                    warnings.Add($"⚠️ Dịch vụ này đã quá hạn {overdueDays} ngày (cho phép tối đa {maxOverdueDays} ngày). Vui lòng xem xét lại tình trạng xe hiện tại.");
+                    warnings.Add($"⚠️ Dịch vụ này đã quá hạn {overdueDays} ngày so với ngưỡng cho phép ({maxDate} ngày, cho phép trễ tối đa {maxOverdueDays} ngày). Vui lòng xem xét lại tình trạng xe hiện tại.");
                 }
                 else
                 {

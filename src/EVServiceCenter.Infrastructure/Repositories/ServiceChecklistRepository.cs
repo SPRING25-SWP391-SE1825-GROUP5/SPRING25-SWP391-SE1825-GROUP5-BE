@@ -189,7 +189,7 @@ public class ServiceChecklistRepository : IServiceChecklistRepository
     {
         int score = 0;
         bool hasKmConditions = template.MinKm.HasValue;
-        bool hasDateConditions = template.IntervalDays.HasValue;
+        bool hasDateConditions = template.MaxDate.HasValue;
         bool hasAnyConditions = hasKmConditions || hasDateConditions;
 
         // Base score for all active templates (ensures we always have some recommendations)
@@ -253,58 +253,7 @@ public class ServiceChecklistRepository : IServiceChecklistRepository
             score += 30; // Điểm trung bình
         }
 
-        // 3. Kiểm tra điều kiện IntervalDays (chu kỳ bảo dưỡng)
-        if (lastMaintenanceDate.HasValue && template.IntervalDays.HasValue)
-        {
-            var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
-            var intervalDays = template.IntervalDays.Value;
-
-            if (daysSinceLastMaintenance >= intervalDays)
-            {
-                // Đã đến chu kỳ bảo dưỡng
-                if (template.MaxOverdueDays.HasValue)
-                {
-                    var overdueDays = daysSinceLastMaintenance - intervalDays;
-                    if (overdueDays <= template.MaxOverdueDays.Value)
-                    {
-                        // Trong phạm vi cho phép trễ - có warning nhưng vẫn chấp nhận
-                        score += 100; // High score nhưng sẽ có warning
-                    }
-                    else
-                    {
-                        // Quá trễ - vẫn hiển thị nhưng điểm thấp và có warning
-                        score += 50; // Lower score for extreme overdue
-                    }
-                }
-                else
-                {
-                    // Không có giới hạn trễ - điểm cao
-                    score += 120;
-                }
-            }
-            else
-            {
-                // Chưa đến chu kỳ bảo dưỡng
-                var remainingDays = intervalDays - daysSinceLastMaintenance;
-                if (remainingDays <= 30) // Trong vòng 30 ngày
-                {
-                    score += 80; // Sắp đến chu kỳ
-                }
-                else if (remainingDays <= 90) // Trong vòng 90 ngày
-                {
-                    score += 60; // Chu kỳ tương lai
-                }
-                else
-                {
-                    score += 40; // Chu kỳ xa
-                }
-            }
-        }
-        else if (template.IntervalDays.HasValue)
-        {
-            // Có chu kỳ nhưng không có ngày bảo dưỡng cuối
-            score += 40;
-        }
+        // 3. Không có IntervalDays trong database - bỏ qua phần này
 
         // 4. Bonus cho templates có điều kiện đầy đủ
         if (hasKmConditions && hasDateConditions)
@@ -312,13 +261,7 @@ public class ServiceChecklistRepository : IServiceChecklistRepository
             score += 20; // Bonus cho template comprehensive
         }
 
-        // 5. Bonus cho IntervalKm
-        if (template.IntervalKm.HasValue)
-        {
-            score += 15; // Bonus cho có định nghĩa chu kỳ km
-        }
-
-        // 6. Đảm bảo điểm tối thiểu cho templates không có điều kiện cụ thể
+        // 5. Đảm bảo điểm tối thiểu cho templates không có điều kiện cụ thể
         if (!hasAnyConditions)
         {
             score = Math.Max(score, 30); // Minimum score for general templates

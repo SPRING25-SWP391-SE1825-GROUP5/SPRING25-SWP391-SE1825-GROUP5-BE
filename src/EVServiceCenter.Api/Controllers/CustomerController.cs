@@ -276,7 +276,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// Lấy lịch sử booking của khách hàng
         /// </summary>
         [HttpGet("{customerId}/bookings")]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Roles = "ADMIN,STAFF,TECHNICIAN,CUSTOMER")]
         public async Task<IActionResult> GetCustomerBookings(int customerId)
         {
             try

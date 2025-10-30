@@ -109,7 +109,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                     email = user.Email,
                     phoneNumber = user.PhoneNumber,
                     role = user.Role,
-                    isActive = user.IsActive
+                    isActive = user.IsActive,
+                    emailVerified = user.EmailVerified
                 };
 
                 return Ok(new { success = true, data = resp });
@@ -157,12 +158,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Tạo người dùng mới (Staff/Admin) - Luôn tạo CUSTOMER, cần verify email
+        /// Tạo người dùng mới (Admin/Manager/Staff) - cho phép truyền role, cần verify email
         /// </summary>
         /// <param name="request">Thông tin người dùng mới (role phải là CUSTOMER, emailVerified phải là false)</param>
         /// <returns>Thông tin người dùng đã tạo + gửi OTP verification</returns>
         [HttpPost]
-        [Authorize(Roles = "ADMIN")]
+        [Authorize(Roles = "ADMIN,MANAGER,STAFF")]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
         {
             try
@@ -181,7 +182,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 
                 return CreatedAtAction(nameof(GetUserById), new { id = user.UserId }, new { 
                     success = true, 
-                    message = "Tạo người dùng thành công",
+                    message = "Tạo người dùng thành công. Mật khẩu tạm đã được gửi qua email.",
                     data = user
                 });
             }

@@ -245,11 +245,7 @@ namespace EVServiceCenter.Application.Service
                 throw new ArgumentException("Email hoặc mật khẩu không đúng");
             }
 
-            // Bắt buộc email verification trước khi login
-            if (!user.EmailVerified)
-            {
-                throw new ArgumentException("Vui lòng verify email trước khi đăng nhập. Kiểm tra email để lấy mã OTP.");
-            }
+            // Không bắt buộc email verification trước khi login theo yêu cầu mới
             
             // Kiểm tra tài khoản có active không
             if (!user.IsActive)
@@ -828,11 +824,7 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Bắt buộc email verification trước khi login
-                if (!user.EmailVerified)
-                {
-                    throw new ArgumentException("Vui lòng verify email trước khi đăng nhập. Kiểm tra email để lấy mã OTP.");
-                }
+                // Không bắt buộc email verification trước khi login theo yêu cầu mới
 
                 // Check if account is active
                 if (!user.IsActive)

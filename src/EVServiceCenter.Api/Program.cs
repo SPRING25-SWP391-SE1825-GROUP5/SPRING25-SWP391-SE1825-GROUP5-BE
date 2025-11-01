@@ -71,6 +71,7 @@ builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS
 builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection("GuestSession"));
 builder.Services.Configure<PromotionOptions>(builder.Configuration.GetSection("Promotion"));
 builder.Services.Configure<MaintenanceReminderOptions>(builder.Configuration.GetSection("MaintenanceReminder"));
+builder.Services.Configure<ExportOptions>(builder.Configuration.GetSection("ExportOptions"));
 builder.Services.AddSingleton<EVServiceCenter.Application.Interfaces.IHoldStore, EVServiceCenter.Application.Service.InMemoryHoldStore>();
 builder.Services.AddScoped<ISettingsService, EVServiceCenter.Application.Service.SettingsService>();
 builder.Services.AddScoped<EVServiceCenter.Domain.Interfaces.ISystemSettingRepository, EVServiceCenter.Infrastructure.Repositories.SystemSettingRepository>();
@@ -209,6 +210,8 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 builder.Services.AddHostedService<SlotAvailabilityUpdateService>();
+builder.Services.AddHostedService<PromotionExpiredUpdateService>();
+builder.Services.AddHostedService<ServicePackageExpiredUpdateService>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");

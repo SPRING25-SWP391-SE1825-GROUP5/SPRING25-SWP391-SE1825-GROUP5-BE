@@ -108,6 +108,12 @@ namespace EVServiceCenter.Application.Service
             {
                 var promotions = await _promotionRepository.GetAllPromotionsAsync();
 
+                // Auto-update expired promotions before filtering
+                foreach (var promotion in promotions.Where(p => p.Status == "ACTIVE"))
+                {
+                    await CheckAndUpdateExpiredStatusAsync(promotion);
+                }
+
                 // Filtering
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
@@ -154,6 +160,9 @@ namespace EVServiceCenter.Application.Service
                 if (promotion == null)
                     throw new ArgumentException("Khuyến mãi không tồn tại.");
 
+                // Auto-update expired status
+                await CheckAndUpdateExpiredStatusAsync(promotion);
+
                 return MapToPromotionResponse(promotion);
             }
             catch (ArgumentException)
@@ -173,6 +182,9 @@ namespace EVServiceCenter.Application.Service
                 var promotion = await _promotionRepository.GetPromotionByCodeAsync(code);
                 if (promotion == null)
                     throw new ArgumentException("Mã khuyến mãi không tồn tại.");
+
+                // Auto-update expired status
+                await CheckAndUpdateExpiredStatusAsync(promotion);
 
                 return MapToPromotionResponse(promotion);
             }
@@ -301,6 +313,17 @@ namespace EVServiceCenter.Application.Service
                     return CreateInvalidResponse("Mã khuyến mãi không tồn tại.", request.OrderAmount);
                 }
 
+                // Auto-update expired status before validation
+                await CheckAndUpdateExpiredStatusAsync(promotion);
+
+                // Reload promotion to get updated status
+                var reloadedPromotion = await _promotionRepository.GetPromotionByIdAsync(promotion.PromotionId);
+                if (reloadedPromotion == null)
+                {
+                    return CreateInvalidResponse("Mã khuyến mãi không tồn tại.", request.OrderAmount);
+                }
+                promotion = reloadedPromotion;
+
                 // Check if promotion is active
                 if (promotion.Status != "ACTIVE")
                 {
@@ -417,12 +440,66 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        private async Task CheckAndUpdateExpiredStatusAsync(Promotion promotion)
+        {
+            if (promotion.Status == "ACTIVE")
+            {
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var isExpired = promotion.EndDate.HasValue && promotion.EndDate.Value < today;
+                var isUsageLimitReached = promotion.UsageLimit.HasValue && promotion.UsageCount >= promotion.UsageLimit.Value;
+
+                if (isExpired || isUsageLimitReached)
+                {
+                    promotion.Status = "EXPIRED";
+                    promotion.UpdatedAt = DateTime.UtcNow;
+                    await _promotionRepository.UpdatePromotionAsync(promotion);
+                }
+            }
+        }
+
+        public async Task<int> UpdateExpiredPromotionsAsync()
+        {
+            try
+            {
+                var allPromotions = await _promotionRepository.GetAllPromotionsAsync();
+                var today = DateOnly.FromDateTime(DateTime.Today);
+                var count = 0;
+
+                foreach (var promotion in allPromotions.Where(p => p.Status == "ACTIVE"))
+                {
+                    var isExpired = promotion.EndDate.HasValue && promotion.EndDate.Value < today;
+                    var isUsageLimitReached = promotion.UsageLimit.HasValue && promotion.UsageCount >= promotion.UsageLimit.Value;
+
+                    if (isExpired || isUsageLimitReached)
+                    {
+                        promotion.Status = "EXPIRED";
+                        promotion.UpdatedAt = DateTime.UtcNow;
+                        await _promotionRepository.UpdatePromotionAsync(promotion);
+                        count++;
+                    }
+                }
+
+                return count;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Lỗi khi cập nhật promotions hết hạn: {ex.Message}");
+            }
+        }
+
         private PromotionResponse MapToPromotionResponse(Promotion promotion)
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
             var isExpired = promotion.EndDate.HasValue && promotion.EndDate.Value < today;
             var isUsageLimitReached = promotion.UsageLimit.HasValue && promotion.UsageCount >= promotion.UsageLimit.Value;
             var isActive = promotion.Status == "ACTIVE" && !isExpired && !isUsageLimitReached;
+
+            // Return status with updated value if it was just expired
+            var statusToReturn = promotion.Status;
+            if (promotion.Status == "ACTIVE" && (isExpired || isUsageLimitReached))
+            {
+                statusToReturn = "EXPIRED";
+            }
 
             return new PromotionResponse
             {
@@ -435,7 +512,7 @@ namespace EVServiceCenter.Application.Service
                 StartDate = promotion.StartDate,
                 EndDate = promotion.EndDate,
                 MaxDiscount = promotion.MaxDiscount,
-                Status = promotion.Status,
+                Status = statusToReturn,
                 CreatedAt = promotion.CreatedAt,
                 UpdatedAt = promotion.UpdatedAt,
                 UsageLimit = promotion.UsageLimit,

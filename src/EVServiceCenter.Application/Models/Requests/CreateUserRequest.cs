@@ -15,9 +15,6 @@ namespace EVServiceCenter.Application.Models.Requests
         [StringLength(100, ErrorMessage = "Email không được vượt quá 100 ký tự")]
         public required string Email { get; set; }
 
-        // Password bỏ khỏi request vì hệ thống gửi mật khẩu tạm qua email khi tạo tài khoản
-        public string? Password { get; set; }
-
         [Required(ErrorMessage = "Số điện thoại là bắt buộc")]
         [RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải bắt đầu bằng 0 và có đúng 10 số")]
         public required string PhoneNumber { get; set; }

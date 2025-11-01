@@ -187,6 +187,23 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<int> GetServicesCountAsync()
+        {
+            var services = await _serviceRepository.GetAllServicesAsync();
+            return services.Count;
+        }
+
+        public async Task<System.Collections.Generic.IList<ServiceResponse>> GetServicesForExportAsync(int maxRecords = 100000)
+        {
+            var services = await _serviceRepository.GetAllServicesAsync();
+            var list = services
+                .OrderBy(s => s.ServiceId)
+                .Take(maxRecords)
+                .Select(MapToServiceResponse)
+                .ToList();
+            return list;
+        }
+
         private ServiceResponse MapToServiceResponse(Domain.Entities.Service service)
         {
             return new ServiceResponse

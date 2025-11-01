@@ -121,7 +121,7 @@ namespace EVServiceCenter.Application.Service
                     Gender = request.Gender,
                     Role = request.Role?.Trim().ToUpper(),
                     IsActive = true, // Mặc định là active
-                    EmailVerified = false, // Luôn cần verify email
+                    EmailVerified = false, // Luôn yêu cầu xác minh email
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -141,16 +141,8 @@ namespace EVServiceCenter.Application.Service
                     await _customerRepository.CreateCustomerAsync(customer);
                 }
 
-                // Gửi email mật khẩu tạm cho user
-                await _emailService.SendEmailAsync(user.Email, "Tài khoản của bạn đã được tạo", GenerateTempPasswordEmailBody(user.FullName, tempPassword));
-
-                // Nếu admin đã đánh dấu emailVerified=true thì bỏ qua OTP; ngược lại gửi OTP
-                if (!request.EmailVerified)
-                {
-                    var otpCode = _otpService.GenerateOtp();
-                    await _otpService.CreateOtpAsync(user.UserId, otpCode, "EMAIL_VERIFICATION");
-                    await _emailService.SendVerificationEmailAsync(user.Email, user.FullName, otpCode);
-                }
+                // Gửi email chào mừng kèm mật khẩu tạm (không gửi OTP)
+                await _emailService.SendWelcomeCustomerWithPasswordAsync(user.Email, user.FullName, tempPassword);
 
                 return MapToUserResponse(user);
             }
@@ -590,6 +582,79 @@ namespace EVServiceCenter.Application.Service
             {
                 throw new Exception($"Lỗi khi gán vai trò cho người dùng: {ex.Message}");
             }
+        }
+
+        public async Task<int> GetUsersCountAsync(string? searchTerm = null, string? role = null, bool? isActive = null, bool? emailVerified = null, DateTime? createdFrom = null, DateTime? createdTo = null)
+        {
+            var users = await _authRepository.GetAllUsersAsync();
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                users = users.Where(u =>
+                    u.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (u.Email?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (u.PhoneNumber?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
+                ).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                users = users.Where(u => (u.Role ?? string.Empty).Equals(role, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+            if (isActive.HasValue)
+            {
+                users = users.Where(u => u.IsActive == isActive.Value).ToList();
+            }
+            if (emailVerified.HasValue)
+            {
+                users = users.Where(u => u.EmailVerified == emailVerified.Value).ToList();
+            }
+            if (createdFrom.HasValue)
+            {
+                users = users.Where(u => u.CreatedAt >= createdFrom.Value).ToList();
+            }
+            if (createdTo.HasValue)
+            {
+                users = users.Where(u => u.CreatedAt <= createdTo.Value).ToList();
+            }
+            return users.Count;
+        }
+
+        public async Task<IList<UserResponse>> GetUsersForExportAsync(string? searchTerm = null, string? role = null, int maxRecords = 100000, bool? isActive = null, bool? emailVerified = null, DateTime? createdFrom = null, DateTime? createdTo = null)
+        {
+            var users = await _authRepository.GetAllUsersAsync();
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                users = users.Where(u =>
+                    u.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (u.Email?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (u.PhoneNumber?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
+                ).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                users = users.Where(u => (u.Role ?? string.Empty).Equals(role, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+            if (isActive.HasValue)
+            {
+                users = users.Where(u => u.IsActive == isActive.Value).ToList();
+            }
+            if (emailVerified.HasValue)
+            {
+                users = users.Where(u => u.EmailVerified == emailVerified.Value).ToList();
+            }
+            if (createdFrom.HasValue)
+            {
+                users = users.Where(u => u.CreatedAt >= createdFrom.Value).ToList();
+            }
+            if (createdTo.HasValue)
+            {
+                users = users.Where(u => u.CreatedAt <= createdTo.Value).ToList();
+            }
+            var limited = users
+                .OrderBy(u => u.UserId)
+                .Take(maxRecords)
+                .Select(MapToUserResponse)
+                .ToList();
+            return limited;
         }
 
         private string NormalizePhoneNumber(string phoneNumber)

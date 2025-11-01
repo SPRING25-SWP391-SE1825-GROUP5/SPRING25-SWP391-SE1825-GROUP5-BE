@@ -30,6 +30,11 @@ namespace EVServiceCenter.Application.Service
 
         public string GenerateAccessToken(User user)
         {
+            return GenerateAccessToken(user, null, null, null);
+        }
+
+        public string GenerateAccessToken(User user, int? customerId, int? staffId, int? technicianId)
+        {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_secretKey);
 
@@ -44,6 +49,20 @@ namespace EVServiceCenter.Application.Service
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
             };
+
+            // Thêm customerId, staffId, technicianId vào claims nếu có
+            if (customerId.HasValue)
+            {
+                claims.Add(new Claim("customerId", customerId.Value.ToString()));
+            }
+            if (staffId.HasValue)
+            {
+                claims.Add(new Claim("staffId", staffId.Value.ToString()));
+            }
+            if (technicianId.HasValue)
+            {
+                claims.Add(new Claim("technicianId", technicianId.Value.ToString()));
+            }
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {

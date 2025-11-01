@@ -224,4 +224,126 @@ public class OrderService : IOrderService
             }).ToList()
         };
     }
+
+    // ============ CART OPERATIONS ============
+    public async Task<OrderResponse> GetOrCreateCartAsync(int customerId)
+    {
+        var customer = await _customerRepository.GetCustomerByIdAsync(customerId);
+        if (customer == null) throw new ArgumentException("Khách hàng không tồn tại");
+
+        var existing = await _orderRepository.GetCartByCustomerIdAsync(customerId);
+        if (existing != null) return MapToResponse(existing);
+
+        var cart = new Order
+        {
+            CustomerId = customerId,
+            Status = "CART",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Notes = null,
+            OrderItems = new List<OrderItem>()
+        };
+        var created = await _orderRepository.AddAsync(cart);
+        return MapToResponse(created);
+    }
+
+    public async Task<List<OrderItemSimpleResponse>> GetCartItemsAsync(int cartOrderId)
+    {
+        var order = await _orderRepository.GetByIdAsync(cartOrderId);
+        if (order == null || order.Status != "CART")
+            throw new ArgumentException("Cart không tồn tại");
+        return order.OrderItems.Select(oi => new OrderItemSimpleResponse
+        {
+            OrderItemId = oi.OrderItemId,
+            PartId = oi.PartId,
+            PartName = oi.Part?.PartName ?? string.Empty,
+            UnitPrice = oi.UnitPrice,
+            Quantity = oi.Quantity,
+            Subtotal = oi.Quantity * oi.UnitPrice
+        }).ToList();
+    }
+
+    public async Task<OrderResponse> AddItemToCartAsync(int cartOrderId, int partId, int quantity)
+    {
+        if (quantity <= 0) throw new ArgumentException("Số lượng phải lớn hơn 0");
+        var order = await _orderRepository.GetByIdAsync(cartOrderId);
+        if (order == null || order.Status != "CART") throw new ArgumentException("Cart không tồn tại");
+
+        var part = await _partRepository.GetPartByIdAsync(partId);
+        if (part == null) throw new ArgumentException("Phụ tùng không tồn tại");
+        if (!part.IsActive) throw new ArgumentException($"Sản phẩm {part.PartName} đã ngưng hoạt động");
+
+        // merge same part
+        var existingItem = order.OrderItems.FirstOrDefault(i => i.PartId == partId);
+        if (existingItem != null)
+        {
+            existingItem.Quantity += quantity;
+        }
+        else
+        {
+            order.OrderItems.Add(new OrderItem
+            {
+                PartId = part.PartId,
+                Quantity = quantity,
+                UnitPrice = part.Price
+            });
+        }
+        order.UpdatedAt = DateTime.UtcNow;
+        var updated = await _orderRepository.UpdateAsync(order);
+        return MapToResponse(updated);
+    }
+
+    public async Task<OrderResponse> UpdateCartItemQuantityAsync(int cartOrderId, int orderItemId, int quantity)
+    {
+        if (quantity < 0) throw new ArgumentException("Số lượng không hợp lệ");
+        var order = await _orderRepository.GetByIdAsync(cartOrderId);
+        if (order == null || order.Status != "CART") throw new ArgumentException("Cart không tồn tại");
+        var item = order.OrderItems.FirstOrDefault(i => i.OrderItemId == orderItemId);
+        if (item == null) throw new ArgumentException("Item không tồn tại trong cart");
+
+        if (quantity == 0)
+        {
+            order.OrderItems.Remove(item);
+        }
+        else
+        {
+            item.Quantity = quantity;
+        }
+        order.UpdatedAt = DateTime.UtcNow;
+        var updated = await _orderRepository.UpdateAsync(order);
+        return MapToResponse(updated);
+    }
+
+    public async Task<OrderResponse> RemoveCartItemAsync(int cartOrderId, int orderItemId)
+    {
+        var order = await _orderRepository.GetByIdAsync(cartOrderId);
+        if (order == null || order.Status != "CART") throw new ArgumentException("Cart không tồn tại");
+        var item = order.OrderItems.FirstOrDefault(i => i.OrderItemId == orderItemId);
+        if (item == null) throw new ArgumentException("Item không tồn tại trong cart");
+        order.OrderItems.Remove(item);
+        order.UpdatedAt = DateTime.UtcNow;
+        var updated = await _orderRepository.UpdateAsync(order);
+        return MapToResponse(updated);
+    }
+
+    public async Task<OrderResponse> ClearCartAsync(int cartOrderId)
+    {
+        var order = await _orderRepository.GetByIdAsync(cartOrderId);
+        if (order == null || order.Status != "CART") throw new ArgumentException("Cart không tồn tại");
+        order.OrderItems.Clear();
+        order.UpdatedAt = DateTime.UtcNow;
+        var updated = await _orderRepository.UpdateAsync(order);
+        return MapToResponse(updated);
+    }
+
+    public async Task<OrderResponse> CheckoutCartAsync(int cartOrderId)
+    {
+        var order = await _orderRepository.GetByIdAsync(cartOrderId);
+        if (order == null || order.Status != "CART") throw new ArgumentException("Cart không tồn tại");
+        if (!order.OrderItems.Any()) throw new ArgumentException("Cart đang trống");
+        order.Status = "PENDING";
+        order.UpdatedAt = DateTime.UtcNow;
+        var updated = await _orderRepository.UpdateAsync(order);
+        return MapToResponse(updated);
+    }
 }

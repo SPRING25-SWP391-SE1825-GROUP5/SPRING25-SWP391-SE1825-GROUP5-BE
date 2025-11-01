@@ -108,9 +108,17 @@ namespace EVServiceCenter.Infrastructure.Repositories
                                 PromotionId = p.PromotionId,
                                 Code = p.Code,
                                 Description = p.Description,
+                                DiscountValue = p.DiscountValue,
+                                DiscountType = p.DiscountType,
+                                MinOrderAmount = p.MinOrderAmount,
                                 StartDate = p.StartDate,
                                 EndDate = p.EndDate,
-                                Status = p.Status
+                                MaxDiscount = p.MaxDiscount,
+                                Status = p.Status,
+                                CreatedAt = p.CreatedAt,
+                                UpdatedAt = p.UpdatedAt,
+                                UsageLimit = p.UsageLimit,
+                                UsageCount = p.UsageCount
                             }
                         };
 

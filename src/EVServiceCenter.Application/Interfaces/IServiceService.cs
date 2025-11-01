@@ -12,5 +12,7 @@ namespace EVServiceCenter.Application.Interfaces
         Task<ServiceResponse> CreateServiceAsync(CreateServiceRequest request);
         Task<ServiceResponse> UpdateServiceAsync(int serviceId, UpdateServiceRequest request);
         Task<bool> ToggleActiveAsync(int serviceId);
+        Task<int> GetServicesCountAsync();
+        System.Threading.Tasks.Task<System.Collections.Generic.IList<ServiceResponse>> GetServicesForExportAsync(int maxRecords = 100000);
     }
 }

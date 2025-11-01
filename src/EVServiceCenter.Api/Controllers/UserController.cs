@@ -7,6 +7,11 @@ using System;
 using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
+using EVServiceCenter.Application.Configurations;
+using System.Text;
+using System.IO;
+#pragma warning disable CS1591
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -19,13 +24,15 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly IAccountService _accountService;
         private readonly IAuthService _authService;
         private readonly IEmailService _emailService;
+        private readonly IOptions<ExportOptions> _exportOptions;
 
-        public UserController(IUserService userService, IAccountService accountService, IAuthService authService, IEmailService emailService)
+        public UserController(IUserService userService, IAccountService accountService, IAuthService authService, IEmailService emailService, IOptions<ExportOptions> exportOptions)
         {
             _userService = userService;
             _accountService = accountService;
             _authService = authService;
             _emailService = emailService;
+            _exportOptions = exportOptions;
         }
 
         /// <summary>
@@ -66,6 +73,126 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        /// <summary>
+        /// Export users as XLSX (ADMIN only)
+        /// </summary>
+        [HttpGet("export")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> ExportUsers()
+        {
+            try
+            {
+                var opts = _exportOptions.Value;
+                var total = await _userService.GetUsersCountAsync();
+                if (total > opts.MaxRecords)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = $"Số bản ghi ({total}) vượt quá giới hạn cho phép ({opts.MaxRecords}). Vui lòng thu hẹp bộ lọc."
+                    });
+                }
+
+                var users = await _userService.GetUsersForExportAsync(null, null, opts.MaxRecords, null, null, null, null);
+
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+                var bytes = GenerateXlsx(users, opts.DateFormat);
+                var fileName = $"users_{timestamp}.xlsx";
+                return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        private static byte[] GenerateXlsx(System.Collections.Generic.IList<EVServiceCenter.Application.Models.Responses.UserResponse> users, string dateFormat, object? filters = null)
+        {
+            using var wb = new ClosedXML.Excel.XLWorkbook();
+            var ws = wb.AddWorksheet("Users");
+
+            // Header
+            var headers = new[] { "UserId", "FullName", "Email", "PhoneNumber", "Role", "IsActive", "EmailVerified", "CreatedAt", "UpdatedAt" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                ws.Cell(1, i + 1).Value = headers[i];
+                ws.Cell(1, i + 1).Style.Font.Bold = true;
+            }
+            ws.SheetView.FreezeRows(1);
+
+            // Rows
+            int r = 2;
+            foreach (var u in users)
+            {
+                ws.Cell(r, 1).Value = u.UserId;
+                ws.Cell(r, 2).Value = u.FullName ?? string.Empty;
+                ws.Cell(r, 3).Value = u.Email ?? string.Empty;
+                ws.Cell(r, 4).Value = u.PhoneNumber ?? string.Empty;
+                ws.Cell(r, 5).Value = u.Role ?? string.Empty;
+                ws.Cell(r, 6).Value = u.IsActive ? "TRUE" : "FALSE";
+                ws.Cell(r, 7).Value = u.EmailVerified ? "TRUE" : "FALSE";
+                ws.Cell(r, 8).Value = u.CreatedAt;
+                ws.Cell(r, 9).Value = u.UpdatedAt;
+                r++;
+            }
+
+            int lastRow = r - 1;
+            int lastCol = headers.Length;
+
+            // Format dates
+            ws.Range(2, 8, lastRow, 9).Style.DateFormat.Format = dateFormat;
+
+            // Alignment
+            ws.Range(2, 6, lastRow, 7).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+            ws.Range(2, 1, lastRow, lastCol).Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
+
+            // Create table with style and auto filter
+            var tableRange = ws.Range(1, 1, lastRow, lastCol);
+            var table = tableRange.CreateTable();
+            table.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+            table.ShowAutoFilter = true;
+
+            // Borders for readability (over table data)
+            ws.Range(1, 1, lastRow, lastCol).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+            ws.Range(1, 1, lastRow, lastCol).Style.Border.InsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+
+            ws.Columns().AdjustToContents();
+
+            // Filters sheet
+            var wsFilters = wb.AddWorksheet("Filters");
+            wsFilters.Cell(1, 1).Value = "Applied Filters";
+            wsFilters.Cell(1, 1).Style.Font.Bold = true;
+            int fr = 3;
+            void WriteFilter(string key, string? value)
+            {
+                wsFilters.Cell(fr, 1).Value = key;
+                wsFilters.Cell(fr, 2).Value = value ?? string.Empty;
+                fr++;
+            }
+            var dict = new System.Collections.Generic.Dictionary<string, string?>();
+            if (filters != null)
+            {
+                foreach (var prop in filters.GetType().GetProperties())
+                {
+                    var val = prop.GetValue(filters);
+                    dict[prop.Name] = val switch
+                    {
+                        DateTime dt => dt.ToString(dateFormat),
+                        bool b => b ? "TRUE" : "FALSE",
+                        _ => val?.ToString()
+                    };
+                }
+            }
+            foreach (var kv in dict)
+            {
+                WriteFilter(kv.Key, kv.Value);
+            }
+            wsFilters.Columns().AdjustToContents();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            return ms.ToArray();
+        }
         /// <summary>
         /// Tìm user theo email hoặc phone (Staff/Admin) - easy name: find-by-email-or-phone
         /// </summary>

@@ -176,6 +176,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 }
 
                 // T?o response ph� h?p v?i FE
+                // Tạo response phù hợp với FE - Đặt customerId ở top level để dễ truy cập
                 var response = new
                 {
                     success = true,
@@ -183,9 +184,13 @@ namespace EVServiceCenter.WebAPI.Controllers
                     data = new
                     {
                         token = result.AccessToken,
+                        userId = result.UserId,  // Top level để FE dễ truy cập
+                        customerId = result.CustomerId,  // Top level để FE dễ truy cập
+                        staffId = result.StaffId,  // Top level để FE dễ truy cập
+                        technicianId = result.TechnicianId,  // Top level để FE dễ truy cập
                         user = new
                         {
-                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
+                            id = result.UserId,
                             userId = result.UserId,
                             customerId = result.CustomerId,
                             staffId = result.StaffId,
@@ -607,7 +612,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var result = await _authService.LoginWithGoogleAsync(request);
                 
-                // Tạo response phù hợp với FE
+                // Tạo response phù hợp với FE - Đặt customerId ở top level để dễ truy cập
                 var response = new
                 {
                     success = true,
@@ -615,9 +620,13 @@ namespace EVServiceCenter.WebAPI.Controllers
                     data = new
                     {
                         token = result.AccessToken,
+                        userId = result.UserId,  // Top level để FE dễ truy cập
+                        customerId = result.CustomerId,  // Top level để FE dễ truy cập
+                        staffId = result.StaffId,  // Top level để FE dễ truy cập
+                        technicianId = result.TechnicianId,  // Top level để FE dễ truy cập
                         user = new
                         {
-                            id = result.UserId,  // Thêm field 'id' để FE có thể sử dụng
+                            id = result.UserId,
                             userId = result.UserId,
                             customerId = result.CustomerId,
                             staffId = result.StaffId,

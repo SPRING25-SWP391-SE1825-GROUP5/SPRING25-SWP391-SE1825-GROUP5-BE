@@ -1,4 +1,6 @@
 using System.Threading.Tasks;
+using System.Collections.Generic;
+using System;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 
@@ -13,5 +15,7 @@ namespace EVServiceCenter.Application.Interfaces
         Task<bool> DeactivateUserAsync(int userId);
         Task<bool> UpdateUserStatusAsync(int userId, bool isActive);
         Task<bool> AssignUserRoleAsync(int userId, string role);
+        Task<int> GetUsersCountAsync(string? searchTerm = null, string? role = null, bool? isActive = null, bool? emailVerified = null, DateTime? createdFrom = null, DateTime? createdTo = null);
+        Task<IList<UserResponse>> GetUsersForExportAsync(string? searchTerm = null, string? role = null, int maxRecords = 100000, bool? isActive = null, bool? emailVerified = null, DateTime? createdFrom = null, DateTime? createdTo = null);
     }
 }

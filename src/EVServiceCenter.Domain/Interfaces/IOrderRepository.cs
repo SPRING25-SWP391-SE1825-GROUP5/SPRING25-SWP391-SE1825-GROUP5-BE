@@ -23,4 +23,8 @@ public interface IOrderRepository
     Task<int> CountOrdersByCustomerIdAsync(int customerId, string? status = null, 
         DateTime? fromDate = null, DateTime? toDate = null);
     Task<Order?> GetOrderWithDetailsByIdAsync(int orderId);
+
+    // Cart helpers
+    Task<Order?> GetCartByCustomerIdAsync(int customerId);
+    Task<OrderItem?> FindItemAsync(int orderId, int partId);
 }

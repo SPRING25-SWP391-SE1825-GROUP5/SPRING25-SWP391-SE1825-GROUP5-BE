@@ -584,6 +584,79 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<int> GetUsersCountAsync(string? searchTerm = null, string? role = null, bool? isActive = null, bool? emailVerified = null, DateTime? createdFrom = null, DateTime? createdTo = null)
+        {
+            var users = await _authRepository.GetAllUsersAsync();
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                users = users.Where(u =>
+                    u.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (u.Email?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (u.PhoneNumber?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
+                ).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                users = users.Where(u => (u.Role ?? string.Empty).Equals(role, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+            if (isActive.HasValue)
+            {
+                users = users.Where(u => u.IsActive == isActive.Value).ToList();
+            }
+            if (emailVerified.HasValue)
+            {
+                users = users.Where(u => u.EmailVerified == emailVerified.Value).ToList();
+            }
+            if (createdFrom.HasValue)
+            {
+                users = users.Where(u => u.CreatedAt >= createdFrom.Value).ToList();
+            }
+            if (createdTo.HasValue)
+            {
+                users = users.Where(u => u.CreatedAt <= createdTo.Value).ToList();
+            }
+            return users.Count;
+        }
+
+        public async Task<IList<UserResponse>> GetUsersForExportAsync(string? searchTerm = null, string? role = null, int maxRecords = 100000, bool? isActive = null, bool? emailVerified = null, DateTime? createdFrom = null, DateTime? createdTo = null)
+        {
+            var users = await _authRepository.GetAllUsersAsync();
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                users = users.Where(u =>
+                    u.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (u.Email?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (u.PhoneNumber?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
+                ).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                users = users.Where(u => (u.Role ?? string.Empty).Equals(role, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+            if (isActive.HasValue)
+            {
+                users = users.Where(u => u.IsActive == isActive.Value).ToList();
+            }
+            if (emailVerified.HasValue)
+            {
+                users = users.Where(u => u.EmailVerified == emailVerified.Value).ToList();
+            }
+            if (createdFrom.HasValue)
+            {
+                users = users.Where(u => u.CreatedAt >= createdFrom.Value).ToList();
+            }
+            if (createdTo.HasValue)
+            {
+                users = users.Where(u => u.CreatedAt <= createdTo.Value).ToList();
+            }
+            var limited = users
+                .OrderBy(u => u.UserId)
+                .Take(maxRecords)
+                .Select(MapToUserResponse)
+                .ToList();
+            return limited;
+        }
+
         private string NormalizePhoneNumber(string phoneNumber)
         {
             // Loại bỏ tất cả ký tự không phải số

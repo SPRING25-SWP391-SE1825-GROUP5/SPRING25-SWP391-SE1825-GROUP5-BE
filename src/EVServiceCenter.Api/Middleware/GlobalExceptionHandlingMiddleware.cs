@@ -6,6 +6,9 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
+using System.Data;
+using System.Text.RegularExpressions;
 
 namespace EVServiceCenter.Api.Middleware
 {
@@ -100,6 +103,43 @@ namespace EVServiceCenter.Api.Middleware
                         success = false,
                         message = "Tính năng chưa được triển khai",
                         error = "NOT_IMPLEMENTED",
+                        timestamp = DateTime.UtcNow
+                    };
+                    break;
+
+                case DbUpdateException dbEx:
+                    response.StatusCode = (int)HttpStatusCode.BadRequest;
+                    var dbErrorMessage = "Lỗi cơ sở dữ liệu";
+                    
+                    // Xử lý Foreign Key constraint violation
+                    if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx && sqlEx.Number == 547)
+                    {
+                        dbErrorMessage = "Dữ liệu không hợp lệ: Tham chiếu đến bản ghi không tồn tại. ";
+                        // Extract table name from error message
+                        var match = Regex.Match(sqlEx.Message, @"table ['""](\w+)['""]");
+                        if (match.Success)
+                        {
+                            var tableName = match.Groups[1].Value;
+                            if (tableName == "Customers")
+                            {
+                                dbErrorMessage = $"Không tìm thấy khách hàng với ID được chỉ định. Vui lòng kiểm tra lại.";
+                            }
+                            else if (tableName == "Promotions")
+                            {
+                                dbErrorMessage = "Không tìm thấy mã khuyến mãi. Vui lòng kiểm tra lại.";
+                            }
+                            else
+                            {
+                                dbErrorMessage += $"Bảng {tableName} không tồn tại hoặc dữ liệu không hợp lệ.";
+                            }
+                        }
+                    }
+                    
+                    errorResponse = new
+                    {
+                        success = false,
+                        message = dbErrorMessage,
+                        error = "DATABASE_ERROR",
                         timestamp = DateTime.UtcNow
                     };
                     break;

@@ -197,4 +197,20 @@ public class OrderRepository : IOrderRepository
                 .ThenInclude(i => i.Payments)
             .FirstOrDefaultAsync(o => o.OrderId == orderId);
     }
+
+    // Cart helpers
+    public async Task<Order?> GetCartByCustomerIdAsync(int customerId)
+    {
+        return await _context.Orders
+            .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Part)
+            .FirstOrDefaultAsync(o => o.CustomerId == customerId && o.Status == "CART");
+    }
+
+    public async Task<OrderItem?> FindItemAsync(int orderId, int partId)
+    {
+        return await _context.Set<OrderItem>()
+            .Include(oi => oi.Part)
+            .FirstOrDefaultAsync(oi => oi.OrderId == orderId && oi.PartId == partId);
+    }
 }

@@ -273,18 +273,7 @@ namespace EVServiceCenter.Application.Service
             // Xóa failed attempts khi login thành công
             await _loginLockoutService.ClearFailedAttemptsAsync(user.Email);
 
-            // Generate JWT tokens
-            var accessToken = _jwtService.GenerateAccessToken(user);
-            var refreshToken = _jwtService.GenerateRefreshToken();
-            var expiresAt = _jwtService.GetTokenExpiration();
-            var expiresIn = _jwtService.GetTokenExpirationInSeconds();
-
-            // Update refresh token in database
-            user.RefreshToken = Encoding.UTF8.GetBytes(refreshToken);
-            user.UpdatedAt = DateTime.UtcNow;
-            await _authRepository.UpdateUserAsync(user);
-
-            // Lấy CustomerId, StaffId, TechnicianId từ database
+            // Lấy CustomerId, StaffId, TechnicianId từ database TRƯỚC KHI tạo token
             int? customerId = null;
             int? staffId = null;
             int? technicianId = null;
@@ -307,6 +296,17 @@ namespace EVServiceCenter.Application.Service
                 technicianId = technician?.TechnicianId;
                 centerId = technician?.CenterId;
             }
+
+            // Generate JWT tokens với customerId, staffId, technicianId
+            var accessToken = _jwtService.GenerateAccessToken(user, customerId, staffId, technicianId);
+            var refreshToken = _jwtService.GenerateRefreshToken();
+            var expiresAt = _jwtService.GetTokenExpiration();
+            var expiresIn = _jwtService.GetTokenExpirationInSeconds();
+
+            // Update refresh token in database
+            user.RefreshToken = Encoding.UTF8.GetBytes(refreshToken);
+            user.UpdatedAt = DateTime.UtcNow;
+            await _authRepository.UpdateUserAsync(user);
 
             // Lấy center name nếu có centerId
             string? centerName = null;
@@ -830,8 +830,32 @@ namespace EVServiceCenter.Application.Service
                 if (!user.IsActive)
                     throw new ArgumentException("Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên");
 
-                // Generate JWT tokens
-                var accessToken = _jwtService.GenerateAccessToken(user);
+                // Lấy CustomerId, StaffId, TechnicianId từ database TRƯỚC KHI tạo token
+                int? customerId = null;
+                int? staffId = null;
+                int? technicianId = null;
+                int? centerId = null;
+                
+                if (user.Role == "CUSTOMER")
+                {
+                    var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
+                    customerId = customer?.CustomerId;
+                }
+                else if (user.Role == "STAFF")
+                {
+                    var staff = await _staffRepository.GetStaffByUserIdAsync(user.UserId);
+                    staffId = staff?.StaffId;
+                    centerId = staff?.CenterId;
+                }
+                else if (user.Role == "TECHNICIAN")
+                {
+                    var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);
+                    technicianId = technician?.TechnicianId;
+                    centerId = technician?.CenterId;
+                }
+
+                // Generate JWT tokens với customerId, staffId, technicianId
+                var accessToken = _jwtService.GenerateAccessToken(user, customerId, staffId, technicianId);
                 var refreshToken = _jwtService.GenerateRefreshToken();
                 var expiresAt = _jwtService.GetTokenExpiration();
                 var expiresIn = _jwtService.GetTokenExpirationInSeconds();
@@ -841,28 +865,8 @@ namespace EVServiceCenter.Application.Service
                 user.UpdatedAt = DateTime.UtcNow;
                 await _authRepository.UpdateUserAsync(user);
 
-                // Lấy CustomerId từ database
-                int? customerId = null;
-                if (user.Role == "CUSTOMER")
-                {
-                    var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
-                    customerId = customer?.CustomerId;
-                }
-
-                // Lấy center info cho staff/technician
-                int? centerId = null;
+                // Lấy center name nếu có centerId
                 string? centerName = null;
-                if (user.Role == "STAFF")
-                {
-                    var staff = await _staffRepository.GetStaffByUserIdAsync(user.UserId);
-                    centerId = staff?.CenterId;
-                }
-                else if (user.Role == "TECHNICIAN")
-                {
-                    var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);
-                    centerId = technician?.CenterId;
-                }
-
                 if (centerId.HasValue)
                 {
                     var center = await _centerRepository.GetCenterByIdAsync(centerId.Value);

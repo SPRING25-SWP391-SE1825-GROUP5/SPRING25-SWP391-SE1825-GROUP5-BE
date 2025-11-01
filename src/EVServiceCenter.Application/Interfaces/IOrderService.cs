@@ -17,4 +17,13 @@ public interface IOrderService
     Task DeleteOrderAsync(int orderId);
     Task<bool> ExistsAsync(int orderId);
     Task<List<OrderItemSimpleResponse>> GetItemsAsync(int orderId);
+
+    // Cart operations (Order with Status = "CART")
+    Task<OrderResponse> GetOrCreateCartAsync(int customerId);
+    Task<List<OrderItemSimpleResponse>> GetCartItemsAsync(int cartOrderId);
+    Task<OrderResponse> AddItemToCartAsync(int cartOrderId, int partId, int quantity);
+    Task<OrderResponse> UpdateCartItemQuantityAsync(int cartOrderId, int orderItemId, int quantity);
+    Task<OrderResponse> RemoveCartItemAsync(int cartOrderId, int orderItemId);
+    Task<OrderResponse> ClearCartAsync(int cartOrderId);
+    Task<OrderResponse> CheckoutCartAsync(int cartOrderId);
 }

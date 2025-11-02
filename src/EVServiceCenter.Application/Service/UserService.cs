@@ -22,16 +22,24 @@ namespace EVServiceCenter.Application.Service
         private readonly IAccountRepository _accountRepository;
         private readonly IStaffRepository _staffRepository;
         private readonly ITechnicianRepository _technicianRepository;
+        private readonly IBookingRepository _bookingRepository;
+        private readonly IInvoiceRepository _invoiceRepository;
+        private readonly IPaymentRepository _paymentRepository;
+        private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
         private readonly IEmailService _emailService;
         private readonly IOtpService _otpService;
 
-        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IOtpService otpService)
+        public UserService(IAuthRepository authRepository, IAccountRepository accountRepository, ICustomerRepository customerRepository, IStaffRepository staffRepository, ITechnicianRepository technicianRepository, IBookingRepository bookingRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianTimeSlotRepository technicianTimeSlotRepository, IEmailService emailService, IOtpService otpService)
         {
             _authRepository = authRepository;
             _accountRepository = accountRepository;
             _customerRepository = customerRepository;
             _staffRepository = staffRepository;
             _technicianRepository = technicianRepository;
+            _bookingRepository = bookingRepository;
+            _invoiceRepository = invoiceRepository;
+            _paymentRepository = paymentRepository;
+            _technicianTimeSlotRepository = technicianTimeSlotRepository;
             _emailService = emailService;
             _otpService = otpService;
         }
@@ -45,7 +53,7 @@ namespace EVServiceCenter.Application.Service
                 // Apply filters
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
-                    users = users.Where(u => 
+                    users = users.Where(u =>
                         u.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                         (u.Email?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
                         (u.PhoneNumber?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
@@ -154,7 +162,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Parse specific database errors
                 var errorMessage = "Lỗi cơ sở dữ liệu";
-                
+
                 if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx)
                 {
                     switch (sqlEx.Number)
@@ -173,7 +181,7 @@ namespace EVServiceCenter.Application.Service
                             break;
                     }
                 }
-                
+
                 throw new ArgumentException(errorMessage);
             }
             catch (Exception ex)
@@ -425,7 +433,7 @@ namespace EVServiceCenter.Application.Service
         private int CalculateAge(DateOnly birthDate, DateOnly today)
         {
             var age = today.Year - birthDate.Year;
-            if (birthDate.Month > today.Month || 
+            if (birthDate.Month > today.Month ||
                 (birthDate.Month == today.Month && birthDate.Day > today.Day))
             {
                 age--;
@@ -508,6 +516,7 @@ namespace EVServiceCenter.Application.Service
 
         /// <summary>
         /// Cập nhật trạng thái người dùng (activate/deactivate)
+        /// Option 1: Strict - Không cho phép deactivate nếu có ràng buộc
         /// </summary>
         /// <param name="userId">ID người dùng</param>
         /// <param name="isActive">Trạng thái mới (true = activate, false = deactivate)</param>
@@ -523,11 +532,149 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException("Không tìm thấy người dùng với ID này.");
                 }
 
-                // Cập nhật trạng thái
-                user.IsActive = isActive;
-                user.UpdatedAt = DateTime.UtcNow;
+                // Nếu đang activate, không cần check ràng buộc
+                if (isActive)
+                {
+                    user.IsActive = true;
+                    user.UpdatedAt = DateTime.UtcNow;
+                    await _authRepository.UpdateUserAsync(user);
+                    return true;
+                }
 
-                // Lưu thay đổi
+                // Nếu đang deactivate, cần check ràng buộc STRICT (Option 1)
+                var constraints = new List<string>();
+
+                // 1. Check nếu user là CUSTOMER
+                if (user.Role == "CUSTOMER")
+                {
+                    var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
+                    if (customer != null)
+                    {
+                        // Check bookings PENDING/CONFIRMED/IN_PROGRESS
+                        var activeBookings = await _bookingRepository.GetBookingsByCustomerIdAsync(
+                            customer.CustomerId,
+                            page: 1,
+                            pageSize: 100,
+                            status: null,
+                            fromDate: null,
+                            toDate: null);
+
+                        var blockedBookings = activeBookings.Where(b =>
+                            b.Status == "PENDING" ||
+                            b.Status == "CONFIRMED" ||
+                            b.Status == "IN_PROGRESS").ToList();
+
+                        if (blockedBookings.Any())
+                        {
+                            var statusCounts = blockedBookings
+                                .GroupBy(b => b.Status)
+                                .Select(g => $"{g.Key}: {g.Count()}")
+                                .ToList();
+                            constraints.Add($"Khách hàng có {blockedBookings.Count} booking đang chờ xử lý ({string.Join(", ", statusCounts)}). Vui lòng hoàn tất hoặc hủy các booking này trước khi vô hiệu hóa tài khoản.");
+                        }
+
+                        // Check invoices PENDING/UNPAID
+                        var invoices = await _invoiceRepository.GetByCustomerIdAsync(customer.CustomerId);
+                        var blockedInvoices = invoices.Where(i =>
+                            i.Status == "PENDING" ||
+                            i.Status == "UNPAID").ToList();
+
+                        if (blockedInvoices.Any())
+                        {
+                            var statusCounts = blockedInvoices
+                                .GroupBy(i => i.Status)
+                                .Select(g => $"{g.Key}: {g.Count()}")
+                                .ToList();
+                            constraints.Add($"Khách hàng có {blockedInvoices.Count} hóa đơn chưa thanh toán ({string.Join(", ", statusCounts)}). Vui lòng thanh toán hoặc hủy các hóa đơn này trước khi vô hiệu hóa tài khoản.");
+                        }
+
+                        // Check payments PENDING cho các invoices của customer
+                        foreach (var invoice in invoices)
+                        {
+                            var payments = await _paymentRepository.GetByInvoiceIdAsync(invoice.InvoiceId, status: "PENDING");
+                            if (payments.Any())
+                            {
+                                constraints.Add($"Khách hàng có {payments.Count} giao dịch thanh toán đang chờ xử lý. Vui lòng hoàn tất các giao dịch này trước khi vô hiệu hóa tài khoản.");
+                                break; // Chỉ cần report một lần
+                            }
+                        }
+                    }
+                }
+
+                // 2. Check nếu user là STAFF
+                if (user.Role == "STAFF")
+                {
+                    var staff = await _staffRepository.GetStaffByUserIdAsync(userId);
+                    if (staff != null)
+                    {
+                        // Note: Hiện tại không có direct link từ Booking đến Staff
+                        // Nếu cần check assignments, cần thêm logic hoặc field StaffId vào Booking
+                        // Tạm thời bỏ qua constraint này hoặc check qua CenterId
+                        var centerBookings = await _bookingRepository.GetBookingsByCenterIdAsync(
+                            staff.CenterId,
+                            page: 1,
+                            pageSize: 100,
+                            status: null,
+                            fromDate: null,
+                            toDate: null);
+
+                        var activeCenterBookings = centerBookings.Where(b =>
+                            b.Status == "PENDING" ||
+                            b.Status == "CONFIRMED" ||
+                            b.Status == "IN_PROGRESS").ToList();
+
+                        if (activeCenterBookings.Any())
+                        {
+                            constraints.Add($"Nhân viên đang làm việc tại trung tâm có {activeCenterBookings.Count} booking đang chờ xử lý. Vui lòng hoàn tất hoặc reassign các booking này trước khi vô hiệu hóa tài khoản.");
+                        }
+                    }
+                }
+
+                // 3. Check nếu user là TECHNICIAN
+                if (user.Role == "TECHNICIAN")
+                {
+                    var technician = await _technicianRepository.GetTechnicianByUserIdAsync(userId);
+                    if (technician != null)
+                    {
+                        // Check bookings assigned to technician
+                        var technicianBookings = await _bookingRepository.GetByTechnicianAsync(technician.TechnicianId);
+                        var activeTechnicianBookings = technicianBookings.Where(b =>
+                            b.Status == "PENDING" ||
+                            b.Status == "CONFIRMED" ||
+                            b.Status == "IN_PROGRESS").ToList();
+
+                        if (activeTechnicianBookings.Any())
+                        {
+                            var statusCounts = activeTechnicianBookings
+                                .GroupBy(b => b.Status)
+                                .Select(g => $"{g.Key}: {g.Count()}")
+                                .ToList();
+                            constraints.Add($"Kỹ thuật viên có {activeTechnicianBookings.Count} booking đang được assign ({string.Join(", ", statusCounts)}). Vui lòng reassign các booking này cho kỹ thuật viên khác trước khi vô hiệu hóa tài khoản.");
+                        }
+
+                        // Check time slots đã book (có BookingId và WorkDate >= today)
+                        var technicianTimeSlots = await _technicianTimeSlotRepository.GetByTechnicianIdAsync(technician.TechnicianId);
+                        var today = DateTime.Today;
+                        var bookedTimeSlots = technicianTimeSlots.Where(tts =>
+                            tts.BookingId != null &&
+                            tts.WorkDate.Date >= today).ToList();
+
+                        if (bookedTimeSlots.Any())
+                        {
+                            constraints.Add($"Kỹ thuật viên có {bookedTimeSlots.Count} time slot đã được book từ hôm nay trở đi. Vui lòng release hoặc reassign các time slot này trước khi vô hiệu hóa tài khoản.");
+                        }
+                    }
+                }
+
+                // Nếu có ràng buộc, throw exception
+                if (constraints.Any())
+                {
+                    throw new ArgumentException($"Không thể vô hiệu hóa tài khoản vì:\n{string.Join("\n", constraints)}");
+                }
+
+                // Không có ràng buộc, cho phép deactivate
+                user.IsActive = false;
+                user.UpdatedAt = DateTime.UtcNow;
                 await _authRepository.UpdateUserAsync(user);
 
                 return true;
@@ -661,15 +808,15 @@ namespace EVServiceCenter.Application.Service
         {
             // Loại bỏ tất cả ký tự không phải số
             var normalized = Regex.Replace(phoneNumber, @"[^\d]", "");
-            
+
             // Nếu bắt đầu bằng 0, giữ nguyên
             if (normalized.StartsWith("0"))
                 return normalized;
-            
+
             // Nếu bắt đầu bằng 84, thay thế bằng 0
             if (normalized.StartsWith("84"))
                 return "0" + normalized.Substring(2);
-            
+
             // Nếu không có prefix, thêm 0
             return "0" + normalized;
         }

@@ -49,6 +49,16 @@ namespace EVServiceCenter.Application.Service
                     return response;
                 }
 
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.WorkDate.Date < today)
+                {
+                    response.Success = false;
+                    response.Message = $"Không thể tạo lịch trong quá khứ. Ngày làm việc phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.";
+                    response.Errors.Add(response.Message);
+                    return response;
+                }
+
                 // Create technician time slot
                 var technicianTimeSlot = new TechnicianTimeSlot
                 {
@@ -71,7 +81,7 @@ namespace EVServiceCenter.Application.Service
             catch (Exception ex)
             {
                 response.Success = false;
-                
+
                 // Check for duplicate key constraint violation
                 if (ex.Message.Contains("UNIQUE") || ex.Message.Contains("duplicate") || ex.Message.Contains("UQ_"))
                 {
@@ -82,7 +92,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     response.Message = $"Lỗi khi tạo lịch technician: {ex.Message}";
                 }
-                
+
                 response.Errors.Add(response.Message);
                 return response;
             }
@@ -105,6 +115,16 @@ namespace EVServiceCenter.Application.Service
                 {
                     response.Success = false;
                     response.Message = "Không tìm thấy technician với ID đã cho";
+                    return response;
+                }
+
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.StartDate.Date < today)
+                {
+                    response.Success = false;
+                    response.Message = $"Không thể tạo lịch trong quá khứ. Ngày bắt đầu phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.";
+                    response.Errors.Add(response.Message);
                     return response;
                 }
 
@@ -135,7 +155,7 @@ namespace EVServiceCenter.Application.Service
                         // Skip duplicate entries and continue with next date
                         var dateStr = currentDate.ToString("dd/MM/yyyy");
                         skippedDates.Add(dateStr);
-                        
+
                         // Provide user-friendly error message for duplicates
                         if (ex.Message.Contains("UNIQUE") || ex.Message.Contains("duplicate") || ex.Message.Contains("UQ_"))
                         {
@@ -146,7 +166,7 @@ namespace EVServiceCenter.Application.Service
                             response.Errors.Add($"Bỏ qua ngày {dateStr}: {ex.Message}");
                         }
                     }
-                    
+
                     currentDate = currentDate.AddDays(1);
                 }
 
@@ -198,6 +218,16 @@ namespace EVServiceCenter.Application.Service
                 {
                     response.Success = false;
                     response.Message = "Không tìm thấy trung tâm với ID đã cho";
+                    return response;
+                }
+
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.WorkDate.Date < today)
+                {
+                    response.Success = false;
+                    response.Message = $"Không thể tạo lịch trong quá khứ. Ngày làm việc phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.";
+                    response.Errors.Add(response.Message);
                     return response;
                 }
 
@@ -277,6 +307,16 @@ namespace EVServiceCenter.Application.Service
                 {
                     response.Success = false;
                     response.Message = "Không tìm thấy trung tâm với ID đã cho";
+                    return response;
+                }
+
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.StartDate.Date < today)
+                {
+                    response.Success = false;
+                    response.Message = $"Không thể tạo lịch trong quá khứ. Ngày bắt đầu phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.";
+                    response.Errors.Add(response.Message);
                     return response;
                 }
 
@@ -418,13 +458,13 @@ namespace EVServiceCenter.Application.Service
                     aggregatedDaySlots.AddRange(daySlots);
                     currentDate = currentDate.AddDays(1);
                 }
-                
+
                 // Group by date and create availability response
                 currentDate = startDate.Date;
                 while (currentDate <= endDate.Date)
                 {
                     var daySlots = aggregatedDaySlots.Where(s => s.WorkDate.Date == currentDate.Date).ToList();
-                    
+
                     foreach (var slot in daySlots)
                     {
                         var timeSlotAvailability = new TimeSlotAvailability
@@ -464,7 +504,7 @@ namespace EVServiceCenter.Application.Service
                             }
                         });
                     }
-                    
+
                     currentDate = currentDate.AddDays(1);
                 }
 
@@ -527,6 +567,13 @@ namespace EVServiceCenter.Application.Service
                 if (request.TechnicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
                 if (request.StartDate.Date > request.EndDate.Date) throw new ArgumentException("Khoảng thời gian không hợp lệ");
 
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.StartDate.Date < today)
+                {
+                    throw new ArgumentException($"Không thể tạo lịch trong quá khứ. Ngày bắt đầu phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.");
+                }
+
                 var technician = await _technicianRepository.GetTechnicianByIdAsync(request.TechnicianId);
                 if (technician == null) throw new ArgumentException("Kỹ thuật viên không tồn tại");
 
@@ -585,11 +632,11 @@ namespace EVServiceCenter.Application.Service
 
             var result = new List<TechnicianDailyScheduleResponse>();
             var currentDate = startDate.Date;
-            
+
             while (currentDate <= endDate.Date)
             {
                 var daySlots = await _technicianTimeSlotRepository.GetTechnicianTimeSlotsByTechnicianAndDateAsync(technicianId, currentDate);
-                
+
                 var dailySchedule = new TechnicianDailyScheduleResponse
                 {
                     TechnicianId = technicianId,
@@ -606,7 +653,7 @@ namespace EVServiceCenter.Application.Service
                         TechnicianSlotId = slot.TechnicianSlotId
                     }).OrderBy(ts => ts.SlotId).ToList()
                 };
-                
+
                 result.Add(dailySchedule);
                 currentDate = currentDate.AddDays(1);
             }
@@ -614,7 +661,7 @@ namespace EVServiceCenter.Application.Service
             return result;
         }
 
-        
+
 
         private TechnicianTimeSlotResponse MapToTechnicianTimeSlotResponse(TechnicianTimeSlot timeSlot)
         {

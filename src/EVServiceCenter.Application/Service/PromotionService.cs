@@ -219,8 +219,8 @@ namespace EVServiceCenter.Application.Service
                     Status = request.Status.ToUpper(),
                     UsageLimit = request.UsageLimit,
                     UsageCount = 0,
-                    
-                    
+
+
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -263,8 +263,8 @@ namespace EVServiceCenter.Application.Service
                 promotion.MaxDiscount = request.MaxDiscount;
                 promotion.Status = request.Status.ToUpper();
                 promotion.UsageLimit = request.UsageLimit;
-                
-                
+
+
                 promotion.UpdatedAt = DateTime.UtcNow;
 
                 await _promotionRepository.UpdatePromotionAsync(promotion);
@@ -487,6 +487,42 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<IList<PromotionResponse>> GetPromotionsForExportAsync(string? searchTerm = null, string? status = null, int maxRecords = 100000)
+        {
+            var promotions = await _promotionRepository.GetAllPromotionsAsync();
+
+            // Auto-update expired promotions before filtering
+            foreach (var promotion in promotions.Where(p => p.Status == "ACTIVE"))
+            {
+                await CheckAndUpdateExpiredStatusAsync(promotion);
+            }
+
+            // Reload after auto-update to get latest status
+            promotions = await _promotionRepository.GetAllPromotionsAsync();
+
+            // Filtering
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                promotions = promotions.Where(p =>
+                    p.Code.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    p.Description.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                ).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                promotions = promotions.Where(p => p.Status.Equals(status, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            var limited = promotions
+                .OrderBy(p => p.PromotionId)
+                .Take(maxRecords)
+                .Select(MapToPromotionResponse)
+                .ToList();
+
+            return limited;
+        }
+
         private PromotionResponse MapToPromotionResponse(Promotion promotion)
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
@@ -517,8 +553,8 @@ namespace EVServiceCenter.Application.Service
                 UpdatedAt = promotion.UpdatedAt,
                 UsageLimit = promotion.UsageLimit,
                 UsageCount = promotion.UsageCount,
-                
-                
+
+
                 IsActive = isActive,
                 IsExpired = isExpired,
                 IsUsageLimitReached = isUsageLimitReached,

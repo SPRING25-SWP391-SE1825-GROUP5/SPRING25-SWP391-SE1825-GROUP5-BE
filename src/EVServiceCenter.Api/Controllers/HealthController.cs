@@ -38,6 +38,41 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Authenticated health check - verifies that authentication/authorization system is ready
+        /// This endpoint requires a valid JWT token to pass, ensuring JWT middleware and policies are initialized
+        /// </summary>
+        [HttpGet("auth")]
+        [Authorize(Policy = "AuthenticatedUser")]
+        public IActionResult GetAuthHealth()
+        {
+            try
+            {
+                // This endpoint requires authentication, so if we get here, auth system is ready
+                return Ok(new
+                {
+                    success = true,
+                    message = "Authentication system is ready",
+                    data = new
+                    {
+                        status = "healthy",
+                        authReady = true,
+                        timestamp = DateTime.UtcNow
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(503, new
+                {
+                    success = false,
+                    message = "Authentication system is not ready",
+                    error = ex.Message,
+                    timestamp = DateTime.UtcNow
+                });
+            }
+        }
     }
 }
 

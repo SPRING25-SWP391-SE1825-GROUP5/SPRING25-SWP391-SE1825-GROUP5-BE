@@ -32,13 +32,14 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         [HttpGet("me")]
+        [Authorize(Roles = "CUSTOMER")]
         public async Task<IActionResult> GetCurrentCustomer()
         {
             try
             {
                 var userId = GetCurrentUserId();
                 Console.WriteLine($"GetCurrentCustomer API called, userId: {userId}");
-                
+
                 if (userId == null)
                 {
                     Console.WriteLine("UserId is null, returning Unauthorized");
@@ -47,10 +48,10 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 Console.WriteLine($"Calling GetCurrentCustomerAsync with userId: {userId}");
                 var customer = await _customerService.GetCurrentCustomerAsync(userId.Value);
-                
+
                 Console.WriteLine($"GetCurrentCustomerAsync completed successfully");
-                return Ok(new { 
-                    success = true, 
+                return Ok(new {
+                    success = true,
                     message = "Lấy thông tin khách hàng thành công",
                     data = customer
                 });
@@ -61,9 +62,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -84,18 +85,18 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
                 var result = await _vehicleService.GetVehiclesAsync(pageNumber, pageSize, id, searchTerm);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = $"Lấy danh sách phương tiện của khách hàng {id} thành công",
                     data = result
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -110,11 +111,11 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var credits = await _customerServiceCreditService.GetByCustomerIdAsync(customerId);
                 var creditsList = credits.ToList();
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = $"Tìm thấy {creditsList.Count} gói dịch vụ đã mua",
-                    data = creditsList 
+                    data = creditsList
                 });
             }
             catch (ArgumentException ex)
@@ -171,9 +172,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
 
                 var servicePackages = await _customerServiceCreditService.GetCustomerServicePackagesAsync(userId.Value);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = $"Tìm thấy {servicePackages.Count()} service package",
                     data = servicePackages
                 });
@@ -198,12 +199,12 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
 
                 var servicePackage = await _customerServiceCreditService.GetServicePackageDetailAsync(packageId, userId.Value);
-                
+
                 if (servicePackage == null)
                     return NotFound(new { success = false, message = "Không tìm thấy service package hoặc bạn không có quyền truy cập" });
 
-                return Ok(new { 
-                    success = true, 
+                return Ok(new {
+                    success = true,
                     message = "Lấy chi tiết service package thành công",
                     data = servicePackage
                 });
@@ -228,9 +229,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
 
                 var usageHistory = await _customerServiceCreditService.GetServicePackageUsageHistoryAsync(packageId, userId.Value);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = $"Tìm thấy {usageHistory.Count()} lần sử dụng",
                     data = usageHistory
                 });
@@ -255,9 +256,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
 
                 var statistics = await _customerServiceCreditService.GetCustomerServicePackageStatisticsAsync(userId.Value);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy thống kê service package thành công",
                     data = statistics
                 });
@@ -296,14 +297,14 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         private int? GetCurrentUserId()
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-                            ?? User.FindFirst("userId")?.Value 
-                            ?? User.FindFirst("sub")?.Value 
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                            ?? User.FindFirst("userId")?.Value
+                            ?? User.FindFirst("sub")?.Value
                             ?? User.FindFirst("nameid")?.Value;
-                            
+
             Console.WriteLine($"Looking for userId in claims. Found: {userIdClaim}");
             Console.WriteLine($"All claims: {string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}"))}");
-            
+
             if (int.TryParse(userIdClaim, out int userId))
                 return userId;
             return null;

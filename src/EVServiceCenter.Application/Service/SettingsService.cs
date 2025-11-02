@@ -3,6 +3,8 @@ using EVServiceCenter.Application.Configurations;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Options;
+using System.Linq;
+using System;
 
 namespace EVServiceCenter.Application.Service;
 
@@ -13,6 +15,7 @@ public class SettingsService : ISettingsService
     private readonly IOptionsMonitor<PayOsOptions> _payOsOptions;
     private readonly IOptionsMonitor<GuestSessionOptions> _guestOptions;
     private readonly IOptionsMonitor<MaintenanceReminderOptions> _reminderOptions;
+    private readonly IOptionsMonitor<RateLimitingOptions> _rateLimitingOptions;
 
     // Setting keys
     private const string BookingHoldTtlKey = "BookingRealtime.HoldTtlMinutes";
@@ -20,13 +23,14 @@ public class SettingsService : ISettingsService
     private const string PayOsMinAmountKey = "PayOS.MinAmount";
     private const string PayOsDescMaxKey = "PayOS.DescriptionMaxLength";
 
-    public SettingsService(ISystemSettingRepository repo, IOptionsMonitor<BookingRealtimeOptions> bookingOptions, IOptionsMonitor<PayOsOptions> payOsOptions, IOptionsMonitor<GuestSessionOptions> guestOptions, IOptionsMonitor<MaintenanceReminderOptions> reminderOptions)
+    public SettingsService(ISystemSettingRepository repo, IOptionsMonitor<BookingRealtimeOptions> bookingOptions, IOptionsMonitor<PayOsOptions> payOsOptions, IOptionsMonitor<GuestSessionOptions> guestOptions, IOptionsMonitor<MaintenanceReminderOptions> reminderOptions, IOptionsMonitor<RateLimitingOptions> rateLimitingOptions)
     {
         _repo = repo;
         _bookingOptions = bookingOptions;
         _payOsOptions = payOsOptions;
         _guestOptions = guestOptions;
         _reminderOptions = reminderOptions;
+        _rateLimitingOptions = rateLimitingOptions;
     }
 
     public Task<BookingRealtimeSettingsDto> GetBookingRealtimeAsync()
@@ -113,6 +117,59 @@ public class SettingsService : ISettingsService
         await _repo.UpsertAsync("MaintenanceReminder.UpcomingDays", request.UpcomingDays.ToString(), "Days ahead to consider upcoming reminders");
         await _repo.UpsertAsync("MaintenanceReminder.DispatchHourLocal", request.DispatchHourLocal.ToString(), "Local hour to dispatch reminder emails");
         await _repo.UpsertAsync("MaintenanceReminder.TimeZoneId", request.TimeZoneId, "Windows/Olson timezone id");
+    }
+
+    public Task<RateLimitingSettingsDto> GetRateLimitingAsync()
+    {
+        var snap = _rateLimitingOptions.CurrentValue;
+        var dto = new RateLimitingSettingsDto
+        {
+            Enabled = snap.Enabled,
+            UseRedis = snap.UseRedis,
+            BypassRoles = snap.BypassRoles ?? Array.Empty<string>()
+        };
+
+        // Convert policies to DTO
+        foreach (var policy in snap.Policies)
+        {
+            dto.Policies[policy.Key] = new RateLimitPolicySettingsDto
+            {
+                PermitLimit = policy.Value.PermitLimit,
+                Window = policy.Value.Window.ToString(@"hh\:mm\:ss"),
+                QueueLimit = policy.Value.QueueLimit,
+                ReplenishmentPeriod = policy.Value.ReplenishmentPeriod.ToString(@"hh\:mm\:ss"),
+                TokensPerPeriod = policy.Value.TokensPerPeriod,
+                AutoReplenishment = policy.Value.AutoReplenishment
+            };
+        }
+
+        return Task.FromResult(dto);
+    }
+
+    public async Task UpdateRateLimitingAsync(UpdateRateLimitingSettingsRequest request)
+    {
+        // Validate
+        if (request.Policies == null) throw new ArgumentException("Policies is required", nameof(request));
+
+        // Update enabled flag
+        await _repo.UpsertAsync("RateLimiting.Enabled", request.Enabled.ToString().ToLower(), "Enable/disable rate limiting");
+        await _repo.UpsertAsync("RateLimiting.UseRedis", request.UseRedis.ToString().ToLower(), "Use Redis for rate limiting");
+
+        // Update bypass roles
+        var bypassRolesValue = string.Join(",", request.BypassRoles ?? Array.Empty<string>());
+        await _repo.UpsertAsync("RateLimiting.BypassRoles", bypassRolesValue, "Roles that bypass rate limiting");
+
+        // Update each policy
+        foreach (var policy in request.Policies)
+        {
+            var prefix = $"RateLimiting.Policies.{policy.Key}";
+            await _repo.UpsertAsync($"{prefix}.PermitLimit", policy.Value.PermitLimit.ToString(), $"Permit limit for {policy.Key}");
+            await _repo.UpsertAsync($"{prefix}.Window", policy.Value.Window, $"Time window for {policy.Key}");
+            await _repo.UpsertAsync($"{prefix}.QueueLimit", policy.Value.QueueLimit.ToString(), $"Queue limit for {policy.Key}");
+            await _repo.UpsertAsync($"{prefix}.ReplenishmentPeriod", policy.Value.ReplenishmentPeriod, $"Replenishment period for {policy.Key}");
+            await _repo.UpsertAsync($"{prefix}.TokensPerPeriod", policy.Value.TokensPerPeriod.ToString(), $"Tokens per period for {policy.Key}");
+            await _repo.UpsertAsync($"{prefix}.AutoReplenishment", policy.Value.AutoReplenishment.ToString().ToLower(), $"Auto replenishment for {policy.Key}");
+        }
     }
 }
 

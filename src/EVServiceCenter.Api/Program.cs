@@ -33,6 +33,10 @@ using EVServiceCenter.Application.Configurations;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Caching.SqlServer;
 using EVServiceCenter.Api;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
+using System.Security.Claims;
+using System.Linq;
 
 
 // ============================================================================
@@ -72,6 +76,198 @@ builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection
 builder.Services.Configure<PromotionOptions>(builder.Configuration.GetSection("Promotion"));
 builder.Services.Configure<MaintenanceReminderOptions>(builder.Configuration.GetSection("MaintenanceReminder"));
 builder.Services.Configure<ExportOptions>(builder.Configuration.GetSection("ExportOptions"));
+
+// Rate Limiting Configuration
+builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection("RateLimiting"));
+var rateLimitingOptions = builder.Configuration.GetSection("RateLimiting").Get<RateLimitingOptions>() ?? new RateLimitingOptions();
+
+if (rateLimitingOptions.Enabled)
+{
+    // Redis Configuration
+    if (rateLimitingOptions.UseRedis && !string.IsNullOrEmpty(builder.Configuration.GetConnectionString("Redis")))
+    {
+        var redisConnection = builder.Configuration.GetConnectionString("Redis");
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = redisConnection;
+        });
+    }
+
+    // Rate Limiting Services
+    builder.Services.AddRateLimiter(options =>
+    {
+        // Global Policy
+        if (rateLimitingOptions.Policies.TryGetValue("GlobalPolicy", out var globalPolicy))
+        {
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            {
+                // Check bypass roles
+                var user = httpContext.User;
+                if (user?.Identity?.IsAuthenticated == true)
+                {
+                    var userRoles = user.Claims
+                        .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role ||
+                                   c.Type == "role" ||
+                                   c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role")
+                        .Select(c => c.Value)
+                        .ToArray();
+
+                    if (userRoles.Any(role => rateLimitingOptions.BypassRoles.Contains(role, StringComparer.OrdinalIgnoreCase)))
+                    {
+                        return RateLimitPartition.GetNoLimiter("bypass");
+                    }
+                }
+
+                // Get User ID + IP
+                var userId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                           ?? user?.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
+                var ipAddress = httpContext.Connection.RemoteIpAddress?.ToString()
+                             ?? httpContext.Request.Headers["X-Forwarded-For"].ToString().Split(',').FirstOrDefault()?.Trim()
+                             ?? "unknown";
+
+                var key = !string.IsNullOrEmpty(userId)
+                    ? $"global:user:{userId}:ip:{ipAddress}"
+                    : $"global:anonymous:ip:{ipAddress}";
+
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = globalPolicy.PermitLimit,
+                    Window = globalPolicy.Window,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = globalPolicy.QueueLimit
+                });
+            });
+        }
+
+        // Booking Create Policy
+        if (rateLimitingOptions.Policies.TryGetValue("BookingCreatePolicy", out var bookingCreatePolicy))
+        {
+            options.AddPolicy("BookingCreatePolicy", httpContext =>
+            {
+                // Check bypass roles
+                var user = httpContext.User;
+                if (user?.Identity?.IsAuthenticated == true)
+                {
+                    var userRoles = user.Claims
+                        .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role ||
+                                   c.Type == "role" ||
+                                   c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role")
+                        .Select(c => c.Value)
+                        .ToArray();
+
+                    if (userRoles.Any(role => rateLimitingOptions.BypassRoles.Contains(role, StringComparer.OrdinalIgnoreCase)))
+                    {
+                        return RateLimitPartition.GetNoLimiter("bypass");
+                    }
+                }
+
+                // Get User ID + IP
+                var userId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                           ?? user?.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
+                var ipAddress = httpContext.Connection.RemoteIpAddress?.ToString()
+                             ?? httpContext.Request.Headers["X-Forwarded-For"].ToString().Split(',').FirstOrDefault()?.Trim()
+                             ?? "unknown";
+
+                var key = !string.IsNullOrEmpty(userId)
+                    ? $"booking-create:user:{userId}:ip:{ipAddress}"
+                    : $"booking-create:anonymous:ip:{ipAddress}";
+
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = bookingCreatePolicy.PermitLimit,
+                    Window = bookingCreatePolicy.Window,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = bookingCreatePolicy.QueueLimit
+                });
+            });
+        }
+
+        // Booking Cancel Policy
+        if (rateLimitingOptions.Policies.TryGetValue("BookingCancelPolicy", out var bookingCancelPolicy))
+        {
+            options.AddPolicy("BookingCancelPolicy", httpContext =>
+            {
+                // Check bypass roles
+                var user = httpContext.User;
+                if (user?.Identity?.IsAuthenticated == true)
+                {
+                    var userRoles = user.Claims
+                        .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role ||
+                                   c.Type == "role" ||
+                                   c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role")
+                        .Select(c => c.Value)
+                        .ToArray();
+
+                    if (userRoles.Any(role => rateLimitingOptions.BypassRoles.Contains(role, StringComparer.OrdinalIgnoreCase)))
+                    {
+                        return RateLimitPartition.GetNoLimiter("bypass");
+                    }
+                }
+
+                // Get User ID + IP
+                var userId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                           ?? user?.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
+                var ipAddress = httpContext.Connection.RemoteIpAddress?.ToString()
+                             ?? httpContext.Request.Headers["X-Forwarded-For"].ToString().Split(',').FirstOrDefault()?.Trim()
+                             ?? "unknown";
+
+                var key = !string.IsNullOrEmpty(userId)
+                    ? $"booking-cancel:user:{userId}:ip:{ipAddress}"
+                    : $"booking-cancel:anonymous:ip:{ipAddress}";
+
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = bookingCancelPolicy.PermitLimit,
+                    Window = bookingCancelPolicy.Window,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = bookingCancelPolicy.QueueLimit
+                });
+            });
+        }
+
+        // Authentication Policy
+        if (rateLimitingOptions.Policies.TryGetValue("AuthenticationPolicy", out var authPolicy))
+        {
+            options.AddPolicy("AuthenticationPolicy", httpContext =>
+            {
+                // For auth endpoints, only use IP (not User ID since user not logged in yet)
+                var ipAddress = httpContext.Connection.RemoteIpAddress?.ToString()
+                             ?? httpContext.Request.Headers["X-Forwarded-For"].ToString().Split(',').FirstOrDefault()?.Trim()
+                             ?? "unknown";
+
+                var key = $"auth:ip:{ipAddress}";
+
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = authPolicy.PermitLimit,
+                    Window = authPolicy.Window,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = authPolicy.QueueLimit
+                });
+            });
+        }
+
+        // On Rejected Handler
+        options.OnRejected = async (context, token) =>
+        {
+            TimeSpan? retryAfter = null;
+            if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfterValue))
+            {
+                retryAfter = retryAfterValue;
+                context.HttpContext.Response.Headers["Retry-After"] = retryAfter.Value.TotalSeconds.ToString();
+            }
+
+            context.HttpContext.Response.StatusCode = 429;
+            await context.HttpContext.Response.WriteAsJsonAsync(new
+            {
+                success = false,
+                message = "Quá nhiều requests. Vui lòng thử lại sau.",
+                retryAfter = retryAfter?.TotalSeconds ?? 0
+            });
+        };
+    });
+}
+
 builder.Services.AddSingleton<EVServiceCenter.Application.Interfaces.IHoldStore, EVServiceCenter.Application.Service.InMemoryHoldStore>();
 builder.Services.AddScoped<ISettingsService, EVServiceCenter.Application.Service.SettingsService>();
 builder.Services.AddScoped<EVServiceCenter.Domain.Interfaces.ISystemSettingRepository, EVServiceCenter.Infrastructure.Repositories.SystemSettingRepository>();
@@ -235,7 +431,12 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = issuer,
         ValidAudience = audience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? string.Empty)),
-        ClockSkew = TimeSpan.Zero // Không cho phép sai lệch thời gian
+        ClockSkew = TimeSpan.Zero, // Không cho phép sai lệch thời gian
+
+        // Explicitly set claim type mappings to ensure roles are recognized correctly
+        // This is critical for authorization to work immediately after restart
+        RoleClaimType = System.Security.Claims.ClaimTypes.Role,
+        NameClaimType = System.Security.Claims.ClaimTypes.NameIdentifier
     };
 
     // Custom JWT error handling events
@@ -463,7 +664,20 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 
-// Global Exception Handling - MUST be first
+// Routing - MUST be before Authentication/Authorization
+app.UseRouting();
+
+// Authentication & Authorization - MUST be after Routing but before MapControllers
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Rate Limiting (must be after Authentication)
+if (rateLimitingOptions.Enabled)
+{
+    app.UseRateLimiter();
+}
+
+// Global Exception Handling - MUST be after routing/auth but before endpoints
 app.UseGlobalExceptionHandling();
 
 // JSON Error Handling - for model binding errors
@@ -472,18 +686,15 @@ app.UseJsonErrorHandling();
 // Guest session cookie middleware
 app.UseMiddleware<EVServiceCenter.Api.Middleware.GuestSessionMiddleware>();
 
-// Authentication & Authorization
-app.UseAuthentication();
-app.UseAuthorization();
-
 // Health endpoints cho Render
 // removed public health and root endpoints per request
 
+// Map endpoints AFTER routing and authentication are set up
 app.MapControllers();
 app.MapHub<EVServiceCenter.Api.BookingHub>("/hubs/booking");
 app.MapHub<EVServiceCenter.Api.ChatHub>("/hubs/chat", options =>
 {
-    options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets | 
+    options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets |
                        Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
 })
 .RequireAuthorization(); // Add JWT authentication requirement

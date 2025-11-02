@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Configurations;
 using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Application.Constants;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
@@ -59,8 +60,16 @@ public class PaymentService
         _pdfInvoiceService = pdfInvoiceService;
         }
 
+	/// <summary>
+	/// Tạo payment link cho Booking
+	/// HOÀN TOÀN ĐỘC LẬP với CreateOrderPaymentLinkAsync
+	/// - Sử dụng bookingId làm PayOS orderCode
+	/// - Logic tính toán amount riêng (service + parts - package - promotion)
+	/// - Validation riêng cho Booking
+	/// </summary>
 	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId)
 	{
+		// Validation riêng cho Booking
 		var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
 		if (booking.Status == "CANCELLED") throw new InvalidOperationException("Booking đã bị hủy");
@@ -88,7 +97,9 @@ public class PaymentService
         var amount = (int)Math.Round(totalAmount); // VNĐ integer
         if (amount < _options.MinAmount) amount = _options.MinAmount;
 
-		var orderCode = booking.BookingId; // PayOS yêu cầu là số
+		// Booking sử dụng bookingId làm orderCode cho PayOS
+		// Lưu ý: Đảm bảo bookingId và orderId không conflict (thường có auto-increment riêng)
+		var orderCode = booking.BookingId;
         var rawDesc = $"Booking #{booking.BookingId}";
         var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
@@ -158,7 +169,77 @@ public class PaymentService
     }
 
     /// <summary>
-    /// Lấy payment link đã tồn tại từ PayOS
+    /// Lấy payment link hiện có từ PayOS cho Order
+    /// HOÀN TOÀN ĐỘC LẬP với Booking payment methods
+    /// - Sử dụng orderId làm PayOS orderCode (khác bookingId)
+    /// - Validation riêng cho Order
+    /// </summary>
+    public async Task<string?> GetExistingOrderPaymentLinkAsync(int orderId)
+    {
+        // Validation chi tiết
+        if (orderId <= 0)
+        {
+            throw new ArgumentException($"OrderId không hợp lệ: {orderId}. OrderId phải lớn hơn 0.");
+        }
+
+        var order = await _orderRepository.GetByIdAsync(orderId);
+        if (order == null)
+        {
+            throw new InvalidOperationException($"Không tìm thấy đơn hàng với ID: {orderId}. Vui lòng kiểm tra lại thông tin đơn hàng.");
+        }
+
+        // Kiểm tra trạng thái đơn hàng
+        if (string.IsNullOrWhiteSpace(order.Status))
+        {
+            throw new InvalidOperationException($"Đơn hàng #{orderId} không có trạng thái. Vui lòng liên hệ quản trị viên.");
+        }
+
+        var statusUpper = order.Status.ToUpperInvariant();
+        if (statusUpper == PaymentConstants.OrderStatus.Cancelled || statusUpper == PaymentConstants.OrderStatus.Canceled)
+        {
+            throw new InvalidOperationException($"Không thể lấy payment link cho đơn hàng #{orderId}. Đơn hàng đã bị hủy (Status: {order.Status}).");
+        }
+
+        if (statusUpper == PaymentConstants.OrderStatus.Paid || statusUpper == PaymentConstants.OrderStatus.Completed)
+        {
+            throw new InvalidOperationException($"Không thể lấy payment link cho đơn hàng #{orderId}. Đơn hàng đã được thanh toán (Status: {order.Status}).");
+        }
+
+        // Kiểm tra đơn hàng có items không
+        if (order.OrderItems == null || !order.OrderItems.Any())
+        {
+            throw new InvalidOperationException($"Không thể lấy payment link cho đơn hàng #{orderId}. Đơn hàng không có sản phẩm nào.");
+        }
+
+        // Kiểm tra tổng tiền
+        var totalAmount = order.OrderItems.Sum(i => i.UnitPrice * i.Quantity);
+        if (totalAmount <= 0)
+        {
+            throw new InvalidOperationException($"Không thể lấy payment link cho đơn hàng #{orderId}. Tổng tiền đơn hàng phải lớn hơn 0 (Hiện tại: {totalAmount:N0} VNĐ).");
+        }
+
+        // Kiểm tra xem đã có invoice thanh toán chưa
+        if (order.Invoices != null && order.Invoices.Any())
+        {
+            var paidInvoice = order.Invoices.FirstOrDefault(i => 
+                i.Status != null && (i.Status.ToUpperInvariant() == PaymentConstants.InvoiceStatus.Paid || i.Status.ToUpperInvariant() == PaymentConstants.InvoiceStatus.Completed));
+            if (paidInvoice != null)
+            {
+                throw new InvalidOperationException($"Không thể lấy payment link cho đơn hàng #{orderId}. Đơn hàng đã có hóa đơn thanh toán (Invoice ID: {paidInvoice.InvoiceId}).");
+            }
+        }
+
+        // Tất cả validation đã pass, lấy payment link từ PayOS
+        // Order sử dụng orderId làm orderCode cho PayOS
+        return await GetExistingPaymentLinkAsync(orderId);
+    }
+
+    /// <summary>
+    /// Helper method: Lấy payment link từ PayOS bằng orderCode
+    /// DÙNG CHUNG bởi cả Booking và Order, nhưng orderCode khác nhau nên không conflict
+    /// - Booking: orderCode = bookingId
+    /// - Order: orderCode = orderId
+    /// Method này là thread-safe và không có side effects
     /// </summary>
     private async Task<string?> GetExistingPaymentLinkAsync(int orderCode)
     {
@@ -195,23 +276,86 @@ public class PaymentService
         }
     }
 
-    public async Task<string?> CreateOrderPaymentLinkAsync(int orderId)
+    /// <summary>
+    /// Tạo payment link cho Order
+    /// HOÀN TOÀN ĐỘC LẬP với CreateBookingPaymentLinkAsync
+    /// - Sử dụng orderId làm PayOS orderCode (khác bookingId)
+    /// - Logic tính toán amount riêng (sum order items)
+    /// - Validation chi tiết riêng cho Order
+    /// - cancelUrl: URL riêng cho order cancel (nếu null, dùng cancel URL mặc định từ config)
+    /// </summary>
+    public async Task<string?> CreateOrderPaymentLinkAsync(int orderId, string? cancelUrl = null)
     {
+        // Validation chi tiết riêng cho Order
+        if (orderId <= 0)
+        {
+            throw new ArgumentException($"OrderId không hợp lệ: {orderId}. OrderId phải lớn hơn 0.");
+        }
+
         var order = await _orderRepository.GetByIdAsync(orderId);
-        if (order == null) throw new InvalidOperationException("Đơn hàng không tồn tại");
+        if (order == null)
+        {
+            throw new InvalidOperationException($"Không tìm thấy đơn hàng với ID: {orderId}. Vui lòng kiểm tra lại thông tin đơn hàng.");
+        }
 
-        var amountDecimal = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? 0m;
+        // Kiểm tra trạng thái đơn hàng
+        if (string.IsNullOrWhiteSpace(order.Status))
+        {
+            throw new InvalidOperationException($"Đơn hàng #{orderId} không có trạng thái. Vui lòng liên hệ quản trị viên.");
+        }
+
+        var statusUpper = order.Status.ToUpperInvariant();
+        if (statusUpper == PaymentConstants.OrderStatus.Cancelled || statusUpper == PaymentConstants.OrderStatus.Canceled)
+        {
+            throw new InvalidOperationException($"Không thể tạo payment link cho đơn hàng #{orderId}. Đơn hàng đã bị hủy (Status: {order.Status}).");
+        }
+
+        if (statusUpper == PaymentConstants.OrderStatus.Paid || statusUpper == PaymentConstants.OrderStatus.Completed)
+        {
+            throw new InvalidOperationException($"Không thể tạo payment link cho đơn hàng #{orderId}. Đơn hàng đã được thanh toán (Status: {order.Status}).");
+        }
+
+        // Kiểm tra đơn hàng có items không
+        if (order.OrderItems == null || !order.OrderItems.Any())
+        {
+            throw new InvalidOperationException($"Không thể tạo payment link cho đơn hàng #{orderId}. Đơn hàng không có sản phẩm nào.");
+        }
+
+        // Kiểm tra tổng tiền
+        var amountDecimal = order.OrderItems.Sum(i => i.UnitPrice * i.Quantity);
+        if (amountDecimal <= 0)
+        {
+            throw new InvalidOperationException($"Không thể tạo payment link cho đơn hàng #{orderId}. Tổng tiền đơn hàng phải lớn hơn 0 (Hiện tại: {amountDecimal:N0} VNĐ).");
+        }
+
         var amount = (int)Math.Round(amountDecimal);
-        if (amount < _options.MinAmount) amount = _options.MinAmount;
+        if (amount < _options.MinAmount)
+        {
+            throw new InvalidOperationException($"Không thể tạo payment link cho đơn hàng #{orderId}. Tổng tiền ({amount:N0} VNĐ) nhỏ hơn số tiền tối thiểu được phép ({_options.MinAmount:N0} VNĐ).");
+        }
 
-        var orderCode = orderId; // PayOS yêu cầu số
+        // Kiểm tra xem đã có invoice thanh toán chưa
+        if (order.Invoices != null && order.Invoices.Any())
+        {
+            var paidInvoice = order.Invoices.FirstOrDefault(i => 
+                i.Status != null && (i.Status.ToUpperInvariant() == PaymentConstants.InvoiceStatus.Paid || i.Status.ToUpperInvariant() == PaymentConstants.InvoiceStatus.Completed));
+            if (paidInvoice != null)
+            {
+                throw new InvalidOperationException($"Không thể tạo payment link cho đơn hàng #{orderId}. Đơn hàng đã có hóa đơn thanh toán (Invoice ID: {paidInvoice.InvoiceId}).");
+            }
+        }
+
+        // Order sử dụng orderId làm orderCode cho PayOS
+        // Lưu ý: Đảm bảo bookingId và orderId không conflict (thường có auto-increment riêng)
+        var orderCode = orderId;
         var rawDesc = $"Order #{order.OrderId}";
         var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
         var returnUrl = (_options.ReturnUrl ?? string.Empty);
-        var cancelUrl = (_options.CancelUrl ?? string.Empty);
+        // Sử dụng cancelUrl riêng cho order nếu được truyền, nếu không thì dùng cancel URL mặc định từ config
+        var finalCancelUrl = cancelUrl ?? (_options.CancelUrl ?? string.Empty);
 
-        var canonical = string.Create(CultureInfo.InvariantCulture, $"amount={amount}&cancelUrl={cancelUrl}&description={description}&orderCode={orderCode}&returnUrl={returnUrl}");
+        var canonical = string.Create(CultureInfo.InvariantCulture, $"amount={amount}&cancelUrl={finalCancelUrl}&description={description}&orderCode={orderCode}&returnUrl={returnUrl}");
         var signature = ComputeHmacSha256Hex(canonical, _options.ChecksumKey);
 
         var items = (order.OrderItems ?? new List<Domain.Entities.OrderItem>())
@@ -226,7 +370,7 @@ public class PaymentService
             description,
             items,
             returnUrl,
-            cancelUrl,
+            cancelUrl = finalCancelUrl,
             signature
         };
 
@@ -238,7 +382,48 @@ public class PaymentService
 
         var response = await _httpClient.SendAsync(request);
         var responseText = await response.Content.ReadAsStringAsync();
+        
+        // Xử lý trường hợp "Đơn thanh toán đã tồn tại" (code 231)
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorJson = JsonDocument.Parse(responseText).RootElement;
+            var code = errorJson.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
+            var desc = errorJson.TryGetProperty("desc", out var errorDescElem) ? errorDescElem.GetString() : null;
+            
+            if (code == PaymentConstants.PayOSErrorCodes.PaymentExists && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
+            {
+                _logger.LogInformation("PayOS trả về code 231 (payment exists) cho orderCode {OrderCode}, đang lấy payment link hiện có...", orderCode);
+                
+                // Thử lấy checkoutUrl từ error response data trước (nếu có)
+                if (errorJson.TryGetProperty("data", out var errorDataElem) && errorDataElem.ValueKind == JsonValueKind.Object)
+                {
+                    if (errorDataElem.TryGetProperty("checkoutUrl", out var errorUrlElem) && errorUrlElem.ValueKind == JsonValueKind.String)
+                    {
+                        var errorCheckoutUrl = errorUrlElem.GetString();
+                        if (!string.IsNullOrEmpty(errorCheckoutUrl))
+                        {
+                            _logger.LogInformation("Tìm thấy checkoutUrl trong error response cho orderCode {OrderCode}", orderCode);
+                            return errorCheckoutUrl;
+                        }
+                    }
+                }
+                
+                // Nếu không có trong error response, thử lấy từ PayOS API
+                var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
+                if (!string.IsNullOrEmpty(existingUrl))
+                {
+                    _logger.LogInformation("Đã lấy được payment link hiện có từ PayOS cho orderCode {OrderCode}", orderCode);
+                    return existingUrl;
+                }
+                
+                // Nếu không lấy được link cũ, throw exception với message chi tiết
+                _logger.LogWarning("Không thể lấy payment link hiện có từ PayOS cho orderCode {OrderCode}. PayOS đã báo payment exists nhưng không tìm thấy link.", orderCode);
+                throw new InvalidOperationException($"Đơn thanh toán đã tồn tại trên PayOS cho đơn hàng #{order.OrderId}, nhưng không thể lấy được payment link. Vui lòng liên hệ hỗ trợ hoặc thử lại sau.");
+            }
+            
         response.EnsureSuccessStatusCode();
+        }
+        
         var json = JsonDocument.Parse(responseText).RootElement;
         if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
             dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)

@@ -51,6 +51,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.TechnicianTimeSlot!)
                 .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
+                .Include(b => b.AppliedCredit!)
+                .ThenInclude(ac => ac.ServicePackage)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
         }
 
@@ -302,6 +304,123 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync()
         {
             return await _context.Database.BeginTransactionAsync();
+        }
+
+        public async Task<List<Booking>> GetBookingsForAdminAsync(int page = 1, int pageSize = 10, 
+            string? status = null, int? centerId = null, int? customerId = null, 
+            DateTime? fromDate = null, DateTime? toDate = null, 
+            string sortBy = "createdAt", string sortOrder = "desc")
+        {
+            var query = _context.Bookings
+                .Include(b => b.Customer)
+                .ThenInclude(c => c.User)
+                .Include(b => b.Vehicle)
+                .ThenInclude(v => v.VehicleModel)
+                .Include(b => b.Center)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Slot!)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Technician!)
+                .ThenInclude(t => t.User)
+                .Include(b => b.Service)
+                .Include(b => b.AppliedCredit!)
+                .ThenInclude(ac => ac.ServicePackage)
+                .AsQueryable();
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(status))
+            {
+                query = query.Where(b => b.Status == status);
+            }
+
+            if (centerId.HasValue && centerId.Value > 0)
+            {
+                query = query.Where(b => b.CenterId == centerId.Value);
+            }
+
+            if (customerId.HasValue && customerId.Value > 0)
+            {
+                query = query.Where(b => b.CustomerId == customerId.Value);
+            }
+
+            if (fromDate.HasValue)
+            {
+                query = query.Where(b => b.CreatedAt >= fromDate.Value);
+            }
+
+            if (toDate.HasValue)
+            {
+                query = query.Where(b => b.CreatedAt <= toDate.Value);
+            }
+
+            // Apply sorting
+            switch (sortBy.ToLower())
+            {
+                case "bookingdate":
+                case "createdat":
+                    query = sortOrder.ToLower() == "asc" 
+                        ? query.OrderBy(b => b.CreatedAt)
+                        : query.OrderByDescending(b => b.CreatedAt);
+                    break;
+                case "status":
+                    query = sortOrder.ToLower() == "asc" 
+                        ? query.OrderBy(b => b.Status)
+                        : query.OrderByDescending(b => b.Status);
+                    break;
+                case "centerid":
+                    query = sortOrder.ToLower() == "asc" 
+                        ? query.OrderBy(b => b.CenterId)
+                        : query.OrderByDescending(b => b.CenterId);
+                    break;
+                case "customerid":
+                    query = sortOrder.ToLower() == "asc" 
+                        ? query.OrderBy(b => b.CustomerId)
+                        : query.OrderByDescending(b => b.CustomerId);
+                    break;
+                default:
+                    query = query.OrderByDescending(b => b.CreatedAt);
+                    break;
+            }
+
+            // Apply pagination
+            return await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+
+        public async Task<int> CountBookingsForAdminAsync(string? status = null, int? centerId = null, 
+            int? customerId = null, DateTime? fromDate = null, DateTime? toDate = null)
+        {
+            var query = _context.Bookings.AsQueryable();
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(status))
+            {
+                query = query.Where(b => b.Status == status);
+            }
+
+            if (centerId.HasValue && centerId.Value > 0)
+            {
+                query = query.Where(b => b.CenterId == centerId.Value);
+            }
+
+            if (customerId.HasValue && customerId.Value > 0)
+            {
+                query = query.Where(b => b.CustomerId == customerId.Value);
+            }
+
+            if (fromDate.HasValue)
+            {
+                query = query.Where(b => b.CreatedAt >= fromDate.Value);
+            }
+
+            if (toDate.HasValue)
+            {
+                query = query.Where(b => b.CreatedAt <= toDate.Value);
+            }
+
+            return await query.CountAsync();
         }
     }
 }

@@ -537,6 +537,79 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        [HttpGet("admin/all")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetAllBookingsForAdmin(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string? status = null,
+            [FromQuery] int? centerId = null,
+            [FromQuery] int? customerId = null,
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] string sortBy = "createdAt",
+            [FromQuery] string sortOrder = "desc")
+        {
+            try
+            {
+                if (page < 1)
+                {
+                    return BadRequest(new { success = false, message = "Page phải lớn hơn 0." });
+                }
+
+                if (pageSize < 1 || pageSize > 100)
+                {
+                    return BadRequest(new { success = false, message = "Page size phải từ 1 đến 100." });
+                }
+
+                var bookings = await _bookingRepository.GetBookingsForAdminAsync(
+                    page, pageSize, status, centerId, customerId, fromDate, toDate, sortBy, sortOrder);
+
+                var totalItems = await _bookingRepository.CountBookingsForAdminAsync(
+                    status, centerId, customerId, fromDate, toDate);
+
+                var bookingSummaries = bookings.Select(MapToBookingSummary).ToList();
+                var totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
+
+                var pagination = new
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalItems = totalItems,
+                    TotalPages = totalPages,
+                    HasNextPage = page < totalPages,
+                    HasPreviousPage = page > 1
+                };
+
+                var filters = new
+                {
+                    Status = status,
+                    CenterId = centerId,
+                    CustomerId = customerId,
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    SortBy = sortBy,
+                    SortOrder = sortOrder
+                };
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách booking thành công",
+                    data = new
+                    {
+                        Bookings = bookingSummaries,
+                        Pagination = pagination,
+                        Filters = filters
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi hệ thống: {ex.Message}" });
+            }
+        }
+
         [HttpGet("center/{centerId}")]
         [Authorize(Roles = "STAFF,ADMIN,MANAGER")]
         public async Task<IActionResult> GetBookingsByCenter(

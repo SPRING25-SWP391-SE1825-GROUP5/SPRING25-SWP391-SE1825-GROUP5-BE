@@ -30,8 +30,7 @@ public class CustomerServiceCreditRepository : ICustomerServiceCreditRepository
     public async Task<IEnumerable<CustomerServiceCredit>> GetByCustomerIdAsync(int customerId)
     {
         return await _context.CustomerServiceCredits
-            .Include(csc => csc.ServicePackage)
-            .Include(csc => csc.Service)
+            .AsNoTracking()
             .Where(csc => csc.CustomerId == customerId)
             .OrderByDescending(csc => csc.PurchaseDate)
             .ToListAsync();

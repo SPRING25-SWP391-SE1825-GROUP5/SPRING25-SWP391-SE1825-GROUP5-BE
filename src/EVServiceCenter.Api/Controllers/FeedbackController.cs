@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Infrastructure.Configurations;
@@ -42,10 +43,52 @@ public class FeedbackController : ControllerBase
 
             var total = await query.CountAsync();
             
-            // Dùng projection thay vì Include để tránh lỗi column mapping
-            var data = await query
+            // Lấy danh sách feedback IDs trước (chỉ select FeedbackId để tránh lỗi)
+            var feedbackIds = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .Select(x => x.FeedbackId)
+                .ToListAsync();
+
+            if (feedbackIds.Count == 0)
+            {
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = "Lấy danh sách đánh giá thành công",
+                    total,
+                    page,
+                    pageSize,
+                    data = new List<object>()
+                });
+            }
+
+            // Load feedbacks với related data
+            var feedbacks = await _db.Feedbacks
+                .AsNoTracking()
+                .Where(x => feedbackIds.Contains(x.FeedbackId))
+                .Include(x => x.Part)
+                .Include(x => x.Technician)
+                    .ThenInclude(t => t != null ? t.User : null!)
+                .ToListAsync();
+
+            // Map sang DTO (load Part và Technician riêng để tránh lỗi column)
+            var partIds = feedbacks.Where(f => f.PartId.HasValue).Select(f => f.PartId!.Value).Distinct().ToList();
+            var technicianIds = feedbacks.Where(f => f.TechnicianId.HasValue).Select(f => f.TechnicianId!.Value).Distinct().ToList();
+
+            var parts = await _db.Parts
+                .AsNoTracking()
+                .Where(p => partIds.Contains(p.PartId))
+                .ToDictionaryAsync(p => p.PartId);
+
+            var technicians = await _db.Technicians
+                .AsNoTracking()
+                .Where(t => technicianIds.Contains(t.TechnicianId))
+                .Include(t => t.User)
+                .ToDictionaryAsync(t => t.TechnicianId);
+
+            // Map sang DTO
+            var data = feedbacks.OrderByDescending(x => x.CreatedAt)
                 .Select(x => new 
                 { 
                     feedbackId = x.FeedbackId,
@@ -58,11 +101,15 @@ public class FeedbackController : ControllerBase
                     comment = x.Comment,
                     isAnonymous = x.IsAnonymous,
                     createdAt = x.CreatedAt,
-                    // Lấy thông tin liên quan nếu có
-                    partName = x.Part != null ? x.Part.PartName : null,
-                    technicianName = x.Technician != null && x.Technician.User != null ? x.Technician.User.FullName : null
+                    // Lấy thông tin liên quan từ dictionary
+                    partName = x.PartId.HasValue && parts.ContainsKey(x.PartId.Value) 
+                        ? parts[x.PartId.Value].PartName 
+                        : null,
+                    technicianName = x.TechnicianId.HasValue && technicians.ContainsKey(x.TechnicianId.Value) 
+                        ? technicians[x.TechnicianId.Value].User?.FullName 
+                        : null
                 })
-                .ToListAsync();
+                .ToList();
 
             return Ok(new 
             { 

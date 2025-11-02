@@ -587,8 +587,8 @@ namespace EVServiceCenter.Application.Service
                     }
                     else if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
                     {
-                        // Refund gói luôn khi hủy booking (xóa CustomerServiceCredit)
-                        await RefundPackageCompletelyAsync(booking.AppliedCreditId.Value);
+                        // Refund gói khi hủy booking (chỉ xóa nếu không có booking khác dùng)
+                        await RefundPackageCompletelyAsync(booking.AppliedCreditId.Value, booking.BookingId);
                         // Clear applied credit
                         booking.AppliedCreditId = null;
                     }
@@ -1136,10 +1136,12 @@ namespace EVServiceCenter.Application.Service
         }
 
         /// <summary>
-        /// Refund gói hoàn toàn (xóa CustomerServiceCredit)
+        /// Refund gói khi hủy booking
+        /// Chỉ xóa CustomerServiceCredit nếu không có booking khác đang sử dụng
         /// </summary>
         /// <param name="creditId">ID của CustomerServiceCredit</param>
-        private async Task RefundPackageCompletelyAsync(int creditId)
+        /// <param name="currentBookingId">ID của booking hiện tại đang hủy (để loại trừ khỏi kiểm tra)</param>
+        private async Task RefundPackageCompletelyAsync(int creditId, int currentBookingId)
         {
             try
             {
@@ -1150,14 +1152,30 @@ namespace EVServiceCenter.Application.Service
                     return;
                 }
 
-                // Xóa CustomerServiceCredit hoàn toàn
+                // Kiểm tra xem credit có được dùng trong booking khác không (trừ booking hiện tại)
+                var bookingsUsingCredit = await _customerServiceCreditRepository.GetBookingsByCreditIdAsync(creditId);
+                var otherBookings = bookingsUsingCredit.Where(b => b.BookingId != currentBookingId).ToList();
+
+                if (otherBookings.Any())
+                {
+                    // Có booking khác đang dùng credit → không xóa, chỉ log
+                    _logger.LogInformation(
+                        "CreditId {CreditId} đang được sử dụng trong {Count} booking khác (BookingIds: {BookingIds}). Không xóa credit khi hủy booking {CurrentBookingId}",
+                        creditId, 
+                        otherBookings.Count,
+                        string.Join(", ", otherBookings.Select(b => b.BookingId)),
+                        currentBookingId);
+                    return;
+                }
+
+                // Không có booking khác đang dùng → xóa credit
                 await _customerServiceCreditRepository.DeleteAsync(creditId);
                 
-                _logger.LogInformation("Đã refund hoàn toàn gói dịch vụ CreditId: {CreditId}", creditId);
+                _logger.LogInformation("Đã refund và xóa gói dịch vụ CreditId: {CreditId} (không có booking khác sử dụng)", creditId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi refund hoàn toàn gói dịch vụ CreditId: {CreditId}", creditId);
+                _logger.LogError(ex, "Lỗi khi refund gói dịch vụ CreditId: {CreditId}", creditId);
                 throw new Exception($"Lỗi khi refund gói dịch vụ: {ex.Message}");
             }
         }

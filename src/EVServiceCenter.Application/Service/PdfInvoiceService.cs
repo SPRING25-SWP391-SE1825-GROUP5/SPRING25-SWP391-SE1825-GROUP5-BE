@@ -64,20 +64,66 @@ namespace EVServiceCenter.Application.Service
                 using var pdf = new PdfDocument(writer);
                 using var document = new Document(pdf);
 
-                // Tạo font hỗ trợ tiếng Việt
+                // Tạo font hỗ trợ tiếng Việt với encoding IDENTITY_H để hiển thị đúng ký tự có dấu
                 PdfFont font;
                 PdfFont boldFont;
+                var fontsFolder = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+                
                 try
                 {
-                    // Thử sử dụng font hệ thống hỗ trợ tiếng Việt
-                    font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
-                    boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
+                    // Ưu tiên 1: Arial (phổ biến và hỗ trợ tốt tiếng Việt)
+                    var arialPath = Path.Combine(fontsFolder, "arial.ttf");
+                    if (File.Exists(arialPath))
+                    {
+                        font = PdfFontFactory.CreateFont(arialPath, PdfEncodings.IDENTITY_H);
+                        var arialBoldPath = Path.Combine(fontsFolder, "arialbd.ttf");
+                        boldFont = File.Exists(arialBoldPath) 
+                            ? PdfFontFactory.CreateFont(arialBoldPath, PdfEncodings.IDENTITY_H)
+                            : PdfFontFactory.CreateFont(arialPath, PdfEncodings.IDENTITY_H);
+                    }
+                    // Ưu tiên 2: Times New Roman
+                    else
+                    {
+                        var timesPath = Path.Combine(fontsFolder, "times.ttf");
+                        if (File.Exists(timesPath))
+                        {
+                            font = PdfFontFactory.CreateFont(timesPath, PdfEncodings.IDENTITY_H);
+                            var timesBoldPath = Path.Combine(fontsFolder, "timesbd.ttf");
+                            boldFont = File.Exists(timesBoldPath) 
+                                ? PdfFontFactory.CreateFont(timesBoldPath, PdfEncodings.IDENTITY_H)
+                                : PdfFontFactory.CreateFont(timesPath, PdfEncodings.IDENTITY_H);
+                        }
+                        // Ưu tiên 3: Thử với tên font trực tiếp
+                        else
+                        {
+                            font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
+                            boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
+                        }
+                    }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Fallback về font mặc định nếu không tìm thấy Arial
-                    font = PdfFontFactory.CreateFont(StandardFonts.HELVETICA);
-                    boldFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD);
+                    _logger.LogWarning(ex, "Không thể tải font từ hệ thống, thử font system font với IDENTITY_H");
+                    try
+                    {
+                        // Thử với tên font hệ thống
+                        font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
+                        boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            font = PdfFontFactory.CreateFont("Times-Roman", PdfEncodings.IDENTITY_H);
+                            boldFont = PdfFontFactory.CreateFont("Times-Bold", PdfEncodings.IDENTITY_H);
+                        }
+                        catch
+                        {
+                            // Fallback cuối cùng - vẫn dùng IDENTITY_H để hỗ trợ tiếng Việt
+                            font = PdfFontFactory.CreateFont(StandardFonts.HELVETICA, PdfEncodings.IDENTITY_H);
+                            boldFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD, PdfEncodings.IDENTITY_H);
+                        }
+                    }
                 }
 
                 // Header - HÓA ĐƠN GIÁ TRỊ GIA TĂNG
@@ -112,20 +158,24 @@ namespace EVServiceCenter.Application.Service
                     .SetBorder(iText.Layout.Borders.Border.NO_BORDER)
                     .SetPadding(10)
                     .Add(new Paragraph("Đơn vị bán hàng (Seller):").SetFont(boldFont).SetFontSize(12))
-                    .Add(new Paragraph("EV SERVICE CENTER").SetFont(font).SetFontSize(11).SetMarginTop(5))
-                    .Add(new Paragraph($"Mã số thuế: Chưa cập nhật").SetFont(font).SetFontSize(10).SetMarginTop(3))
+                    .Add(new Paragraph(booking.Center?.CenterName ?? "EV SERVICE CENTER").SetFont(font).SetFontSize(11).SetMarginTop(5))
+                    .Add(new Paragraph($"Mã số thuế: {booking.Center?.CenterName ?? ""} - {booking.CenterId:D6}").SetFont(font).SetFontSize(10).SetMarginTop(3))
                     .Add(new Paragraph($"Địa chỉ: {booking.Center?.Address ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3))
-                    .Add(new Paragraph($"Điện thoại: {booking.Center?.PhoneNumber ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3));
+                    .Add(new Paragraph($"Điện thoại: {booking.Center?.PhoneNumber ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3))
+                    .Add(new Paragraph($"Email: support@evservicecenter.com").SetFont(font).SetFontSize(10).SetMarginTop(3))
+                    .Add(new Paragraph($"Website: www.evservicecenter.com").SetFont(font).SetFontSize(10).SetMarginTop(3));
 
                 // Người mua hàng
+                var payment = invoice?.Payments?.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
                 var buyerCell = new Cell()
                     .SetBorder(iText.Layout.Borders.Border.NO_BORDER)
                     .SetPadding(10)
                     .Add(new Paragraph("Người mua hàng (Buyer):").SetFont(boldFont).SetFontSize(12))
                     .Add(new Paragraph(booking.Customer?.User?.FullName ?? "Chưa cập nhật").SetFont(font).SetFontSize(11).SetMarginTop(5))
                     .Add(new Paragraph($"Mã KH: {booking.CustomerId}").SetFont(font).SetFontSize(10).SetMarginTop(3))
-                    .Add(new Paragraph($"Địa chỉ: {booking.Customer?.User?.Address ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3))
-                    .Add(new Paragraph($"Hình thức thanh toán: Chưa xác định").SetFont(font).SetFontSize(10).SetMarginTop(3));
+                    .Add(new Paragraph($"Email: {invoice?.Email ?? booking.Customer?.User?.Email ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3))
+                    .Add(new Paragraph($"Số điện thoại: {invoice?.Phone ?? booking.Customer?.User?.PhoneNumber ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3))
+                    .Add(new Paragraph($"Địa chỉ: {booking.Customer?.User?.Address ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(10).SetMarginTop(3));
 
                 infoTable.AddCell(sellerCell);
                 infoTable.AddCell(buyerCell);
@@ -138,9 +188,26 @@ namespace EVServiceCenter.Application.Service
 
                 invoiceInfoTable.AddCell(new Cell().Add(new Paragraph($"Ký hiệu (Series): EVS").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER));
                 invoiceInfoTable.AddCell(new Cell().Add(new Paragraph($"Số (No.): {invoice?.InvoiceId:D8}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER));
-                invoiceInfoTable.AddCell(new Cell().Add(new Paragraph($"Ngày: {DateTime.Now:dd} tháng {DateTime.Now:MM} năm {DateTime.Now:yyyy}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER));
+                invoiceInfoTable.AddCell(new Cell().Add(new Paragraph($"Ngày: {invoice?.CreatedAt:dd} tháng {invoice?.CreatedAt:MM} năm {invoice?.CreatedAt:yyyy}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER));
 
                 document.Add(invoiceInfoTable);
+
+                // Thông tin xe và dịch vụ
+                var vehicleInfoTable = new Table(4)
+                    .SetWidth(UnitValue.CreatePercentValue(100))
+                    .SetMarginBottom(15);
+
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph("Thông tin xe:").SetFont(boldFont).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Biển số: {booking.Vehicle?.LicensePlate ?? "N/A"}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Loại xe: {booking.Vehicle?.VehicleModel?.ModelName ?? "N/A"}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Màu: {booking.Vehicle?.Color ?? "N/A"}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph("Kỹ thuật viên:").SetFont(boldFont).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph(booking.TechnicianTimeSlot?.Technician?.User?.FullName ?? "Chưa phân công").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Ngày thực hiện: {booking.TechnicianTimeSlot?.WorkDate:dd/MM/yyyy}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Thời gian: {booking.TechnicianTimeSlot?.Slot?.SlotLabel ?? booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString("HH:mm") ?? "N/A"}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+
+                document.Add(vehicleInfoTable);
 
                 // Bảng kê chi tiết hàng hóa, dịch vụ
                 var itemsTable = new Table(6)
@@ -165,13 +232,46 @@ namespace EVServiceCenter.Application.Service
                 var partsAmount = invoice?.PartsAmount ?? 0m;
                 var finalServicePrice = servicePrice - packageDiscountAmount;
 
+                // Thông tin gói dịch vụ (nếu có)
+                var packageName = booking.AppliedCredit?.ServicePackage?.PackageName;
+                var packageCode = booking.AppliedCredit?.ServicePackage?.PackageCode;
+                var packageDiscountPercent = booking.AppliedCredit?.ServicePackage?.DiscountPercent;
+
                 int stt = 1;
+                // Dòng dịch vụ - hiển thị giá gốc
                 itemsTable.AddCell(new Cell().Add(new Paragraph(stt.ToString()).SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.CENTER));
                 itemsTable.AddCell(new Cell().Add(new Paragraph(booking.Service?.ServiceName ?? "Dịch vụ").SetFont(font).SetFontSize(10)).SetPadding(8));
                 itemsTable.AddCell(new Cell().Add(new Paragraph("Lần").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.CENTER));
                 itemsTable.AddCell(new Cell().Add(new Paragraph("1").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.CENTER));
-                itemsTable.AddCell(new Cell().Add(new Paragraph($"{finalServicePrice:N0}").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.RIGHT));
-                itemsTable.AddCell(new Cell().Add(new Paragraph($"{finalServicePrice:N0}").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.RIGHT));
+                itemsTable.AddCell(new Cell().Add(new Paragraph($"{servicePrice:N0}").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.RIGHT));
+                itemsTable.AddCell(new Cell().Add(new Paragraph($"{servicePrice:N0}").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.RIGHT));
+
+                // Dòng giảm giá gói dịch vụ (nếu có)
+                if (packageDiscountAmount > 0 && !string.IsNullOrEmpty(packageName))
+                {
+                    var discountText = !string.IsNullOrEmpty(packageCode) 
+                        ? $"Áp dụng gói: {packageName} ({packageCode})"
+                        : $"Áp dụng gói: {packageName}";
+                    
+                    if (packageDiscountPercent.HasValue && packageDiscountPercent.Value > 0)
+                    {
+                        discountText += $" - {packageDiscountPercent.Value:N0}%";
+                    }
+                    
+                    itemsTable.AddCell(new Cell().Add(new Paragraph("").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.CENTER));
+                    itemsTable.AddCell(new Cell()
+                        .Add(new Paragraph(discountText).SetFont(font).SetFontSize(9))
+                        .SetPadding(8)
+                        .SetFontColor(new DeviceRgb(0, 128, 0))); // Màu xanh lá
+                    itemsTable.AddCell(new Cell().Add(new Paragraph("").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.CENTER));
+                    itemsTable.AddCell(new Cell().Add(new Paragraph("").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.CENTER));
+                    itemsTable.AddCell(new Cell().Add(new Paragraph("").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.RIGHT));
+                    itemsTable.AddCell(new Cell()
+                        .Add(new Paragraph($"-{packageDiscountAmount:N0}").SetFont(font).SetFontSize(10))
+                        .SetPadding(8)
+                        .SetTextAlignment(TextAlignment.RIGHT)
+                        .SetFontColor(new DeviceRgb(0, 128, 0))); // Màu xanh lá
+                }
 
                 // Thêm các dòng phụ tùng
                 foreach (var part in workOrderParts)
@@ -186,27 +286,32 @@ namespace EVServiceCenter.Application.Service
                     itemsTable.AddCell(new Cell().Add(new Paragraph($"{partTotal:N0}").SetFont(font).SetFontSize(10)).SetPadding(8).SetTextAlignment(TextAlignment.RIGHT));
                 }
 
+                // Dòng giảm giá promotion (nếu có) - hiển thị trong bảng nếu cần
+                // Promotion discount được hiển thị trong phần tóm tắt
+
                 document.Add(itemsTable);
 
                 // Phần tóm tắt thanh toán
                 var totalAmount = finalServicePrice + partsAmount;
-                var vatRate = 0m; // No VAT for now
-                var vatAmount = totalAmount * (vatRate / 100);
-                var finalTotal = totalAmount + vatAmount - promotionDiscountAmount;
+                var finalTotal = totalAmount - promotionDiscountAmount;
 
                 var summaryTable = new Table(2)
                     .SetWidth(UnitValue.CreatePercentValue(60))
                     .SetHorizontalAlignment(HorizontalAlignment.RIGHT)
                     .SetMarginTop(20);
 
-                summaryTable.AddCell(new Cell().Add(new Paragraph($"Thuế suất GTGT (VAT rate): 0%").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
-                summaryTable.AddCell(new Cell().Add(new Paragraph("").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
-
                 summaryTable.AddCell(new Cell().Add(new Paragraph("Cộng tiền hàng (Total amount):").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
                 summaryTable.AddCell(new Cell().Add(new Paragraph($"{totalAmount:N0}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5).SetTextAlignment(TextAlignment.RIGHT));
 
-                summaryTable.AddCell(new Cell().Add(new Paragraph("Tiền thuế GTGT (VAT amount):").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
-                summaryTable.AddCell(new Cell().Add(new Paragraph($"{vatAmount:N0}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5).SetTextAlignment(TextAlignment.RIGHT));
+                // Hiển thị giảm giá gói dịch vụ trong phần tóm tắt (nếu có)
+                if (packageDiscountAmount > 0)
+                {
+                    var packageDiscountText = !string.IsNullOrEmpty(packageName) 
+                        ? $"Giảm giá gói dịch vụ ({packageName}):"
+                        : "Giảm giá gói dịch vụ:";
+                    summaryTable.AddCell(new Cell().Add(new Paragraph(packageDiscountText).SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                    summaryTable.AddCell(new Cell().Add(new Paragraph($"-{packageDiscountAmount:N0}").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5).SetTextAlignment(TextAlignment.RIGHT));
+                }
 
                 if (promotionDiscountAmount > 0)
                 {
@@ -226,6 +331,36 @@ namespace EVServiceCenter.Application.Service
                     .SetFontSize(10)
                     .SetMarginTop(15);
                 document.Add(amountInWordsParagraph);
+
+                // Thông tin thanh toán chi tiết (nếu có)
+                if (payment != null)
+                {
+                    var paymentInfoTable = new Table(2)
+                        .SetWidth(UnitValue.CreatePercentValue(100))
+                        .SetMarginTop(20)
+                        .SetMarginBottom(10);
+
+                    paymentInfoTable.AddCell(new Cell().Add(new Paragraph("Thông tin thanh toán:").SetFont(boldFont).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                    paymentInfoTable.AddCell(new Cell().Add(new Paragraph("").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+
+                    paymentInfoTable.AddCell(new Cell().Add(new Paragraph("Mã thanh toán:").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                    paymentInfoTable.AddCell(new Cell().Add(new Paragraph(payment.PaymentCode ?? "N/A").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+
+                    paymentInfoTable.AddCell(new Cell().Add(new Paragraph("Ngày thanh toán:").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                    paymentInfoTable.AddCell(new Cell().Add(new Paragraph(payment.PaidAt?.ToString("dd/MM/yyyy HH:mm") ?? payment.CreatedAt.ToString("dd/MM/yyyy HH:mm")).SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+
+                    paymentInfoTable.AddCell(new Cell().Add(new Paragraph("Trạng thái:").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                    var statusText = payment.Status?.ToUpper() switch
+                    {
+                        "SUCCESS" or "COMPLETED" or "PAID" => "Đã thanh toán",
+                        "PENDING" => "Đang chờ thanh toán",
+                        "FAILED" => "Thất bại",
+                        _ => payment.Status ?? "N/A"
+                    };
+                    paymentInfoTable.AddCell(new Cell().Add(new Paragraph(statusText).SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+
+                    document.Add(paymentInfoTable);
+                }
 
                 // Chữ ký
                 var signatureTable = new Table(2)
@@ -251,12 +386,21 @@ namespace EVServiceCenter.Application.Service
                 document.Add(signatureTable);
 
                 // Footer
-                var footerParagraph = new Paragraph("(Cần kiểm tra, đối chiếu khi lập, giao, nhận hóa đơn)")
-                    .SetFont(font)
-                    .SetFontSize(9)
-                    .SetTextAlignment(TextAlignment.CENTER)
+                var footerTable = new Table(1)
+                    .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginTop(30);
-                document.Add(footerParagraph);
+
+                footerTable.AddCell(new Cell()
+                    .SetBorder(iText.Layout.Borders.Border.NO_BORDER)
+                    .SetPadding(10)
+                    .SetTextAlignment(TextAlignment.CENTER)
+                    .Add(new Paragraph("(Cần kiểm tra, đối chiếu khi lập, giao, nhận hóa đơn)").SetFont(font).SetFontSize(9))
+                    .Add(new Paragraph("").SetFont(font).SetFontSize(6).SetMarginTop(5))
+                    .Add(new Paragraph("Hotline hỗ trợ: 1900-xxxx | Email: support@evservicecenter.com").SetFont(font).SetFontSize(9))
+                    .Add(new Paragraph("Website: www.evservicecenter.com | Giờ làm việc: 8:00 - 18:00 (T2-CN)").SetFont(font).SetFontSize(9))
+                    .Add(new Paragraph("© EV Service Center - Dịch vụ bảo dưỡng và sửa chữa xe điện chuyên nghiệp").SetFont(font).SetFontSize(8).SetMarginTop(5)));
+
+                document.Add(footerTable);
 
                 document.Close();
 
@@ -334,18 +478,66 @@ namespace EVServiceCenter.Application.Service
                 using var pdf = new PdfDocument(writer);
                 using var document = new Document(pdf);
 
-                // Tạo font hỗ trợ tiếng Việt
+                // Tạo font hỗ trợ tiếng Việt với encoding IDENTITY_H để hiển thị đúng ký tự có dấu
                 PdfFont font;
                 PdfFont boldFont;
+                var fontsFolder = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+                
                 try
                 {
-                    font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
-                    boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
+                    // Ưu tiên 1: Arial (phổ biến và hỗ trợ tốt tiếng Việt)
+                    var arialPath = Path.Combine(fontsFolder, "arial.ttf");
+                    if (File.Exists(arialPath))
+                    {
+                        font = PdfFontFactory.CreateFont(arialPath, PdfEncodings.IDENTITY_H);
+                        var arialBoldPath = Path.Combine(fontsFolder, "arialbd.ttf");
+                        boldFont = File.Exists(arialBoldPath) 
+                            ? PdfFontFactory.CreateFont(arialBoldPath, PdfEncodings.IDENTITY_H)
+                            : PdfFontFactory.CreateFont(arialPath, PdfEncodings.IDENTITY_H);
+                    }
+                    // Ưu tiên 2: Times New Roman
+                    else
+                    {
+                        var timesPath = Path.Combine(fontsFolder, "times.ttf");
+                        if (File.Exists(timesPath))
+                        {
+                            font = PdfFontFactory.CreateFont(timesPath, PdfEncodings.IDENTITY_H);
+                            var timesBoldPath = Path.Combine(fontsFolder, "timesbd.ttf");
+                            boldFont = File.Exists(timesBoldPath) 
+                                ? PdfFontFactory.CreateFont(timesBoldPath, PdfEncodings.IDENTITY_H)
+                                : PdfFontFactory.CreateFont(timesPath, PdfEncodings.IDENTITY_H);
+                        }
+                        // Ưu tiên 3: Thử với tên font trực tiếp
+                        else
+                        {
+                            font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
+                            boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
+                        }
+                    }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    font = PdfFontFactory.CreateFont(StandardFonts.HELVETICA);
-                    boldFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD);
+                    _logger.LogWarning(ex, "Không thể tải font từ hệ thống, thử font system font với IDENTITY_H");
+                    try
+                    {
+                        // Thử với tên font hệ thống
+                        font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
+                        boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            font = PdfFontFactory.CreateFont("Times-Roman", PdfEncodings.IDENTITY_H);
+                            boldFont = PdfFontFactory.CreateFont("Times-Bold", PdfEncodings.IDENTITY_H);
+                        }
+                        catch
+                        {
+                            // Fallback cuối cùng - vẫn dùng IDENTITY_H để hỗ trợ tiếng Việt
+                            font = PdfFontFactory.CreateFont(StandardFonts.HELVETICA, PdfEncodings.IDENTITY_H);
+                            boldFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD, PdfEncodings.IDENTITY_H);
+                        }
+                    }
                 }
 
                 // Header - PHIẾU KIỂM TRA BẢO DƯỠNG ĐỊNH KỲ
@@ -456,7 +648,6 @@ namespace EVServiceCenter.Application.Service
                 var passCount = maintenanceResults.Count(r => string.Equals(r.Result, "PASS", StringComparison.OrdinalIgnoreCase));
                 var failCount = maintenanceResults.Count(r => string.Equals(r.Result, "FAIL", StringComparison.OrdinalIgnoreCase));
                 var pendingCount = maintenanceResults.Count(r => string.Equals(r.Result, "PENDING", StringComparison.OrdinalIgnoreCase));
-                var naCount = maintenanceResults.Count(r => string.Equals(r.Result, "NA", StringComparison.OrdinalIgnoreCase));
 
                 var summaryTable = new Table(2)
                     .SetWidth(UnitValue.CreatePercentValue(80))
@@ -474,9 +665,6 @@ namespace EVServiceCenter.Application.Service
 
                 summaryTable.AddCell(new Cell().Add(new Paragraph("Chưa kiểm tra (PENDING):").SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6));
                 summaryTable.AddCell(new Cell().Add(new Paragraph(pendingCount.ToString()).SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT));
-
-                summaryTable.AddCell(new Cell().Add(new Paragraph("Không áp dụng (N/A):").SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6));
-                summaryTable.AddCell(new Cell().Add(new Paragraph(naCount.ToString()).SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT));
 
                 document.Add(summaryTable);
 

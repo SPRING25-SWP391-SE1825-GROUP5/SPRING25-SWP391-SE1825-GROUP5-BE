@@ -95,35 +95,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         // ===== APPLY/REMOVE/LIST for BOOKINGS and ORDERS (unified under PromotionController) =====
-        /// <summary>
-        /// Public validate promotion code for BOOKING/ORDER without authentication
-        /// </summary>
-        public class PublicValidatePromotionRequest { public string Code { get; set; } = string.Empty; public decimal OrderAmount { get; set; } public string OrderType { get; set; } = "BOOKING"; }
-
-        [HttpPost("/api/promotion/validate")]
-        [AllowAnonymous]
-        public async Task<IActionResult> PublicValidate([FromBody] PublicValidatePromotionRequest request)
-        {
-            if (string.IsNullOrWhiteSpace(request?.Code))
-                return BadRequest(new { success = false, message = "Mã khuyến mãi không được để trống" });
-
-            if (request.OrderAmount < 0)
-                return BadRequest(new { success = false, message = "Số tiền đơn hàng không hợp lệ" });
-
-            var orderType = string.Equals(request.OrderType, "ORDER", StringComparison.OrdinalIgnoreCase) ? "ORDER" : "BOOKING";
-
-            var validate = await _promotionService.ValidatePromotionAsync(new ValidatePromotionRequest
-            {
-                Code = request.Code.Trim().ToUpper(),
-                OrderAmount = request.OrderAmount,
-                OrderType = orderType
-            });
-
-            if (!validate.IsValid)
-                return BadRequest(new { success = false, message = validate.Message, data = validate });
-
-            return Ok(new { success = true, message = "Xác thực mã khuyến mãi thành công", data = validate });
-        }
         public class BookingApplyPromotionRequest { public string? Code { get; set; } }
 
         [HttpPost("bookings/{bookingId:int}/apply")]

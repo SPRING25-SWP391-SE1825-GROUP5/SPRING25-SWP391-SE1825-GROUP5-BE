@@ -259,6 +259,17 @@ namespace EVServiceCenter.WebAPI.Controllers
 
             var updated = await _bookingService.UpdateBookingStatusAsync(id, new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = status });
 
+            // Realtime: notify booking group and center-date group
+            await _hub.Clients.Group($"booking:{id}").SendCoreAsync("booking.updated", new object[] { new { bookingId = id, status } });
+            // Try center/date grouping if available
+            var details = await _bookingRepository.GetBookingWithDetailsByIdAsync(id);
+            var workDate = details?.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd");
+            if (details?.CenterId > 0 && !string.IsNullOrEmpty(workDate))
+            {
+                var group = $"center:{details.CenterId}:date:{workDate}";
+                await _hub.Clients.Group(group).SendCoreAsync("booking.updated", new object[] { new { bookingId = id, status } });
+            }
+
             // Gửi thông báo khi thay đổi status
             await SendStatusChangeNotifications(updated, status);
 

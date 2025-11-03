@@ -16,7 +16,9 @@ public class WorkOrderPartsController : ControllerBase
         private readonly IVehicleModelPartRepository _modelParts;
         private readonly IPartRepository _partRepo;
         private readonly IBookingRepository _bookingRepo;
-        public WorkOrderPartsController(IWorkOrderPartRepository repo, IVehicleModelPartRepository modelParts, IPartRepository partRepo, IBookingRepository bookingRepo) { _repo = repo; _modelParts = modelParts; _partRepo = partRepo; _bookingRepo = bookingRepo; }
+        private readonly IInventoryRepository _inventoryRepo;
+        private readonly Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> _hub;
+        public WorkOrderPartsController(IWorkOrderPartRepository repo, IVehicleModelPartRepository modelParts, IPartRepository partRepo, IBookingRepository bookingRepo, IInventoryRepository inventoryRepo, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub) { _repo = repo; _modelParts = modelParts; _partRepo = partRepo; _bookingRepo = bookingRepo; _inventoryRepo = inventoryRepo; _hub = hub; }
 
         [HttpGet]
         public async Task<IActionResult> Get(int bookingId)
@@ -50,6 +52,7 @@ public class WorkOrderPartsController : ControllerBase
                 QuantityUsed = req.Quantity
             };
             await _repo.AddAsync(item);
+            await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("parts.updated", new object[] { new { bookingId, type = "add", partId = req.PartId, quantity = req.Quantity } });
             return Ok(new { success = true });
         }
 
@@ -70,6 +73,7 @@ public class WorkOrderPartsController : ControllerBase
                 QuantityUsed = req.Quantity
             };
             await _repo.UpdateAsync(item);
+            await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("parts.updated", new object[] { new { bookingId, type = "update", partId, quantity = req.Quantity } });
             return Ok(new { success = true });
         }
 
@@ -81,6 +85,7 @@ public class WorkOrderPartsController : ControllerBase
             if (string.Equals(booking.Status, "COMPLETED", System.StringComparison.OrdinalIgnoreCase) || string.Equals(booking.Status, "CANCELED", System.StringComparison.OrdinalIgnoreCase))
                 return BadRequest(new { success = false, message = "Không thể sửa parts khi booking đã hoàn tất/hủy" });
             await _repo.DeleteAsync(bookingId, partId);
+            await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("parts.updated", new object[] { new { bookingId, type = "delete", partId } });
             return Ok(new { success = true });
         }
 
@@ -101,6 +106,59 @@ public class WorkOrderPartsController : ControllerBase
                 await _repo.UpdateAsync(entity);
             }
             return Ok(new { success = true, count = items.Count });
+        }
+
+        public class ConfirmRequest { public int? CenterId { get; set; } }
+
+        [HttpPost("confirm")]
+        public async Task<IActionResult> Confirm(int bookingId, [FromBody] ConfirmRequest? req)
+        {
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            var status = (booking.Status ?? string.Empty).ToUpperInvariant();
+            if (status == "COMPLETED" || status == "CANCELED" || status == "CANCELLED")
+                return BadRequest(new { success = false, message = "Không thể xác nhận parts khi booking đã hoàn tất/hủy" });
+
+            var centerId = req?.CenterId ?? booking.CenterId;
+            var inventory = await _inventoryRepo.GetInventoryByCenterIdAsync(centerId);
+            if (inventory == null) return BadRequest(new { success = false, message = "Trung tâm chưa có kho" });
+
+            var items = await _repo.GetByBookingIdAsync(bookingId);
+            if (items == null || items.Count == 0) return BadRequest(new { success = false, message = "Không có phụ tùng phát sinh để xác nhận" });
+
+            // Tính tổng theo PartId
+            var sumByPart = items
+                .GroupBy(i => i.PartId)
+                .Select(g => new { PartId = g.Key, Quantity = g.Sum(x => x.QuantityUsed) })
+                .ToList();
+
+            // Kiểm tra tồn kho đủ
+            foreach (var s in sumByPart)
+            {
+                var invPart = await _inventoryRepo.GetInventoryPartByInventoryAndPartAsync(inventory.InventoryId, s.PartId);
+                if (invPart == null)
+                    return BadRequest(new { success = false, message = $"Phụ tùng {s.PartId} không có trong kho trung tâm" });
+                if (invPart.CurrentStock < s.Quantity)
+                    return BadRequest(new { success = false, message = $"Không đủ tồn kho cho phụ tùng {s.PartId}. Còn {invPart.CurrentStock}, cần {s.Quantity}" });
+            }
+
+            // Trừ kho
+            foreach (var s in sumByPart)
+            {
+                var invPart = await _inventoryRepo.GetInventoryPartByInventoryAndPartAsync(inventory.InventoryId, s.PartId);
+                if (invPart == null)
+                    return BadRequest(new { success = false, message = $"Phụ tùng {s.PartId} không có trong kho trung tâm" });
+                invPart.CurrentStock -= s.Quantity;
+                if (invPart.CurrentStock < 0) invPart.CurrentStock = 0; // safety
+                invPart.LastUpdated = System.DateTime.UtcNow;
+                await _inventoryRepo.UpdateInventoryPartAsync(invPart);
+            }
+
+            inventory.LastUpdated = System.DateTime.UtcNow;
+            await _inventoryRepo.UpdateInventoryAsync(inventory);
+
+            await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("parts.updated", new object[] { new { bookingId, type = "confirm", centerId } });
+            return Ok(new { success = true, message = "Đã xác nhận phụ tùng phát sinh và trừ kho theo trung tâm", centerId, items = sumByPart });
         }
 
         [HttpGet("suggestions")]

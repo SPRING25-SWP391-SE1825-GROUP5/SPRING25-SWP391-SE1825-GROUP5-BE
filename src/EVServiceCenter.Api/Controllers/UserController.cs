@@ -25,14 +25,16 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly IAuthService _authService;
         private readonly IEmailService _emailService;
         private readonly IOptions<ExportOptions> _exportOptions;
+        private readonly EVServiceCenter.Domain.Interfaces.ICustomerRepository _customerRepository;
 
-        public UserController(IUserService userService, IAccountService accountService, IAuthService authService, IEmailService emailService, IOptions<ExportOptions> exportOptions)
+        public UserController(IUserService userService, IAccountService accountService, IAuthService authService, IEmailService emailService, IOptions<ExportOptions> exportOptions, EVServiceCenter.Domain.Interfaces.ICustomerRepository customerRepository)
         {
             _userService = userService;
             _accountService = accountService;
             _authService = authService;
             _emailService = emailService;
             _exportOptions = exportOptions;
+            _customerRepository = customerRepository;
         }
 
         /// <summary>
@@ -57,18 +59,18 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
                 var result = await _userService.GetAllUsersAsync(pageNumber, pageSize, searchTerm, role);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy danh sách người dùng thành công",
                     data = result
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -229,6 +231,15 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (user == null)
                     return NotFound(new { success = false, message = "Không tìm thấy người dùng" });
 
+                // Try get customerId by userId (if role is CUSTOMER)
+                int? customerId = null;
+                try
+                {
+                    var customer = await _customerRepository.GetCustomerByUserIdAsync(user.UserId);
+                    if (customer != null) customerId = customer.CustomerId;
+                }
+                catch { }
+
                 var resp = new
                 {
                     userId = user.UserId,
@@ -237,7 +248,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                     phoneNumber = user.PhoneNumber,
                     role = user.Role,
                     isActive = user.IsActive,
-                    emailVerified = user.EmailVerified
+                    emailVerified = user.EmailVerified,
+                    customerId = customerId
                 };
 
                 return Ok(new { success = true, data = resp });
@@ -264,9 +276,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "ID người dùng không hợp lệ" });
 
                 var user = await _userService.GetUserByIdAsync(id);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy thông tin người dùng thành công",
                     data = user
                 });
@@ -277,9 +289,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -298,17 +310,17 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
                     });
                 }
 
                 var user = await _userService.CreateUserAsync(request);
-                
-                return CreatedAtAction(nameof(GetUserById), new { id = user.UserId }, new { 
-                    success = true, 
+
+                return CreatedAtAction(nameof(GetUserById), new { id = user.UserId }, new {
+                    success = true,
                     message = "Tạo người dùng thành công. Mật khẩu tạm đã được gửi qua email.",
                     data = user
                 });
@@ -319,9 +331,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -344,10 +356,10 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
                     });
                 }
 
@@ -356,21 +368,21 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "Không thể vô hiệu hóa tài khoản của chính mình" });
 
                 var result = await _userService.UpdateUserStatusAsync(id, request.IsActive);
-                
+
                 if (result)
                 {
                     var action = request.IsActive ? "kích hoạt" : "vô hiệu hóa";
-                    return Ok(new { 
-                        success = true, 
-                        message = $"{action} người dùng thành công" 
+                    return Ok(new {
+                        success = true,
+                        message = $"{action} người dùng thành công"
                     });
                 }
                 else
                 {
                     var action = request.IsActive ? "kích hoạt" : "vô hiệu hóa";
-                    return StatusCode(500, new { 
-                        success = false, 
-                        message = $"Không thể {action} người dùng" 
+                    return StatusCode(500, new {
+                        success = false,
+                        message = $"Không thể {action} người dùng"
                     });
                 }
             }
@@ -380,14 +392,14 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
 
-        
+
 
         #region Helper Methods
 

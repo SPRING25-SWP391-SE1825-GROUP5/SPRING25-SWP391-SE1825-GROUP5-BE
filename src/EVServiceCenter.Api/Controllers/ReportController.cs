@@ -173,24 +173,44 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, cancelled, totalServed = served, cancellationRate = rate });
         }
 
+        // GET /api/Reporting/centers/{centerId}/technicians/productivity?from=...&to=...
+        [HttpGet("centers/{centerId}/technicians/productivity")]
+        public async Task<IActionResult> GetTechnicianProductivity(int centerId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+        {
+            var start = (from ?? DateTime.Today.AddDays(-30)).Date;
+            var end = (to ?? DateTime.Today).Date.AddDays(1).AddTicks(-1);
+            // Simplified: use completed count per technician
+            var bookings = await _bookingRepo.GetBookingsByCenterIdAsync(centerId, 1, 100000, null, start, end);
+            var items = bookings
+                .Where(b => (b.Status ?? string.Empty).ToUpperInvariant() == "COMPLETED" || (b.Status ?? string.Empty).ToUpperInvariant() == "PAID")
+                .GroupBy(b => b.TechnicianSlotId)
+                .Select(g => new { technicianSlotId = g.Key, completedCount = g.Count() })
+                .OrderByDescending(x => x.completedCount)
+                .ToList();
+
+            return Ok(new { success = true, items });
+        }
+
         /// <summary>
-        /// Lấy thống kê số lượng booking của center và mỗi technician thực hiện trong khoảng thời gian
-        /// Chỉ tính booking có trạng thái PAID hoặc COMPLETED
-        /// GET /api/Report/centers/{centerId}/technicians/booking-stats?from=...&to=...
+        /// Lấy tỉ lệ lấp đầy (utilization rate) của center theo khoảng thời gian
+        /// Hỗ trợ groupBy theo day/week/month/quarter/year khi chọn khoảng thời gian dài
+        /// GET /api/Report/centers/{centerId}/utilization-rate?from=...&to=...&granularity=day|week|month|quarter|year
         /// </summary>
         /// <param name="centerId">ID trung tâm</param>
         /// <param name="from">Ngày bắt đầu (nullable, mặc định 30 ngày trước)</param>
         /// <param name="to">Ngày kết thúc (nullable, mặc định hôm nay)</param>
-        /// <returns>Response chứa totalBookings và danh sách technician với số booking đã thực hiện</returns>
-        [HttpGet("centers/{centerId}/technicians/booking-stats")]
-        public async Task<IActionResult> GetTechnicianBookingStats(
-            int centerId, 
-            [FromQuery] DateTime? from = null, 
-            [FromQuery] DateTime? to = null)
+        /// <param name="granularity">Chế độ phân loại: day, week, month, quarter, year (nullable, tự động chọn dựa trên khoảng thời gian)</param>
+        /// <returns>Response chứa utilizationRate trung bình và items theo period (nếu có groupBy)</returns>
+        [HttpGet("centers/{centerId}/utilization-rate")]
+        public async Task<IActionResult> GetCenterUtilizationRate(
+            int centerId,
+            [FromQuery] DateTime? from = null,
+            [FromQuery] DateTime? to = null,
+            [FromQuery] string? granularity = null)
         {
             try
             {
-                var result = await _technicianReportsService.GetTechnicianBookingStatsAsync(centerId, from, to);
+                var result = await _technicianReportsService.GetCenterUtilizationRateAsync(centerId, from, to, granularity);
                 return Ok(result);
             }
             catch (ArgumentException ex)
@@ -199,7 +219,7 @@ namespace EVServiceCenter.Api.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy thống kê booking của technician", error = ex.Message });
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy tỉ lệ lấp đầy", error = ex.Message });
             }
         }
     }

@@ -83,4 +83,28 @@ namespace EVServiceCenter.Application.Models.Responses
         public string TechnicianName { get; set; } = string.Empty;
         public int BookingCount { get; set; }
     }
+
+    /// <summary>
+    /// Response cho API GetCenterUtilizationRate - tỉ lệ lấp đầy của center
+    /// </summary>
+    public class UtilizationRateResponse
+    {
+        public bool Success { get; set; } = true;
+        public decimal AverageUtilizationRate { get; set; }
+        public int TotalSlots { get; set; }
+        public int BookedSlots { get; set; }
+        public string? Granularity { get; set; }
+        public List<UtilizationRateByPeriodItem> Items { get; set; } = new List<UtilizationRateByPeriodItem>();
+    }
+
+    /// <summary>
+    /// Item trong danh sách tỉ lệ lấp đầy theo period
+    /// </summary>
+    public class UtilizationRateByPeriodItem
+    {
+        public string Period { get; set; } = string.Empty;
+        public int TotalSlots { get; set; }
+        public int BookedSlots { get; set; }
+        public decimal UtilizationRate { get; set; }
+    }
 }

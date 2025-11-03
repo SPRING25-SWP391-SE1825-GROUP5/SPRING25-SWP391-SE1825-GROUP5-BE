@@ -279,4 +279,20 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
             .Where(t => t.Booking != null)
             .ToListAsync();
     }
+
+    public async Task<List<TechnicianTimeSlot>> GetByCenterAndDateRangeAsync(int centerId, DateTime startDate, DateTime endDate)
+    {
+        // Lấy tất cả TechnicianTimeSlot của center trong khoảng thời gian (theo WorkDate)
+        // Include Booking để kiểm tra trạng thái booking
+        return await _context.TechnicianTimeSlots
+            .Include(t => t.Technician)
+            .Include(t => t.Booking)
+            .Include(t => t.Slot)
+            .Where(t => t.Technician.CenterId == centerId 
+                     && t.WorkDate >= startDate.Date 
+                     && t.WorkDate <= endDate.Date)
+            .OrderBy(t => t.WorkDate)
+            .ThenBy(t => t.Slot.SlotTime)
+            .ToListAsync();
+    }
 }

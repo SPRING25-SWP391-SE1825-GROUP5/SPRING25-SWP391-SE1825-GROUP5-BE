@@ -25,4 +25,14 @@ public interface ITechnicianTimeSlotRepository
     Task<List<TechnicianTimeSlot>> GetExpiredAvailableSlotsAsync(DateOnly workDate, TimeOnly currentTime);
     Task<bool> IsSlotTrulyAvailableAsync(int technicianId, DateTime date, int slotId);
     Task<List<TechnicianTimeSlot>> GetByTechnicianAndDateAsync(int technicianId, DateTime date);
+    
+    /// <summary>
+    /// Lấy tất cả TechnicianTimeSlot của center trong khoảng thời gian (theo WorkDate)
+    /// Include Booking để kiểm tra trạng thái booking
+    /// </summary>
+    /// <param name="centerId">ID trung tâm</param>
+    /// <param name="startDate">Ngày bắt đầu</param>
+    /// <param name="endDate">Ngày kết thúc</param>
+    /// <returns>Danh sách TechnicianTimeSlot với Booking đã include</returns>
+    Task<List<TechnicianTimeSlot>> GetByCenterAndDateRangeAsync(int centerId, DateTime startDate, DateTime endDate);
 }

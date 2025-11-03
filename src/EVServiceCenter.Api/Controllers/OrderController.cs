@@ -7,6 +7,9 @@ using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Application.Models.Requests;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using EVServiceCenter.Application.Configurations;
+using System.IO;
 
 namespace EVServiceCenter.Api.Controllers;
 
@@ -18,12 +21,14 @@ public class OrderController : ControllerBase
     private readonly IOrderService _orderService;
     private readonly PaymentService _paymentService;
     private readonly IOrderHistoryService _orderHistoryService;
+    private readonly IOptions<ExportOptions> _exportOptions;
 
-    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService)
+    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions)
     {
         _orderService = orderService;
         _paymentService = paymentService;
         _orderHistoryService = orderHistoryService;
+        _exportOptions = exportOptions;
     }
 
     /// <summary>
@@ -124,6 +129,102 @@ public class OrderController : ControllerBase
         {
             return BadRequest(new { success = false, message = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Lấy tất cả đơn hàng (Admin)
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetAllOrders()
+    {
+        try
+        {
+            var orders = await _orderService.GetAllAsync();
+            return Ok(new { success = true, data = orders });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Export orders as XLSX (ADMIN only)
+    /// </summary>
+    [HttpGet("export")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> ExportOrders()
+    {
+        try
+        {
+            var opts = _exportOptions.Value;
+            var orders = await _orderService.GetAllAsync()
+                ?? new System.Collections.Generic.List<EVServiceCenter.Application.Models.Responses.OrderResponse>();
+            var total = orders.Count;
+            if (total > opts.MaxRecords)
+            {
+                return BadRequest(new { success = false, message = $"Số bản ghi ({total}) vượt quá giới hạn cho phép ({opts.MaxRecords}). Vui lòng thu hẹp bộ lọc." });
+            }
+
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+            var bytes = GenerateOrdersXlsx(orders, opts.DateFormat);
+            var fileName = $"orders_{timestamp}.xlsx";
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    private static byte[] GenerateOrdersXlsx(System.Collections.Generic.IList<EVServiceCenter.Application.Models.Responses.OrderResponse> orders, string dateFormat)
+    {
+        using var wb = new ClosedXML.Excel.XLWorkbook();
+        var ws = wb.AddWorksheet("Orders");
+
+        var headers = new[] { "OrderId", "OrderNumber", "CustomerId", "CustomerName", "CustomerPhone", "TotalAmount", "Status", "CreatedAt", "UpdatedAt" };
+        for (int i = 0; i < headers.Length; i++)
+        {
+            ws.Cell(1, i + 1).Value = headers[i];
+            ws.Cell(1, i + 1).Style.Font.Bold = true;
+        }
+        ws.SheetView.FreezeRows(1);
+
+        int r = 2;
+        foreach (var o in orders)
+        {
+            ws.Cell(r, 1).Value = o.OrderId;
+            ws.Cell(r, 2).Value = o.OrderNumber ?? string.Empty;
+            ws.Cell(r, 3).Value = o.CustomerId;
+            ws.Cell(r, 4).Value = o.CustomerName ?? string.Empty;
+            ws.Cell(r, 5).Value = o.CustomerPhone ?? string.Empty;
+            ws.Cell(r, 6).Value = o.TotalAmount;
+            ws.Cell(r, 7).Value = o.Status ?? string.Empty;
+            ws.Cell(r, 8).Value = o.CreatedAt;
+            ws.Cell(r, 9).Value = o.UpdatedAt;
+            r++;
+        }
+
+        int lastRow = r - 1;
+        int lastCol = headers.Length;
+
+        ws.Range(2, 6, lastRow, 6).Style.NumberFormat.Format = "#,##0.00";
+        ws.Range(2, 8, lastRow, 9).Style.DateFormat.Format = dateFormat;
+        ws.Range(2, 7, lastRow, 7).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+        ws.Range(1, 1, lastRow, lastCol).Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
+
+        var tableRange = ws.Range(1, 1, lastRow, lastCol);
+        var table = tableRange.CreateTable();
+        table.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+        table.ShowAutoFilter = true;
+        ws.Range(1, 1, lastRow, lastCol).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+        ws.Range(1, 1, lastRow, lastCol).Style.Border.InsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+
+        ws.Columns().AdjustToContents();
+
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        return ms.ToArray();
     }
 
     // Removed: POST /api/Order/create (dùng route có customerId)

@@ -9,6 +9,10 @@ using Microsoft.AspNetCore.Authorization;
 using System.Collections.Generic;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
+using Microsoft.Extensions.Options;
+using EVServiceCenter.Application.Configurations;
+using System.Text;
+using System.IO;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -18,11 +22,13 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class ServiceController : ControllerBase
     {
         private readonly IServiceService _serviceService;
+        private readonly IOptions<ExportOptions> _exportOptions;
         // Removed: IServicePartRepository _servicePartRepo;
 
-        public ServiceController(IServiceService serviceService)
+        public ServiceController(IServiceService serviceService, IOptions<ExportOptions> exportOptions)
         {
             _serviceService = serviceService;
+            _exportOptions = exportOptions;
         }
 
         /// <summary>
@@ -61,6 +67,83 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message = "Lỗi hệ thống: " + ex.Message 
                 });
             }
+        }
+
+        /// <summary>
+        /// Export services as XLSX (ADMIN only)
+        /// </summary>
+        [HttpGet("export")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> ExportServices()
+        {
+            try
+            {
+                var opts = _exportOptions.Value;
+                var total = await _serviceService.GetServicesCountAsync();
+                if (total > opts.MaxRecords)
+                {
+                    return BadRequest(new { success = false, message = $"Số bản ghi ({total}) vượt quá giới hạn cho phép ({opts.MaxRecords}). Vui lòng thu hẹp bộ lọc." });
+                }
+
+                var services = await _serviceService.GetServicesForExportAsync(opts.MaxRecords);
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+                var bytes = GenerateServicesXlsx(services, opts.DateFormat);
+                var fileName = $"services_{timestamp}.xlsx";
+                return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        private static byte[] GenerateServicesXlsx(System.Collections.Generic.IList<ServiceResponse> services, string dateFormat)
+        {
+            using var wb = new ClosedXML.Excel.XLWorkbook();
+            var ws = wb.AddWorksheet("Services");
+
+            var headers = new[] { "ServiceId", "ServiceName", "Description", "BasePrice", "IsActive", "CreatedAt" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                ws.Cell(1, i + 1).Value = headers[i];
+                ws.Cell(1, i + 1).Style.Font.Bold = true;
+            }
+            ws.SheetView.FreezeRows(1);
+
+            int r = 2;
+            foreach (var s in services)
+            {
+                ws.Cell(r, 1).Value = s.ServiceId;
+                ws.Cell(r, 2).Value = s.ServiceName ?? string.Empty;
+                ws.Cell(r, 3).Value = s.Description ?? string.Empty;
+                ws.Cell(r, 4).Value = s.BasePrice;
+                ws.Cell(r, 5).Value = s.IsActive ? "TRUE" : "FALSE";
+                ws.Cell(r, 6).Value = s.CreatedAt;
+                r++;
+            }
+
+            int lastRow = r - 1;
+            int lastCol = headers.Length;
+
+            // Formats
+            ws.Range(2, 4, lastRow, 4).Style.NumberFormat.Format = "#,##0.00";
+            ws.Range(2, 6, lastRow, 6).Style.DateFormat.Format = dateFormat;
+            ws.Range(2, 5, lastRow, 5).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+            ws.Range(1, 1, lastRow, lastCol).Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
+
+            // Table and borders
+            var tableRange = ws.Range(1, 1, lastRow, lastCol);
+            var table = tableRange.CreateTable();
+            table.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+            table.ShowAutoFilter = true;
+            ws.Range(1, 1, lastRow, lastCol).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+            ws.Range(1, 1, lastRow, lastCol).Style.Border.InsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+
+            ws.Columns().AdjustToContents();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            return ms.ToArray();
         }
 
         /// <summary>

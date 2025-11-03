@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Infrastructure.Configurations;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Domain.Interfaces;
+using System.Security.Claims;
 
 namespace EVServiceCenter.Api.Controllers;
 
@@ -18,6 +20,123 @@ public class FeedbackController : ControllerBase
     private readonly EVServiceCenter.Infrastructure.Configurations.EVDbContext _db;
     private readonly ICustomerRepository _customerRepository;
     public FeedbackController(EVServiceCenter.Infrastructure.Configurations.EVDbContext db, ICustomerRepository customerRepository) { _db = db; _customerRepository = customerRepository; }
+
+    /// <summary>
+    /// Lấy danh sách đánh giá của customer hiện tại (tự động lấy customerId từ JWT token)
+    /// </summary>
+    [HttpGet("my-reviews")]
+    [Authorize(Policy = "AuthenticatedUser")]
+    public async Task<IActionResult> GetMyReviews([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    {
+        try
+        {
+            // Lấy customerId từ JWT token
+            var customerId = GetCustomerIdFromToken();
+            if (!customerId.HasValue)
+            {
+                return BadRequest(new { success = false, message = "Không xác định được khách hàng. Vui lòng đăng nhập lại." });
+            }
+
+            var query = _db.Feedbacks.AsNoTracking()
+                .Where(x => x.CustomerId == customerId.Value)
+                .OrderByDescending(x => x.CreatedAt);
+
+            var total = await query.CountAsync();
+            
+            // Lấy danh sách feedback IDs trước (chỉ select FeedbackId để tránh lỗi)
+            var feedbackIds = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => x.FeedbackId)
+                .ToListAsync();
+
+            if (feedbackIds.Count == 0)
+            {
+                return Ok(new 
+                { 
+                    success = true, 
+                    message = "Lấy danh sách đánh giá thành công",
+                    total,
+                    page,
+                    pageSize,
+                    data = new List<object>()
+                });
+            }
+
+            // Load feedbacks với related data
+            var feedbacks = await _db.Feedbacks
+                .AsNoTracking()
+                .Where(x => feedbackIds.Contains(x.FeedbackId))
+                .Include(x => x.Part)
+                .Include(x => x.Technician)
+                    .ThenInclude(t => t != null ? t.User : null!)
+                .ToListAsync();
+
+            // Map sang DTO (load Part và Technician riêng để tránh lỗi column)
+            var partIds = feedbacks.Where(f => f.PartId.HasValue).Select(f => f.PartId!.Value).Distinct().ToList();
+            var technicianIds = feedbacks.Where(f => f.TechnicianId.HasValue).Select(f => f.TechnicianId!.Value).Distinct().ToList();
+
+            var parts = await _db.Parts
+                .AsNoTracking()
+                .Where(p => partIds.Contains(p.PartId))
+                .ToDictionaryAsync(p => p.PartId);
+
+            var technicians = await _db.Technicians
+                .AsNoTracking()
+                .Where(t => technicianIds.Contains(t.TechnicianId))
+                .Include(t => t.User)
+                .ToDictionaryAsync(t => t.TechnicianId);
+
+            // Map sang DTO
+            var data = feedbacks.OrderByDescending(x => x.CreatedAt)
+                .Select(x => new 
+                { 
+                    feedbackId = x.FeedbackId,
+                    customerId = x.CustomerId,
+                    bookingId = x.BookingId,
+                    orderId = x.OrderId,
+                    partId = x.PartId,
+                    technicianId = x.TechnicianId,
+                    rating = x.Rating,
+                    comment = x.Comment,
+                    isAnonymous = x.IsAnonymous,
+                    createdAt = x.CreatedAt,
+                    // Lấy thông tin liên quan từ dictionary
+                    partName = x.PartId.HasValue && parts.ContainsKey(x.PartId.Value) 
+                        ? parts[x.PartId.Value].PartName 
+                        : null,
+                    technicianName = x.TechnicianId.HasValue && technicians.ContainsKey(x.TechnicianId.Value) 
+                        ? technicians[x.TechnicianId.Value].User?.FullName 
+                        : null
+                })
+                .ToList();
+
+            return Ok(new 
+            { 
+                success = true, 
+                message = "Lấy danh sách đánh giá thành công",
+                total,
+                page,
+                pageSize,
+                data 
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+        }
+    }
+
+    private int? GetCustomerIdFromToken()
+    {
+        // Lấy customerId từ JWT token claim
+        var customerIdClaim = User.FindFirst("customerId")?.Value;
+        if (int.TryParse(customerIdClaim, out int customerId))
+        {
+            return customerId;
+        }
+        return null;
+    }
 
     [HttpPost("orders/{orderId:int}/parts/{partId:int}")]
     [Authorize(Policy = "AuthenticatedUser")]

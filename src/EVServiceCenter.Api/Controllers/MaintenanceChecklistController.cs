@@ -16,17 +16,23 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IMaintenanceChecklistRepository _checkRepo;
         private readonly IMaintenanceChecklistResultRepository _resultRepo;
         private readonly IPdfInvoiceService _pdfInvoiceService;
+        private readonly IBookingRepository _bookingRepo;
+        private readonly Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> _hub;
         // WorkOrderRepository removed - functionality merged into BookingRepository
         // Removed: IServicePartRepository _servicePartRepo;
 
         public MaintenanceChecklistController(
             IMaintenanceChecklistRepository checkRepo,
             IMaintenanceChecklistResultRepository resultRepo,
-            IPdfInvoiceService pdfInvoiceService)
+            IPdfInvoiceService pdfInvoiceService,
+            IBookingRepository bookingRepo,
+            Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub)
         {
             _checkRepo = checkRepo;
             _resultRepo = resultRepo;
             _pdfInvoiceService = pdfInvoiceService;
+            _bookingRepo = bookingRepo;
+            _hub = hub;
             // WorkOrderRepository removed - functionality merged into BookingRepository
         }
 
@@ -71,11 +77,11 @@ namespace EVServiceCenter.Api.Controllers
                 result = r.Result,
                 status = r.Status
             });
-            return Ok(new { 
-                success = true, 
-                checklistId = checklist.ChecklistId, 
+            return Ok(new {
+                success = true,
+                checklistId = checklist.ChecklistId,
                 status = checklist.Status,
-                items = data 
+                items = data
             });
         }
 
@@ -106,6 +112,13 @@ namespace EVServiceCenter.Api.Controllers
         [HttpPut("{bookingId:int}/parts/{partId:int}")]
         public async Task<IActionResult> EvaluatePart(int bookingId, int partId, [FromBody] EvaluatePartRequest req)
         {
+            // Guard: only allow when booking is IN_PROGRESS
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            var status = (booking.Status ?? string.Empty).ToUpperInvariant();
+            if (status == "CANCELED" || status == "CANCELLED" || status == "COMPLETED")
+                return BadRequest(new { success = false, message = "Không thể đánh giá checklist khi booking đã hoàn tất/hủy" });
+
             var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
@@ -123,6 +136,7 @@ namespace EVServiceCenter.Api.Controllers
                 Status = string.IsNullOrEmpty(req.Result) || req.Result == "PENDING" ? "PENDING" : "CHECKED"
             };
             await _resultRepo.UpsertAsync(entity);
+            await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("checklist.updated", new object[] { new { bookingId } });
             return Ok(new { success = true });
         }
 
@@ -132,6 +146,13 @@ namespace EVServiceCenter.Api.Controllers
         [HttpPut("{bookingId:int}")]
         public async Task<IActionResult> UpdateBulk(int bookingId, [FromBody] BulkRequest req)
         {
+            // Guard: only allow when booking is IN_PROGRESS
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            var status = (booking.Status ?? string.Empty).ToUpperInvariant();
+            if (status == "CANCELED" || status == "CANCELLED" || status == "COMPLETED")
+                return BadRequest(new { success = false, message = "Không thể cập nhật checklist khi booking đã hoàn tất/hủy" });
+
             var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
@@ -145,6 +166,7 @@ namespace EVServiceCenter.Api.Controllers
                 Status = string.IsNullOrEmpty(i.Result) || i.Result == "PENDING" ? "PENDING" : "CHECKED"
             });
             await _resultRepo.UpsertManyAsync(results);
+            await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("checklist.updated", new object[] { new { bookingId } });
             return Ok(new { success = true });
         }
 
@@ -167,6 +189,12 @@ namespace EVServiceCenter.Api.Controllers
         [HttpPut("{bookingId:int}/status")]
         public async Task<IActionResult> UpdateStatus(int bookingId, [FromBody] UpdateStatusRequest req)
         {
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            var bookingStatus = (booking.Status ?? string.Empty).ToUpperInvariant();
+            if (bookingStatus == "CANCELED" || bookingStatus == "CANCELLED")
+                return BadRequest(new { success = false, message = "Không thể cập nhật trạng thái checklist khi booking đã hủy" });
+
             var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
@@ -181,16 +209,16 @@ namespace EVServiceCenter.Api.Controllers
                 var pendingCount = results.Count(r => string.Equals(r.Result, "PENDING", StringComparison.OrdinalIgnoreCase));
                 if (pendingCount > 0)
                 {
-                    return BadRequest(new { 
-                        success = false, 
-                        message = $"Không thể hoàn thành checklist. Còn {pendingCount} phụ tùng chưa được đánh giá (PENDING)" 
+                    return BadRequest(new {
+                        success = false,
+                        message = $"Không thể hoàn thành checklist. Còn {pendingCount} phụ tùng chưa được đánh giá (PENDING)"
                     });
                 }
             }
 
             checklist.Status = req.Status;
             await _checkRepo.UpdateAsync(checklist);
-            
+
             return Ok(new { success = true, message = $"Đã cập nhật status thành {req.Status}" });
         }
 
@@ -205,8 +233,8 @@ namespace EVServiceCenter.Api.Controllers
             var pendingCount = results.Count(r => string.Equals(r.Result, "PENDING", StringComparison.OrdinalIgnoreCase));
             var totalCount = results.Count();
 
-            return Ok(new { 
-                success = true, 
+            return Ok(new {
+                success = true,
                 checklistId = checklist.ChecklistId,
                 status = checklist.Status,
                 totalParts = totalCount,
@@ -223,12 +251,12 @@ namespace EVServiceCenter.Api.Controllers
             try
             {
                 var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
-                if (checklist == null) 
+                if (checklist == null)
                     return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
                 // Sử dụng PdfInvoiceService để tạo PDF với thông tin maintenance checklist
                 var pdfBytes = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(bookingId);
-                
+
                 return File(pdfBytes, "application/pdf", $"MaintenanceChecklist_{bookingId}.pdf");
             }
             catch (Exception ex)
@@ -237,36 +265,43 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        public class UpdateStatusRequest 
-        { 
-            public string Status { get; set; } = string.Empty; 
+        public class UpdateStatusRequest
+        {
+            public string Status { get; set; } = string.Empty;
         }
 
         // POST /api/maintenance-checklist/{bookingId}/confirm
         [HttpPost("{bookingId:int}/confirm")]
         public async Task<IActionResult> ConfirmCompletion(int bookingId)
         {
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null)
+                return NotFound(new { success = false, message = "Booking không tồn tại" });
+            var bookingStatus = (booking.Status ?? string.Empty).ToUpperInvariant();
+            if (bookingStatus == "CANCELED" || bookingStatus == "CANCELLED")
+                return BadRequest(new { success = false, message = "Không thể xác nhận checklist khi booking đã hủy" });
+
             var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
-            if (checklist == null) 
+            if (checklist == null)
                 return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
             // Lấy tất cả results của checklist
             var results = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
-            
+
             if (results == null || !results.Any())
                 return BadRequest(new { success = false, message = "Checklist chưa có phụ tùng nào" });
 
             // Kiểm tra xem tất cả items đã được đánh giá chưa
-            var pendingItems = results.Where(r => 
-                string.IsNullOrEmpty(r.Result) || 
+            var pendingItems = results.Where(r =>
+                string.IsNullOrEmpty(r.Result) ||
                 string.Equals(r.Result, "PENDING", StringComparison.OrdinalIgnoreCase) ||
                 r.Status == "PENDING"
             ).ToList();
 
             if (pendingItems.Any())
             {
-                return BadRequest(new { 
-                    success = false, 
+                return BadRequest(new {
+                    success = false,
                     message = $"Không thể xác nhận hoàn thành. Còn {pendingItems.Count} phụ tùng chưa được đánh giá",
                     pendingItems = pendingItems.Select(item => new {
                         partId = item.PartId,
@@ -286,8 +321,9 @@ namespace EVServiceCenter.Api.Controllers
             var naCount = results.Count(r => string.Equals(r.Result, "NA", StringComparison.OrdinalIgnoreCase));
             var totalCount = results.Count;
 
-            return Ok(new { 
-                success = true, 
+            await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("checklist.updated", new object[] { new { bookingId, status = checklist.Status } });
+            return Ok(new {
+                success = true,
                 message = "Xác nhận hoàn thành checklist thành công",
                 checklistId = checklist.ChecklistId,
                 status = checklist.Status,

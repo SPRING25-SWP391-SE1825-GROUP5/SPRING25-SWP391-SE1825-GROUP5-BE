@@ -45,18 +45,18 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
                 var result = await _partService.GetAllPartsAsync(pageNumber, pageSize, searchTerm, isActive);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy danh sách phụ tùng thành công",
                     data = result
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -66,8 +66,29 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// </summary>
         [HttpGet("availability")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetGlobalAvailability([FromQuery] string? partIds = null)
+        public async Task<IActionResult> GetGlobalAvailability([FromQuery] string? partIds = null, [FromQuery] int? centerId = null)
         {
+            // Center-scoped availability when centerId provided
+            if (centerId.HasValue && centerId.Value > 0)
+            {
+                var inv = await _inventoryService.GetInventoryByCenterIdAsync(centerId.Value);
+                var parts = inv.InventoryParts
+                    .Where(p => p.CurrentStock > 0)
+                    .Select(p => new {
+                        partId = p.PartId,
+                        partNumber = p.PartNumber,
+                        partName = p.PartName,
+                        brand = p.Brand,
+                        totalStock = p.CurrentStock,
+                        minimumStock = p.MinimumStock,
+                        isLowStock = p.IsLowStock,
+                        isOutOfStock = p.IsOutOfStock,
+                        unitPrice = p.UnitPrice,
+                        rating = (int?)null,
+                        lastUpdated = p.LastUpdated
+                    }).ToList();
+                return Ok(new { success = true, data = parts });
+            }
             // Nếu không truyền partIds => trả toàn bộ các phụ tùng còn hàng (Get All)
             if (string.IsNullOrWhiteSpace(partIds))
             {
@@ -124,9 +145,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "ID phụ tùng không hợp lệ" });
 
                 var part = await _partService.GetPartByIdAsync(id);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy thông tin phụ tùng thành công",
                     data = part
                 });
@@ -137,9 +158,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -158,17 +179,17 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
                     });
                 }
 
                 var part = await _partService.CreatePartAsync(request);
-                
-                return CreatedAtAction(nameof(GetPartById), new { id = part.PartId }, new { 
-                    success = true, 
+
+                return CreatedAtAction(nameof(GetPartById), new { id = part.PartId }, new {
+                    success = true,
                     message = "Tạo phụ tùng thành công",
                     data = part
                 });
@@ -179,9 +200,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -214,9 +235,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
                 var result = await _partService.GetPartsNotInInventoryAsync(0, pageNumber, pageSize, searchTerm);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy danh sách phụ tùng chưa có trong kho nào thành công",
                     data = result
                 });
@@ -227,9 +248,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }

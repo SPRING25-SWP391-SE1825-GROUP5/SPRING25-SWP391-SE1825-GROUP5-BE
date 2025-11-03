@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using EVServiceCenter.Application.Service;
 using EVServiceCenter.Domain.Entities;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -81,9 +82,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                 }
 
                 var availability = await _bookingService.GetAvailabilityAsync(centerId, bookingDate, serviceIdList);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy thông tin khả dụng thành công",
                     data = availability
                 });
@@ -94,9 +95,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -169,9 +170,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -181,6 +182,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         [HttpPut("{bookingId}/cancel")]
         [Authorize(Roles = "CUSTOMER,STAFF,ADMIN,MANAGER,TECHNICIAN")]
+        [EnableRateLimiting("BookingCancelPolicy")]
         public async Task<IActionResult> CancelBooking(int bookingId, [FromBody] CancelBookingRequest request)
         {
             try
@@ -256,10 +258,21 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new { success = false, message = "Trạng thái booking không hợp lệ" });
 
             var updated = await _bookingService.UpdateBookingStatusAsync(id, new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = status });
-            
+
+            // Realtime: notify booking group and center-date group
+            await _hub.Clients.Group($"booking:{id}").SendCoreAsync("booking.updated", new object[] { new { bookingId = id, status } });
+            // Try center/date grouping if available
+            var details = await _bookingRepository.GetBookingWithDetailsByIdAsync(id);
+            var workDate = details?.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd");
+            if (details?.CenterId > 0 && !string.IsNullOrEmpty(workDate))
+            {
+                var group = $"center:{details.CenterId}:date:{workDate}";
+                await _hub.Clients.Group(group).SendCoreAsync("booking.updated", new object[] { new { bookingId = id, status } });
+            }
+
             // Gửi thông báo khi thay đổi status
             await SendStatusChangeNotifications(updated, status);
-            
+
             return Ok(new { success = true, message = "Cập nhật trạng thái booking thành công", data = new { bookingId = updated.BookingId, status = updated.Status } });
         }
 
@@ -302,14 +315,15 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
 
         [HttpPost]
+        [EnableRateLimiting("BookingCreatePolicy")]
         public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
         {
             try
@@ -317,21 +331,21 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
                     });
                 }
 
                 var booking = await _bookingService.CreateBookingAsync(request);
-                
+
                 // Lấy UserId của customer và technician để gửi notification
                 var customerUserId = await _customerService.GetCustomerUserIdAsync(booking.CustomerId);
-                var technicianUserId = booking.TechnicianId.HasValue 
+                var technicianUserId = booking.TechnicianId.HasValue
                     ? await _technicianService.GetTechnicianUserIdAsync(booking.TechnicianId.Value)
                     : (int?)null;
-                
+
                 // Gửi thông báo cho customer
                 if (customerUserId.HasValue)
                 {
@@ -353,13 +367,13 @@ namespace EVServiceCenter.WebAPI.Controllers
                         "BOOKING"
                     );
                 }
-                
+
                 var message = (!string.IsNullOrWhiteSpace(request.PackageCode))
                     ? $"Tạo đặt lịch thành công và đã áp dụng gói '{request.PackageCode}'"
                     : "Tạo đặt lịch thành công";
-                
-                return CreatedAtAction(nameof(GetBookingById), new { id = booking.BookingId }, new { 
-                    success = true, 
+
+                return CreatedAtAction(nameof(GetBookingById), new { id = booking.BookingId }, new {
+                    success = true,
                     message = message,
                     data = booking
                 });
@@ -370,9 +384,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -386,9 +400,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "ID đặt lịch không hợp lệ" });
 
                 var booking = await _bookingService.GetBookingByIdAsync(id);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy thông tin đặt lịch thành công",
                     data = booking
                 });
@@ -399,9 +413,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -437,7 +451,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 
 
 
-        
+
 
 
 
@@ -450,17 +464,17 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
                     });
                 }
 
                 var result = await _bookingService.ApplyPackageToBookingAsync(bookingId, request);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Áp dụng gói dịch vụ thành công",
                     data = result
                 });
@@ -471,9 +485,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -484,9 +498,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             try
             {
                 var result = await _bookingService.RemovePackageFromBookingAsync(bookingId);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Gỡ gói dịch vụ thành công",
                     data = result
                 });
@@ -497,9 +511,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -517,9 +531,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "Mã gói dịch vụ là bắt buộc" });
 
                 var result = await _bookingService.CreatePackageAfterPaymentAsync(bookingId, request.PackageCode);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Tạo gói dịch vụ thành công",
                     data = result
                 });
@@ -530,10 +544,83 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
+            }
+        }
+
+        [HttpGet("admin/all")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetAllBookingsForAdmin(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] string? status = null,
+            [FromQuery] int? centerId = null,
+            [FromQuery] int? customerId = null,
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] string sortBy = "createdAt",
+            [FromQuery] string sortOrder = "desc")
+        {
+            try
+            {
+                if (page < 1)
+                {
+                    return BadRequest(new { success = false, message = "Page phải lớn hơn 0." });
+                }
+
+                if (pageSize < 1 || pageSize > 100)
+                {
+                    return BadRequest(new { success = false, message = "Page size phải từ 1 đến 100." });
+                }
+
+                var bookings = await _bookingRepository.GetBookingsForAdminAsync(
+                    page, pageSize, status, centerId, customerId, fromDate, toDate, sortBy, sortOrder);
+
+                var totalItems = await _bookingRepository.CountBookingsForAdminAsync(
+                    status, centerId, customerId, fromDate, toDate);
+
+                var bookingSummaries = bookings.Select(MapToBookingSummary).ToList();
+                var totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
+
+                var pagination = new
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalItems = totalItems,
+                    TotalPages = totalPages,
+                    HasNextPage = page < totalPages,
+                    HasPreviousPage = page > 1
+                };
+
+                var filters = new
+                {
+                    Status = status,
+                    CenterId = centerId,
+                    CustomerId = customerId,
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    SortBy = sortBy,
+                    SortOrder = sortOrder
+                };
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách booking thành công",
+                    data = new
+                    {
+                        Bookings = bookingSummaries,
+                        Pagination = pagination,
+                        Filters = filters
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi hệ thống: {ex.Message}" });
             }
         }
 

@@ -13,7 +13,9 @@ public sealed class ServiceChecklistTemplateItemConfiguration : IEntityTypeConfi
 
         entity.Property(e => e.ItemID).HasColumnName("ItemID");
         entity.Property(e => e.TemplateID).HasColumnName("TemplateID");
-        entity.Property(e => e.PartID).HasColumnName("PartID");
+        entity.Property(e => e.PartID)
+            .HasColumnName("PartID")
+            .IsRequired();
         entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysdatetime())");
 
         entity.HasIndex(e => new { e.TemplateID, e.PartID }).IsUnique();
@@ -22,9 +24,11 @@ public sealed class ServiceChecklistTemplateItemConfiguration : IEntityTypeConfi
             .WithMany()
             .HasForeignKey(e => e.TemplateID);
 
-        entity.HasOne<Part>()
+        // Cấu hình relationship với Part - đảm bảo chỉ dùng PartID, không tạo shadow property PartId
+        entity.HasOne(e => e.Part)
             .WithMany()
-            .HasForeignKey(e => e.PartID);
+            .HasForeignKey(e => e.PartID)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 

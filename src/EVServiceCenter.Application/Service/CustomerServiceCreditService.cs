@@ -38,7 +38,64 @@ public class CustomerServiceCreditService : ICustomerServiceCreditService
     public async Task<IEnumerable<CustomerServiceCreditResponse>> GetByCustomerIdAsync(int customerId)
     {
         var credits = await _customerServiceCreditRepository.GetByCustomerIdAsync(customerId);
-        return credits.Select(MapToResponse);
+        var creditsList = credits.ToList();
+
+        if (!creditsList.Any())
+        {
+            return Enumerable.Empty<CustomerServiceCreditResponse>();
+        }
+
+        var packageIds = creditsList.Select(c => c.PackageId).Distinct().ToList();
+        var serviceIds = creditsList.Select(c => c.ServiceId).Distinct().ToList();
+
+        var packageDict = new Dictionary<int, ServicePackage>();
+        foreach (var packageId in packageIds)
+        {
+            var package = await _servicePackageRepository.GetByIdAsync(packageId);
+            if (package != null)
+            {
+                packageDict[packageId] = package;
+            }
+        }
+
+        var serviceDict = new Dictionary<int, EVServiceCenter.Domain.Entities.Service>();
+        foreach (var serviceId in serviceIds)
+        {
+            var service = await _serviceRepository.GetServiceByIdAsync(serviceId);
+            if (service != null)
+            {
+                serviceDict[serviceId] = service;
+            }
+        }
+
+        var result = new List<CustomerServiceCreditResponse>();
+        foreach (var credit in creditsList)
+        {
+            var package = packageDict.ContainsKey(credit.PackageId) ? packageDict[credit.PackageId] : null;
+            var service = serviceDict.ContainsKey(credit.ServiceId) ? serviceDict[credit.ServiceId] : null;
+
+            result.Add(new CustomerServiceCreditResponse
+            {
+                CreditId = credit.CreditId,
+                CustomerId = credit.CustomerId,
+                CustomerName = "N/A",
+                PackageId = credit.PackageId,
+                PackageName = package?.PackageName ?? "N/A",
+                PackageCode = package?.PackageCode ?? "N/A",
+                ServiceId = credit.ServiceId,
+                ServiceName = service?.ServiceName ?? "N/A",
+                TotalCredits = credit.TotalCredits,
+                UsedCredits = credit.UsedCredits,
+                RemainingCredits = credit.TotalCredits - credit.UsedCredits,
+                PurchaseDate = credit.PurchaseDate,
+                ExpiryDate = credit.ExpiryDate,
+                Status = credit.Status,
+                CreatedAt = credit.CreatedAt,
+                UpdatedAt = credit.UpdatedAt
+            });
+        }
+
+        return result;
     }
 
     public async Task<IEnumerable<CustomerServiceCreditResponse>> GetActiveCreditsByCustomerIdAsync(int customerId)
@@ -151,11 +208,23 @@ public class CustomerServiceCreditService : ICustomerServiceCreditService
 
     private static CustomerServiceCreditResponse MapToResponse(CustomerServiceCredit credit)
     {
+        var remainingCredits = credit.TotalCredits - credit.UsedCredits;
+        
+        var customerName = "N/A";
+        try
+        {
+            customerName = credit.Customer?.User?.FullName ?? "N/A";
+        }
+        catch
+        {
+            customerName = "N/A";
+        }
+        
         return new CustomerServiceCreditResponse
         {
             CreditId = credit.CreditId,
             CustomerId = credit.CustomerId,
-            CustomerName = credit.Customer?.User?.FullName ?? "N/A",
+            CustomerName = customerName,
             PackageId = credit.PackageId,
             PackageName = credit.ServicePackage?.PackageName ?? "N/A",
             PackageCode = credit.ServicePackage?.PackageCode ?? "N/A",
@@ -163,7 +232,7 @@ public class CustomerServiceCreditService : ICustomerServiceCreditService
             ServiceName = credit.Service?.ServiceName ?? "N/A",
             TotalCredits = credit.TotalCredits,
             UsedCredits = credit.UsedCredits,
-            RemainingCredits = credit.RemainingCredits,
+            RemainingCredits = remainingCredits,
             PurchaseDate = credit.PurchaseDate,
             ExpiryDate = credit.ExpiryDate,
             Status = credit.Status,

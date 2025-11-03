@@ -43,23 +43,31 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 Console.WriteLine($"GetCurrentCustomerAsync called for userId: {userId}");
-                
+
+                // Kiểm tra user tồn tại và role trước
+                var user = await _accountRepository.GetUserByIdAsync(userId);
+                if (user == null)
+                {
+                    Console.WriteLine($"User not found for userId: {userId}");
+                    throw new ArgumentException("Người dùng không tồn tại.");
+                }
+
+                Console.WriteLine($"User found: {user.FullName}, Role: {user.Role}");
+
+                // CHỈ cho phép tạo Customer nếu role = "CUSTOMER"
+                // Nếu role khác (ADMIN/MANAGER/STAFF/TECHNICIAN) thì không được tự động tạo Customer
+                if (user.Role != "CUSTOMER")
+                {
+                    Console.WriteLine($"User with role '{user.Role}' cannot have Customer record. Only CUSTOMER role allowed.");
+                    throw new ArgumentException($"Tài khoản với vai trò '{user.Role}' không thể có thông tin khách hàng. Chỉ tài khoản CUSTOMER mới có thể truy cập thông tin này.");
+                }
+
                 var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
                 if (customer == null)
                 {
                     Console.WriteLine($"Customer not found for userId: {userId}, creating new customer...");
-                    
-                    // Tự động tạo customer nếu chưa có
-                    var user = await _accountRepository.GetUserByIdAsync(userId);
-                    if (user == null)
-                    {
-                        Console.WriteLine($"User not found for userId: {userId}");
-                        throw new ArgumentException("Người dùng không tồn tại.");
-                    }
 
-                    Console.WriteLine($"User found: {user.FullName}, Role: {user.Role}");
-
-                    // Tạo customer mới
+                    // Tạo customer mới (chỉ khi role = "CUSTOMER")
                     var newCustomer = new Customer
                     {
                         UserId = userId,
@@ -102,7 +110,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     UserId = null, // Will be set when user registers
                     IsGuest = request.IsGuest,
-                    
+
                 };
 
                 // Save customer
@@ -137,7 +145,7 @@ namespace EVServiceCenter.Application.Service
 
                 // Update customer
                 customer.IsGuest = request.IsGuest;
-                
+
 
                 await _customerRepository.UpdateCustomerAsync(customer);
 
@@ -262,7 +270,7 @@ namespace EVServiceCenter.Application.Service
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
-            
+
             return Task.CompletedTask;
         }
 
@@ -274,7 +282,7 @@ namespace EVServiceCenter.Application.Service
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
-            
+
             return Task.CompletedTask;
         }
 

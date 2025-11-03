@@ -15,7 +15,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<Invoice?> GetByBookingIdAsync(int bookingId)
         {
-            return await _db.Invoices.FirstOrDefaultAsync(i => i.BookingId == bookingId);
+            return await _db.Invoices
+                .Include(i => i.Payments)
+                .FirstOrDefaultAsync(i => i.BookingId == bookingId);
         }
 
         // GetByWorkOrderIdAsync removed - WorkOrder functionality merged into Booking

@@ -21,7 +21,7 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         /// <summary>
-        /// Lấy danh sách thông báo của user hiện tại
+        /// Lấy danh sách thông báo của user hiện tại (theo userId từ JWT token)
         /// </summary>
         [HttpGet("my-notifications")]
         public async Task<IActionResult> GetMyNotifications()
@@ -37,6 +37,40 @@ namespace EVServiceCenter.Api.Controllers
                     success = true, 
                     message = "Lấy danh sách thông báo thành công", 
                     data = notifications 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách thông báo của customer hiện tại (theo customerId từ JWT token)
+        /// </summary>
+        [HttpGet("customer-notifications")]
+        public async Task<IActionResult> GetCustomerNotifications()
+        {
+            try
+            {
+                // Lấy customerId từ JWT token
+                var customerId = GetCustomerIdFromToken();
+                if (!customerId.HasValue)
+                {
+                    return BadRequest(new { success = false, message = "Không xác định được khách hàng. Vui lòng đăng nhập lại." });
+                }
+
+                // Lấy userId từ customerId thông qua service
+                var userId = GetCurrentUserId();
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+
+                var notifications = await _notificationService.GetUserNotificationsAsync(userId.Value);
+                return Ok(new { 
+                    success = true, 
+                    message = "Lấy danh sách thông báo thành công", 
+                    data = notifications,
+                    customerId = customerId.Value
                 });
             }
             catch (Exception ex)
@@ -96,6 +130,17 @@ namespace EVServiceCenter.Api.Controllers
                             
             if (int.TryParse(userIdClaim, out int userId))
                 return userId;
+            return null;
+        }
+
+        private int? GetCustomerIdFromToken()
+        {
+            // Lấy customerId từ JWT token claim
+            var customerIdClaim = User.FindFirst("customerId")?.Value;
+            if (int.TryParse(customerIdClaim, out int customerId))
+            {
+                return customerId;
+            }
             return null;
         }
     }

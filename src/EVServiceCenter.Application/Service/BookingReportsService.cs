@@ -35,14 +35,16 @@ namespace EVServiceCenter.Application.Service
 
                 // Lấy bookings hôm nay
                 var todayBookings = await _bookingRepository.GetBookingsByCenterIdAsync(
-                    centerId, 
-                    page: 1, 
+                    centerId,
+                    page: 1,
                     pageSize: int.MaxValue);
 
-                // Filter theo ngày hôm nay
-                var filteredBookings = todayBookings.Where(b => 
-                    b.CreatedAt.Date == today || 
-                    b.UpdatedAt.Date == today).ToList();
+                // Filter theo ngày làm việc của kỹ thuật viên (TechnicianTimeSlot.WorkDate)
+                // Fallback: nếu chưa có slot, dùng CreatedAt
+                var filteredBookings = todayBookings.Where(b =>
+                    (b.TechnicianTimeSlot != null && b.TechnicianTimeSlot.WorkDate.Date == today)
+                    || (b.TechnicianTimeSlot == null && b.CreatedAt.Date == today)
+                ).ToList();
 
                 var bookings = filteredBookings.Select(MapToBookingTodayItem).ToList();
 
@@ -73,9 +75,9 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 var bookings = await _bookingRepository.GetBookingsByCenterIdAsync(
-                    centerId, 
-                    page: pageNumber, 
-                    pageSize: pageSize, 
+                    centerId,
+                    page: pageNumber,
+                    pageSize: pageSize,
                     status: status);
 
                 var totalCount = await _bookingRepository.CountBookingsByCenterIdAsync(centerId, status);

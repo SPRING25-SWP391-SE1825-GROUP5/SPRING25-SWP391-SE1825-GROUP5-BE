@@ -44,9 +44,10 @@ namespace EVServiceCenter.Infrastructure.Repositories
             var query = _db.Payments.AsQueryable().Where(p => p.InvoiceId == invoiceId);
             if (!string.IsNullOrWhiteSpace(status)) query = query.Where(p => p.Status == status);
             if (!string.IsNullOrWhiteSpace(method)) query = query.Where(p => p.PaymentMethod == method);
-            if (from.HasValue) query = query.Where(p => p.CreatedAt >= from.Value);
-            if (to.HasValue) query = query.Where(p => p.CreatedAt <= to.Value);
-            return await query.OrderBy(p => p.CreatedAt).ToListAsync();
+            // Filter by PaidAt (doanh thu thực nhận) thay vì CreatedAt
+            if (from.HasValue) query = query.Where(p => p.PaidAt != null && p.PaidAt >= from.Value);
+            if (to.HasValue) query = query.Where(p => p.PaidAt != null && p.PaidAt <= to.Value);
+            return await query.OrderBy(p => p.PaidAt).ToListAsync();
         }
     }
 }

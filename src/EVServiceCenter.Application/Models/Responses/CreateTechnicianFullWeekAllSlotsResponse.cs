@@ -8,6 +8,8 @@ namespace EVServiceCenter.Application.Models.Responses
         public string Message { get; set; } = string.Empty;
         public int TotalDays { get; set; }
         public int TotalSlotsCreated { get; set; }
+        public int WeekendDaysSkipped { get; set; }
+        public List<string> WeekendDatesSkipped { get; set; } = new();
         public List<string> Errors { get; set; } = new();
     }
 }

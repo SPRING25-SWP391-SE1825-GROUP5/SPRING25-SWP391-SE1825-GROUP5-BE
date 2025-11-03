@@ -44,18 +44,18 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
                 var result = await _centerService.GetAllCentersAsync(pageNumber, pageSize, searchTerm, city);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy danh sách trung tâm thành công",
                     data = result
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -141,18 +141,18 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
                 var result = await _centerService.GetActiveCentersAsync(pageNumber, pageSize, searchTerm, city);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy danh sách trung tâm đang hoạt động thành công",
                     data = result
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -172,9 +172,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
 
                 var center = await _centerService.GetCenterByIdAsync(id);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy thông tin trung tâm thành công",
                     data = center
                 });
@@ -185,9 +185,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -206,17 +206,17 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
                     });
                 }
 
                 var center = await _centerService.CreateCenterAsync(request);
-                
-                return CreatedAtAction(nameof(GetCenterById), new { id = center.CenterId }, new { 
-                    success = true, 
+
+                return CreatedAtAction(nameof(GetCenterById), new { id = center.CenterId }, new {
+                    success = true,
                     message = "Tạo trung tâm thành công",
                     data = center
                 });
@@ -227,9 +227,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -252,17 +252,17 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
                     });
                 }
 
                 var center = await _centerService.UpdateCenterAsync(id, request);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Cập nhật thông tin trung tâm thành công",
                     data = center
                 });
@@ -273,9 +273,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }

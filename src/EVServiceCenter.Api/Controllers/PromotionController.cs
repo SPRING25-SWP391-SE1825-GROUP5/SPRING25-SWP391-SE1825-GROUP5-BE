@@ -6,6 +6,10 @@ using EVServiceCenter.Application.Models.Responses;
 using System;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
+using EVServiceCenter.Application.Configurations;
+using System.Text;
+using System.IO;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -19,20 +23,23 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly EVServiceCenter.Domain.Interfaces.IOrderRepository _orderRepo;
         private readonly EVServiceCenter.Domain.Interfaces.IPromotionRepository _promotionRepo;
         private readonly EVServiceCenter.Domain.Interfaces.ICustomerRepository _customerRepo;
-        
+        private readonly IOptions<ExportOptions> _exportOptions;
+
 
         public PromotionController(
             IPromotionService promotionService,
             EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepo,
             EVServiceCenter.Domain.Interfaces.IOrderRepository orderRepo,
             EVServiceCenter.Domain.Interfaces.IPromotionRepository promotionRepo,
-            EVServiceCenter.Domain.Interfaces.ICustomerRepository customerRepo)
+            EVServiceCenter.Domain.Interfaces.ICustomerRepository customerRepo,
+            IOptions<ExportOptions> exportOptions)
         {
             _promotionService = promotionService;
             _bookingRepo = bookingRepo;
             _orderRepo = orderRepo;
             _promotionRepo = promotionRepo;
             _customerRepo = customerRepo;
+            _exportOptions = exportOptions;
         }
 
         private int? GetCustomerIdFromToken()
@@ -71,18 +78,18 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
                 var result = await _promotionService.GetAllPromotionsAsync(pageNumber, pageSize, searchTerm, status, promotionType);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy danh sách khuyến mãi thành công",
                     data = result
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -286,11 +293,43 @@ namespace EVServiceCenter.WebAPI.Controllers
             return Ok(new { success = true, data = result });
         }
         /// <summary>
+        /// Export promotions as XLSX (ADMIN only)
+        /// </summary>
+        [HttpGet("export")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> ExportPromotions()
+        {
+            try
+            {
+                var opts = _exportOptions.Value;
+                var promotions = await _promotionService.GetPromotionsForExportAsync(null, null, opts.MaxRecords);
+
+                if (promotions.Count > opts.MaxRecords)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = $"Số bản ghi ({promotions.Count}) vượt quá giới hạn cho phép ({opts.MaxRecords}). Vui lòng thu hẹp bộ lọc."
+                    });
+                }
+
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+                var bytes = GenerateXlsx(promotions, opts.DateFormat);
+                var fileName = $"promotions_{timestamp}.xlsx";
+                return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Lấy thông tin khuyến mãi theo ID
         /// </summary>
         /// <param name="id">ID khuyến mãi</param>
         /// <returns>Thông tin khuyến mãi</returns>
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> GetPromotionById(int id)
         {
             try
@@ -299,9 +338,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "ID khuyến mãi không hợp lệ" });
 
                 var promotion = await _promotionService.GetPromotionByIdAsync(id);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy thông tin khuyến mãi thành công",
                     data = promotion
                 });
@@ -312,14 +351,14 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
 
-        
+
 
         /// <summary>
         /// Tạo khuyến mãi mới (chỉ ADMIN)
@@ -335,17 +374,17 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
                     });
                 }
 
                 var promotion = await _promotionService.CreatePromotionAsync(request);
-                
-                return CreatedAtAction(nameof(GetPromotionById), new { id = promotion.PromotionId }, new { 
-                    success = true, 
+
+                return CreatedAtAction(nameof(GetPromotionById), new { id = promotion.PromotionId }, new {
+                    success = true,
                     message = "Tạo khuyến mãi thành công",
                     data = promotion
                 });
@@ -356,9 +395,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -381,17 +420,17 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
-                    return BadRequest(new { 
-                        success = false, 
-                        message = "Dữ liệu không hợp lệ", 
-                        errors = errors 
+                    return BadRequest(new {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
                     });
                 }
 
                 var promotion = await _promotionService.UpdatePromotionAsync(id, request);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Cập nhật khuyến mãi thành công",
                     data = promotion
                 });
@@ -402,15 +441,15 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
 
 
-        
+
         // ===== Customer promotions: list & save =====
         [HttpGet("promotions")]
         public async Task<IActionResult> GetCustomerPromotions()
@@ -424,13 +463,13 @@ namespace EVServiceCenter.WebAPI.Controllers
 
             int customerId = customerIdNullable.Value;
             var items = await _promotionRepo.GetUserPromotionsByCustomerAsync(customerId);
-            
+
             // Map đầy đủ thông tin promotion và user promotion
             var today = DateOnly.FromDateTime(DateTime.Today);
             var result = items.Select(x => {
                 var promo = x.Promotion;
                 if (promo == null) return null;
-                
+
                 // Auto-update expired status nếu cần
                 var isExpired = promo.EndDate.HasValue && promo.EndDate.Value < today;
                 var isUsageLimitReached = promo.UsageLimit.HasValue && promo.UsageCount >= promo.UsageLimit.Value;
@@ -440,7 +479,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 {
                     statusToReturn = "EXPIRED";
                 }
-                
+
                 return new {
                     // Thông tin từ Promotion
                     promotionId = promo.PromotionId,
@@ -460,10 +499,10 @@ namespace EVServiceCenter.WebAPI.Controllers
                     isActive = isActive,
                     isExpired = isExpired,
                     isUsageLimitReached = isUsageLimitReached,
-                    remainingUsage = promo.UsageLimit.HasValue 
-                        ? Math.Max(0, promo.UsageLimit.Value - promo.UsageCount) 
+                    remainingUsage = promo.UsageLimit.HasValue
+                        ? Math.Max(0, promo.UsageLimit.Value - promo.UsageCount)
                         : (int?)null,
-                    
+
                     // Thông tin từ UserPromotion
                     bookingId = x.BookingId,
                     orderId = x.OrderId,
@@ -472,7 +511,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                     usedAt = x.UsedAt
                 };
             }).Where(x => x != null);
-            
+
             return Ok(new { success = true, data = result });
         }
 
@@ -501,7 +540,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 
             // Tìm promotion theo code (dùng service để có auto-update expired status)
             var promoResponse = await _promotionService.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
-            
+
             // Reload từ repo để lấy entity mới nhất sau khi auto-update
             var promo = await _promotionRepo.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
             if (promo == null) return NotFound(new { success = false, message = "Mã khuyến mãi không tồn tại" });
@@ -560,17 +599,17 @@ namespace EVServiceCenter.WebAPI.Controllers
             try
             {
                 var count = await _promotionService.UpdateExpiredPromotionsAsync();
-                return Ok(new { 
-                    success = true, 
+                return Ok(new {
+                    success = true,
                     message = $"Đã cập nhật {count} promotion(s) thành EXPIRED",
                     updatedCount = count
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
         }
@@ -598,20 +637,132 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
                 var result = await _promotionService.GetAllPromotionsAsync(pageNumber, pageSize, searchTerm, "ACTIVE", promotionType);
-                
-                return Ok(new { 
-                    success = true, 
+
+                return Ok(new {
+                    success = true,
                     message = "Lấy danh sách khuyến mãi đang hoạt động thành công",
                     data = result
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
-                    success = false, 
-                    message = "Lỗi hệ thống: " + ex.Message 
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
                 });
             }
+        }
+
+        private static byte[] GenerateXlsx(System.Collections.Generic.IList<PromotionResponse> promotions, string dateFormat, object? filters = null)
+        {
+            using var wb = new ClosedXML.Excel.XLWorkbook();
+            var ws = wb.AddWorksheet("Promotions");
+
+            // Header
+            var headers = new[] {
+                "PromotionId",
+                "Code",
+                "Description",
+                "DiscountValue",
+                "DiscountType",
+                "MinOrderAmount",
+                "MaxDiscount",
+                "StartDate",
+                "EndDate",
+                "Status",
+                "UsageLimit",
+                "UsageCount",
+                "CreatedAt",
+                "UpdatedAt"
+            };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                ws.Cell(1, i + 1).Value = headers[i];
+                ws.Cell(1, i + 1).Style.Font.Bold = true;
+            }
+            ws.SheetView.FreezeRows(1);
+
+            // Rows
+            int r = 2;
+            foreach (var p in promotions)
+            {
+                ws.Cell(r, 1).Value = p.PromotionId;
+                ws.Cell(r, 2).Value = p.Code ?? string.Empty;
+                ws.Cell(r, 3).Value = p.Description ?? string.Empty;
+                ws.Cell(r, 4).Value = p.DiscountValue;
+                ws.Cell(r, 5).Value = p.DiscountType ?? string.Empty;
+                ws.Cell(r, 6).Value = p.MinOrderAmount.HasValue ? p.MinOrderAmount.Value : (decimal?)null;
+                ws.Cell(r, 7).Value = p.MaxDiscount.HasValue ? p.MaxDiscount.Value : (decimal?)null;
+                ws.Cell(r, 8).Value = p.StartDate.ToDateTime(TimeOnly.MinValue);
+                ws.Cell(r, 9).Value = p.EndDate.HasValue ? p.EndDate.Value.ToDateTime(TimeOnly.MinValue) : (DateTime?)null;
+                ws.Cell(r, 10).Value = p.Status ?? string.Empty;
+                ws.Cell(r, 11).Value = p.UsageLimit.HasValue ? p.UsageLimit.Value : (int?)null;
+                ws.Cell(r, 12).Value = p.UsageCount;
+                ws.Cell(r, 13).Value = p.CreatedAt;
+                ws.Cell(r, 14).Value = p.UpdatedAt;
+                r++;
+            }
+
+            int lastRow = r - 1;
+            int lastCol = headers.Length;
+
+            // Format dates
+            ws.Range(2, 8, lastRow, 9).Style.DateFormat.Format = dateFormat;
+            ws.Range(2, 13, lastRow, 14).Style.DateFormat.Format = dateFormat;
+
+            // Alignment
+            ws.Range(2, 4, lastRow, 4).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Right; // DiscountValue
+            ws.Range(2, 6, lastRow, 7).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Right; // MinOrderAmount, MaxDiscount
+            ws.Range(2, 10, lastRow, 10).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center; // Status
+            ws.Range(2, 11, lastRow, 12).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center; // UsageLimit, UsageCount
+            ws.Range(2, 1, lastRow, lastCol).Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
+
+            // Create table with style and auto filter
+            var tableRange = ws.Range(1, 1, lastRow, lastCol);
+            var table = tableRange.CreateTable();
+            table.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
+            table.ShowAutoFilter = true;
+
+            // Borders for readability (over table data)
+            ws.Range(1, 1, lastRow, lastCol).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+            ws.Range(1, 1, lastRow, lastCol).Style.Border.InsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+
+            ws.Columns().AdjustToContents();
+
+            // Filters sheet
+            var wsFilters = wb.AddWorksheet("Filters");
+            wsFilters.Cell(1, 1).Value = "Applied Filters";
+            wsFilters.Cell(1, 1).Style.Font.Bold = true;
+            int fr = 3;
+            void WriteFilter(string key, string? value)
+            {
+                wsFilters.Cell(fr, 1).Value = key;
+                wsFilters.Cell(fr, 2).Value = value ?? string.Empty;
+                fr++;
+            }
+            var dict = new System.Collections.Generic.Dictionary<string, string?>();
+            if (filters != null)
+            {
+                foreach (var prop in filters.GetType().GetProperties())
+                {
+                    var val = prop.GetValue(filters);
+                    dict[prop.Name] = val switch
+                    {
+                        DateTime dt => dt.ToString(dateFormat),
+                        bool b => b ? "TRUE" : "FALSE",
+                        _ => val?.ToString()
+                    };
+                }
+            }
+            foreach (var kv in dict)
+            {
+                WriteFilter(kv.Key, kv.Value);
+            }
+            wsFilters.Columns().AdjustToContents();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            return ms.ToArray();
         }
     }
 }

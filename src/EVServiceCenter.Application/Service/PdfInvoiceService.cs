@@ -122,11 +122,11 @@ namespace EVServiceCenter.Application.Service
                     try
                     {
                         // Thử với tên font hệ thống
-                        font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
-                        boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
-                    }
-                    catch
-                    {
+                    font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
+                    boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
+                }
+                catch
+                {
                         try
                         {
                             font = PdfFontFactory.CreateFont("Times-Roman", PdfEncodings.IDENTITY_H);
@@ -317,10 +317,10 @@ namespace EVServiceCenter.Application.Service
                 // Thêm các dòng phụ tùng (nếu có)
                 if (workOrderParts.Any())
                 {
-                    foreach (var part in workOrderParts)
-                    {
-                        stt++;
-                        var partTotal = (part.Part?.Price ?? 0) * part.QuantityUsed;
+                foreach (var part in workOrderParts)
+                {
+                    stt++;
+                    var partTotal = (part.Part?.Price ?? 0) * part.QuantityUsed;
                         itemsTable.AddCell(new Cell().Add(new Paragraph(stt.ToString()).SetFont(font).SetFontSize(8)).SetPadding(4).SetTextAlignment(TextAlignment.CENTER));
                         itemsTable.AddCell(new Cell().Add(new Paragraph(part.Part?.PartName ?? "Phụ tùng").SetFont(font).SetFontSize(8)).SetPadding(4));
                         itemsTable.AddCell(new Cell().Add(new Paragraph("Cái").SetFont(font).SetFontSize(8)).SetPadding(4).SetTextAlignment(TextAlignment.CENTER));
@@ -564,11 +564,11 @@ namespace EVServiceCenter.Application.Service
                     try
                     {
                         // Thử với tên font hệ thống
-                        font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
-                        boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
-                    }
-                    catch
-                    {
+                    font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
+                    boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
+                }
+                catch
+                {
                         try
                         {
                             font = PdfFontFactory.CreateFont("Times-Roman", PdfEncodings.IDENTITY_H);

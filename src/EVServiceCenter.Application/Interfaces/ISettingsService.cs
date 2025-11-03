@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace EVServiceCenter.Application.Interfaces;
@@ -15,6 +17,9 @@ public interface ISettingsService
 
     Task<MaintenanceReminderSettingsDto> GetMaintenanceReminderAsync();
     Task UpdateMaintenanceReminderAsync(UpdateMaintenanceReminderSettingsRequest request);
+
+    Task<RateLimitingSettingsDto> GetRateLimitingAsync();
+    Task UpdateRateLimitingAsync(UpdateRateLimitingSettingsRequest request);
 }
 
 public class BookingRealtimeSettingsDto
@@ -71,6 +76,42 @@ public class UpdateMaintenanceReminderSettingsRequest
     public int UpcomingDays { get; set; }
     public int DispatchHourLocal { get; set; }
     public required string TimeZoneId { get; set; }
+}
+
+public class RateLimitingSettingsDto
+{
+    public bool Enabled { get; set; }
+    public bool UseRedis { get; set; }
+    public string[] BypassRoles { get; set; } = Array.Empty<string>();
+    public Dictionary<string, RateLimitPolicySettingsDto> Policies { get; set; } = new();
+}
+
+public class RateLimitPolicySettingsDto
+{
+    public int PermitLimit { get; set; }
+    public string Window { get; set; } = string.Empty; // Format: "00:01:00"
+    public int QueueLimit { get; set; }
+    public string ReplenishmentPeriod { get; set; } = string.Empty;
+    public int TokensPerPeriod { get; set; }
+    public bool AutoReplenishment { get; set; }
+}
+
+public class UpdateRateLimitingSettingsRequest
+{
+    public bool Enabled { get; set; }
+    public bool UseRedis { get; set; }
+    public string[] BypassRoles { get; set; } = Array.Empty<string>();
+    public Dictionary<string, UpdateRateLimitPolicyRequest> Policies { get; set; } = new();
+}
+
+public class UpdateRateLimitPolicyRequest
+{
+    public int PermitLimit { get; set; }
+    public string Window { get; set; } = string.Empty; // Format: "00:01:00"
+    public int QueueLimit { get; set; }
+    public string ReplenishmentPeriod { get; set; } = string.Empty;
+    public int TokensPerPeriod { get; set; }
+    public bool AutoReplenishment { get; set; }
 }
 
 

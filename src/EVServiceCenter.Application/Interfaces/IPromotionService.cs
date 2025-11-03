@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
@@ -19,5 +20,6 @@ namespace EVServiceCenter.Application.Interfaces
         Task<bool> ActivatePromotionAsync(int promotionId);
         Task<bool> DeactivatePromotionAsync(int promotionId);
         Task<int> UpdateExpiredPromotionsAsync();
+        Task<IList<PromotionResponse>> GetPromotionsForExportAsync(string? searchTerm = null, string? status = null, int maxRecords = 100000);
     }
 }

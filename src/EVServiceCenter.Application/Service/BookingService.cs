@@ -28,7 +28,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IServiceChecklistRepository _serviceChecklistRepository;
         private readonly IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
         private readonly ILogger<BookingService> _logger;
-        
+
 
         public BookingService(
             IBookingRepository bookingRepository,
@@ -76,12 +76,14 @@ namespace EVServiceCenter.Application.Service
                 var technicians = await _technicianRepository.GetAllTechniciansAsync();
                 var centerTechnicians = technicians.Where(t => t.CenterId == centerId).ToList();
 
-                // Get existing bookings for the date
+                // Get existing bookings for the date - filter theo WorkDate của TechnicianTimeSlot thay vì CreatedAt
                 var existingBookings = await _bookingRepository.GetAllBookingsAsync();
                 var dateStart = date.ToDateTime(TimeOnly.MinValue).Date;
                 var dateEnd = dateStart.AddDays(1);
                 var bookingsForDate = existingBookings
-                    .Where(b => b.CenterId == centerId && b.CreatedAt >= dateStart && b.CreatedAt < dateEnd &&
+                    .Where(b => b.CenterId == centerId &&
+                               b.TechnicianTimeSlot != null &&
+                               DateOnly.FromDateTime(b.TechnicianTimeSlot.WorkDate) == date &&
                                b.Status != "CANCELLED")
                     .ToList();
 
@@ -107,7 +109,7 @@ namespace EVServiceCenter.Application.Service
                     // Check availability for each technician
                     foreach (var technician in centerTechnicians)
                     {
-                        var isTechnicianAvailable = !bookingsForDate.Any(b => 
+                        var isTechnicianAvailable = !bookingsForDate.Any(b =>
                             b.TechnicianTimeSlot?.SlotId == timeSlot.SlotId && b.TechnicianTimeSlot?.TechnicianId == technician.TechnicianId);
 
                         timeSlotAvailability.AvailableTechnicians.Add(new TechnicianAvailability
@@ -152,7 +154,7 @@ namespace EVServiceCenter.Application.Service
                 if (serviceIds != null && serviceIds.Any())
                 {
                     var services = await _serviceRepository.GetAllServicesAsync();
-                    var invalidServices = serviceIds.Where(id => 
+                    var invalidServices = serviceIds.Where(id =>
                         !services.Any(s => s.ServiceId == id && s.IsActive)).ToList();
                     if (invalidServices.Any())
                         throw new ArgumentException($"Các dịch vụ sau không tồn tại hoặc không hoạt động: {string.Join(", ", invalidServices)}");
@@ -166,15 +168,15 @@ namespace EVServiceCenter.Application.Service
 
                 // Get technicians for the center
                 var allTechnicians = await _technicianRepository.GetAllTechniciansAsync();
-                var centerTechnicians = allTechnicians.Where(t => 
+                var centerTechnicians = allTechnicians.Where(t =>
                     t.CenterId == centerId && t.IsActive).ToList();
 
-                // Get existing bookings and technician time slots for the date
+                // Get existing bookings and technician time slots for the date - filter theo WorkDate của TechnicianTimeSlot thay vì CreatedAt
                 var existingBookings = await _bookingRepository.GetAllBookingsAsync();
-                var dStart = date.ToDateTime(TimeOnly.MinValue).Date;
-                var dEnd = dStart.AddDays(1);
                 var bookingsForDate = existingBookings
-                    .Where(b => b.CenterId == centerId && b.CreatedAt >= dStart && b.CreatedAt < dEnd &&
+                    .Where(b => b.CenterId == centerId &&
+                               b.TechnicianTimeSlot != null &&
+                               DateOnly.FromDateTime(b.TechnicianTimeSlot.WorkDate) == date &&
                                b.Status != "CANCELLED")
                     .ToList();
 
@@ -201,12 +203,12 @@ namespace EVServiceCenter.Application.Service
 
                         var slotId = slot.SlotId;
                         var isBooked = bookingsForDate.Any(b => b.TechnicianTimeSlot?.SlotId == slotId);
-                            var techTimeSlot = technicianTimeSlots.FirstOrDefault(tts => 
-                                tts.TechnicianId == technician.TechnicianId && 
-                                tts.WorkDate.Date == date.ToDateTime(TimeOnly.MinValue).Date && 
+                            var techTimeSlot = technicianTimeSlots.FirstOrDefault(tts =>
+                                tts.TechnicianId == technician.TechnicianId &&
+                                tts.WorkDate.Date == date.ToDateTime(TimeOnly.MinValue).Date &&
                                 tts.SlotId == slotId);
 
-                            var isRealtimeAvailable = !isBooked && 
+                            var isRealtimeAvailable = !isBooked &&
                                 (techTimeSlot == null || (techTimeSlot.IsAvailable && techTimeSlot.BookingId == null));
 
                             availableTimeSlots.Add(new AvailableTimeSlot
@@ -238,7 +240,7 @@ namespace EVServiceCenter.Application.Service
                     CenterName = center.CenterName,
                     Date = date,
                     TechnicianId = technicianId,
-                    TechnicianName = technicianId.HasValue ? 
+                    TechnicianName = technicianId.HasValue ?
                         centerTechnicians.FirstOrDefault(t => t.TechnicianId == technicianId.Value)?.User?.FullName ?? "N/A" : string.Empty,
                     AvailableTimeSlots = availableTimeSlots.OrderBy(ts => ts.SlotTime).ToList(),
                     AvailableServices = availableServices.Select(s => new ServiceInfo
@@ -326,12 +328,12 @@ namespace EVServiceCenter.Application.Service
                         throw new ArgumentException("Gói dịch vụ đã hết hạn.");
 
                     resolvedServiceId = selectedPackage.ServiceId;
-                    
+
                     // Lấy giá dịch vụ gốc
                     var service = await _serviceRepository.GetServiceByIdAsync(selectedPackage.ServiceId);
                     if (service == null)
                         throw new ArgumentException("Dịch vụ trong gói không tồn tại.");
-                    
+
                     // Tính tổng tiền = Giá dịch vụ - (Giá dịch vụ × DiscountPercent)
                     var servicePrice = service.BasePrice;
                     var discountAmount = servicePrice * ((selectedPackage.DiscountPercent ?? 0) / 100);
@@ -358,10 +360,10 @@ namespace EVServiceCenter.Application.Service
 
                 // Kiểm tra slot availability một cách chính xác
                 var isTrulyAvailable = await _technicianTimeSlotRepository.IsSlotTrulyAvailableAsync(
-                    selectedTechnicianId, 
-                    request.BookingDate.ToDateTime(TimeOnly.MinValue), 
+                    selectedTechnicianId,
+                    request.BookingDate.ToDateTime(TimeOnly.MinValue),
                     timeSlot.SlotId);
-                
+
                 if (!isTrulyAvailable)
                     throw new ArgumentException($"Khung giờ {timeSlot.Slot?.SlotLabel} ({timeSlot.Slot?.SlotTime}) của kỹ thuật viên {timeSlot.Technician?.User?.FullName} đã được đặt. Vui lòng chọn khung giờ khác.");
 
@@ -371,16 +373,16 @@ namespace EVServiceCenter.Application.Service
                 {
                     // Tìm credit đã có cho customer và package này
                     var existingCredits = await _customerServiceCreditRepository.GetByCustomerAndPackageAsync(request.CustomerId, selectedPackage.PackageId);
-                    var availableCredit = existingCredits?.FirstOrDefault(c => 
-                        c.Status == "ACTIVE" && 
-                        c.ExpiryDate > DateTime.UtcNow && 
+                    var availableCredit = existingCredits?.FirstOrDefault(c =>
+                        c.Status == "ACTIVE" &&
+                        c.ExpiryDate > DateTime.UtcNow &&
                         c.UsedCredits < c.TotalCredits);
 
                     if (availableCredit != null)
                     {
                         // Sử dụng credit đã có
                         appliedCreditId = availableCredit.CreditId;
-                        _logger.LogInformation("Using existing CustomerServiceCredit {CreditId} for customer {CustomerId} with package {PackageId}", 
+                        _logger.LogInformation("Using existing CustomerServiceCredit {CreditId} for customer {CustomerId} with package {PackageId}",
                             availableCredit.CreditId, request.CustomerId, selectedPackage.PackageId);
                 }
                 else
@@ -399,10 +401,10 @@ namespace EVServiceCenter.Application.Service
                             CreatedAt = DateTime.UtcNow,
                             UpdatedAt = DateTime.UtcNow
                         };
-                        
+
                         var createdCredit = await _customerServiceCreditRepository.CreateAsync(customerServiceCredit);
                         appliedCreditId = createdCredit.CreditId;
-                        _logger.LogInformation("Created new CustomerServiceCredit {CreditId} for customer {CustomerId} with package {PackageId}", 
+                        _logger.LogInformation("Created new CustomerServiceCredit {CreditId} for customer {CustomerId} with package {PackageId}",
                             createdCredit.CreditId, request.CustomerId, selectedPackage.PackageId);
                     }
                 }
@@ -434,20 +436,20 @@ namespace EVServiceCenter.Application.Service
                     request.BookingDate.ToDateTime(TimeOnly.MinValue),
                     timeSlot.SlotId,
                     null); // Reserve without booking ID first
-                
+
                 if (!reserveOk)
                     throw new ArgumentException("Slot đã được đặt bởi người khác. Vui lòng chọn khung giờ khác.");
 
                 // Save booking only after successful slot reservation
                 var createdBooking = await _bookingRepository.CreateBookingAsync(booking);
-                
+
                 // Update the reserved slot with the actual booking ID
                 await _technicianTimeSlotRepository.UpdateSlotBookingIdAsync(
                     selectedTechnicianId,
                     request.BookingDate.ToDateTime(TimeOnly.MinValue),
                     timeSlot.SlotId,
                     createdBooking.BookingId);
-                
+
                 _logger.LogDebug("Booking {BookingId} created with status: {Status}", createdBooking.BookingId, createdBooking.Status);
 
                 // Tự động tạo MaintenanceChecklist từ ServiceChecklistTemplate
@@ -485,7 +487,7 @@ namespace EVServiceCenter.Application.Service
                 // Lấy template checklist cho service này
                 var templates = await _serviceChecklistRepository.GetActiveAsync(serviceId);
                 var template = templates.FirstOrDefault();
-                
+
                 if (template == null)
                 {
                     _logger.LogWarning("Không tìm thấy ServiceChecklistTemplate cho service {ServiceId}", serviceId);
@@ -503,7 +505,7 @@ namespace EVServiceCenter.Application.Service
                 };
 
                 await _maintenanceChecklistRepository.CreateAsync(checklist);
-                _logger.LogInformation("Đã tạo MaintenanceChecklist {ChecklistId} cho booking {BookingId} từ template {TemplateId}", 
+                _logger.LogInformation("Đã tạo MaintenanceChecklist {ChecklistId} cho booking {BookingId} từ template {TemplateId}",
                     checklist.ChecklistId, bookingId, template.TemplateID);
 
                 // Seed MaintenanceChecklistResults từ ServiceChecklistTemplateItems
@@ -594,30 +596,73 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Release reserved technician slot when booking is cancelled
-                if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+                // Release reserved technician slot based on status
+                // CANCELLED: Luôn release slot
+                // COMPLETED/PAID: Chỉ release nếu WorkDate >= today (slot còn tương lai)
+                if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(request.Status, "PAID", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Luôn release TechnicianSlotId khi hủy booking (kể cả khi NULL)
                     if (booking.TechnicianSlotId.HasValue)
                     {
                         var tts = await _technicianTimeSlotRepository.GetByIdAsync(booking.TechnicianSlotId.Value);
                         if (tts != null)
                         {
-                            var releaseOk = await _technicianTimeSlotRepository.ReleaseSlotAsync(
-                                tts.TechnicianId,
-                                tts.WorkDate,
-                                tts.SlotId);
-                            
-                            if (!releaseOk)
+                            var today = DateTime.Today;
+                            var shouldRelease = false;
+                            var reason = string.Empty;
+
+                            if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
                             {
-                                _logger.LogWarning("Không thể release slot {SlotId} cho technician {TechnicianId} khi hủy booking {BookingId}", 
-                                    tts.SlotId, tts.TechnicianId, booking.BookingId);
+                                // CANCELLED: Luôn release slot (thường là trước WorkDate)
+                                shouldRelease = true;
+                                reason = "Booking bị hủy";
+                            }
+                            else if (string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(request.Status, "PAID", StringComparison.OrdinalIgnoreCase))
+                            {
+                                // COMPLETED/PAID: Chỉ release nếu WorkDate >= today (slot còn tương lai)
+                                if (tts.WorkDate.Date >= today)
+                                {
+                                    shouldRelease = true;
+                                    reason = $"Booking {request.Status}, slot còn tương lai (WorkDate: {tts.WorkDate:dd/MM/yyyy})";
+                                }
+                                else
+                                {
+                                    shouldRelease = false;
+                                    reason = $"Booking {request.Status}, slot đã qua (WorkDate: {tts.WorkDate:dd/MM/yyyy}), không cần release";
+                                }
+                            }
+
+                            if (shouldRelease)
+                            {
+                                var releaseOk = await _technicianTimeSlotRepository.ReleaseSlotAsync(
+                                    tts.TechnicianId,
+                                    tts.WorkDate,
+                                    tts.SlotId);
+
+                                if (!releaseOk)
+                                {
+                                    _logger.LogWarning("Không thể release slot {SlotId} cho technician {TechnicianId} khi {Status} booking {BookingId}. Lý do: {Reason}",
+                                        tts.SlotId, tts.TechnicianId, request.Status, booking.BookingId, reason);
+                                }
+                                else
+                                {
+                                    _logger.LogInformation("Đã release slot {SlotId} cho technician {TechnicianId} khi {Status} booking {BookingId}. Lý do: {Reason}",
+                                        tts.SlotId, tts.TechnicianId, request.Status, booking.BookingId, reason);
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogInformation("Không release slot {SlotId} cho technician {TechnicianId} khi {Status} booking {BookingId}. Lý do: {Reason}",
+                                    tts.SlotId, tts.TechnicianId, request.Status, booking.BookingId, reason);
                             }
                         }
                     }
-                    
-                    // Luôn set TechnicianSlotId = NULL khi hủy booking (đảm bảo không có duplicate key)
-                    booking.TechnicianSlotId = null;
+
+                    // GIỮ NGUYÊN TechnicianSlotId để có thể query thời gian đã book sau khi hủy/hoàn thành
+                    // Chỉ release slot (BookingId = null) để slot có thể được book lại (nếu cần)
+                    // Không set booking.TechnicianSlotId = null
                 }
 
                 // Update MaintenanceChecklist and MaintenanceChecklistResult when booking is cancelled
@@ -654,9 +699,18 @@ namespace EVServiceCenter.Application.Service
         private async Task<BookingResponse> MapToBookingResponseAsync(Booking booking, ServicePackage? selectedPackage = null, decimal? totalAmount = null)
         {
             // Load related data if not already loaded
-            if (booking.Customer == null)
+            // Cần reload nếu Customer hoặc TechnicianTimeSlot chưa được load để lấy đúng BookingDate
+            // Đặc biệt quan trọng khi tạo booking mới vì TechnicianTimeSlot navigation property chưa được load
+            if (booking.Customer == null || booking.TechnicianTimeSlot == null)
             {
-                booking = await _bookingRepository.GetBookingByIdAsync(booking.BookingId) ?? booking;
+                var reloadedBooking = await _bookingRepository.GetBookingByIdAsync(booking.BookingId);
+                if (reloadedBooking != null)
+                {
+                    booking = reloadedBooking;
+                    _logger.LogDebug("Reloaded booking {BookingId} to get TechnicianTimeSlot. WorkDate: {WorkDate}",
+                        booking.BookingId,
+                        booking.TechnicianTimeSlot?.WorkDate);
+                }
             }
 
             // Determine matched schedule for display
@@ -682,7 +736,7 @@ namespace EVServiceCenter.Application.Service
                     packageCode = appliedCredit.ServicePackage.PackageCode;
                     packageName = appliedCredit.ServicePackage.PackageName;
                     packageDiscountPercent = appliedCredit.ServicePackage.DiscountPercent;
-                    
+
                     // Calculate discount amount
                     var servicePrice = booking.Service?.BasePrice ?? 0;
                     originalServicePrice = servicePrice;
@@ -699,7 +753,7 @@ namespace EVServiceCenter.Application.Service
                 packageName = selectedPackage.PackageName;
                 packageDiscountPercent = selectedPackage.DiscountPercent;
                 paymentType = "PACKAGE";
-                
+
                 // Tính tổng tiền = Giá dịch vụ - (Giá dịch vụ × DiscountPercent)
                 var servicePrice = booking.Service?.BasePrice ?? 0;
                 originalServicePrice = servicePrice;
@@ -718,7 +772,11 @@ namespace EVServiceCenter.Application.Service
                 VehicleInfo = $"{booking.Vehicle?.LicensePlate ?? "N/A"}",
                 CenterId = booking.CenterId,
                 CenterName = booking.Center?.CenterName ?? "N/A",
-                BookingDate = DateOnly.FromDateTime(booking.CreatedAt),
+                // Ưu tiên lấy BookingDate từ TechnicianTimeSlot.WorkDate (ngày làm việc thực tế)
+                // Chỉ fallback về CreatedAt nếu thực sự không có TechnicianTimeSlot
+                BookingDate = booking.TechnicianTimeSlot != null
+                    ? DateOnly.FromDateTime(booking.TechnicianTimeSlot.WorkDate)
+                    : DateOnly.FromDateTime(booking.CreatedAt), // Fallback nếu không có TechnicianTimeSlot
                 TechnicianSlotId = booking.TechnicianSlotId,
                 SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0, // Get SlotId from TechnicianTimeSlot
                 SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
@@ -727,16 +785,16 @@ namespace EVServiceCenter.Application.Service
 
                 Status = booking.Status ?? string.Empty,
                 SpecialRequests = booking.SpecialRequests ?? string.Empty,
-                
+
                 // Fields migrated from WorkOrder
                 TechnicianId = booking.TechnicianTimeSlot?.TechnicianId,
                 TechnicianName = booking.TechnicianTimeSlot?.Technician?.User?.FullName ?? "N/A",
                 CurrentMileage = booking.CurrentMileage,
                 LicensePlate = booking.LicensePlate,
-                
+
                 CreatedAt = booking.CreatedAt,
                 UpdatedAt = booking.UpdatedAt,
-                
+
                 // Package information
                 AppliedCreditId = booking.AppliedCreditId,
                 PackageCode = packageCode,
@@ -744,11 +802,11 @@ namespace EVServiceCenter.Application.Service
                 PackageDiscountPercent = packageDiscountPercent,
                 PackageDiscountAmount = packageDiscountAmount,
                 OriginalServicePrice = originalServicePrice,
-                
+
                 // Payment information
                 TotalAmount = finalTotalAmount,
                 PaymentType = paymentType,
-                
+
                 // Single-slot model
                 Services = new List<BookingServiceResponse>
                 {
@@ -941,15 +999,15 @@ namespace EVServiceCenter.Application.Service
             // Get all time slots and find the one that matches the time
             var timeSlots = await _timeSlotRepository.GetAllTimeSlotsAsync();
             var matchingSlot = timeSlots.FirstOrDefault(ts => ts.SlotTime == time);
-            
+
             if (matchingSlot != null)
                 return matchingSlot.SlotId;
-            
+
             // If no exact match, find the closest slot
             var closestSlot = timeSlots
                 .OrderBy(ts => Math.Abs((ts.SlotTime - time).Ticks))
                 .FirstOrDefault();
-            
+
             return closestSlot?.SlotId ?? 1; // Default to slot 1 if no slots found
         }
 
@@ -982,8 +1040,8 @@ namespace EVServiceCenter.Application.Service
 
                 // Find available customer service credit
                 var customerCredits = await _customerServiceCreditRepository.GetByCustomerIdAsync(customerId);
-                var availableCredit = customerCredits.FirstOrDefault(cc => 
-                    cc.PackageId == servicePackage.PackageId && 
+                var availableCredit = customerCredits.FirstOrDefault(cc =>
+                    cc.PackageId == servicePackage.PackageId &&
                     cc.RemainingCredits > 0 &&
                     string.Equals(cc.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase));
 
@@ -1161,7 +1219,7 @@ namespace EVServiceCenter.Application.Service
                     // Có booking khác đang dùng credit → không xóa, chỉ log
                     _logger.LogInformation(
                         "CreditId {CreditId} đang được sử dụng trong {Count} booking khác (BookingIds: {BookingIds}). Không xóa credit khi hủy booking {CurrentBookingId}",
-                        creditId, 
+                        creditId,
                         otherBookings.Count,
                         string.Join(", ", otherBookings.Select(b => b.BookingId)),
                         currentBookingId);
@@ -1170,7 +1228,7 @@ namespace EVServiceCenter.Application.Service
 
                 // Không có booking khác đang dùng → xóa credit
                 await _customerServiceCreditRepository.DeleteAsync(creditId);
-                
+
                 _logger.LogInformation("Đã refund và xóa gói dịch vụ CreditId: {CreditId} (không có booking khác sử dụng)", creditId);
             }
             catch (Exception ex)
@@ -1236,7 +1294,7 @@ namespace EVServiceCenter.Application.Service
                 booking.UpdatedAt = DateTime.UtcNow;
                 await _bookingRepository.UpdateBookingAsync(booking);
 
-                _logger.LogInformation("Đã tạo gói dịch vụ {PackageCode} cho booking {BookingId}, CreditId: {CreditId}", 
+                _logger.LogInformation("Đã tạo gói dịch vụ {PackageCode} cho booking {BookingId}, CreditId: {CreditId}",
                     packageCode, bookingId, createdCredit.CreditId);
 
                 return await MapToBookingResponseAsync(booking);
@@ -1269,7 +1327,7 @@ namespace EVServiceCenter.Application.Service
 
                     // Lấy tất cả MaintenanceChecklistResult của checklist này
                     var results = await _maintenanceChecklistResultRepository.GetByChecklistIdAsync(checklist.ChecklistId);
-                    
+
                     // Cập nhật status và result của tất cả MaintenanceChecklistResult thành CANCELLED
                     foreach (var result in results)
                     {
@@ -1278,7 +1336,7 @@ namespace EVServiceCenter.Application.Service
                         await _maintenanceChecklistResultRepository.UpdateAsync(result);
                     }
 
-                    _logger.LogInformation("Đã cập nhật MaintenanceChecklist và {Count} MaintenanceChecklistResult thành CANCELLED cho booking {BookingId}", 
+                    _logger.LogInformation("Đã cập nhật MaintenanceChecklist và {Count} MaintenanceChecklistResult thành CANCELLED cho booking {BookingId}",
                         results.Count, bookingId);
                 }
             }

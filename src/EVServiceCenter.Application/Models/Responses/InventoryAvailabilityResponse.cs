@@ -8,6 +8,7 @@ namespace EVServiceCenter.Application.Models.Responses
 		public required string PartNumber { get; set; } = null!;
 		public required string PartName { get; set; } = null!;
 		public required string Brand { get; set; } = null!;
+		public string? ImageUrl { get; set; }
 		public int TotalStock { get; set; }
 		public int MinimumStock { get; set; }
 		public bool IsLowStock { get; set; }

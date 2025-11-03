@@ -21,7 +21,7 @@ namespace EVServiceCenter.Api.Controllers
         private readonly ITechnicianAvailabilityService _technicianAvailabilityService;
 
         public TechnicianTimeSlotController(
-            ITechnicianTimeSlotService technicianTimeSlotService, 
+            ITechnicianTimeSlotService technicianTimeSlotService,
             ITechnicianRepository technicianRepository,
             ITechnicianAvailabilityService technicianAvailabilityService)
         {
@@ -43,13 +43,13 @@ namespace EVServiceCenter.Api.Controllers
                 // Get all technician time slots by getting all technicians and their time slots
                 var technicians = await _technicianRepository.GetAllTechniciansAsync();
                 var allTimeSlots = new List<TechnicianTimeSlotResponse>();
-                
+
                 foreach (var technician in technicians)
                 {
                     var timeSlots = await _technicianTimeSlotService.GetTechnicianTimeSlotsByTechnicianIdAsync(technician.TechnicianId);
                     allTimeSlots.AddRange(timeSlots);
                 }
-                
+
                 return Ok(new
                 {
                     success = true,
@@ -77,7 +77,14 @@ namespace EVServiceCenter.Api.Controllers
             req.TechnicianId = technicianId;
             var result = await _technicianTimeSlotService.CreateTechnicianFullWeekAllSlotsAsync(req);
             if (!result.Success) return BadRequest(new { success = false, message = result.Message, errors = result.Errors });
-            return Ok(new { success = true, message = result.Message, totalDays = result.TotalDays, totalSlotsCreated = result.TotalSlotsCreated });
+            return Ok(new {
+                success = true,
+                message = result.Message,
+                totalDays = result.TotalDays,
+                totalSlotsCreated = result.TotalSlotsCreated,
+                weekendDaysSkipped = result.WeekendDaysSkipped,
+                weekendDatesSkipped = result.WeekendDatesSkipped
+            });
         }
 
         /// <summary>
@@ -164,13 +171,13 @@ namespace EVServiceCenter.Api.Controllers
                 // Get technicians in the center first
                 var technicians = await _technicianRepository.GetTechniciansByCenterIdAsync(centerId);
                 var allTimeSlots = new List<TechnicianTimeSlotResponse>();
-                
+
                 foreach (var technician in technicians)
                 {
                     var timeSlots = await _technicianTimeSlotService.GetTechnicianTimeSlotsByTechnicianIdAsync(technician.TechnicianId);
                     allTimeSlots.AddRange(timeSlots);
                 }
-                
+
                 return Ok(new
                 {
                     success = true,
@@ -212,7 +219,7 @@ namespace EVServiceCenter.Api.Controllers
                         message = "Không tìm thấy technician trong center này"
                     });
                 }
-                
+
                 var timeSlots = await _technicianTimeSlotService.GetTechnicianTimeSlotsByTechnicianIdAsync(technicianId);
                 return Ok(new
                 {
@@ -256,7 +263,7 @@ namespace EVServiceCenter.Api.Controllers
                 // Get all technicians and filter by day of week
                 var technicians = await _technicianRepository.GetAllTechniciansAsync();
                 var allTimeSlots = new List<TechnicianTimeSlotResponse>();
-                
+
                 foreach (var technician in technicians)
                 {
                     var timeSlots = await _technicianTimeSlotService.GetTechnicianTimeSlotsByTechnicianIdAsync(technician.TechnicianId);
@@ -264,7 +271,7 @@ namespace EVServiceCenter.Api.Controllers
                     var filteredSlots = timeSlots.Where(ts => ((int)ts.WorkDate.DayOfWeek + 6) % 7 + 1 == dayOfWeek).ToList();
                     allTimeSlots.AddRange(filteredSlots);
                 }
-                
+
                 return Ok(new
                 {
                     success = true,
@@ -614,12 +621,12 @@ namespace EVServiceCenter.Api.Controllers
             try
             {
                 var data = await _technicianTimeSlotService.GetTechnicianDailyScheduleAsync(technicianId, startDate, endDate);
-                return Ok(new 
-                { 
-                    success = true, 
+                return Ok(new
+                {
+                    success = true,
                     message = "Lấy lịch làm việc technician thành công",
-                    data, 
-                    total = data.Count 
+                    data,
+                    total = data.Count
                 });
             }
             catch (ArgumentException ex)

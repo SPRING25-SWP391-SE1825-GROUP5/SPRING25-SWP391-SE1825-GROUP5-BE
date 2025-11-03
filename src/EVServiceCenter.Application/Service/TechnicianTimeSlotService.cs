@@ -49,6 +49,16 @@ namespace EVServiceCenter.Application.Service
                     return response;
                 }
 
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.WorkDate.Date < today)
+                {
+                    response.Success = false;
+                    response.Message = $"Không thể tạo lịch trong quá khứ. Ngày làm việc phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.";
+                    response.Errors.Add(response.Message);
+                    return response;
+                }
+
                 // Create technician time slot
                 var technicianTimeSlot = new TechnicianTimeSlot
                 {
@@ -71,7 +81,7 @@ namespace EVServiceCenter.Application.Service
             catch (Exception ex)
             {
                 response.Success = false;
-                
+
                 // Check for duplicate key constraint violation
                 if (ex.Message.Contains("UNIQUE") || ex.Message.Contains("duplicate") || ex.Message.Contains("UQ_"))
                 {
@@ -82,7 +92,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     response.Message = $"Lỗi khi tạo lịch technician: {ex.Message}";
                 }
-                
+
                 response.Errors.Add(response.Message);
                 return response;
             }
@@ -108,13 +118,34 @@ namespace EVServiceCenter.Application.Service
                     return response;
                 }
 
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.StartDate.Date < today)
+                {
+                    response.Success = false;
+                    response.Message = $"Không thể tạo lịch trong quá khứ. Ngày bắt đầu phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.";
+                    response.Errors.Add(response.Message);
+                    return response;
+                }
+
                 var createdTimeSlots = new List<TechnicianTimeSlotResponse>();
                 var skippedDates = new List<string>();
+                var weekendDaysSkipped = 0;
+                var weekendDatesSkipped = new List<string>();
 
                 // Create time slots for the specified date range
                 var currentDate = request.StartDate;
                 while (currentDate <= request.EndDate)
                 {
+                    // Skip weekend (Saturday = 6, Sunday = 0)
+                    if (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday)
+                    {
+                        weekendDaysSkipped++;
+                        weekendDatesSkipped.Add(currentDate.ToString("dd/MM/yyyy"));
+                        currentDate = currentDate.AddDays(1);
+                        continue;
+                    }
+
                     try
                     {
                         var technicianTimeSlot = new TechnicianTimeSlot
@@ -135,7 +166,7 @@ namespace EVServiceCenter.Application.Service
                         // Skip duplicate entries and continue with next date
                         var dateStr = currentDate.ToString("dd/MM/yyyy");
                         skippedDates.Add(dateStr);
-                        
+
                         // Provide user-friendly error message for duplicates
                         if (ex.Message.Contains("UNIQUE") || ex.Message.Contains("duplicate") || ex.Message.Contains("UQ_"))
                         {
@@ -146,7 +177,7 @@ namespace EVServiceCenter.Application.Service
                             response.Errors.Add($"Bỏ qua ngày {dateStr}: {ex.Message}");
                         }
                     }
-                    
+
                     currentDate = currentDate.AddDays(1);
                 }
 
@@ -155,10 +186,17 @@ namespace EVServiceCenter.Application.Service
                 {
                     response.Success = true;
                     var message = $"Tạo lịch tuần cho technician thành công. Đã tạo {createdTimeSlots.Count} lịch trình";
+
+                    if (weekendDaysSkipped > 0)
+                    {
+                        message += $". Đã tự động bỏ qua {weekendDaysSkipped} ngày cuối tuần (Thứ 7 và Chủ nhật): {string.Join(", ", weekendDatesSkipped)}";
+                    }
+
                     if (skippedDates.Count > 0)
                     {
                         message += $". Đã bỏ qua {skippedDates.Count} ngày đã có lịch: {string.Join(", ", skippedDates)}";
                     }
+
                     response.Message = message;
                 }
                 else
@@ -198,6 +236,16 @@ namespace EVServiceCenter.Application.Service
                 {
                     response.Success = false;
                     response.Message = "Không tìm thấy trung tâm với ID đã cho";
+                    return response;
+                }
+
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.WorkDate.Date < today)
+                {
+                    response.Success = false;
+                    response.Message = $"Không thể tạo lịch trong quá khứ. Ngày làm việc phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.";
+                    response.Errors.Add(response.Message);
                     return response;
                 }
 
@@ -280,6 +328,16 @@ namespace EVServiceCenter.Application.Service
                     return response;
                 }
 
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.StartDate.Date < today)
+                {
+                    response.Success = false;
+                    response.Message = $"Không thể tạo lịch trong quá khứ. Ngày bắt đầu phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.";
+                    response.Errors.Add(response.Message);
+                    return response;
+                }
+
                 // Get all technicians in the center
                 var technicians = await _technicianRepository.GetTechniciansByCenterIdAsync(request.CenterId);
                 if (!technicians.Any())
@@ -305,33 +363,76 @@ namespace EVServiceCenter.Application.Service
 
                     // Create time slots for the specified date range
                     var currentDate = request.StartDate;
+                    var weekendDaysSkippedForTechnician = 0;
+
                     while (currentDate <= request.EndDate)
                     {
-                        var technicianTimeSlot = new TechnicianTimeSlot
+                        // Skip weekend (Saturday = 6, Sunday = 0)
+                        if (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday)
                         {
-                            TechnicianId = technician.TechnicianId,
-                            SlotId = request.SlotId,
-                            WorkDate = currentDate,
-                            IsAvailable = request.IsAvailable,
-                            Notes = request.Notes,
-                            CreatedAt = DateTime.UtcNow
-                        };
+                            weekendDaysSkippedForTechnician++;
+                            currentDate = currentDate.AddDays(1);
+                            continue;
+                        }
 
-                        var createdTimeSlot = await _technicianTimeSlotRepository.CreateAsync(technicianTimeSlot);
-                        var timeSlotResponse = MapToTechnicianTimeSlotResponse(createdTimeSlot);
+                        try
+                        {
+                            var technicianTimeSlot = new TechnicianTimeSlot
+                            {
+                                TechnicianId = technician.TechnicianId,
+                                SlotId = request.SlotId,
+                                WorkDate = currentDate,
+                                IsAvailable = request.IsAvailable,
+                                Notes = request.Notes,
+                                CreatedAt = DateTime.UtcNow
+                            };
 
-                        technicianSummary.TimeSlotsCreated++;
-                        technicianSummary.DayNames.Add(currentDate.ToString("dd/MM/yyyy"));
-                        technicianSummary.TimeSlots.Add(timeSlotResponse);
-                        totalCreated++;
+                            var createdTimeSlot = await _technicianTimeSlotRepository.CreateAsync(technicianTimeSlot);
+                            var timeSlotResponse = MapToTechnicianTimeSlotResponse(createdTimeSlot);
+
+                            technicianSummary.TimeSlotsCreated++;
+                            technicianSummary.DayNames.Add(currentDate.ToString("dd/MM/yyyy"));
+                            technicianSummary.TimeSlots.Add(timeSlotResponse);
+                            totalCreated++;
+                        }
+                        catch
+                        {
+                            // Ignore duplicates - slot already exists for this technician and date
+                        }
+
                         currentDate = currentDate.AddDays(1);
+                    }
+
+                    // Add weekend info to summary if weekend was skipped
+                    if (weekendDaysSkippedForTechnician > 0)
+                    {
+                        technicianSummary.DayNames.Insert(0, $"[Đã bỏ qua {weekendDaysSkippedForTechnician} ngày cuối tuần]");
                     }
 
                     technicianTimeSlots.Add(technicianSummary);
                 }
 
                 response.Success = true;
-                response.Message = $"Tạo lịch tuần cho tất cả technician thành công. Đã tạo {totalCreated} lịch trình cho {technicians.Count()} technician";
+                var message = $"Tạo lịch tuần cho tất cả technician thành công. Đã tạo {totalCreated} lịch trình cho {technicians.Count()} technician";
+
+                // Check if any weekend days were skipped (same for all technicians in same date range)
+                var testDate = request.StartDate;
+                var totalWeekendDaysInRange = 0;
+                while (testDate <= request.EndDate)
+                {
+                    if (testDate.DayOfWeek == DayOfWeek.Saturday || testDate.DayOfWeek == DayOfWeek.Sunday)
+                    {
+                        totalWeekendDaysInRange++;
+                    }
+                    testDate = testDate.AddDays(1);
+                }
+
+                if (totalWeekendDaysInRange > 0)
+                {
+                    message += $". Đã tự động bỏ qua {totalWeekendDaysInRange} ngày cuối tuần (Thứ 7 và Chủ nhật) cho mỗi technician";
+                }
+
+                response.Message = message;
                 response.TotalTechnicians = technicians.Count();
                 response.TotalTimeSlotsCreated = totalCreated;
                 response.TechnicianTimeSlots = technicianTimeSlots;
@@ -418,13 +519,13 @@ namespace EVServiceCenter.Application.Service
                     aggregatedDaySlots.AddRange(daySlots);
                     currentDate = currentDate.AddDays(1);
                 }
-                
+
                 // Group by date and create availability response
                 currentDate = startDate.Date;
                 while (currentDate <= endDate.Date)
                 {
                     var daySlots = aggregatedDaySlots.Where(s => s.WorkDate.Date == currentDate.Date).ToList();
-                    
+
                     foreach (var slot in daySlots)
                     {
                         var timeSlotAvailability = new TimeSlotAvailability
@@ -464,7 +565,7 @@ namespace EVServiceCenter.Application.Service
                             }
                         });
                     }
-                    
+
                     currentDate = currentDate.AddDays(1);
                 }
 
@@ -527,15 +628,34 @@ namespace EVServiceCenter.Application.Service
                 if (request.TechnicianId <= 0) throw new ArgumentException("TechnicianId không hợp lệ");
                 if (request.StartDate.Date > request.EndDate.Date) throw new ArgumentException("Khoảng thời gian không hợp lệ");
 
+                // Không cho phép tạo lịch trong quá khứ
+                var today = DateTime.Today;
+                if (request.StartDate.Date < today)
+                {
+                    throw new ArgumentException($"Không thể tạo lịch trong quá khứ. Ngày bắt đầu phải từ hôm nay ({today:dd/MM/yyyy}) trở đi.");
+                }
+
                 var technician = await _technicianRepository.GetTechnicianByIdAsync(request.TechnicianId);
                 if (technician == null) throw new ArgumentException("Kỹ thuật viên không tồn tại");
 
                 var timeSlots = await _timeSlotRepository.GetAllTimeSlotsAsync();
 
                 var totalCreated = 0;
+                var weekendDaysSkipped = 0;
+                var weekendDatesSkipped = new List<string>();
                 var currentDate = request.StartDate.Date;
+
                 while (currentDate <= request.EndDate.Date)
                 {
+                    // Skip weekend (Saturday = 6, Sunday = 0)
+                    if (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday)
+                    {
+                        weekendDaysSkipped++;
+                        weekendDatesSkipped.Add(currentDate.ToString("dd/MM/yyyy"));
+                        currentDate = currentDate.AddDays(1);
+                        continue;
+                    }
+
                     foreach (var slot in timeSlots)
                     {
                         try
@@ -561,9 +681,19 @@ namespace EVServiceCenter.Application.Service
                 }
 
                 response.Success = true;
-                response.TotalDays = (int)(request.EndDate.Date - request.StartDate.Date).TotalDays + 1;
+                var totalDaysInRange = (int)(request.EndDate.Date - request.StartDate.Date).TotalDays + 1;
+                var workingDays = totalDaysInRange - weekendDaysSkipped;
+                response.TotalDays = workingDays;
                 response.TotalSlotsCreated = totalCreated;
-                response.Message = "Đã tạo lịch full tuần với toàn bộ slot";
+                response.WeekendDaysSkipped = weekendDaysSkipped;
+                response.WeekendDatesSkipped = weekendDatesSkipped;
+
+                var message = $"Đã tạo lịch full tuần với toàn bộ slot cho {workingDays} ngày làm việc";
+                if (weekendDaysSkipped > 0)
+                {
+                    message += $". Đã tự động bỏ qua {weekendDaysSkipped} ngày cuối tuần (Thứ 7 và Chủ nhật): {string.Join(", ", weekendDatesSkipped)}";
+                }
+                response.Message = message;
                 return response;
             }
             catch (Exception ex)
@@ -585,11 +715,11 @@ namespace EVServiceCenter.Application.Service
 
             var result = new List<TechnicianDailyScheduleResponse>();
             var currentDate = startDate.Date;
-            
+
             while (currentDate <= endDate.Date)
             {
                 var daySlots = await _technicianTimeSlotRepository.GetTechnicianTimeSlotsByTechnicianAndDateAsync(technicianId, currentDate);
-                
+
                 var dailySchedule = new TechnicianDailyScheduleResponse
                 {
                     TechnicianId = technicianId,
@@ -606,7 +736,7 @@ namespace EVServiceCenter.Application.Service
                         TechnicianSlotId = slot.TechnicianSlotId
                     }).OrderBy(ts => ts.SlotId).ToList()
                 };
-                
+
                 result.Add(dailySchedule);
                 currentDate = currentDate.AddDays(1);
             }
@@ -614,7 +744,7 @@ namespace EVServiceCenter.Application.Service
             return result;
         }
 
-        
+
 
         private TechnicianTimeSlotResponse MapToTechnicianTimeSlotResponse(TechnicianTimeSlot timeSlot)
         {

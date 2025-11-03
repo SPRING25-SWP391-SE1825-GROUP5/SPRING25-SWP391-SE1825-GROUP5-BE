@@ -81,16 +81,152 @@ public class OrderController : ControllerBase
     {
         try
         {
-            var url = await _paymentService.CreateOrderPaymentLinkAsync(orderId);
-            return Ok(new { success = true, checkoutUrl = url });
+            // Tạo cancel URL riêng cho order để phân biệt với booking
+            var frontendUrl = _configuration["App:FrontendUrl"] ?? "http://localhost:5173";
+            var orderCancelUrl = $"{frontendUrl}/api/payment/order/{orderId}/cancel";
+            
+            var url = await _paymentService.CreateOrderPaymentLinkAsync(orderId, orderCancelUrl);
+            return Ok(new { 
+                success = true, 
+                checkoutUrl = url,
+                orderId = orderId,
+                message = "Tạo payment link thành công"
+            });
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            // Validation lỗi: orderId không hợp lệ
+            return BadRequest(new { 
+                success = false, 
+                message = ex.Message,
+                errorType = ApiConstants.ErrorTypes.ValidationError,
+                orderId = orderId
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Business logic lỗi: order không tồn tại, đã hủy, đã thanh toán, v.v.
+            var message = ex.Message;
+            
+            // Phân loại lỗi dựa trên message để trả về status code phù hợp
+            if (message.Contains("không tồn tại") || message.Contains("Không tìm thấy"))
+            {
+                return NotFound(new { 
+                    success = false, 
+                    message = message,
+                    errorType = ApiConstants.ErrorTypes.OrderNotFound,
+                    orderId = orderId
+                });
+            }
+            else if (message.Contains("đã bị hủy") || message.Contains("đã được thanh toán") || message.Contains("hóa đơn thanh toán"))
+            {
+                return BadRequest(new { 
+                    success = false, 
+                    message = message,
+                    errorType = ApiConstants.ErrorTypes.OrderInvalidState,
+                    orderId = orderId
+                });
+            }
+            else
+            {
+                return BadRequest(new { 
+                    success = false, 
+                    message = message,
+                    errorType = ApiConstants.ErrorTypes.BusinessRuleViolation,
+                    orderId = orderId
+                });
+            }
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            // Lỗi hệ thống không mong đợi
+            return StatusCode(500, new { 
+                success = false, 
+                message = $"Lỗi hệ thống khi tạo payment link: {ex.Message}",
+                errorType = ApiConstants.ErrorTypes.SystemError,
+                orderId = orderId
+            });
+        }
+    }
+
+    /// <summary>
+    /// Lấy payment link hiện có từ PayOS cho Order (khi đã tồn tại)
+    /// </summary>
+    [HttpGet("{orderId}/payment/link")]
+    public async Task<IActionResult> GetOrderPaymentLink(int orderId)
+    {
+        try
+        {
+            var checkoutUrl = await _paymentService.GetExistingOrderPaymentLinkAsync(orderId);
+            if (string.IsNullOrEmpty(checkoutUrl))
+            {
+                return NotFound(new { 
+                    success = false, 
+                    message = $"Không tìm thấy payment link cho đơn hàng #{orderId}. Payment link có thể chưa được tạo hoặc đã hết hạn.",
+                    orderId = orderId
+                });
+            }
+            
+            return Ok(new { 
+                success = true, 
+                checkoutUrl = checkoutUrl,
+                orderCode = orderId,
+                message = "Lấy payment link thành công"
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            // Validation lỗi: orderId không hợp lệ
+            return BadRequest(new { 
+                success = false, 
+                message = ex.Message,
+                errorType = ApiConstants.ErrorTypes.ValidationError,
+                orderId = orderId
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Business logic lỗi: order không tồn tại, đã hủy, đã thanh toán, v.v.
+            var message = ex.Message;
+            
+            // Phân loại lỗi dựa trên message để trả về status code phù hợp
+            if (message.Contains("không tồn tại") || message.Contains("Không tìm thấy"))
+            {
+                return NotFound(new { 
+                    success = false, 
+                    message = message,
+                    errorType = ApiConstants.ErrorTypes.OrderNotFound,
+                    orderId = orderId
+                });
+            }
+            else if (message.Contains("đã bị hủy") || message.Contains("đã được thanh toán") || message.Contains("hóa đơn thanh toán"))
+            {
+                return BadRequest(new { 
+                    success = false, 
+                    message = message,
+                    errorType = ApiConstants.ErrorTypes.OrderInvalidState,
+                    orderId = orderId
+                });
+            }
+            else
+            {
+                return BadRequest(new { 
+                    success = false, 
+                    message = message,
+                    errorType = ApiConstants.ErrorTypes.BusinessRuleViolation,
+                    orderId = orderId
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            // Lỗi hệ thống không mong đợi
+            return StatusCode(500, new { 
+                success = false, 
+                message = $"Lỗi hệ thống khi lấy payment link: {ex.Message}",
+                errorType = ApiConstants.ErrorTypes.SystemError,
+                orderId = orderId
+            });
         }
     }
 
@@ -323,5 +459,20 @@ public class OrderController : ControllerBase
         {
             return BadRequest(new { success = false, message = "Lỗi khi xóa đơn hàng: " + ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Endpoint xử lý cancel payment cho Order
+    /// HOÀN TOÀN ĐỘC LẬP với PaymentController.Cancel (dành cho Booking)
+    /// Redirect về frontend với orderId để phân biệt với booking
+    /// </summary>
+    [HttpGet("/api/payment/order/{orderId}/cancel")]
+    [AllowAnonymous]
+    public IActionResult CancelOrderPayment([FromRoute] int orderId, [FromQuery] string? status = null, [FromQuery] string? code = null)
+    {
+        // Redirect về trang hủy thanh toán trên FE với orderId để phân biệt với booking
+        var frontendUrl = _configuration["App:FrontendUrl"] ?? "http://localhost:5173";
+        var frontendCancelUrl = $"{frontendUrl}/payment-cancel?orderId={orderId}&status={status}&code={code}";
+        return Redirect(frontendCancelUrl);
     }
 }

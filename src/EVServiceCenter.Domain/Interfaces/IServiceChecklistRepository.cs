@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Entities;
@@ -18,6 +19,12 @@ public interface IServiceChecklistRepository
     Task UpsertItemsAsync(int templateId, IEnumerable<ServiceChecklistTemplateItem> items);
     Task SetActiveAsync(int templateId, bool isActive);
     Task DeleteTemplateAsync(int templateId);
+    
+    // New recommendation methods
+    Task<IReadOnlyList<ServiceChecklistTemplate>> GetRecommendedTemplatesAsync(
+        int currentKm, 
+        DateTime? lastMaintenanceDate, 
+        int? categoryId = null);
 }
 
 

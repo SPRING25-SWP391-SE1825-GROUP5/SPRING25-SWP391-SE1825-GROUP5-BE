@@ -74,6 +74,31 @@ public static class ApiConstants
         public const string Refunded = "REFUNDED";
     }
 
+    public static class OrderStatus
+    {
+        public const string Pending = "PENDING";
+        public const string Paid = "PAID";
+        public const string Completed = "COMPLETED";
+        public const string Cancelled = "CANCELLED";
+        public const string Canceled = "CANCELED";
+    }
+
+    public static class InvoiceStatus
+    {
+        public const string Pending = "PENDING";
+        public const string Paid = "PAID";
+        public const string Completed = "COMPLETED";
+    }
+
+    public static class ErrorTypes
+    {
+        public const string ValidationError = "VALIDATION_ERROR";
+        public const string OrderNotFound = "ORDER_NOT_FOUND";
+        public const string OrderInvalidState = "ORDER_INVALID_STATE";
+        public const string BusinessRuleViolation = "BUSINESS_RULE_VIOLATION";
+        public const string SystemError = "SYSTEM_ERROR";
+    }
+
     public static class ServiceType
     {
         public const string Maintenance = "MAINTENANCE";

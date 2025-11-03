@@ -63,4 +63,24 @@ namespace EVServiceCenter.Application.Models.Responses
         public string CustomerName { get; set; } = string.Empty;
         public string ServiceName { get; set; } = string.Empty;
     }
+
+    /// <summary>
+    /// Response cho API GetTechnicianBookingStats - thống kê số lượng booking của center và mỗi technician
+    /// </summary>
+    public class TechnicianBookingStatsResponse
+    {
+        public bool Success { get; set; } = true;
+        public int TotalBookings { get; set; }
+        public List<TechnicianBookingStatsItem> Technicians { get; set; } = new List<TechnicianBookingStatsItem>();
+    }
+
+    /// <summary>
+    /// Item trong danh sách thống kê booking của technician
+    /// </summary>
+    public class TechnicianBookingStatsItem
+    {
+        public int TechnicianId { get; set; }
+        public string TechnicianName { get; set; } = string.Empty;
+        public int BookingCount { get; set; }
+    }
 }

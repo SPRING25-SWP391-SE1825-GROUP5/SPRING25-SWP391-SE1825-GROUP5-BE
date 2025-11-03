@@ -172,5 +172,96 @@ namespace EVServiceCenter.Application.Service
                 AverageProcessingTimeHours = technicians.Any() ? technicians.Average(t => t.AverageProcessingTimeHours) : 0
             };
         }
+
+        /// <summary>
+        /// Lấy thống kê số lượng booking của center và mỗi technician thực hiện trong khoảng thời gian
+        /// Chỉ tính booking có trạng thái PAID hoặc COMPLETED
+        /// </summary>
+        public async Task<TechnicianBookingStatsResponse> GetTechnicianBookingStatsAsync(int centerId, DateTime? fromDate, DateTime? toDate)
+        {
+            try
+            {
+                // Tính toán khoảng thời gian (mặc định 30 ngày gần nhất)
+                var start = (fromDate ?? DateTime.Today.AddDays(-30)).Date;
+                var end = (toDate ?? DateTime.Today).Date.AddDays(1).AddTicks(-1);
+
+                // Validate date range
+                if (start > end)
+                {
+                    throw new ArgumentException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc", nameof(fromDate));
+                }
+
+                // Lấy tất cả bookings của center trong khoảng thời gian
+                var bookings = await _bookingRepository.GetBookingsByCenterIdAsync(
+                    centerId, 
+                    page: 1, 
+                    pageSize: int.MaxValue, 
+                    status: null, 
+                    fromDate: start, 
+                    toDate: end);
+
+                // Lọc chỉ lấy booking có trạng thái PAID hoặc COMPLETED và có technician được gán
+                var completedBookings = bookings
+                    .Where(b => 
+                        ((b.Status ?? string.Empty).ToUpperInvariant() == "PAID" || 
+                         (b.Status ?? string.Empty).ToUpperInvariant() == "COMPLETED") &&
+                        b.TechnicianTimeSlot != null)
+                    .ToList();
+
+                // Tổng số booking của center (chỉ tính booking đã gán technician)
+                var totalBookings = completedBookings.Count;
+
+                // Lấy tất cả technicians của center
+                var technicians = await _technicianRepository.GetTechniciansByCenterIdAsync(centerId);
+
+                // Nhóm bookings theo technician (thông qua TechnicianTimeSlot)
+                var bookingCountByTechnician = new Dictionary<int, int>();
+
+                foreach (var booking in completedBookings)
+                {
+                    // Lấy technicianId từ TechnicianTimeSlot (đã filter ở trên nên không null)
+                    var technicianId = booking.TechnicianTimeSlot!.TechnicianId;
+                    
+                    if (!bookingCountByTechnician.ContainsKey(technicianId))
+                    {
+                        bookingCountByTechnician[technicianId] = 0;
+                    }
+                    
+                    bookingCountByTechnician[technicianId]++;
+                }
+
+                // Tạo danh sách technicians với số booking đã thực hiện
+                // Bao gồm cả technicians không có booking (bookingCount = 0)
+                var technicianItems = technicians
+                    .Select(technician => new TechnicianBookingStatsItem
+                    {
+                        TechnicianId = technician.TechnicianId,
+                        TechnicianName = technician.User?.FullName ?? "Unknown",
+                        BookingCount = bookingCountByTechnician.ContainsKey(technician.TechnicianId) 
+                            ? bookingCountByTechnician[technician.TechnicianId] 
+                            : 0
+                    })
+                    .OrderByDescending(x => x.BookingCount)
+                    .ThenBy(x => x.TechnicianName)
+                    .ToList();
+
+                return new TechnicianBookingStatsResponse
+                {
+                    Success = true,
+                    TotalBookings = totalBookings,
+                    Technicians = technicianItems
+                };
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Lỗi validation khi lấy thống kê booking của technician cho center {CenterId}", centerId);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy thống kê booking của technician cho center {CenterId}", centerId);
+                throw;
+            }
+        }
     }
 }

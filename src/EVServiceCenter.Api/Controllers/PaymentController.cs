@@ -338,14 +338,25 @@ public class PaymentController : ControllerBase
 			else if (!string.IsNullOrEmpty(request.Description))
 			{
 				// Parse từ Description với format "Pay{bookingId}ment"
-				// Ví dụ: "Pay123ment" -> bookingId = 123
-				if (request.Description.StartsWith("Pay", StringComparison.OrdinalIgnoreCase)
-					&& request.Description.EndsWith("ment", StringComparison.OrdinalIgnoreCase))
+				// SePay có thể gửi Description với format: "BankAPINotify Pay157ment FT25308510006606..."
+				// Cần tìm pattern "Pay{number}ment" trong Description
+				var descriptionText = request.Description;
+
+				// Tìm pattern "Pay" trong Description
+				var payIndex = descriptionText.IndexOf("Pay", StringComparison.OrdinalIgnoreCase);
+				if (payIndex >= 0)
 				{
-					var content = request.Description.Substring(3, request.Description.Length - 7); // Bỏ "Pay" và "ment"
-					if (int.TryParse(content, out var extractedBookingId))
+					// Tìm "ment" sau "Pay"
+					var mentIndex = descriptionText.IndexOf("ment", payIndex + 3, StringComparison.OrdinalIgnoreCase);
+					if (mentIndex > payIndex + 3)
 					{
-						bookingId = extractedBookingId;
+						// Extract số giữa "Pay" và "ment"
+						var bookingIdStr = descriptionText.Substring(payIndex + 3, mentIndex - payIndex - 3);
+						if (int.TryParse(bookingIdStr, out var extractedBookingId))
+						{
+							bookingId = extractedBookingId;
+							_logger.LogInformation("SePay webhook: Extracted bookingId {BookingId} from Description: {Description}", extractedBookingId, descriptionText);
+						}
 					}
 				}
 			}
@@ -382,20 +393,29 @@ public class PaymentController : ControllerBase
 			_logger.LogInformation("SePay webhook: Extracted bookingId = {BookingId}", bookingId.Value);
 
 			// Kiểm tra trạng thái thanh toán từ SePay
-			// SePay thường gửi status: "SUCCESS", "PAID", "COMPLETED" cho thanh toán thành công
+			// SePay gọi webhook khi thanh toán thành công, nếu có Description chứa "BankAPINotify" thì coi như thành công
 			var paymentStatus = request.Status?.ToUpperInvariant() ?? "";
+			var description = request.Description ?? "";
+
+			// Check payment success từ nhiều điều kiện:
+			// 1. Status có giá trị thành công
+			// 2. Code = "00"
+			// 3. Description chứa "BankAPINotify" (SePay gửi khi thanh toán thành công qua bank API)
 			var isPaymentSuccess = paymentStatus == "SUCCESS"
 				|| paymentStatus == "PAID"
 				|| paymentStatus == "COMPLETED"
-				|| paymentStatus == "00"  // Nếu SePay dùng code 00 như PayOS
-				|| (request.Code == "00");
+				|| paymentStatus == "00"
+				|| (request.Code == "00")
+				|| description.Contains("BankAPINotify", StringComparison.OrdinalIgnoreCase);
 
 			if (!isPaymentSuccess)
 			{
-				_logger.LogInformation("SePay webhook: Payment not successful. Status: {Status}, Code: {Code}", paymentStatus, request.Code);
+				_logger.LogInformation("SePay webhook: Payment not successful. Status: {Status}, Code: {Code}, Description: {Description}", paymentStatus, request.Code, description);
 				// Trả về 200 OK để SePay không retry, nhưng không xử lý payment
 				return Ok(new { success = true, message = "Webhook received but payment not successful" });
 			}
+
+			_logger.LogInformation("SePay webhook: Payment confirmed as successful. Status: {Status}, Code: {Code}, Description: {Description}", paymentStatus, request.Code, description);
 
 			// Xác nhận thanh toán
 			_logger.LogInformation("SePay webhook: Payment successful, confirming payment for booking {BookingId}", bookingId.Value);

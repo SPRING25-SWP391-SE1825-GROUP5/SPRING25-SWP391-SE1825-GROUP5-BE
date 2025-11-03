@@ -22,10 +22,10 @@ jobs:
         run: dotnet restore EVServiceBE.sln
 
       - name: Build
-        run: dotnet build -c Release --no-restore
+        run: dotnet build EVServiceBE.sln -c Release --no-restore
 
       - name: Test
-        run: dotnet test -c Release --no-build --verbosity normal
+        run: dotnet test EVServiceBE.sln -c Release --no-build --verbosity normal
 
   deploy:
     needs: build-test
@@ -40,9 +40,9 @@ jobs:
             echo "RENDER_DEPLOY_HOOK secret is not set" >&2
             exit 1
           fi
-          
+
           echo "Triggering deploy hook: $DEPLOY_HOOK"
-          
+
           # Try with different curl options for better error handling
           curl -v -X POST "$DEPLOY_HOOK" \
             -H "Content-Type: application/json" \
@@ -61,5 +61,5 @@ jobs:
                 --max-time 60 || true
               exit 1
             }
-          
+
           echo "Deploy hook triggered successfully"

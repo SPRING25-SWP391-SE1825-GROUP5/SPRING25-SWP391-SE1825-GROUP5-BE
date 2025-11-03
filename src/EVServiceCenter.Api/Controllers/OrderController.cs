@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using EVServiceCenter.Application.Configurations;
 using System.IO;
+using Microsoft.Extensions.Configuration;
+using EVServiceCenter.Api.Constants;
 
 namespace EVServiceCenter.Api.Controllers;
 
@@ -22,13 +24,15 @@ public class OrderController : ControllerBase
     private readonly PaymentService _paymentService;
     private readonly IOrderHistoryService _orderHistoryService;
     private readonly IOptions<ExportOptions> _exportOptions;
+    private readonly IConfiguration _configuration;
 
-    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions)
+    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration)
     {
         _orderService = orderService;
         _paymentService = paymentService;
         _orderHistoryService = orderHistoryService;
         _exportOptions = exportOptions;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -84,10 +88,10 @@ public class OrderController : ControllerBase
             // Tạo cancel URL riêng cho order để phân biệt với booking
             var frontendUrl = _configuration["App:FrontendUrl"] ?? "http://localhost:5173";
             var orderCancelUrl = $"{frontendUrl}/api/payment/order/{orderId}/cancel";
-            
+
             var url = await _paymentService.CreateOrderPaymentLinkAsync(orderId, orderCancelUrl);
-            return Ok(new { 
-                success = true, 
+            return Ok(new {
+                success = true,
                 checkoutUrl = url,
                 orderId = orderId,
                 message = "Tạo payment link thành công"
@@ -96,8 +100,8 @@ public class OrderController : ControllerBase
         catch (ArgumentException ex)
         {
             // Validation lỗi: orderId không hợp lệ
-            return BadRequest(new { 
-                success = false, 
+            return BadRequest(new {
+                success = false,
                 message = ex.Message,
                 errorType = ApiConstants.ErrorTypes.ValidationError,
                 orderId = orderId
@@ -107,12 +111,12 @@ public class OrderController : ControllerBase
         {
             // Business logic lỗi: order không tồn tại, đã hủy, đã thanh toán, v.v.
             var message = ex.Message;
-            
+
             // Phân loại lỗi dựa trên message để trả về status code phù hợp
             if (message.Contains("không tồn tại") || message.Contains("Không tìm thấy"))
             {
-                return NotFound(new { 
-                    success = false, 
+                return NotFound(new {
+                    success = false,
                     message = message,
                     errorType = ApiConstants.ErrorTypes.OrderNotFound,
                     orderId = orderId
@@ -120,8 +124,8 @@ public class OrderController : ControllerBase
             }
             else if (message.Contains("đã bị hủy") || message.Contains("đã được thanh toán") || message.Contains("hóa đơn thanh toán"))
             {
-                return BadRequest(new { 
-                    success = false, 
+                return BadRequest(new {
+                    success = false,
                     message = message,
                     errorType = ApiConstants.ErrorTypes.OrderInvalidState,
                     orderId = orderId
@@ -129,8 +133,8 @@ public class OrderController : ControllerBase
             }
             else
             {
-                return BadRequest(new { 
-                    success = false, 
+                return BadRequest(new {
+                    success = false,
                     message = message,
                     errorType = ApiConstants.ErrorTypes.BusinessRuleViolation,
                     orderId = orderId
@@ -140,8 +144,8 @@ public class OrderController : ControllerBase
         catch (Exception ex)
         {
             // Lỗi hệ thống không mong đợi
-            return StatusCode(500, new { 
-                success = false, 
+            return StatusCode(500, new {
+                success = false,
                 message = $"Lỗi hệ thống khi tạo payment link: {ex.Message}",
                 errorType = ApiConstants.ErrorTypes.SystemError,
                 orderId = orderId
@@ -160,15 +164,15 @@ public class OrderController : ControllerBase
             var checkoutUrl = await _paymentService.GetExistingOrderPaymentLinkAsync(orderId);
             if (string.IsNullOrEmpty(checkoutUrl))
             {
-                return NotFound(new { 
-                    success = false, 
+                return NotFound(new {
+                    success = false,
                     message = $"Không tìm thấy payment link cho đơn hàng #{orderId}. Payment link có thể chưa được tạo hoặc đã hết hạn.",
                     orderId = orderId
                 });
             }
-            
-            return Ok(new { 
-                success = true, 
+
+            return Ok(new {
+                success = true,
                 checkoutUrl = checkoutUrl,
                 orderCode = orderId,
                 message = "Lấy payment link thành công"
@@ -177,8 +181,8 @@ public class OrderController : ControllerBase
         catch (ArgumentException ex)
         {
             // Validation lỗi: orderId không hợp lệ
-            return BadRequest(new { 
-                success = false, 
+            return BadRequest(new {
+                success = false,
                 message = ex.Message,
                 errorType = ApiConstants.ErrorTypes.ValidationError,
                 orderId = orderId
@@ -188,12 +192,12 @@ public class OrderController : ControllerBase
         {
             // Business logic lỗi: order không tồn tại, đã hủy, đã thanh toán, v.v.
             var message = ex.Message;
-            
+
             // Phân loại lỗi dựa trên message để trả về status code phù hợp
             if (message.Contains("không tồn tại") || message.Contains("Không tìm thấy"))
             {
-                return NotFound(new { 
-                    success = false, 
+                return NotFound(new {
+                    success = false,
                     message = message,
                     errorType = ApiConstants.ErrorTypes.OrderNotFound,
                     orderId = orderId
@@ -201,8 +205,8 @@ public class OrderController : ControllerBase
             }
             else if (message.Contains("đã bị hủy") || message.Contains("đã được thanh toán") || message.Contains("hóa đơn thanh toán"))
             {
-                return BadRequest(new { 
-                    success = false, 
+                return BadRequest(new {
+                    success = false,
                     message = message,
                     errorType = ApiConstants.ErrorTypes.OrderInvalidState,
                     orderId = orderId
@@ -210,8 +214,8 @@ public class OrderController : ControllerBase
             }
             else
             {
-                return BadRequest(new { 
-                    success = false, 
+                return BadRequest(new {
+                    success = false,
                     message = message,
                     errorType = ApiConstants.ErrorTypes.BusinessRuleViolation,
                     orderId = orderId
@@ -221,8 +225,8 @@ public class OrderController : ControllerBase
         catch (Exception ex)
         {
             // Lỗi hệ thống không mong đợi
-            return StatusCode(500, new { 
-                success = false, 
+            return StatusCode(500, new {
+                success = false,
                 message = $"Lỗi hệ thống khi lấy payment link: {ex.Message}",
                 errorType = ApiConstants.ErrorTypes.SystemError,
                 orderId = orderId

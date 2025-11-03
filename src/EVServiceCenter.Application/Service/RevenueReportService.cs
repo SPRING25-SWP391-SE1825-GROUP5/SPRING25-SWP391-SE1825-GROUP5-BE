@@ -14,16 +14,19 @@ namespace EVServiceCenter.Application.Service
     public class RevenueReportService : IRevenueReportService
     {
         private readonly IBookingRepository _bookingRepository;
-        private readonly IWorkOrderPartRepository _workOrderPartRepository;
+        private readonly IInvoiceRepository _invoiceRepository;
+        private readonly IPaymentRepository _paymentRepository;
         private readonly ILogger<RevenueReportService> _logger;
 
         public RevenueReportService(
             IBookingRepository bookingRepository,
-            IWorkOrderPartRepository workOrderPartRepository,
+            IInvoiceRepository invoiceRepository,
+            IPaymentRepository paymentRepository,
             ILogger<RevenueReportService> logger)
         {
             _bookingRepository = bookingRepository;
-            _workOrderPartRepository = workOrderPartRepository;
+            _invoiceRepository = invoiceRepository;
+            _paymentRepository = paymentRepository;
             _logger = logger;
         }
 
@@ -31,21 +34,37 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Lấy dữ liệu booking đã thanh toán trong khoảng thời gian
-                var paidBookings = await GetPaidBookingsAsync(centerId, request.StartDate, request.EndDate);
-                
-                // Lấy dữ liệu phụ tùng đã sử dụng
-                var workOrderParts = await _workOrderPartRepository.GetByCenterAndDateRangeAsync(
-                    centerId, request.StartDate, request.EndDate);
+                // Lấy tất cả booking của center
+                var allCenterBookings = await _bookingRepository.GetBookingsByCenterIdAsync(
+                    centerId, page: 1, pageSize: int.MaxValue, status: null);
 
-                // Tính toán doanh thu theo từng khoảng thời gian
-                var revenueByPeriod = CalculateRevenueByPeriod(paidBookings, workOrderParts, request.Period);
+                // Map bookingId -> booking để lấy service/technician cho groupBy
+                var bookingById = allCenterBookings.ToDictionary(b => b.BookingId, b => b);
+
+                // Thu thập payments SUCCESS theo PaidAt trong range
+                var bookingPaymentAmounts = new List<(DateTime paidAt, int bookingId, decimal amount)>();
+                foreach (var booking in allCenterBookings)
+                {
+                    var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
+                    if (invoice == null) continue;
+                    var payments = await _paymentRepository.GetByInvoiceIdAsync(invoice.InvoiceId, status: "COMPLETED", method: null, from: request.StartDate, to: request.EndDate);
+                    foreach (var p in payments)
+                    {
+                        if (p.PaidAt.HasValue)
+                        {
+                            bookingPaymentAmounts.Add((p.PaidAt.Value, booking.BookingId, p.Amount));
+                        }
+                    }
+                }
+
+                // Tính toán doanh thu theo từng khoảng thời gian dựa trên PaidAt
+                var revenueByPeriod = CalculateRevenueByPeriodFromPayments(bookingPaymentAmounts, request.Period);
 
                 // Tính summary
-                var summary = CalculateSummary(revenueByPeriod, paidBookings);
+                var summary = CalculateSummaryFromPayments(revenueByPeriod);
 
-                // Phân nhóm dữ liệu
-                var groupedData = CalculateGroupedData(paidBookings, workOrderParts, request.GroupBy);
+                // Phân nhóm dữ liệu theo service/technician bằng tổng amount theo booking
+                var groupedData = CalculateGroupedDataFromPayments(bookingPaymentAmounts, bookingById, request.GroupBy);
 
                 // Tính alerts
                 var alerts = await CalculateAlertsAsync(centerId, revenueByPeriod, request.StartDate, request.EndDate);
@@ -77,58 +96,37 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        private async Task<List<Booking>> GetPaidBookingsAsync(int centerId, DateTime startDate, DateTime endDate)
+        // New calculations based on PaidAt payments
+        private List<RevenueByPeriod> CalculateRevenueByPeriodFromPayments(List<(DateTime paidAt, int bookingId, decimal amount)> bookingPayments, string period)
         {
-            // Lấy tất cả bookings đã thanh toán của center trong khoảng thời gian
-            var allBookings = await _bookingRepository.GetBookingsByCenterIdAsync(
-                centerId, 
-                page: 1, 
-                pageSize: int.MaxValue, 
-                status: "PAID");
-
-            // Filter theo UpdatedAt vì repository filter theo CreatedAt
-            var filteredBookings = allBookings.Where(b => b.UpdatedAt >= startDate && b.UpdatedAt <= endDate).ToList();
-            
-            // Debug logging
-            _logger.LogInformation($"Found {allBookings.Count} paid bookings for center {centerId}");
-            _logger.LogInformation($"After date filter: {filteredBookings.Count} bookings");
-            
-            foreach (var booking in filteredBookings)
-            {
-                _logger.LogInformation($"Booking {booking.BookingId}: Service={booking.Service?.ServiceName}, BasePrice={booking.Service?.BasePrice}, UpdatedAt={booking.UpdatedAt}");
-            }
-            
-            return filteredBookings;
+            var result = bookingPayments
+                .GroupBy(x => GetPeriodKey(x.paidAt, period))
+                .Select(g => new RevenueByPeriod
+                {
+                    Period = g.Key,
+                    Revenue = g.Sum(x => x.amount),
+                    Bookings = g.Select(x => x.bookingId).Distinct().Count(),
+                    Services = g.Sum(x => x.amount),
+                    Parts = 0
+                })
+                .OrderBy(r => r.Period)
+                .ToList();
+            return result;
         }
 
-        private List<RevenueByPeriod> CalculateRevenueByPeriod(List<Booking> bookings, List<WorkOrderPart> workOrderParts, string period)
+        private RevenueSummary CalculateSummaryFromPayments(List<RevenueByPeriod> revenueByPeriod)
         {
-            var result = new List<RevenueByPeriod>();
-            
-            // Group by period
-            var groupedBookings = bookings.GroupBy(b => GetPeriodKey(b.UpdatedAt, period));
-            var groupedParts = workOrderParts.GroupBy(wop => GetPeriodKey(wop.Booking.UpdatedAt, period));
-
-            foreach (var group in groupedBookings)
+            var totalRevenue = revenueByPeriod.Sum(r => r.Revenue);
+            var totalBookings = revenueByPeriod.Sum(r => r.Bookings);
+            var averageRevenuePerBooking = totalBookings > 0 ? totalRevenue / totalBookings : 0;
+            return new RevenueSummary
             {
-                var periodKey = group.Key;
-                var periodBookings = group.ToList();
-                var periodParts = groupedParts.FirstOrDefault(g => g.Key == periodKey)?.ToList() ?? new List<WorkOrderPart>();
-
-                var revenue = periodBookings.Sum(b => b.Service?.BasePrice ?? 0);
-                var partsRevenue = periodParts.Sum(wop => wop.QuantityUsed * wop.Part.Price);
-
-                result.Add(new RevenueByPeriod
-                {
-                    Period = periodKey,
-                    Revenue = revenue + partsRevenue,
-                    Bookings = periodBookings.Count,
-                    Services = revenue,
-                    Parts = partsRevenue
-                });
-            }
-
-            return result.OrderBy(r => r.Period).ToList();
+                TotalRevenue = totalRevenue,
+                TotalBookings = totalBookings,
+                AverageRevenuePerBooking = averageRevenuePerBooking,
+                GrowthRate = "+15%",
+                AlertLevel = "normal"
+            };
         }
 
         private string GetPeriodKey(DateTime date, string period)
@@ -171,34 +169,47 @@ namespace EVServiceCenter.Application.Service
             };
         }
 
-        private GroupedRevenueData CalculateGroupedData(List<Booking> bookings, List<WorkOrderPart> workOrderParts, string groupBy)
+        private GroupedRevenueData CalculateGroupedDataFromPayments(List<(DateTime paidAt, int bookingId, decimal amount)> bookingPayments, Dictionary<int, Booking> bookingById, string groupBy)
         {
             var result = new GroupedRevenueData();
+            var bookingAmount = bookingPayments
+                .GroupBy(x => x.bookingId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.amount));
 
             if (groupBy == "service")
             {
-                var serviceGroups = bookings.GroupBy(b => b.ServiceId);
-                result.ByService = serviceGroups.Select(g => new ServiceRevenue
-                {
-                    ServiceId = g.Key,
-                    ServiceName = g.First().Service?.ServiceName ?? "Unknown",
-                    Revenue = g.Sum(b => b.Service?.BasePrice ?? 0),
-                    Bookings = g.Count(),
-                    Percentage = 0 // TODO: Calculate percentage
-                }).ToList();
+                var data = bookingAmount
+                    .Select(kv => new { bookingId = kv.Key, amount = kv.Value, booking = bookingById.GetValueOrDefault(kv.Key) })
+                    .Where(x => x.booking != null)
+                    .GroupBy(x => x.booking!.ServiceId)
+                    .Select(g => new ServiceRevenue
+                    {
+                        ServiceId = g.Key,
+                        ServiceName = g.First().booking!.Service?.ServiceName ?? "Unknown",
+                        Revenue = g.Sum(x => x.amount),
+                        Bookings = g.Count(),
+                        Percentage = 0
+                    })
+                    .ToList();
+                result.ByService = data;
             }
 
             if (groupBy == "technician")
             {
-                var technicianGroups = bookings.Where(b => b.TechnicianSlotId.HasValue).GroupBy(b => b.TechnicianSlotId!.Value);
-                result.ByTechnician = technicianGroups.Select(g => new TechnicianRevenue
-                {
-                    TechnicianId = g.First().TechnicianTimeSlot?.TechnicianId ?? 0,
-                    TechnicianName = g.First().TechnicianTimeSlot?.Technician?.User?.FullName ?? "Unknown",
-                    Revenue = g.Sum(b => b.Service?.BasePrice ?? 0),
-                    Bookings = g.Count(),
-                    AverageRating = 4.5 // TODO: Calculate actual rating
-                }).ToList();
+                var data = bookingAmount
+                    .Select(kv => new { bookingId = kv.Key, amount = kv.Value, booking = bookingById.GetValueOrDefault(kv.Key) })
+                    .Where(x => x.booking != null && x.booking.TechnicianSlotId.HasValue)
+                    .GroupBy(x => x.booking!.TechnicianTimeSlot?.TechnicianId ?? 0)
+                    .Select(g => new TechnicianRevenue
+                    {
+                        TechnicianId = g.Key,
+                        TechnicianName = g.First().booking!.TechnicianTimeSlot?.Technician?.User?.FullName ?? "Unknown",
+                        Revenue = g.Sum(x => x.amount),
+                        Bookings = g.Count(),
+                        AverageRating = 4.5
+                    })
+                    .ToList();
+                result.ByTechnician = data;
             }
 
             return result;

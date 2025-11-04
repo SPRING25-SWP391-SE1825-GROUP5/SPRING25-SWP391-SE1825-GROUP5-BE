@@ -95,16 +95,24 @@ namespace EVServiceCenter.Application.Service
                 
                 Console.WriteLine($"User created with ID: {user.UserId}");
 
-                // Tạo Customer record tương ứng
-                var customer = new Customer
+                // Chỉ tạo Customer record nếu role là CUSTOMER
+                // Tránh tạo customer cho các role staff, technician, manager, admin
+                if (user.Role == "CUSTOMER")
                 {
-                    UserId = user.UserId,
-                    IsGuest = false
-                };
+                    var customer = new Customer
+                    {
+                        UserId = user.UserId,
+                        IsGuest = false
+                    };
 
-                Console.WriteLine($"Creating customer for UserId: {user.UserId}");
-                await _customerRepository.CreateCustomerAsync(customer);
-                Console.WriteLine($"Customer created successfully for UserId: {user.UserId}");
+                    Console.WriteLine($"Creating customer for UserId: {user.UserId}");
+                    await _customerRepository.CreateCustomerAsync(customer);
+                    Console.WriteLine($"Customer created successfully for UserId: {user.UserId}");
+                }
+                else
+                {
+                    Console.WriteLine($"Skipping customer creation for UserId: {user.UserId} with role: {user.Role}");
+                }
 
                 // Tạo và gửi mã OTP xác thực email
                 try

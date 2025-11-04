@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Application.Models;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
@@ -15,17 +16,23 @@ namespace EVServiceCenter.Application.Service
         private readonly ITechnicianRepository _technicianRepository;
         private readonly IBookingRepository _bookingRepository;
         private readonly ITechnicianTimeSlotRepository _technicianTimeSlotRepository;
+        private readonly ICenterRepository _centerRepository;
+        private readonly ITimeSlotRepository _timeSlotRepository;
         private readonly ILogger<TechnicianReportsService> _logger;
 
         public TechnicianReportsService(
             ITechnicianRepository technicianRepository,
             IBookingRepository bookingRepository,
             ITechnicianTimeSlotRepository technicianTimeSlotRepository,
+            ICenterRepository centerRepository,
+            ITimeSlotRepository timeSlotRepository,
             ILogger<TechnicianReportsService> logger)
         {
             _technicianRepository = technicianRepository;
             _bookingRepository = bookingRepository;
             _technicianTimeSlotRepository = technicianTimeSlotRepository;
+            _centerRepository = centerRepository;
+            _timeSlotRepository = timeSlotRepository;
             _logger = logger;
         }
 
@@ -175,7 +182,7 @@ namespace EVServiceCenter.Application.Service
 
         /// <summary>
         /// Lấy thống kê số lượng booking của center và mỗi technician thực hiện trong khoảng thời gian
-        /// Chỉ tính booking có trạng thái PAID hoặc COMPLETED
+        /// Chỉ tính booking có trạng thái PAID (đã thanh toán)
         /// </summary>
         public async Task<TechnicianBookingStatsResponse> GetTechnicianBookingStatsAsync(int centerId, DateTime? fromDate, DateTime? toDate)
         {
@@ -200,16 +207,15 @@ namespace EVServiceCenter.Application.Service
                     fromDate: start, 
                     toDate: end);
 
-                // Lọc chỉ lấy booking có trạng thái PAID hoặc COMPLETED và có technician được gán
-                var completedBookings = bookings
+                // Lọc chỉ lấy booking có trạng thái PAID và có technician được gán
+                var paidBookings = bookings
                     .Where(b => 
-                        ((b.Status ?? string.Empty).ToUpperInvariant() == "PAID" || 
-                         (b.Status ?? string.Empty).ToUpperInvariant() == "COMPLETED") &&
+                        (b.Status ?? string.Empty).ToUpperInvariant() == "PAID" &&
                         b.TechnicianTimeSlot != null)
                     .ToList();
 
-                // Tổng số booking của center (chỉ tính booking đã gán technician)
-                var totalBookings = completedBookings.Count;
+                // Tổng số booking của center (chỉ tính booking đã gán technician và đã thanh toán)
+                var totalBookings = paidBookings.Count;
 
                 // Lấy tất cả technicians của center
                 var technicians = await _technicianRepository.GetTechniciansByCenterIdAsync(centerId);
@@ -217,7 +223,7 @@ namespace EVServiceCenter.Application.Service
                 // Nhóm bookings theo technician (thông qua TechnicianTimeSlot)
                 var bookingCountByTechnician = new Dictionary<int, int>();
 
-                foreach (var booking in completedBookings)
+                foreach (var booking in paidBookings)
                 {
                     // Lấy technicianId từ TechnicianTimeSlot (đã filter ở trên nên không null)
                     var technicianId = booking.TechnicianTimeSlot!.TechnicianId;
@@ -504,6 +510,101 @@ namespace EVServiceCenter.Application.Service
         {
             var quarter = (date.Month - 1) / 3 + 1;
             return $"{date.Year}-Q{quarter}";
+        }
+
+        /// <summary>
+        /// Lấy thống kê số lượng slot được đặt theo giờ để đánh giá giờ cao điểm của trung tâm
+        /// </summary>
+        public async Task<PeakHourStatsResponse> GetPeakHourStatsAsync(int centerId, DateTime? fromDate, DateTime? toDate)
+        {
+            try
+            {
+                // Validate center
+                var center = await _centerRepository.GetCenterByIdAsync(centerId);
+                if (center == null)
+                {
+                    throw new ArgumentException($"Không tìm thấy trung tâm với ID: {centerId}", nameof(centerId));
+                }
+
+                // Tính toán khoảng thời gian (mặc định 30 ngày gần nhất)
+                var start = (fromDate ?? DateTime.Today.AddDays(-30)).Date;
+                var end = (toDate ?? DateTime.Today).Date.AddDays(1).AddTicks(-1);
+
+                // Validate date range
+                if (start > end)
+                {
+                    throw new ArgumentException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc", nameof(fromDate));
+                }
+
+                // Lấy tất cả TimeSlot active trong hệ thống (để trả về tất cả slot)
+                var allTimeSlots = await _timeSlotRepository.GetActiveTimeSlotsAsync();
+
+                // Lấy tất cả TechnicianTimeSlot của center trong khoảng thời gian
+                var slots = await _technicianTimeSlotRepository.GetByCenterAndDateRangeAsync(centerId, start, end);
+
+                // Danh sách status hợp lệ để tính booked slot (chỉ tính slot đã được đặt)
+                var validBookingStatuses = new[] { "PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "PAID" };
+
+                // Lọc chỉ lấy slot đã được đặt (có BookingId và booking có status hợp lệ)
+                var bookedSlots = slots
+                    .Where(s => 
+                        s.BookingId != null && 
+                        s.Booking != null &&
+                        validBookingStatuses.Contains((s.Booking.Status ?? "").ToUpperInvariant()))
+                    .ToList();
+
+                var totalBookedSlots = bookedSlots.Count;
+
+                // Nhóm booked slots theo SlotId để đếm số slot được đặt theo từng giờ
+                var bookedSlotsByTimeSlot = bookedSlots
+                    .GroupBy(s => s.SlotId)
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                // Tạo danh sách hourly stats với TẤT CẢ slot (bao gồm cả slot không có booking = 0)
+                // Sắp xếp theo giờ để dễ vẽ chart
+                var hourlyStatsItems = allTimeSlots
+                    .OrderBy(ts => ts.SlotTime)
+                    .Select(timeSlot =>
+                    {
+                        var bookedCount = bookedSlotsByTimeSlot.ContainsKey(timeSlot.SlotId) 
+                            ? bookedSlotsByTimeSlot[timeSlot.SlotId] 
+                            : 0;
+
+                        return new PeakHourStatsItem
+                        {
+                            SlotId = timeSlot.SlotId,
+                            SlotTime = timeSlot.SlotTime.ToString("HH:mm"),
+                            SlotLabel = timeSlot.SlotLabel,
+                            TotalBookedSlots = bookedCount
+                        };
+                    })
+                    .ToList();
+
+                return new PeakHourStatsResponse
+                {
+                    Success = true,
+                    CenterId = centerId,
+                    CenterName = center.CenterName,
+                    TotalBookedSlots = totalBookedSlots,
+                    HourlyStats = hourlyStatsItems,
+                    DateRange = new DateRangeInfo
+                    {
+                        StartDate = start.ToString("yyyy-MM-dd"),
+                        EndDate = end.ToString("yyyy-MM-dd")
+                    },
+                    LastUpdated = DateTime.UtcNow
+                };
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Lỗi validation khi lấy thống kê giờ cao điểm cho center {CenterId}", centerId);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy thống kê giờ cao điểm cho center {CenterId}", centerId);
+                throw;
+            }
         }
     }
 }

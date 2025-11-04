@@ -648,7 +648,7 @@ namespace EVServiceCenter.Application.Service
 
                 // Thêm dữ liệu kết quả kiểm tra
                 int stt = 1;
-                foreach (var result in maintenanceResults.OrderBy(r => r.PartId))
+                foreach (var result in maintenanceResults.OrderBy(r => r.CategoryId ?? int.MaxValue))
                 {
                     // STT
                     maintenanceTable.AddCell(new Cell()
@@ -663,9 +663,9 @@ namespace EVServiceCenter.Application.Service
                         .SetTextAlignment(TextAlignment.CENTER));
 
                     // Nội dung kiểm tra
-                    var partName = result.Part?.PartName ?? result.Description ?? "N/A";
+                    var categoryName = result.Category?.CategoryName ?? result.Description ?? "N/A";
                     maintenanceTable.AddCell(new Cell()
-                        .Add(new Paragraph(partName).SetFont(font).SetFontSize(10))
+                        .Add(new Paragraph(categoryName).SetFont(font).SetFontSize(10))
                         .SetPadding(8));
 
                     // Cấp bảo dưỡng (để trống vì không có thông tin)

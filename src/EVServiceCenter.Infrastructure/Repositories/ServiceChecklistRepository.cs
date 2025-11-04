@@ -36,44 +36,30 @@ public class ServiceChecklistRepository : IServiceChecklistRepository
 
     public async Task<IReadOnlyList<ServiceChecklistTemplateItem>> GetItemsByTemplateAsync(int templateId)
         => await _db.ServiceChecklistTemplateItems.AsNoTracking()
-            .Include(i => i.Part)
+            .Include(i => i.Category)
             .Where(i => i.TemplateID == templateId)
             .OrderBy(i => i.ItemID)
             .ToListAsync();
 
-    public async Task AddPartToTemplateAsync(int templateId, int partId)
+    public async Task AddCategoryToTemplateAsync(int templateId, int categoryId)
     {
-        // Kiểm tra template có tồn tại không
         var template = await _db.ServiceChecklistTemplates.FirstOrDefaultAsync(t => t.TemplateID == templateId);
         if (template == null) throw new ArgumentException("Template không tồn tại");
 
-        // Kiểm tra part có tồn tại không
-        var part = await _db.Parts.FirstOrDefaultAsync(p => p.PartId == partId);
-        if (part == null) throw new ArgumentException("Part không tồn tại");
+        var category = await _db.PartCategories.FirstOrDefaultAsync(c => c.CategoryId == categoryId);
+        if (category == null) throw new ArgumentException("Category không tồn tại");
 
-        // Kiểm tra part đã có trong template chưa
         var existing = await _db.ServiceChecklistTemplateItems
-            .FirstOrDefaultAsync(i => i.TemplateID == templateId && i.PartID == partId);
-        if (existing != null) throw new ArgumentException("Part đã có trong template");
+            .FirstOrDefaultAsync(i => i.TemplateID == templateId && i.CategoryId == categoryId);
+        if (existing != null) throw new ArgumentException("Category đã có trong template");
 
-        // Thêm part vào template
         var item = new ServiceChecklistTemplateItem
         {
             TemplateID = templateId,
-            PartID = partId,
+            CategoryId = categoryId,
             CreatedAt = DateTime.UtcNow
         };
         await _db.ServiceChecklistTemplateItems.AddAsync(item);
-        await _db.SaveChangesAsync();
-    }
-
-    public async Task RemovePartFromTemplateAsync(int templateId, int partId)
-    {
-        var item = await _db.ServiceChecklistTemplateItems
-            .FirstOrDefaultAsync(i => i.TemplateID == templateId && i.PartID == partId);
-        if (item == null) throw new ArgumentException("Part không có trong template");
-
-        _db.ServiceChecklistTemplateItems.Remove(item);
         await _db.SaveChangesAsync();
     }
 
@@ -110,8 +96,7 @@ public class ServiceChecklistRepository : IServiceChecklistRepository
         {
             if (incoming.ItemID != 0 && byKey.TryGetValue(incoming.ItemID, out var found))
             {
-                found.PartID = incoming.PartID;
-                // nếu sau này có DefaultQuantity thì set tại đây
+                found.CategoryId = incoming.CategoryId;
             }
             else
             {
@@ -155,8 +140,8 @@ public class ServiceChecklistRepository : IServiceChecklistRepository
     }
 
     public async Task<IReadOnlyList<ServiceChecklistTemplate>> GetRecommendedTemplatesAsync(
-        int currentKm, 
-        DateTime? lastMaintenanceDate, 
+        int currentKm,
+        DateTime? lastMaintenanceDate,
         int? categoryId = null)
     {
         var query = _db.ServiceChecklistTemplates

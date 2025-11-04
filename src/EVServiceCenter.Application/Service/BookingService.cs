@@ -29,6 +29,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
         private readonly ILogger<BookingService> _logger;
         private readonly IWorkOrderPartRepository _workOrderPartRepository;
+        private readonly IPartRepository _partRepository;
 
 
         public BookingService(
@@ -46,7 +47,8 @@ namespace EVServiceCenter.Application.Service
             IServiceChecklistRepository serviceChecklistRepository,
             IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository,
             ILogger<BookingService> logger,
-            IWorkOrderPartRepository workOrderPartRepository)
+            IWorkOrderPartRepository workOrderPartRepository,
+            IPartRepository partRepository)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -63,6 +65,7 @@ namespace EVServiceCenter.Application.Service
             _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
             _logger = logger;
             _workOrderPartRepository = workOrderPartRepository;
+            _partRepository = partRepository;
         }
 
         public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int>? serviceIds = null)
@@ -525,17 +528,31 @@ namespace EVServiceCenter.Application.Service
                     var templateItems = await _serviceChecklistRepository.GetItemsByTemplateAsync(template.TemplateID);
                     if (templateItems != null && templateItems.Any())
                     {
-                        var seedResults = templateItems.Select(i => new MaintenanceChecklistResult
-                        {
-                            ChecklistId = checklist.ChecklistId,
-                            PartId = i.PartID,
-                            Description = i.Part?.PartName ?? string.Empty,
-                            Result = null, // chưa đánh giá
-                            Status = "PENDING"
-                        }).ToList();
+                        var seedResults = new List<MaintenanceChecklistResult>();
 
-                        await _maintenanceChecklistResultRepository.UpsertManyAsync(seedResults);
-                        _logger.LogInformation("Đã seed {Count} MaintenanceChecklistResults cho checklist {ChecklistId}", seedResults.Count, checklist.ChecklistId);
+                        foreach (var templateItem in templateItems.Where(i => i.CategoryId.HasValue))
+                        {
+                            // Tạo 1 MaintenanceChecklistResult cho mỗi category (không phải cho từng part)
+                            var categoryId = templateItem.CategoryId!.Value;
+                            seedResults.Add(new MaintenanceChecklistResult
+                            {
+                                ChecklistId = checklist.ChecklistId,
+                                CategoryId = categoryId,
+                                Description = templateItem.Category?.CategoryName ?? string.Empty,
+                                Result = null,
+                                Status = "PENDING"
+                            });
+                        }
+
+                        if (seedResults.Any())
+                        {
+                            await _maintenanceChecklistResultRepository.UpsertManyAsync(seedResults);
+                            _logger.LogInformation("Đã seed {Count} MaintenanceChecklistResults cho checklist {ChecklistId}", seedResults.Count, checklist.ChecklistId);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Template {TemplateId} không có parts để seed MaintenanceChecklistResults", template.TemplateID);
+                        }
                     }
                     else
                     {

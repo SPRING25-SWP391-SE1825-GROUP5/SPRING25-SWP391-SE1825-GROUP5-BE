@@ -9,7 +9,7 @@ public partial class MaintenanceChecklistResult
 
     public int ChecklistId { get; set; }
 
-    public int? PartId { get; set; }
+    public int? CategoryId { get; set; }
 
     public string? Description { get; set; }
 
@@ -19,5 +19,5 @@ public partial class MaintenanceChecklistResult
 
     public virtual MaintenanceChecklist Checklist { get; set; }
 
-    public virtual Part Part { get; set; }
+    public virtual PartCategory? Category { get; set; }
 }

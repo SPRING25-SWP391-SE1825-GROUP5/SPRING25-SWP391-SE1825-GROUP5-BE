@@ -33,6 +33,7 @@ public class PaymentService
     private readonly IMaintenanceChecklistRepository _checklistRepository;
     private readonly IMaintenanceChecklistResultRepository _checklistResultRepository;
     private readonly IPromotionService _promotionService;
+    private readonly IPromotionRepository _promotionRepository;
     private readonly ILogger<PaymentService> _logger;
     private readonly INotificationService _notificationService;
     private readonly ICustomerServiceCreditRepository _customerServiceCreditRepository;
@@ -40,7 +41,7 @@ public class PaymentService
 
     private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService, INotificationService notificationService)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, IPromotionRepository promotionRepository, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService, INotificationService notificationService)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -56,6 +57,7 @@ public class PaymentService
         _checklistResultRepository = checklistResultRepository;
         _holdStore = holdStore;
         _promotionService = promotionService;
+        _promotionRepository = promotionRepository;
         _logger = logger;
         _customerServiceCreditRepository = customerServiceCreditRepository;
         _pdfInvoiceService = pdfInvoiceService;
@@ -539,8 +541,9 @@ public class PaymentService
 					var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
 					decimal packageDiscountAmount = 0m;
 					decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
-					decimal promotionDiscountAmount = 0m; // hook khuyến mãi sau
+					decimal promotionDiscountAmount = 0m;
 					decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
+						.Where(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.APPROVED || p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.CONSUMED)
 						.Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
 
 					if (booking.AppliedCreditId.HasValue)
@@ -558,6 +561,15 @@ public class PaymentService
 								packagePrice = appliedCredit.ServicePackage.Price;
 							}
 						}
+					}
+
+					// Tính promotion discount
+					var userPromotions = await _promotionRepository.GetUserPromotionsByBookingAsync(booking.BookingId);
+					if (userPromotions != null && userPromotions.Any())
+					{
+						promotionDiscountAmount = userPromotions
+							.Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+							.Sum(up => up.DiscountAmount);
 					}
 
 					decimal paymentAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice)

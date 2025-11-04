@@ -21,7 +21,7 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
         entity.Property(e => e.VehicleModelPartId).HasColumnName("VehicleModelPartID");
 
         entity.Property(e => e.Status).HasConversion<int>();
-        entity.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)");
+        // No UnitPrice column mapped; pricing resolved from Parts at time of calculation
         entity.Property(e => e.CreatedAt).HasPrecision(0).HasDefaultValueSql("(sysdatetime())");
         entity.Property(e => e.UpdatedAt).HasPrecision(0);
         entity.Property(e => e.ApprovedAt).HasPrecision(0);

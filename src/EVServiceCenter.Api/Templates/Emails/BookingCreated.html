@@ -1,9 +1,73 @@
+<!DOCTYPE html>
 <html>
-  <body>
-    <h3>Xác nhận đặt lịch</h3>
-    <p>Booking #{{bookingId}} tại {{centerName}}</p>
-    <p>Ngày: {{date}} — Giờ: {{time}}</p>
-  </body>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Service Center - Xác nhận đặt lịch</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f8f9fa; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background-color: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+        .header { background: linear-gradient(135deg, #FF593D, #F4A261); color: white; padding: 30px 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 22px; font-weight: bold; }
+        .content { padding: 30px; }
+        .card { background: #f3f4f6; border-radius: 12px; padding: 24px; margin: 20px 0; border: 1px solid #e5e7eb; }
+        .row { display: flex; flex-wrap: wrap; gap: 16px; }
+        .col { flex: 1 1 240px; }
+        .label { color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+        .value { font-size: 16px; font-weight: 600; }
+        .actions { margin-top: 12px; }
+        .btn { display: inline-block; background: #FF593D; color: #fff; padding: 10px 16px; border-radius: 8px; text-decoration: none; }
+        .footer { background-color: #f8f9fa; padding: 18px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="/email/10.webp" alt="EV Service Center" style="height:64px; display:block; margin:0 auto 12px auto;" />
+            <h1>EV Service Center</h1>
+        </div>
+        <div class="content">
+            <p>Xin chào {{fullName}},</p>
+            <p>Đặt lịch của bạn đã được tạo thành công.</p>
+            <div class="card">
+                <div class="row">
+                    <div class="col">
+                        <div class="label">Mã đặt lịch</div>
+                        <div class="value">#{{bookingId}}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Trung tâm</div>
+                        <div class="value">{{centerName}}</div>
+                    </div>
+                </div>
+                <div class="row" style="margin-top: 8px;">
+                    <div class="col">
+                        <div class="label">Ngày</div>
+                        <div class="value">{{date}}</div>
+                    </div>
+                    <div class="col">
+                        <div class="label">Giờ</div>
+                        <div class="value">{{time}}</div>
+                    </div>
+                </div>
+                <div class="row" style="margin-top: 8px;">
+                    <div class="col">
+                        <div class="label">Địa chỉ</div>
+                        <div class="value">{{centerAddress}}</div>
+                    </div>
+                </div>
+                <div class="actions">
+                    <a class="btn" href="{{bookingUrl}}" target="_blank">Xem chi tiết</a>
+                </div>
+            </div>
+            <p>Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.</p>
+        </div>
+        <div class="footer">
+            <div>© {{year}} EV Service Center</div>
+            <div>Hỗ trợ: support@evservicecenter.com | {{supportPhone}}</div>
+        </div>
+    </div>
+</body>
 </html>
 
 

@@ -45,14 +45,24 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task<WorkOrderPart> AddAsync(WorkOrderPart item)
         {
-            var existing = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.BookingId == item.BookingId && x.PartId == item.PartId);
-            if (existing != null)
+            // Nếu status là PENDING_CUSTOMER_APPROVAL (từ FAIL evaluation), không cộng dồn với existing
+            // Vì đây là yêu cầu thay thế cụ thể, không phải thêm số lượng
+            if (item.Status != WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL)
             {
-                // Upsert: cộng dồn số lượng
-                existing.QuantityUsed += item.QuantityUsed;
-                await _db.SaveChangesAsync();
-                return existing;
+                var existing = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.BookingId == item.BookingId && x.PartId == item.PartId);
+                if (existing != null)
+                {
+                    // Upsert: cộng dồn số lượng
+                    existing.QuantityUsed += item.QuantityUsed;
+                    existing.UpdatedAt = System.DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                    return existing;
+                }
             }
+
+            // Safety defaults nếu caller chưa set
+            if (item.CreatedAt == default) item.CreatedAt = System.DateTime.UtcNow;
+            if (item.UpdatedAt == default) item.UpdatedAt = item.CreatedAt;
 
             _db.WorkOrderParts.Add(item);
             await _db.SaveChangesAsync();
@@ -76,12 +86,11 @@ namespace EVServiceCenter.Infrastructure.Repositories
             }
         }
 
-        public async Task<WorkOrderPart?> ApproveAsync(int id, decimal unitPrice, int approvedByUserId, DateTime approvedAtUtc)
+        public async Task<WorkOrderPart?> ApproveAsync(int id, int approvedByUserId, DateTime approvedAtUtc)
         {
             var entity = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.WorkOrderPartId == id);
             if (entity == null) return null;
             entity.Status = WorkOrderPartStatus.APPROVED;
-            entity.UnitPrice = unitPrice;
             entity.ApprovedAt = approvedAtUtc;
             entity.ApprovedByUserId = approvedByUserId;
             entity.UpdatedAt = approvedAtUtc;
@@ -97,6 +106,28 @@ namespace EVServiceCenter.Infrastructure.Repositories
             entity.ApprovedAt = rejectedAtUtc;
             entity.ApprovedByUserId = rejectedByUserId;
             entity.UpdatedAt = rejectedAtUtc;
+            await _db.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<WorkOrderPart?> CustomerApproveAsync(int id)
+        {
+            var entity = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.WorkOrderPartId == id);
+            if (entity == null) return null;
+            if (entity.Status != WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL) return null;
+            entity.Status = WorkOrderPartStatus.DRAFT;
+            entity.UpdatedAt = System.DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<WorkOrderPart?> CustomerRejectAsync(int id)
+        {
+            var entity = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.WorkOrderPartId == id);
+            if (entity == null) return null;
+            if (entity.Status != WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL) return null;
+            entity.Status = WorkOrderPartStatus.REJECTED;
+            entity.UpdatedAt = System.DateTime.UtcNow;
             await _db.SaveChangesAsync();
             return entity;
         }

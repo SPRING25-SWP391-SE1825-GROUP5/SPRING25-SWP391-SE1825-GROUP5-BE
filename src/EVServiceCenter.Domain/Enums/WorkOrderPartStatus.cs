@@ -5,7 +5,8 @@ namespace EVServiceCenter.Domain.Enums
         DRAFT = 0,
         APPROVED = 1,
         CONSUMED = 2,
-        REJECTED = 3
+        REJECTED = 3,
+        PENDING_CUSTOMER_APPROVAL = 4
     }
 }
 

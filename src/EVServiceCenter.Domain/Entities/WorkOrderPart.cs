@@ -18,8 +18,6 @@ public partial class WorkOrderPart
 
     public WorkOrderPartStatus Status { get; set; } = WorkOrderPartStatus.DRAFT;
 
-    public decimal? UnitPrice { get; set; }
-
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

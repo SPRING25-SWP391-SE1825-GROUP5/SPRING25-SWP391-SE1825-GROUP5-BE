@@ -593,10 +593,10 @@ namespace EVServiceCenter.Application.Service
                 if (string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
                 {
                     var parts = await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId);
-                    var hasDraft = parts.Any(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.DRAFT);
-                    if (hasDraft)
+                    var hasDraftOrPending = parts.Any(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.DRAFT || p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL);
+                    if (hasDraftOrPending)
                     {
-                        throw new ArgumentException("Không thể chuyển COMPLETED khi còn phụ tùng DRAFT");
+                        throw new ArgumentException("Không thể chuyển COMPLETED khi còn phụ tùng chưa được xử lý (DRAFT hoặc PENDING_CUSTOMER_APPROVAL)");
                     }
                 }
 
@@ -734,10 +734,7 @@ namespace EVServiceCenter.Application.Service
                 }
             }
 
-            // Determine matched schedule for display
-            DateOnly? scheduleDate = null;
-            byte? scheduleDow = null;
-            // CenterSchedule removed: keep schedule info null
+            // CenterSchedule removed in current model; no schedule metadata to compute
 
             // Load package information if applied
             string? packageCode = null;
@@ -786,7 +783,6 @@ namespace EVServiceCenter.Application.Service
             return new BookingResponse
             {
                 BookingId = booking.BookingId,
-                BookingCode = null,
                 CustomerId = booking.CustomerId,
                 CustomerName = booking.Customer?.User?.FullName ?? "N/A",
                 VehicleId = booking.VehicleId,
@@ -801,8 +797,6 @@ namespace EVServiceCenter.Application.Service
                 TechnicianSlotId = booking.TechnicianSlotId,
                 SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0, // Get SlotId from TechnicianTimeSlot
                 SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
-                CenterScheduleDate = scheduleDate,
-                CenterScheduleDayOfWeek = scheduleDow,
 
                 Status = booking.Status ?? string.Empty,
                 SpecialRequests = booking.SpecialRequests ?? string.Empty,

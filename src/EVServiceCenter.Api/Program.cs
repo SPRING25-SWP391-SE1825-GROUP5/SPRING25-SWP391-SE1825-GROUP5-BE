@@ -37,6 +37,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using System.Security.Claims;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 
 // ============================================================================
@@ -59,7 +60,10 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 // ============================================================================
 // CORE SERVICES REGISTRATION
 // ============================================================================
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(o =>
+{
+    o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
@@ -592,7 +596,10 @@ builder.Services.AddCors(options =>
 // ============================================================================
 
 // Controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(o =>
+{
+    o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 
 // Swagger Configuration

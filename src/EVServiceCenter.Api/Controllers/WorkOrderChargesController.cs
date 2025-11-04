@@ -86,80 +86,7 @@ public class WorkOrderChargesController : ControllerBase
         }
 
 
-        [HttpPost("link")]
-        public async Task<IActionResult> CreatePaymentLink(int bookingId)
-        {
-            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
-            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
-
-            // WorkOrder functionality merged into Booking - get parts from WorkOrderParts table using bookingId
-            // This would need to be implemented in WorkOrderPartRepository if needed
-            // For now, return empty parts
-            var parts = new List<object>();
-            _logger.LogDebug("Booking {BookingId} has {PartsCount} WorkOrderParts", bookingId, parts.Count);
-            
-            var total = 0m; // No parts available yet
-            _logger.LogDebug("Total calculated: {Total}", total);
-            
-            if (total <= 0) return BadRequest(new { success = false, message = "Không có chi phí phát sinh", debug = new { partsCount = parts.Count, total = total } });
-
-            var orderCode = long.Parse($"{bookingId}99"); // mã riêng cho phát sinh
-            var amount = (int)Math.Round((decimal)total);
-            var description = ($"BOOKING-{bookingId}-Charges").Substring(0, Math.Min(25, $"BOOKING-{bookingId}-Charges".Length));
-            var returnUrl = _payos.ReturnUrl ?? string.Empty;
-            var cancelUrl = _payos.CancelUrl ?? string.Empty;
-            
-            // Tạo canonical string và signature giống PaymentService
-            var canonical = string.Create(System.Globalization.CultureInfo.InvariantCulture, 
-                $"amount={amount}&cancelUrl={cancelUrl}&description={description}&orderCode={orderCode}&returnUrl={returnUrl}");
-            var signature = ComputeHmacSha256Hex(canonical, _payos.ChecksumKey);
-            
-            var payload = new
-            {
-                orderCode,
-                amount,
-                description,
-                items = new List<object>(), // No parts available yet
-                returnUrl,
-                cancelUrl,
-                signature
-            };
-
-            var url = $"{_payos.BaseUrl.TrimEnd('/')}/payment-requests";
-            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(url));
-            request.Headers.Add("x-client-id", _payos.ClientId);
-            request.Headers.Add("x-api-key", _payos.ApiKey);
-            request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.SendAsync(request);
-            var responseText = await response.Content.ReadAsStringAsync();
-            response.EnsureSuccessStatusCode();
-            var json = JsonDocument.Parse(responseText).RootElement;
-            
-            _logger.LogDebug("PayOS Response: {ResponseText}", responseText);
-            
-            if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
-                dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
-            {
-                var checkoutUrl = urlElem.GetString();
-                return Ok(new { checkoutUrl });
-            }
-            
-            var message = (json.TryGetProperty("message", out var msgElem) && msgElem.ValueKind == JsonValueKind.String ? msgElem.GetString() : null)
-                ?? (json.TryGetProperty("desc", out var descElem) && descElem.ValueKind == JsonValueKind.String ? descElem.GetString() : null)
-                ?? "Không nhận được checkoutUrl từ PayOS";
-            return BadRequest(new { success = false, message = $"Tạo link PayOS thất bại: {message}. Response: {responseText}" });
-        }
-
-        private static string ComputeHmacSha256Hex(string data, string key)
-        {
-            if (string.IsNullOrEmpty(key)) return string.Empty;
-            using var hmac = new System.Security.Cryptography.HMACSHA256(Encoding.UTF8.GetBytes(key));
-            var hashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(data));
-            var sb = new StringBuilder(hashBytes.Length * 2);
-            for (int i = 0; i < hashBytes.Length; i++) sb.Append(hashBytes[i].ToString("x2"));
-            return sb.ToString();
-        }
+        // Removed: duplicate and incomplete payment link creation.
 
         [HttpPost("confirm")]
         public async Task<IActionResult> Confirm(int bookingId, [FromQuery] long orderCode)
@@ -188,7 +115,7 @@ public class WorkOrderChargesController : ControllerBase
                 Phone = booking.Customer?.User?.PhoneNumber,
                 Status = "PAID",
                 CreatedAt = DateTime.UtcNow,
-                
+
             };
             invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
 
@@ -242,46 +169,7 @@ public class WorkOrderChargesController : ControllerBase
             public string Note { get; set; } = string.Empty;
         }
 
-        [HttpPost("offline")]
-        public async Task<IActionResult> CreateOffline(int bookingId, [FromBody] OfflinePaymentRequest req)
-        {
-            if (req == null || req.Amount <= 0 || req.PaidByUserId <= 0)
-                return BadRequest(new { success = false, message = "amount và paidByUserId là bắt buộc" });
-
-            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
-            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
-
-            // WorkOrder functionality merged into Booking - no separate work order needed
-            var total = req.Amount; // Use provided amount
-
-            // Tạo invoice DETAIL
-            var invoice = new Domain.Entities.Invoice
-            {
-                BookingId = bookingId,
-                CustomerId = booking.CustomerId,
-                Email = booking.Customer?.User?.Email,
-                Phone = booking.Customer?.User?.PhoneNumber,
-                Status = "PAID",
-                CreatedAt = DateTime.UtcNow,
-                
-            };
-            invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
-
-            var payment = new Domain.Entities.Payment
-            {
-                PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{bookingId}",
-                InvoiceId = invoice.InvoiceId,
-                PaymentMethod = "CASH",
-                Amount = (int)Math.Round((decimal)total),
-                Status = "PAID",
-                PaidAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                PaidByUserID = req.PaidByUserId,
-            };
-            await _paymentRepo.CreateAsync(payment);
-
-            return Ok(new { success = true, invoiceId = invoice.InvoiceId, paymentId = payment.PaymentId, status = payment.Status });
-        }
+        // Removed: offline payment for booking (not used in current flow).
 
         private static byte[] BuildInvoicePdf(Domain.Entities.Invoice invoice)
         {

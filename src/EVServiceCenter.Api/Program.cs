@@ -67,7 +67,6 @@ builder.Services.AddSignalR(options =>
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
 });
 builder.Services.Configure<BookingRealtimeOptions>(builder.Configuration.GetSection("BookingRealtime"));
-// Cache configuration
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<PaymentService>();
@@ -76,24 +75,34 @@ builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection
 builder.Services.Configure<PromotionOptions>(builder.Configuration.GetSection("Promotion"));
 builder.Services.Configure<MaintenanceReminderOptions>(builder.Configuration.GetSection("MaintenanceReminder"));
 builder.Services.Configure<ExportOptions>(builder.Configuration.GetSection("ExportOptions"));
+builder.Services.Configure<CartOptions>(builder.Configuration.GetSection(CartOptions.SectionName));
+builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
 
-// Rate Limiting Configuration
+var redisConnection = builder.Configuration.GetConnectionString("Redis");
+var redisOptions = builder.Configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>() ?? new RedisOptions();
+
+if (!string.IsNullOrEmpty(redisConnection))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnection;
+        options.ConfigurationOptions = StackExchange.Redis.ConfigurationOptions.Parse(redisConnection);
+        options.ConfigurationOptions.ConnectTimeout = redisOptions.ConnectTimeout;
+        options.ConfigurationOptions.SyncTimeout = redisOptions.SyncTimeout;
+        options.ConfigurationOptions.AsyncTimeout = redisOptions.AsyncTimeout;
+        options.ConfigurationOptions.AbortOnConnectFail = redisOptions.AbortOnConnectFail;
+    });
+}
+else
+{
+    builder.Services.AddDistributedMemoryCache();
+}
+
 builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection("RateLimiting"));
 var rateLimitingOptions = builder.Configuration.GetSection("RateLimiting").Get<RateLimitingOptions>() ?? new RateLimitingOptions();
 
 if (rateLimitingOptions.Enabled)
 {
-    // Redis Configuration
-    if (rateLimitingOptions.UseRedis && !string.IsNullOrEmpty(builder.Configuration.GetConnectionString("Redis")))
-    {
-        var redisConnection = builder.Configuration.GetConnectionString("Redis");
-        builder.Services.AddStackExchangeRedisCache(options =>
-        {
-            options.Configuration = redisConnection;
-        });
-    }
-
-    // Rate Limiting Services
     builder.Services.AddRateLimiter(options =>
     {
         // Global Policy
@@ -330,6 +339,7 @@ builder.Services.AddScoped<ITechnicianDashboardService, EVServiceCenter.Applicat
 
 // E-commerce services
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<ICartService, CartService>();
 // Wishlist removed
 // removed: ProductReviewService deprecated
 

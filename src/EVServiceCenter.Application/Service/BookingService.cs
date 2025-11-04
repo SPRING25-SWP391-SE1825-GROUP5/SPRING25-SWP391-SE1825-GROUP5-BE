@@ -955,9 +955,9 @@ namespace EVServiceCenter.Application.Service
             var validTransitions = new Dictionary<string, List<string>>
             {
                 { "PENDING", new List<string> { "CONFIRMED", "CANCELLED" } },
-                { "CONFIRMED", new List<string> { "IN_PROGRESS", "CANCELLED" } },
-                { "IN_PROGRESS", new List<string> { "COMPLETED", "CANCELLED" } },
-                { "COMPLETED", new List<string> { "PAID" } }, // Cho phép chuyển sang PAID nếu cần
+                { "CONFIRMED", new List<string> { "IN_PROGRESS" } },
+                { "IN_PROGRESS", new List<string> { "COMPLETED" } },
+                { "COMPLETED", new List<string> { "PAID" } },
                 { "PAID", new List<string>() },
                 { "CANCELLED", new List<string>() }
             };

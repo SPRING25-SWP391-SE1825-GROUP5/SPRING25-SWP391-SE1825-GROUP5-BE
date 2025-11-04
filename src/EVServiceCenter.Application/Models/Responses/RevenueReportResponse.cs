@@ -83,4 +83,45 @@ namespace EVServiceCenter.Application.Models.Responses
         public string PercentageChange { get; set; } = string.Empty;
         public int BookingChange { get; set; }
     }
+
+    /// <summary>
+    /// Response cho API GetRevenueByPeriod - đơn giản hơn RevenueReportResponse
+    /// </summary>
+    public class RevenueByPeriodResponse
+    {
+        public bool Success { get; set; } = true;
+        public decimal TotalRevenue { get; set; }
+        public string Granularity { get; set; } = string.Empty;
+        public List<RevenueByPeriodItem> Items { get; set; } = new List<RevenueByPeriodItem>();
+    }
+
+    /// <summary>
+    /// Item trong danh sách doanh thu theo period
+    /// </summary>
+    public class RevenueByPeriodItem
+    {
+        public string Period { get; set; } = string.Empty;
+        public decimal Revenue { get; set; }
+    }
+
+    /// <summary>
+    /// Response cho API GetRevenueByService - danh sách doanh thu theo service
+    /// </summary>
+    public class RevenueByServiceResponse
+    {
+        public bool Success { get; set; } = true;
+        public decimal TotalRevenue { get; set; }
+        public List<RevenueByServiceItem> Items { get; set; } = new List<RevenueByServiceItem>();
+    }
+
+    /// <summary>
+    /// Item trong danh sách doanh thu theo service
+    /// </summary>
+    public class RevenueByServiceItem
+    {
+        public int ServiceId { get; set; }
+        public string ServiceName { get; set; } = string.Empty;
+        public int BookingCount { get; set; }
+        public decimal Revenue { get; set; }
+    }
 }

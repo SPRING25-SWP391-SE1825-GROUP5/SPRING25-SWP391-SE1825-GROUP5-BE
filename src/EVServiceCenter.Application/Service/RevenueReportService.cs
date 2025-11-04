@@ -16,17 +16,20 @@ namespace EVServiceCenter.Application.Service
         private readonly IBookingRepository _bookingRepository;
         private readonly IInvoiceRepository _invoiceRepository;
         private readonly IPaymentRepository _paymentRepository;
+        private readonly IServiceRepository _serviceRepository;
         private readonly ILogger<RevenueReportService> _logger;
 
         public RevenueReportService(
             IBookingRepository bookingRepository,
             IInvoiceRepository invoiceRepository,
             IPaymentRepository paymentRepository,
+            IServiceRepository serviceRepository,
             ILogger<RevenueReportService> logger)
         {
             _bookingRepository = bookingRepository;
             _invoiceRepository = invoiceRepository;
             _paymentRepository = paymentRepository;
+            _serviceRepository = serviceRepository;
             _logger = logger;
         }
 
@@ -151,6 +154,328 @@ namespace EVServiceCenter.Application.Service
         {
             var quarter = (date.Month - 1) / 3 + 1;
             return $"{date.Year}-Q{quarter}";
+        }
+
+        private string GetYearKey(DateTime date)
+        {
+            return date.ToString("yyyy");
+        }
+
+        /// <summary>
+        /// Lấy tổng doanh thu theo khoảng thời gian với các mode: day/week/month/quarter/year
+        /// Tối ưu query bằng cách join Payment -> Invoice -> Booking trong một query
+        /// </summary>
+        public async Task<RevenueByPeriodResponse> GetRevenueByPeriodAsync(int centerId, DateTime? fromDate, DateTime? toDate, string granularity)
+        {
+            try
+            {
+                // Validate granularity
+                var validGranularities = new[] { "day", "week", "month", "quarter", "year" };
+                var normalizedGranularity = granularity?.ToLower() ?? "day";
+                if (!validGranularities.Contains(normalizedGranularity))
+                {
+                    throw new ArgumentException($"Granularity không hợp lệ. Chỉ chấp nhận: {string.Join(", ", validGranularities)}", nameof(granularity));
+                }
+
+                // Tính toán khoảng thời gian (mặc định 30 ngày gần nhất)
+                var start = (fromDate ?? DateTime.Today.AddDays(-30)).Date;
+                var end = (toDate ?? DateTime.Today).Date.AddDays(1).AddTicks(-1);
+
+                // Validate date range
+                if (start > end)
+                {
+                    throw new ArgumentException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc", nameof(fromDate));
+                }
+
+                // Lấy payments đã thanh toán (COMPLETED) theo centerId và khoảng thời gian PaidAt
+                // Tối ưu query: join Payment -> Invoice -> Booking trong một query
+                var payments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(centerId, start, end);
+
+                // Tạo danh sách tất cả các period trong khoảng thời gian (bao gồm cả period không có doanh thu)
+                var allPeriods = GenerateAllPeriodsInRange(start, end, normalizedGranularity);
+                
+                // Tạo dictionary mapping từ period key đến date range (để match payment với period)
+                var periodDateRanges = new Dictionary<string, (DateTime startDate, DateTime endDate)>();
+                foreach (var period in allPeriods)
+                {
+                    if (normalizedGranularity == "week" && period.Contains("_to_"))
+                    {
+                        // Parse "yyyy-MM-dd_to_yyyy-MM-dd"
+                        var parts = period.Split("_to_");
+                        if (parts.Length == 2 && DateTime.TryParse(parts[0], out var weekStart) && DateTime.TryParse(parts[1], out var weekEnd))
+                        {
+                            periodDateRanges[period] = (weekStart.Date, weekEnd.Date.AddDays(1).AddTicks(-1));
+                        }
+                    }
+                }
+
+                // Nhóm payments theo period dựa trên PaidAt
+                var revenueByKey = new Dictionary<string, decimal>();
+                decimal total = 0m;
+
+                foreach (var payment in payments)
+                {
+                    if (payment.PaidAt == null) continue;
+
+                    string periodKey;
+                    
+                    if (normalizedGranularity == "week")
+                    {
+                        // Tìm period chứa payment.PaidAt
+                        periodKey = periodDateRanges
+                            .FirstOrDefault(kv => payment.PaidAt.Value.Date >= kv.Value.startDate && payment.PaidAt.Value.Date <= kv.Value.endDate)
+                            .Key;
+                        
+                        if (string.IsNullOrEmpty(periodKey))
+                        {
+                            // Fallback: tạo period key theo cách cũ nếu không tìm thấy
+                            periodKey = GetPeriodKeyForGranularity(payment.PaidAt.Value, normalizedGranularity);
+                        }
+                    }
+                    else
+                    {
+                        periodKey = GetPeriodKeyForGranularity(payment.PaidAt.Value, normalizedGranularity);
+                    }
+                    
+                    if (!revenueByKey.ContainsKey(periodKey))
+                    {
+                        revenueByKey[periodKey] = 0m;
+                    }
+                    
+                    revenueByKey[periodKey] += payment.Amount;
+                    total += payment.Amount;
+                }
+                
+                // Tạo items với tất cả các period, nếu không có doanh thu thì = 0
+                var items = allPeriods
+                    .Select(period => new RevenueByPeriodItem
+                    {
+                        Period = period,
+                        Revenue = revenueByKey.ContainsKey(period) ? revenueByKey[period] : 0m
+                    })
+                    .OrderBy(item => item.Period)
+                    .ToList();
+
+                return new RevenueByPeriodResponse
+                {
+                    Success = true,
+                    TotalRevenue = total,
+                    Granularity = normalizedGranularity,
+                    Items = items
+                };
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Lỗi validation khi lấy doanh thu theo period cho center {CenterId}", centerId);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy doanh thu theo period cho center {CenterId}", centerId);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Lấy period key theo granularity (day/week/month/quarter/year)
+        /// </summary>
+        private string GetPeriodKeyForGranularity(DateTime date, string granularity)
+        {
+            return granularity switch
+            {
+                "day" => date.ToString("yyyy-MM-dd"),
+                "week" => GetWeekKey(date),
+                "month" => date.ToString("yyyy-MM"),
+                "quarter" => GetQuarterKey(date),
+                "year" => GetYearKey(date),
+                _ => date.ToString("yyyy-MM-dd") // Default to day
+            };
+        }
+
+        /// <summary>
+        /// Tạo danh sách tất cả các period trong khoảng thời gian (bao gồm cả period không có doanh thu)
+        /// </summary>
+        private List<string> GenerateAllPeriodsInRange(DateTime startDate, DateTime endDate, string granularity)
+        {
+            var periods = new List<string>();
+            var currentDate = startDate.Date;
+
+            while (currentDate <= endDate.Date)
+            {
+                string periodKey;
+                DateTime nextDate;
+
+                switch (granularity)
+                {
+                    case "day":
+                        periodKey = currentDate.ToString("yyyy-MM-dd");
+                        nextDate = currentDate.AddDays(1);
+                        break;
+
+                    case "week":
+                        // Tuần đầu tiên: bắt đầu từ ngày startDate
+                        if (currentDate == startDate.Date)
+                        {
+                            // Tính cuối tuần (Chủ nhật = 0, nên cộng 6 để có ngày cuối tuần)
+                            var dayOfWeek = (int)currentDate.DayOfWeek;
+                            var endOfWeek = currentDate.AddDays(6 - dayOfWeek);
+                            
+                            // Nếu endDate trong cùng tuần, thì tuần kết thúc ở endDate
+                            var weekEnd = endOfWeek < endDate.Date ? endOfWeek : endDate.Date;
+                            
+                            // Format: "2024-01-03_to_2024-01-07" để thể hiện tuần từ ngày bắt đầu đến ngày kết thúc
+                            periodKey = $"{currentDate:yyyy-MM-dd}_to_{weekEnd:yyyy-MM-dd}";
+                            nextDate = weekEnd.AddDays(1);
+                        }
+                        // Các tuần tiếp theo: đầy đủ 7 ngày
+                        else
+                        {
+                            // Tính cuối tuần hiện tại
+                            var dayOfWeek = (int)currentDate.DayOfWeek;
+                            var endOfWeek = currentDate.AddDays(6 - dayOfWeek);
+                            
+                            // Nếu endDate trong cùng tuần, thì tuần kết thúc ở endDate
+                            var weekEnd = endOfWeek < endDate.Date ? endOfWeek : endDate.Date;
+                            
+                            periodKey = $"{currentDate:yyyy-MM-dd}_to_{weekEnd:yyyy-MM-dd}";
+                            nextDate = weekEnd.AddDays(1);
+                        }
+                        break;
+
+                    case "month":
+                        periodKey = currentDate.ToString("yyyy-MM");
+                        nextDate = currentDate.AddMonths(1);
+                        // Set về ngày đầu tháng
+                        nextDate = new DateTime(nextDate.Year, nextDate.Month, 1);
+                        break;
+
+                    case "quarter":
+                        var quarter = (currentDate.Month - 1) / 3 + 1;
+                        periodKey = $"{currentDate.Year}-Q{quarter}";
+                        // Tìm tháng đầu của quý tiếp theo
+                        var nextQuarter = quarter + 1;
+                        if (nextQuarter > 4)
+                        {
+                            nextDate = new DateTime(currentDate.Year + 1, 1, 1);
+                        }
+                        else
+                        {
+                            nextDate = new DateTime(currentDate.Year, (nextQuarter - 1) * 3 + 1, 1);
+                        }
+                        break;
+
+                    case "year":
+                        periodKey = currentDate.ToString("yyyy");
+                        nextDate = new DateTime(currentDate.Year + 1, 1, 1);
+                        break;
+
+                    default:
+                        periodKey = currentDate.ToString("yyyy-MM-dd");
+                        nextDate = currentDate.AddDays(1);
+                        break;
+                }
+
+                if (!periods.Contains(periodKey))
+                {
+                    periods.Add(periodKey);
+                }
+
+                // Nếu đã đến cuối khoảng thời gian, dừng lại
+                if (nextDate > endDate.Date)
+                {
+                    break;
+                }
+
+                currentDate = nextDate;
+            }
+
+            return periods;
+        }
+
+        /// <summary>
+        /// Lấy danh sách doanh thu theo service cho một center, bao gồm cả service không có doanh thu (revenue = 0)
+        /// Tính doanh thu từ payments (COMPLETED) trong khoảng thời gian
+        /// </summary>
+        public async Task<RevenueByServiceResponse> GetRevenueByServiceAsync(int centerId, DateTime? fromDate, DateTime? toDate)
+        {
+            try
+            {
+                // Tính toán khoảng thời gian (mặc định 30 ngày gần nhất)
+                var start = (fromDate ?? DateTime.Today.AddDays(-30)).Date;
+                var end = (toDate ?? DateTime.Today).Date.AddDays(1).AddTicks(-1);
+
+                // Validate date range
+                if (start > end)
+                {
+                    throw new ArgumentException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc", nameof(fromDate));
+                }
+
+                // Lấy tất cả services
+                var allServices = await _serviceRepository.GetAllServicesAsync();
+
+                // Lấy payments đã thanh toán (COMPLETED) theo centerId và khoảng thời gian PaidAt
+                var payments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(centerId, start, end);
+
+                // Nhóm payments theo service thông qua Booking
+                var revenueByService = new Dictionary<int, (decimal revenue, HashSet<int> bookingIds)>();
+
+                foreach (var payment in payments)
+                {
+                    if (payment.PaidAt == null || payment.Invoice?.Booking == null) continue;
+
+                    var booking = payment.Invoice.Booking;
+                    var serviceId = booking.ServiceId;
+
+                    if (!revenueByService.ContainsKey(serviceId))
+                    {
+                        revenueByService[serviceId] = (0m, new HashSet<int>());
+                    }
+
+                    var current = revenueByService[serviceId];
+                    revenueByService[serviceId] = (
+                        current.revenue + payment.Amount,
+                        current.bookingIds
+                    );
+                    // Thêm bookingId vào HashSet để đếm unique bookings
+                    current.bookingIds.Add(booking.BookingId);
+                }
+
+                // Tạo danh sách tất cả services, nếu không có doanh thu thì = 0
+                // Sắp xếp theo serviceId tăng dần
+                var items = allServices
+                    .Select(service => new RevenueByServiceItem
+                    {
+                        ServiceId = service.ServiceId,
+                        ServiceName = service.ServiceName ?? $"Service #{service.ServiceId}",
+                        BookingCount = revenueByService.ContainsKey(service.ServiceId) 
+                            ? revenueByService[service.ServiceId].bookingIds.Count 
+                            : 0,
+                        Revenue = revenueByService.ContainsKey(service.ServiceId) 
+                            ? revenueByService[service.ServiceId].revenue 
+                            : 0m
+                    })
+                    .OrderBy(x => x.ServiceId)
+                    .ToList();
+
+                var totalRevenue = items.Sum(x => x.Revenue);
+
+                return new RevenueByServiceResponse
+                {
+                    Success = true,
+                    TotalRevenue = totalRevenue,
+                    Items = items
+                };
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Lỗi validation khi lấy doanh thu theo service cho center {CenterId}", centerId);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy doanh thu theo service cho center {CenterId}", centerId);
+                throw;
+            }
         }
 
         private RevenueSummary CalculateSummary(List<RevenueByPeriod> revenueByPeriod, List<Booking> bookings)

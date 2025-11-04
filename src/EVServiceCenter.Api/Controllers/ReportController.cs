@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Domain.Interfaces;
+using EVServiceCenter.Application.Interfaces;
 
 namespace EVServiceCenter.Api.Controllers
 {
@@ -18,48 +19,56 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IPaymentRepository _paymentRepo;
         private readonly IWorkOrderPartRepository _workOrderPartRepo;
         private readonly IInventoryRepository _inventoryRepo;
+        private readonly IRevenueReportService _revenueReportService;
+        private readonly ITechnicianReportsService _technicianReportsService;
 
         public CenterReportController(
             IBookingRepository bookingRepo,
             IInvoiceRepository invoiceRepo,
             IPaymentRepository paymentRepo,
             IWorkOrderPartRepository workOrderPartRepo,
-            IInventoryRepository inventoryRepo)
+            IInventoryRepository inventoryRepo,
+            IRevenueReportService revenueReportService,
+            ITechnicianReportsService technicianReportsService)
         {
             _bookingRepo = bookingRepo;
             _invoiceRepo = invoiceRepo;
             _paymentRepo = paymentRepo;
             _workOrderPartRepo = workOrderPartRepo;
             _inventoryRepo = inventoryRepo;
+            _revenueReportService = revenueReportService;
+            _technicianReportsService = technicianReportsService;
         }
 
-        // GET /api/Reporting/centers/{centerId}/revenue?from=...&to=...&granularity=day|month
+        /// <summary>
+        /// Lấy tổng doanh thu theo khoảng thời gian với các mode: day/week/month/quarter/year
+        /// GET /api/Report/centers/{centerId}/revenue?from=...&to=...&granularity=day|week|month|quarter|year
+        /// </summary>
+        /// <param name="centerId">ID trung tâm</param>
+        /// <param name="from">Ngày bắt đầu (nullable, mặc định 30 ngày trước)</param>
+        /// <param name="to">Ngày kết thúc (nullable, mặc định hôm nay)</param>
+        /// <param name="granularity">Chế độ phân loại: day, week, month, quarter, year (mặc định: day)</param>
+        /// <returns>Response chứa totalRevenue, granularity, và items (period, revenue)</returns>
         [HttpGet("centers/{centerId}/revenue")]
-        public async Task<IActionResult> GetRevenueByPeriod(int centerId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string granularity = "day")
+        public async Task<IActionResult> GetRevenueByPeriod(
+            int centerId, 
+            [FromQuery] DateTime? from = null, 
+            [FromQuery] DateTime? to = null, 
+            [FromQuery] string granularity = "day")
         {
-            var start = (from ?? DateTime.Today.AddDays(-30)).Date;
-            var end = (to ?? DateTime.Today).Date.AddDays(1).AddTicks(-1);
-
-            var bookings = await _bookingRepo.GetBookingsByCenterIdAsync(centerId, 1, 100000, null, start, end);
-            var revenueByKey = new Dictionary<string, decimal>();
-            decimal total = 0m;
-
-            foreach (var b in bookings)
+            try
             {
-                var invoice = await _invoiceRepo.GetByBookingIdAsync(b.BookingId);
-                if (invoice == null) continue;
-                var payments = await _paymentRepo.GetByInvoiceIdAsync(invoice.InvoiceId, status: "COMPLETED", method: null, from: start, to: end);
-                var amount = payments.Sum(p => (decimal)p.Amount);
-                if (amount <= 0) continue;
-
-                var key = granularity == "month" ? new DateTime(b.CreatedAt.Year, b.CreatedAt.Month, 1).ToString("yyyy-MM") : b.CreatedAt.ToString("yyyy-MM-dd");
-                if (!revenueByKey.ContainsKey(key)) revenueByKey[key] = 0m;
-                revenueByKey[key] += amount;
-                total += amount;
+                var result = await _revenueReportService.GetRevenueByPeriodAsync(centerId, from, to, granularity);
+                return Ok(result);
             }
-
-            var items = revenueByKey.OrderBy(kv => kv.Key).Select(kv => new { period = kv.Key, revenue = kv.Value }).ToList();
-            return Ok(new { success = true, totalRevenue = total, granularity, items });
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy doanh thu theo period", error = ex.Message });
+            }
         }
 
         // GET /api/Reporting/centers/{centerId}/bookings/status?from=...&to=...
@@ -118,27 +127,33 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, items });
         }
 
-        // GET /api/Reporting/centers/{centerId}/revenue-by-service?from=...&to=...
+        /// <summary>
+        /// Lấy danh sách doanh thu theo service cho một center, bao gồm cả service không có doanh thu (revenue = 0)
+        /// GET /api/Report/centers/{centerId}/revenue-by-service?from=...&to=...
+        /// </summary>
+        /// <param name="centerId">ID trung tâm</param>
+        /// <param name="from">Ngày bắt đầu (nullable, mặc định 30 ngày trước)</param>
+        /// <param name="to">Ngày kết thúc (nullable, mặc định hôm nay)</param>
+        /// <returns>Response chứa danh sách service với revenue (bao gồm cả service revenue = 0)</returns>
         [HttpGet("centers/{centerId}/revenue-by-service")]
-        public async Task<IActionResult> GetRevenueByService(int centerId, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+        public async Task<IActionResult> GetRevenueByService(
+            int centerId, 
+            [FromQuery] DateTime? from = null, 
+            [FromQuery] DateTime? to = null)
         {
-            var start = (from ?? DateTime.Today.AddDays(-30)).Date;
-            var end = (to ?? DateTime.Today).Date.AddDays(1).AddTicks(-1);
-            var bookings = await _bookingRepo.GetBookingsByCenterIdAsync(centerId, 1, 100000, null, start, end);
-
-            var grouped = bookings
-                .Where(b => (b.Status ?? string.Empty).ToUpperInvariant() == "COMPLETED" || (b.Status ?? string.Empty).ToUpperInvariant() == "PAID")
-                .GroupBy(b => new { b.ServiceId, serviceName = b.Service?.ServiceName ?? ($"Service #{b.ServiceId}") })
-                .Select(g => new {
-                    serviceId = g.Key.ServiceId,
-                    serviceName = g.Key.serviceName,
-                    count = g.Count(),
-                    revenue = g.Sum(x => (decimal)(x.Service?.BasePrice ?? 0))
-                })
-                .OrderByDescending(x => x.revenue)
-                .ToList();
-
-            return Ok(new { success = true, items = grouped });
+            try
+            {
+                var result = await _revenueReportService.GetRevenueByServiceAsync(centerId, from, to);
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy doanh thu theo service", error = ex.Message });
+            }
         }
 
         // GET /api/Reporting/centers/{centerId}/booking-cancellation?from=...&to=...
@@ -174,6 +189,38 @@ namespace EVServiceCenter.Api.Controllers
                 .ToList();
 
             return Ok(new { success = true, items });
+        }
+
+        /// <summary>
+        /// Lấy tỉ lệ lấp đầy (utilization rate) của center theo khoảng thời gian
+        /// Hỗ trợ groupBy theo day/week/month/quarter/year khi chọn khoảng thời gian dài
+        /// GET /api/Report/centers/{centerId}/utilization-rate?from=...&to=...&granularity=day|week|month|quarter|year
+        /// </summary>
+        /// <param name="centerId">ID trung tâm</param>
+        /// <param name="from">Ngày bắt đầu (nullable, mặc định 30 ngày trước)</param>
+        /// <param name="to">Ngày kết thúc (nullable, mặc định hôm nay)</param>
+        /// <param name="granularity">Chế độ phân loại: day, week, month, quarter, year (nullable, tự động chọn dựa trên khoảng thời gian)</param>
+        /// <returns>Response chứa utilizationRate trung bình và items theo period (nếu có groupBy)</returns>
+        [HttpGet("centers/{centerId}/utilization-rate")]
+        public async Task<IActionResult> GetCenterUtilizationRate(
+            int centerId,
+            [FromQuery] DateTime? from = null,
+            [FromQuery] DateTime? to = null,
+            [FromQuery] string? granularity = null)
+        {
+            try
+            {
+                var result = await _technicianReportsService.GetCenterUtilizationRateAsync(centerId, from, to, granularity);
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy tỉ lệ lấp đầy", error = ex.Message });
+            }
         }
     }
 }

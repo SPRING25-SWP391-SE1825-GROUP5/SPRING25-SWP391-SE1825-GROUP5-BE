@@ -65,7 +65,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<bool> IsPartNumberUniqueAsync(string partNumber, int? excludePartId = null)
         {
             var query = _context.Parts.Where(p => p.PartNumber == partNumber);
-            
+
             if (excludePartId.HasValue)
             {
                 query = query.Where(p => p.PartId != excludePartId.Value);
@@ -77,6 +77,17 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<bool> PartExistsAsync(int partId)
         {
             return await _context.Parts.AnyAsync(p => p.PartId == partId);
+        }
+
+        public async Task<List<Part>> GetPartsByCategoryIdAsync(int categoryId)
+        {
+            return await _context.PartCategoryMaps
+                .AsNoTracking()
+                .Where(pcm => pcm.CategoryId == categoryId)
+                .Include(pcm => pcm.Part)
+                .Where(pcm => pcm.Part != null && pcm.Part.IsActive)
+                .Select(pcm => pcm.Part!)
+                .ToListAsync();
         }
     }
 }

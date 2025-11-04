@@ -48,16 +48,16 @@ namespace EVServiceCenter.Infrastructure.Repositories
             // Nếu status là PENDING_CUSTOMER_APPROVAL (từ FAIL evaluation), không cộng dồn với existing
             // Vì đây là yêu cầu thay thế cụ thể, không phải thêm số lượng
             if (item.Status != WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL)
+        {
+            var existing = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.BookingId == item.BookingId && x.PartId == item.PartId);
+            if (existing != null)
             {
-                var existing = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.BookingId == item.BookingId && x.PartId == item.PartId);
-                if (existing != null)
-                {
-                    // Upsert: cộng dồn số lượng
-                    existing.QuantityUsed += item.QuantityUsed;
+                // Upsert: cộng dồn số lượng
+                existing.QuantityUsed += item.QuantityUsed;
                     existing.UpdatedAt = System.DateTime.UtcNow;
-                    await _db.SaveChangesAsync();
-                    return existing;
-                }
+                await _db.SaveChangesAsync();
+                return existing;
+            }
             }
 
             // Safety defaults nếu caller chưa set

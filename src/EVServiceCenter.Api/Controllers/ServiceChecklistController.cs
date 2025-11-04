@@ -92,33 +92,6 @@ public class ServiceChecklistController : ControllerBase
         }
     }
 
-    [HttpPost("{templateId}/parts/{partId}")]
-    public async Task<IActionResult> AddPartToTemplate(int templateId, int partId)
-    {
-        try
-        {
-            await _repo.AddPartToTemplateAsync(templateId, partId);
-            return Ok(new { success = true, message = "Thêm part vào template thành công" });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { success = false, message = "Lỗi khi thêm part vào template", error = ex.Message });
-        }
-    }
-
-    [HttpDelete("{templateId}/parts/{partId}")]
-    public async Task<IActionResult> RemovePartFromTemplate(int templateId, int partId)
-    {
-        try
-        {
-            await _repo.RemovePartFromTemplateAsync(templateId, partId);
-            return Ok(new { success = true, message = "Xóa part khỏi template thành công" });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { success = false, message = "Lỗi khi xóa part khỏi template", error = ex.Message });
-        }
-    }
 
     [HttpPost("create")]
     public async Task<IActionResult> CreateTemplate([FromBody] CreateTemplateRequest request)
@@ -208,8 +181,8 @@ public class ServiceChecklistController : ControllerBase
         try
         {
             var recommendedTemplates = await _repo.GetRecommendedTemplatesAsync(
-                currentKm, 
-                lastMaintenanceDate, 
+                currentKm,
+                lastMaintenanceDate,
                 categoryId);
 
             var response = recommendedTemplates.Select((template, index) => new
@@ -231,8 +204,8 @@ public class ServiceChecklistController : ControllerBase
                 warnings = GetWarnings(template, currentKm, lastMaintenanceDate)
             }).ToList();
 
-            return Ok(new 
-            { 
+            return Ok(new
+            {
                 success = true,
                 data = response,
                 total = response.Count,
@@ -241,8 +214,8 @@ public class ServiceChecklistController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new 
-            { 
+            return StatusCode(500, new
+            {
                 success = false,
                 message = "Lỗi khi tìm kiếm dịch vụ phù hợp",
                 error = ex.Message

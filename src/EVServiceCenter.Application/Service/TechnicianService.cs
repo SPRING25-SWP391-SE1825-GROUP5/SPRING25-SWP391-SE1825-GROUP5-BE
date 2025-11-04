@@ -392,9 +392,9 @@ namespace EVServiceCenter.Application.Service
                         resultInfos.Add(new MaintenanceChecklistResultInfo
                         {
                             ResultId = resultItem.ResultId,
-                            PartId = resultItem.PartId ?? 0,
-                            PartName = resultItem.Part?.PartName ?? "N/A",
-                            Description = resultItem.Part?.Brand ?? "N/A", // Sử dụng Brand làm Description
+                            CategoryId = resultItem.CategoryId ?? 0,
+                            CategoryName = resultItem.Category?.CategoryName ?? resultItem.Description ?? "N/A",
+                            Description = resultItem.Description ?? "N/A",
                             Result = resultItem.Result,
                             Status = resultItem.Status ?? "PENDING"
                         });

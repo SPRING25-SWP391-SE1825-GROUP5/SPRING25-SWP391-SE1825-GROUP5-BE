@@ -12,18 +12,17 @@ public interface IServiceChecklistRepository
     Task<IReadOnlyList<ServiceChecklistTemplate>> GetActiveAsync(int? serviceId);
     Task<ServiceChecklistTemplate?> GetByIdAsync(int templateId);
     Task<IReadOnlyList<ServiceChecklistTemplateItem>> GetItemsByTemplateAsync(int templateId);
-    Task AddPartToTemplateAsync(int templateId, int partId);
-    Task RemovePartFromTemplateAsync(int templateId, int partId);
+    Task AddCategoryToTemplateAsync(int templateId, int categoryId);
     Task<int> CreateTemplateAsync(ServiceChecklistTemplate template, IEnumerable<ServiceChecklistTemplateItem> items);
     Task UpdateTemplateAsync(ServiceChecklistTemplate template);
     Task UpsertItemsAsync(int templateId, IEnumerable<ServiceChecklistTemplateItem> items);
     Task SetActiveAsync(int templateId, bool isActive);
     Task DeleteTemplateAsync(int templateId);
-    
+
     // New recommendation methods
     Task<IReadOnlyList<ServiceChecklistTemplate>> GetRecommendedTemplatesAsync(
-        int currentKm, 
-        DateTime? lastMaintenanceDate, 
+        int currentKm,
+        DateTime? lastMaintenanceDate,
         int? categoryId = null);
 }
 

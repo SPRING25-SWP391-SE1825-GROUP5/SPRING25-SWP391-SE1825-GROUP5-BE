@@ -6,11 +6,11 @@ public class ServiceChecklistTemplateItem
 {
     public int ItemID { get; set; }
     public int TemplateID { get; set; }
-    public int PartID { get; set; }
+    public int? CategoryId { get; set; }
     public DateTime CreatedAt { get; set; }
-    
+
     // Navigation properties
-    public virtual Part Part { get; set; }
+    public virtual PartCategory? Category { get; set; }
 }
 
 

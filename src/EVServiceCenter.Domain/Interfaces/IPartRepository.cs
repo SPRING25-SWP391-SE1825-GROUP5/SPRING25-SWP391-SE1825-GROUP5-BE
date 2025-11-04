@@ -13,5 +13,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task UpdatePartAsync(Part part);
         Task<bool> IsPartNumberUniqueAsync(string partNumber, int? excludePartId = null);
         Task<bool> PartExistsAsync(int partId);
+        Task<List<Part>> GetPartsByCategoryIdAsync(int categoryId);
     }
 }

@@ -80,8 +80,8 @@ namespace EVServiceCenter.Api.Controllers
             var data = results.Select(r => new
             {
                 resultId = r.ResultId,
-                partId = r.PartId,
-                partName = r.Part?.PartName,
+                categoryId = r.CategoryId,
+                categoryName = r.Category?.CategoryName,
                 description = r.Description,
                 result = r.Result,
                 status = r.Status
@@ -96,18 +96,19 @@ namespace EVServiceCenter.Api.Controllers
 
 
 
-        // Đánh giá theo PartID (đúng với yêu cầu: kỹ thuật viên đánh giá từng phụ tùng)
-        public class EvaluatePartRequest
+        // Đánh giá theo ResultId (kỹ thuật viên đánh giá từng category trong checklist)
+        public class EvaluateResultRequest
         {
             public string Description { get; set; } = string.Empty;
             public string Result { get; set; } = string.Empty;
             public bool RequireReplacement { get; set; } = false;
             public int ReplacementQuantity { get; set; } = 1;
+            public int? ReplacementPartId { get; set; }
         }
 
-        // PUT /api/maintenance-checklist/{bookingId}/parts/{partId}
-        [HttpPut("{bookingId:int}/parts/{partId:int}")]
-        public async Task<IActionResult> EvaluatePart(int bookingId, int partId, [FromBody] EvaluatePartRequest req)
+        // PUT /api/maintenance-checklist/{bookingId}/results/{resultId}
+        [HttpPut("{bookingId:int}/results/{resultId:int}")]
+        public async Task<IActionResult> EvaluateResult(int bookingId, int resultId, [FromBody] EvaluateResultRequest req)
         {
             // Guard: allow when booking is CONFIRMED or IN_PROGRESS
             var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
@@ -121,29 +122,10 @@ namespace EVServiceCenter.Api.Controllers
             var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
-            // Validate PartID: nếu PartID không tồn tại trong Parts thì set null (cho phép đánh giá các mục không gắn phụ tùng)
-            int? validPartId = null;
-            if (partId > 0)
-            {
-                var part = await _partRepo.GetPartByIdAsync(partId);
-                if (part != null && part.IsActive)
-                {
-                    validPartId = partId;
-                }
-            }
-
-            // Tìm result theo PartID trong checklist này (nếu có) hoặc tìm theo ResultId nếu không có PartID
+            // Tìm result theo ResultId
             var results = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
-            MaintenanceChecklistResult? existing = null;
-            if (validPartId.HasValue)
-            {
-                existing = results.FirstOrDefault(r => r.PartId == validPartId.Value);
-            }
-            else if (partId > 0)
-            {
-                // Nếu PartID không hợp lệ nhưng vẫn có trong checklist results, tìm theo PartID cũ
-                existing = results.FirstOrDefault(r => r.PartId == partId);
-            }
+            var existing = results.FirstOrDefault(r => r.ResultId == resultId);
+            if (existing == null) return NotFound(new { success = false, message = "Checklist result không tồn tại" });
 
             var normalizedResult = (req?.Result ?? string.Empty).Trim();
             if (string.Equals(normalizedResult, "FAIL", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(req?.Description))
@@ -153,49 +135,53 @@ namespace EVServiceCenter.Api.Controllers
 
             var entity = new MaintenanceChecklistResult
             {
-                ResultId = existing?.ResultId ?? 0,
+                ResultId = resultId,
                 ChecklistId = checklist.ChecklistId,
-                PartId = validPartId,
+                CategoryId = existing.CategoryId,
                 Description = req?.Description ?? string.Empty,
                 Result = normalizedResult,
                 Status = string.IsNullOrEmpty(req?.Result) || req?.Result == "PENDING" ? "PENDING" : "CHECKED"
             };
             await _resultRepo.UpsertAsync(entity);
 
-            // Nếu FAIL + requireReplacement = true và có validPartId → tự động tạo WorkOrderPart
+            // Nếu FAIL + requireReplacement = true → tự động tạo WorkOrderPart với part cụ thể
             if (string.Equals(normalizedResult, "FAIL", StringComparison.OrdinalIgnoreCase) &&
                 req?.RequireReplacement == true &&
-                validPartId.HasValue)
+                req.ReplacementPartId.HasValue && req.ReplacementPartId.Value > 0)
             {
-                var quantity = req.ReplacementQuantity > 0 ? req.ReplacementQuantity : 1;
-                var existingWorkOrderPart = (await _workOrderPartRepo.GetByBookingIdAsync(bookingId))
-                    .FirstOrDefault(wop => wop.PartId == validPartId.Value && wop.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL);
-
-                if (existingWorkOrderPart == null)
+                var replacementPartId = req.ReplacementPartId.Value;
+                var part = await _partRepo.GetPartByIdAsync(replacementPartId);
+                if (part != null && part.IsActive)
                 {
-                    var workOrderPart = new WorkOrderPart
-                    {
-                        BookingId = bookingId,
-                        PartId = validPartId.Value,
-                        QuantityUsed = quantity,
-                        Status = EVServiceCenter.Domain.Enums.WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    await _workOrderPartRepo.AddAsync(workOrderPart);
+                    var quantity = req.ReplacementQuantity > 0 ? req.ReplacementQuantity : 1;
+                    var existingWorkOrderPart = (await _workOrderPartRepo.GetByBookingIdAsync(bookingId))
+                        .FirstOrDefault(wop => wop.PartId == replacementPartId && wop.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL);
 
-                    // Gửi notification cho customer
-                    var bookingDetails = await _bookingRepo.GetBookingWithDetailsByIdAsync(bookingId);
-                    var customerUserId = bookingDetails?.Customer?.UserId;
-                    if (customerUserId.HasValue)
+                    if (existingWorkOrderPart == null)
                     {
-                        var partInfo = await _partRepo.GetPartByIdAsync(validPartId.Value);
-                        await _notificationService.SendBookingNotificationAsync(
-                            customerUserId.Value,
-                            "Phụ tùng cần thay thế",
-                            $"Phụ tùng {partInfo?.PartName ?? $"#{validPartId.Value}"} không đạt tiêu chuẩn. Vui lòng xác nhận có đồng ý thay thế không.",
-                            "WORKORDER_PART"
-                        );
+                        var workOrderPart = new WorkOrderPart
+                        {
+                            BookingId = bookingId,
+                            PartId = replacementPartId,
+                            QuantityUsed = quantity,
+                            Status = EVServiceCenter.Domain.Enums.WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        await _workOrderPartRepo.AddAsync(workOrderPart);
+
+                        // Gửi notification cho customer
+                        var bookingDetails = await _bookingRepo.GetBookingWithDetailsByIdAsync(bookingId);
+                        var customerUserId = bookingDetails?.Customer?.UserId;
+                        if (customerUserId.HasValue)
+                        {
+                            await _notificationService.SendBookingNotificationAsync(
+                                customerUserId.Value,
+                                "Phụ tùng cần thay thế",
+                                $"Phụ tùng {part.PartName ?? $"#{replacementPartId}"} không đạt tiêu chuẩn. Vui lòng xác nhận có đồng ý thay thế không.",
+                                "WORKORDER_PART"
+                            );
+                        }
                     }
                 }
             }
@@ -238,13 +224,21 @@ namespace EVServiceCenter.Api.Controllers
                 });
             }
 
-            var results = incoming.Select(i => new MaintenanceChecklistResult
+            var existingResults = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
+            var resultsById = existingResults.ToDictionary(r => r.ResultId);
+
+            var results = incoming.Select(i =>
             {
-                ResultId = i.ResultId ?? 0,
-                ChecklistId = checklist.ChecklistId,
-                Description = i.Description,
-                Result = (i.Result ?? string.Empty).Trim(),
-                Status = string.IsNullOrEmpty(i.Result) || i.Result == "PENDING" ? "PENDING" : "CHECKED"
+                var existing = i.ResultId.HasValue && resultsById.TryGetValue(i.ResultId.Value, out var existingResult) ? existingResult : null;
+                return new MaintenanceChecklistResult
+                {
+                    ResultId = i.ResultId ?? 0,
+                    ChecklistId = checklist.ChecklistId,
+                    CategoryId = existing?.CategoryId,
+                    Description = i.Description,
+                    Result = (i.Result ?? string.Empty).Trim(),
+                    Status = string.IsNullOrEmpty(i.Result) || i.Result == "PENDING" ? "PENDING" : "CHECKED"
+                };
             });
             await _resultRepo.UpsertManyAsync(results);
             await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("checklist.updated", new object[] { new { bookingId } });
@@ -385,8 +379,9 @@ namespace EVServiceCenter.Api.Controllers
                     success = false,
                     message = $"Không thể xác nhận hoàn thành. Còn {pendingItems.Count} phụ tùng chưa được đánh giá",
                     pendingItems = pendingItems.Select(item => new {
-                        partId = item.PartId,
-                        partName = item.Part?.PartName,
+                        resultId = item.ResultId,
+                        categoryId = item.CategoryId,
+                        categoryName = item.Category?.CategoryName ?? item.Description,
                         status = item.Status
                     })
                 });

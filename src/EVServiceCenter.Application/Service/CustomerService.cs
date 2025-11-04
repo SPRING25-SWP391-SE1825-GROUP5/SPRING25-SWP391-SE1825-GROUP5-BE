@@ -313,7 +313,7 @@ namespace EVServiceCenter.Application.Service
                         Status = booking.Status ?? "N/A",
                         Date = booking.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd") ?? "N/A",
                         SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
-                        SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel ?? "N/A", // Thêm SlotLabel
+                        SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel != "SA" && booking.TechnicianTimeSlot?.Slot?.SlotLabel != "CH" ? booking.TechnicianTimeSlot?.Slot?.SlotLabel : null,
                         ServiceName = booking.Service?.ServiceName ?? "N/A",
                         CenterName = booking.Center?.CenterName ?? "N/A",
                         VehiclePlate = booking.Vehicle?.LicensePlate ?? "N/A",

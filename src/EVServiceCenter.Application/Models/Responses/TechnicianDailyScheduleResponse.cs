@@ -16,7 +16,7 @@ namespace EVServiceCenter.Application.Models.Responses
     {
         public int SlotId { get; set; }
         public required string SlotTime { get; set; } = string.Empty;
-        public required string SlotLabel { get; set; } = string.Empty;
+        public string? SlotLabel { get; set; }
         public bool IsAvailable { get; set; }
         public string? Notes { get; set; }
         public int? TechnicianSlotId { get; set; }

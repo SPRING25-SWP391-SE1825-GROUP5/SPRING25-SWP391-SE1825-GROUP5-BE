@@ -15,7 +15,7 @@ namespace EVServiceCenter.Application.Models.Responses
     {
         public int SlotId { get; set; }
         public required string SlotTime { get; set; }
-        public required string SlotLabel { get; set; }
+        public string? SlotLabel { get; set; }
         public bool IsAvailable { get; set; }
         public required List<TechnicianAvailability> AvailableTechnicians { get; set; } = new List<TechnicianAvailability>();
     }

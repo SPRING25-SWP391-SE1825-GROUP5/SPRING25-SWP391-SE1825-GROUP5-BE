@@ -27,6 +27,10 @@ public sealed class VehicleModelConfiguration : IEntityTypeConfiguration<Vehicle
         entity.Property(e => e.Version)
             .HasMaxLength(50)
             .HasColumnName("Version");
+
+        entity.Property(e => e.ImageUrl)
+            .HasMaxLength(500)
+            .HasColumnName("ImageUrl");
     }
 }
 

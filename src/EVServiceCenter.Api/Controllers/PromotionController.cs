@@ -132,16 +132,28 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new { success = false, message = "Booking chỉ được áp dụng 1 khuyến mãi." });
             }
 
-            var userPromotion = new EVServiceCenter.Domain.Entities.UserPromotion
+            // Kiểm tra xem promotion đã được saved chưa (bắt buộc phải save trước khi apply)
+            var savedPromotions = await _promotionRepo.GetUserPromotionsByCustomerAsync(booking.CustomerId);
+            var savedPromotion = savedPromotions.FirstOrDefault(x =>
+                x.PromotionId == promoEntity.PromotionId &&
+                x.Status == "SAVED" &&
+                x.BookingId == null &&
+                x.OrderId == null);
+
+            if (savedPromotion == null)
             {
-                CustomerId = booking.CustomerId,
-                PromotionId = promoEntity.PromotionId,
-                BookingId = booking.BookingId,
-                UsedAt = DateTime.UtcNow,
-                DiscountAmount = validate.DiscountAmount,
-                Status = "APPLIED"
-            };
-            await _promotionRepo.CreateUserPromotionAsync(userPromotion);
+                return BadRequest(new {
+                    success = false,
+                    message = "Bạn cần lưu mã khuyến mãi này trước khi áp dụng. Vui lòng lưu mã khuyến mãi trước."
+                });
+            }
+
+            // Cập nhật UserPromotion từ SAVED thành APPLIED và gán BookingId
+            savedPromotion.BookingId = booking.BookingId;
+            savedPromotion.UsedAt = DateTime.UtcNow;
+            savedPromotion.DiscountAmount = validate.DiscountAmount;
+            savedPromotion.Status = "APPLIED";
+            await _promotionRepo.UpdateUserPromotionAsync(savedPromotion);
 
             return Ok(new { success = true, message = "Áp dụng khuyến mãi thành công", data = validate });
         }
@@ -155,10 +167,24 @@ namespace EVServiceCenter.WebAPI.Controllers
             var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
             if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
 
-            var removed = await _promotionRepo.DeleteUserPromotionByBookingAndCodeAsync(bookingId, promotionCode.Trim().ToUpper());
-            if (!removed) return NotFound(new { success = false, message = "Không tìm thấy khuyến mãi trên booking" });
+            // Tìm UserPromotion đang apply cho booking này
+            var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
+            var userPromotion = userPromotions.FirstOrDefault(x =>
+                x.Promotion?.Code?.Equals(promotionCode.Trim().ToUpper(), StringComparison.OrdinalIgnoreCase) == true &&
+                x.Status == "APPLIED" &&
+                x.BookingId == bookingId);
 
-            return Ok(new { success = true, message = "Đã gỡ khuyến mãi khỏi booking" });
+            if (userPromotion == null)
+                return NotFound(new { success = false, message = "Không tìm thấy khuyến mãi trên booking" });
+
+            // Restore về status SAVED thay vì xóa: clear BookingId, reset DiscountAmount, set status = "SAVED"
+            userPromotion.BookingId = null;
+            userPromotion.DiscountAmount = 0;
+            userPromotion.Status = "SAVED";
+            userPromotion.UsedAt = DateTime.UtcNow; // Update lại thời gian
+            await _promotionRepo.UpdateUserPromotionAsync(userPromotion);
+
+            return Ok(new { success = true, message = "Đã gỡ khuyến mãi khỏi booking. Mã khuyến mãi đã được khôi phục vào danh sách đã lưu." });
         }
 
         [HttpGet("bookings/{bookingId:int}")]
@@ -216,16 +242,28 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new { success = false, message = "Order chỉ được áp dụng 1 khuyến mãi." });
             }
 
-            var userPromotion = new EVServiceCenter.Domain.Entities.UserPromotion
+            // Kiểm tra xem promotion đã được saved chưa (bắt buộc phải save trước khi apply)
+            var savedPromotions = await _promotionRepo.GetUserPromotionsByCustomerAsync(order.CustomerId);
+            var savedPromotion = savedPromotions.FirstOrDefault(x =>
+                x.PromotionId == promoEntity.PromotionId &&
+                x.Status == "SAVED" &&
+                x.BookingId == null &&
+                x.OrderId == null);
+
+            if (savedPromotion == null)
             {
-                CustomerId = order.CustomerId,
-                PromotionId = promoEntity.PromotionId,
-                OrderId = order.OrderId,
-                UsedAt = DateTime.UtcNow,
-                DiscountAmount = validate.DiscountAmount,
-                Status = "APPLIED"
-            };
-            await _promotionRepo.CreateUserPromotionAsync(userPromotion);
+                return BadRequest(new {
+                    success = false,
+                    message = "Bạn cần lưu mã khuyến mãi này trước khi áp dụng. Vui lòng lưu mã khuyến mãi trước."
+                });
+            }
+
+            // Cập nhật UserPromotion từ SAVED thành APPLIED và gán OrderId
+            savedPromotion.OrderId = order.OrderId;
+            savedPromotion.UsedAt = DateTime.UtcNow;
+            savedPromotion.DiscountAmount = validate.DiscountAmount;
+            savedPromotion.Status = "APPLIED";
+            await _promotionRepo.UpdateUserPromotionAsync(savedPromotion);
 
             return Ok(new { success = true, message = "Áp dụng khuyến mãi thành công", data = validate });
         }
@@ -240,10 +278,24 @@ namespace EVServiceCenter.WebAPI.Controllers
             var order = await _orderRepo.GetByIdAsync(orderId);
             if (order == null) return NotFound(new { success = false, message = "Order không tồn tại" });
 
-            var removed = await _promotionRepo.DeleteUserPromotionByOrderAndCodeAsync(orderId, promotionCode.Trim().ToUpper());
-            if (!removed) return NotFound(new { success = false, message = "Không tìm thấy khuyến mãi trên đơn hàng" });
+            // Tìm UserPromotion đang apply cho order này
+            var userPromotions = await _promotionRepo.GetUserPromotionsByOrderAsync(orderId);
+            var userPromotion = userPromotions.FirstOrDefault(x =>
+                x.Promotion?.Code?.Equals(promotionCode.Trim().ToUpper(), StringComparison.OrdinalIgnoreCase) == true &&
+                x.Status == "APPLIED" &&
+                x.OrderId == orderId);
 
-            return Ok(new { success = true, message = "Đã gỡ khuyến mãi khỏi đơn hàng" });
+            if (userPromotion == null)
+                return NotFound(new { success = false, message = "Không tìm thấy khuyến mãi trên đơn hàng" });
+
+            // Restore về status SAVED thay vì xóa: clear OrderId, reset DiscountAmount, set status = "SAVED"
+            userPromotion.OrderId = null;
+            userPromotion.DiscountAmount = 0;
+            userPromotion.Status = "SAVED";
+            userPromotion.UsedAt = DateTime.UtcNow; // Update lại thời gian
+            await _promotionRepo.UpdateUserPromotionAsync(userPromotion);
+
+            return Ok(new { success = true, message = "Đã gỡ khuyến mãi khỏi đơn hàng. Mã khuyến mãi đã được khôi phục vào danh sách đã lưu." });
         }
 
         [HttpGet("orders/{orderId:int}")]

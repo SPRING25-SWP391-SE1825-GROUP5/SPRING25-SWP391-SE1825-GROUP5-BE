@@ -43,7 +43,8 @@ public class VehicleModelService : IVehicleModelService
             CreatedAt = model.CreatedAt,
             VehicleCount = vehicleCount,
             CompatiblePartsCount = compatiblePartsCount,
-            Version = model.Version
+            Version = model.Version,
+            ImageUrl = model.ImageUrl
         };
     }
 
@@ -65,7 +66,8 @@ public class VehicleModelService : IVehicleModelService
                 CreatedAt = model.CreatedAt,
                 VehicleCount = vehicleCount,
                 CompatiblePartsCount = compatiblePartsCount,
-                Version = model.Version
+                Version = model.Version,
+                ImageUrl = model.ImageUrl
             });
         }
 
@@ -91,7 +93,9 @@ public class VehicleModelService : IVehicleModelService
                 IsActive = model.IsActive,
                 CreatedAt = model.CreatedAt,
                 VehicleCount = vehicleCount,
-                CompatiblePartsCount = compatiblePartsCount
+                CompatiblePartsCount = compatiblePartsCount,
+                Version = model.Version,
+                ImageUrl = model.ImageUrl
             });
         }
 
@@ -105,11 +109,12 @@ public class VehicleModelService : IVehicleModelService
             ModelName = request.ModelName,
             IsActive = true,
             CreatedAt = DateTime.Now,
-            Version = null
+            Version = null,
+            ImageUrl = request.ImageUrl
         };
 
         var createdModel = await _vehicleModelRepository.CreateAsync(model);
-        
+
         return new VehicleModelResponse
         {
             ModelId = createdModel.ModelId,
@@ -118,7 +123,8 @@ public class VehicleModelService : IVehicleModelService
             CreatedAt = createdModel.CreatedAt,
             VehicleCount = 0,
             CompatiblePartsCount = 0,
-            Version = createdModel.Version
+            Version = createdModel.Version,
+            ImageUrl = createdModel.ImageUrl
         };
     }
 
@@ -130,8 +136,8 @@ public class VehicleModelService : IVehicleModelService
 
         if (request.ModelName != null)
             model.ModelName = request.ModelName;
-        // Brand removed
-        // Spec fields removed
+        if (request.ImageUrl != null)
+            model.ImageUrl = request.ImageUrl;
         if (request.IsActive.HasValue)
             model.IsActive = request.IsActive.Value;
         // Version hiện chưa cập nhật qua request
@@ -149,7 +155,9 @@ public class VehicleModelService : IVehicleModelService
             IsActive = updatedModel.IsActive,
             CreatedAt = updatedModel.CreatedAt,
             VehicleCount = vehicleCount,
-            CompatiblePartsCount = compatiblePartsCount
+            CompatiblePartsCount = compatiblePartsCount,
+            Version = updatedModel.Version,
+            ImageUrl = updatedModel.ImageUrl
         };
     }
 
@@ -192,7 +200,9 @@ public class VehicleModelService : IVehicleModelService
                 IsActive = model.IsActive,
                 CreatedAt = model.CreatedAt,
                 VehicleCount = vehicleCount,
-                CompatiblePartsCount = compatiblePartsCount
+                CompatiblePartsCount = compatiblePartsCount,
+                Version = model.Version,
+                ImageUrl = model.ImageUrl
             });
         }
 

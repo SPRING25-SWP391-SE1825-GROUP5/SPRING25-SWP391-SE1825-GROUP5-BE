@@ -43,7 +43,11 @@ namespace EVServiceCenter.WebAPI.Controllers
         _holdStore = holdStore;
         _hub = hub;
         _notificationService = notificationService;
-        _ttlMinutes = realtimeOptions?.Value?.HoldTtlMinutes ?? 5;
+        if (realtimeOptions?.Value == null || realtimeOptions.Value.HoldTtlMinutes <= 0)
+        {
+            throw new InvalidOperationException("BookingRealtime:HoldTtlMinutes must be configured in appsettings.json and must be greater than 0");
+        }
+        _ttlMinutes = realtimeOptions.Value.HoldTtlMinutes;
         _guestBookingService = guestBookingService;
         _paymentService = paymentService;
         _invoiceRepository = invoiceRepository;
@@ -187,14 +191,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Validate booking exists
                 var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
                 if (booking == null)
                 {
                     return NotFound(new { success = false, message = "Booking không tồn tại" });
                 }
 
-                // Check if booking can be cancelled
                 if (booking.Status == "CANCELLED")
                 {
                     return BadRequest(new { success = false, message = "Booking đã được hủy rồi" });
@@ -205,7 +207,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "Không thể hủy booking đã hoàn thành hoặc đã thanh toán" });
                 }
 
-                // Update booking status to CANCELLED
                 var updateRequest = new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest
                 {
                     Status = "CANCELLED"
@@ -213,7 +214,6 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var result = await _bookingService.UpdateBookingStatusAsync(bookingId, updateRequest);
 
-                // Send notification to technician
                 if (result.TechnicianId.HasValue)
                 {
                     var technicianUserId = await _technicianService.GetTechnicianUserIdAsync(result.TechnicianId.Value);
@@ -259,9 +259,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 
             var updated = await _bookingService.UpdateBookingStatusAsync(id, new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = status });
 
-            // Realtime: notify booking group and center-date group
             await _hub.Clients.Group($"booking:{id}").SendCoreAsync("booking.updated", new object[] { new { bookingId = id, status } });
-            // Try center/date grouping if available
             var details = await _bookingRepository.GetBookingWithDetailsByIdAsync(id);
             var workDate = details?.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd");
             if (details?.CenterId > 0 && !string.IsNullOrEmpty(workDate))
@@ -270,7 +268,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 await _hub.Clients.Group(group).SendCoreAsync("booking.updated", new object[] { new { bookingId = id, status } });
             }
 
-            // Gửi thông báo khi thay đổi status
             await SendStatusChangeNotifications(updated, status);
 
             return Ok(new { success = true, message = "Cập nhật trạng thái booking thành công", data = new { bookingId = updated.BookingId, status = updated.Status } });
@@ -340,13 +337,11 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var booking = await _bookingService.CreateBookingAsync(request);
 
-                // Lấy UserId của customer và technician để gửi notification
                 var customerUserId = await _customerService.GetCustomerUserIdAsync(booking.CustomerId);
                 var technicianUserId = booking.TechnicianId.HasValue
                     ? await _technicianService.GetTechnicianUserIdAsync(booking.TechnicianId.Value)
                     : (int?)null;
 
-                // Gửi thông báo cho customer
                 if (customerUserId.HasValue)
                 {
                     await _notificationService.SendBookingNotificationAsync(
@@ -357,7 +352,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                     );
                 }
 
-                // Gửi thông báo cho kỹ thuật viên khi có booking mới
                 if (technicianUserId.HasValue)
                 {
                     await _notificationService.SendTechnicianNotificationAsync(
@@ -743,7 +737,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                     SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
                     StartTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString("HH:mm") ?? "Chưa xác định",
                     EndTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.AddMinutes(30).ToString("HH:mm") ?? "Chưa xác định",
-                    SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel ?? "Chưa xác định",
+                    SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel != "SA" && booking.TechnicianTimeSlot?.Slot?.SlotLabel != "CH" ? booking.TechnicianTimeSlot?.Slot?.SlotLabel : null,
                     WorkDate = booking.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd") ?? "Chưa xác định",
                     Notes = booking.TechnicianTimeSlot?.Notes ?? ""
                 },
@@ -765,14 +759,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Lấy thông tin booking chi tiết để gửi thông báo
                 var bookingDetail = await _bookingRepository.GetBookingWithDetailsByIdAsync(booking.BookingId);
                 if (bookingDetail == null) return;
 
                 var customerUserId = bookingDetail.Customer?.UserId;
                 var technicianUserId = bookingDetail.TechnicianTimeSlot?.Technician?.UserId;
 
-                // Thông báo cho customer
                 if (customerUserId.HasValue)
                 {
                     var customerMessage = GetStatusMessageForCustomer(newStatus, booking.BookingId);
@@ -784,7 +776,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                     );
                 }
 
-                // Thông báo cho kỹ thuật viên
                 if (technicianUserId.HasValue)
                 {
                     var technicianMessage = GetStatusMessageForTechnician(newStatus, booking.BookingId);
@@ -796,7 +787,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                     );
                 }
 
-                // Thông báo cho staff/admin
                 await _notificationService.SendStaffNotificationAsync(
                     "Booking status đã thay đổi",
                     $"Booking #{booking.BookingId} đã chuyển sang trạng thái {newStatus}",
@@ -805,7 +795,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-                // Log error nhưng không throw để không ảnh hưởng đến response chính
                 Console.WriteLine($"Error sending status change notifications: {ex.Message}");
             }
         }

@@ -18,12 +18,12 @@ namespace EVServiceCenter.Application.Models.Responses
     {
         public int SlotId { get; set; }
         public TimeOnly SlotTime { get; set; }
-        public required string SlotLabel { get; set; }
+        public string? SlotLabel { get; set; }
         public bool IsAvailable { get; set; }
         public bool IsRealtimeAvailable { get; set; }
         public int? TechnicianId { get; set; }
         public required string TechnicianName { get; set; }
-        public required string Status { get; set; } // AVAILABLE, BOOKED, MAINTENANCE, BREAK
+        public required string Status { get; set; }
         public DateTime LastUpdated { get; set; }
     }
 

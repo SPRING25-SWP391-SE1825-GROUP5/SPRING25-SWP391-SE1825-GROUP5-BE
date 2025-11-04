@@ -22,13 +22,13 @@ public class TechnicianBookingItem
     public int SlotId { get; set; }
     public int TechnicianSlotId { get; set; }
     public required string SlotTime { get; set; }
-    public required string SlotLabel { get; set; } // Thêm SlotLabel
+    public string? SlotLabel { get; set; }
     public required string CustomerName { get; set; }
     public required string CustomerPhone { get; set; }
     public required string VehiclePlate { get; set; }
     public DateTime? WorkStartTime { get; set; }
     public DateTime? WorkEndTime { get; set; }
-    
+
     // Thêm các field cho dashboard
     public DateTime BookingDate { get; set; }
     public string VehicleInfo { get; set; } = string.Empty;

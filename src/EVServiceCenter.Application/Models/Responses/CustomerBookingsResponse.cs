@@ -15,7 +15,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public string Status { get; set; } = string.Empty;
         public string Date { get; set; } = string.Empty;
         public string SlotTime { get; set; } = string.Empty;
-        public string SlotLabel { get; set; } = string.Empty; // Thêm SlotLabel
+        public string? SlotLabel { get; set; }
         public string ServiceName { get; set; } = string.Empty;
         public string CenterName { get; set; } = string.Empty;
         public string VehiclePlate { get; set; } = string.Empty;

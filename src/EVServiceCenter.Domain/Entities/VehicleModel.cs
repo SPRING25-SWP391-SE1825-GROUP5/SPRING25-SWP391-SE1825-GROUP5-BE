@@ -17,6 +17,8 @@ public partial class VehicleModel
 
     public string? Version { get; set; }
 
+    public string? ImageUrl { get; set; }
+
     // Navigation properties
     public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
 

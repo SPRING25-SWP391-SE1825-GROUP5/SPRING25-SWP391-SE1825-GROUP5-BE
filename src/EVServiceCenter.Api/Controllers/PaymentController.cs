@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +20,7 @@ public class PaymentController : ControllerBase
 {
 	private readonly PaymentService _paymentService;
     private readonly IPayOSService _payOSService;
+    private readonly IVNPayService _vnPayService;
     private readonly IBookingRepository _bookingRepo;
     private readonly IInvoiceRepository _invoiceRepo;
     private readonly IPaymentRepository _paymentRepo;
@@ -29,6 +31,7 @@ public class PaymentController : ControllerBase
 
     public PaymentController(PaymentService paymentService,
         IPayOSService payOSService,
+        IVNPayService vnPayService,
         IBookingRepository bookingRepo,
         IInvoiceRepository invoiceRepo,
         IPaymentRepository paymentRepo,
@@ -39,6 +42,7 @@ public class PaymentController : ControllerBase
 	{
 		_paymentService = paymentService;
         _payOSService = payOSService;
+        _vnPayService = vnPayService;
         _bookingRepo = bookingRepo;
         _invoiceRepo = invoiceRepo;
         _paymentRepo = paymentRepo;
@@ -118,6 +122,7 @@ public class PaymentController : ControllerBase
 			// Tính tổng tiền theo logic giống PayOS
 			var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
 			decimal packageDiscountAmount = 0m;
+			decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
 			decimal partsAmount = 0m;
 
 			// Tính parts amount
@@ -127,18 +132,26 @@ public class PaymentController : ControllerBase
 				partsAmount = workOrderParts.Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
 			}
 
-			// Tính package discount nếu có
+			// Tính package discount và package price nếu có
 			if (booking.AppliedCreditId.HasValue)
 			{
 				var appliedCredit = await _customerServiceCreditRepo.GetByIdAsync(booking.AppliedCreditId.Value);
 				if (appliedCredit?.ServicePackage != null)
 				{
+					// Tính discount từ gói
 					packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+
+					// Lần đầu mua gói (UsedCredits == 0) → phải trả tiền mua gói
+					// Lần sau dùng gói (UsedCredits > 0) → chỉ trả phần discount còn lại
+					if (appliedCredit.UsedCredits == 0)
+					{
+						packagePrice = appliedCredit.ServicePackage.Price;
+					}
 				}
 			}
 
-			// Total = (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) + parts
-			decimal totalAmount = (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice) + partsAmount;
+			// Total = packagePrice (nếu lần đầu) + (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) + parts
+			decimal totalAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice) + partsAmount;
 
 			var amount = (int)Math.Round(totalAmount);
 			if (amount < 1000) amount = 1000; // Min amount
@@ -157,8 +170,6 @@ public class PaymentController : ControllerBase
 			// Format: https://qr.sepay.vn/img?acc={account}&bank={bank}&amount={amount}&des={description}
 			var qrCodeUrl = $"{qrCodeBaseUrl}?acc={Uri.EscapeDataString(sepayAccount)}&bank={Uri.EscapeDataString(sepayBank)}&amount={amount}&des={Uri.EscapeDataString(transactionContent)}";
 
-			_logger.LogInformation("SePay QR Code created for booking {BookingId}: Amount={Amount}, Content={Content}", bookingId, amount, transactionContent);
-
 			return Ok(new
 			{
 				success = true,
@@ -176,7 +187,6 @@ public class PaymentController : ControllerBase
 		}
 		catch (Exception ex)
 		{
-			_logger.LogError(ex, "Error creating SePay QR code for booking {BookingId}", bookingId);
 			return StatusCode(500, new { success = false, message = $"Lỗi tạo QR code thanh toán: {ex.Message}" });
 		}
 	}
@@ -298,6 +308,240 @@ public class PaymentController : ControllerBase
 	}
 
 	/// <summary>
+	/// Tạo VNPay payment link cho Booking
+	/// </summary>
+	[HttpPost("booking/{bookingId:int}/vnpay-link")]
+	[Authorize]
+	public async Task<IActionResult> CreateVNPayPaymentLink([FromRoute] int bookingId)
+	{
+		try
+		{
+			var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+			if (booking == null)
+			{
+				return NotFound(new { success = false, message = "Không tìm thấy booking" });
+			}
+
+			if (booking.Status == "CANCELLED")
+			{
+				return BadRequest(new { success = false, message = "Booking đã bị hủy" });
+			}
+
+			if (booking.Status == "PAID")
+			{
+				return BadRequest(new { success = false, message = "Booking đã được thanh toán" });
+			}
+
+			// Tính tổng tiền theo logic giống PayOS
+			var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+			decimal packageDiscountAmount = 0m;
+			decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
+			decimal partsAmount = 0m;
+
+			// Tính parts amount
+			var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
+			if (workOrderParts != null && workOrderParts.Any())
+			{
+				partsAmount = workOrderParts.Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
+			}
+
+			// Tính package discount và package price nếu có
+			if (booking.AppliedCreditId.HasValue)
+			{
+				var appliedCredit = await _customerServiceCreditRepo.GetByIdAsync(booking.AppliedCreditId.Value);
+				if (appliedCredit?.ServicePackage != null)
+				{
+					// Tính discount từ gói
+					packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+
+					// Lần đầu mua gói (UsedCredits == 0) → phải trả tiền mua gói
+					// Lần sau dùng gói (UsedCredits > 0) → chỉ trả phần discount còn lại
+					if (appliedCredit.UsedCredits == 0)
+					{
+						packagePrice = appliedCredit.ServicePackage.Price;
+					}
+				}
+			}
+
+			// Total = packagePrice (nếu lần đầu) + (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) + parts
+			decimal totalAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice) + partsAmount;
+
+			var amount = (decimal)Math.Round(totalAmount);
+			var minAmount = _configuration.GetValue<decimal>("VNPay:MinAmount", 1000);
+			if (amount < minAmount) amount = minAmount;
+
+			var description = $"Thanh toán vé #{bookingId}";
+			var customerName = booking.Customer?.User?.FullName ?? "Khách hàng";
+
+			var paymentUrl = await _vnPayService.CreatePaymentUrlAsync(bookingId, amount, description, customerName);
+
+			_logger.LogInformation("VNPay payment URL created for booking {BookingId}: {Url}", bookingId, paymentUrl);
+
+			return Ok(new
+			{
+				success = true,
+				message = "Tạo link thanh toán VNPay thành công",
+				data = new { paymentUrl, bookingId, amount }
+			});
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error creating VNPay payment link for booking {BookingId}", bookingId);
+			return StatusCode(500, new { success = false, message = $"Lỗi tạo link thanh toán VNPay: {ex.Message}" });
+		}
+	}
+
+	/// <summary>
+	/// VNPay Return URL - User redirect về sau khi thanh toán
+	/// </summary>
+	[HttpGet("/api/payment/vnpay-return")]
+	[AllowAnonymous]
+	public async Task<IActionResult> VNPayReturn([FromQuery] Dictionary<string, string> vnpayData)
+	{
+		try
+		{
+			_logger.LogInformation("=== VNPAY RETURN URL RECEIVED ===");
+			_logger.LogInformation("VNPay Return Data: {Data}", System.Text.Json.JsonSerializer.Serialize(vnpayData));
+
+			// Verify payment response
+			var secureHash = vnpayData.ContainsKey("vnp_SecureHash") ? vnpayData["vnp_SecureHash"] : "";
+			var isValid = _vnPayService.VerifyPaymentResponse(vnpayData, secureHash);
+
+			if (!isValid)
+			{
+				_logger.LogWarning("VNPay return: Invalid payment signature");
+				var frontendUrl = _configuration["App:FrontendUrl"];
+				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
+				var frontendFailUrl = $"{frontendUrl}{failedPath}?error=invalid_signature";
+				return Redirect(frontendFailUrl);
+			}
+
+			// Lấy bookingId từ response
+			var bookingId = _vnPayService.GetBookingIdFromResponse(vnpayData);
+			if (!bookingId.HasValue)
+			{
+				_logger.LogWarning("VNPay return: Cannot extract bookingId from response");
+				var frontendUrl = _configuration["App:FrontendUrl"];
+				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
+				var frontendFailUrl = $"{frontendUrl}{failedPath}?error=cannot_extract_booking";
+				return Redirect(frontendFailUrl);
+			}
+
+			// Kiểm tra response code
+			var responseCode = vnpayData.ContainsKey("vnp_ResponseCode") ? vnpayData["vnp_ResponseCode"] : "";
+			var isPaymentSuccess = responseCode == "00";
+
+			if (isPaymentSuccess)
+			{
+				// Xác nhận thanh toán với payment method VNPAY
+				_logger.LogInformation("VNPay return: Payment successful, confirming payment for booking {BookingId} with method VNPAY", bookingId.Value);
+				var confirmed = await _paymentService.ConfirmPaymentAsync(bookingId.Value, "VNPAY");
+
+				if (confirmed)
+				{
+					var frontendUrl = _configuration["App:FrontendUrl"];
+					var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
+					var frontendSuccessUrl = $"{frontendUrl}{successPath}?bookingId={bookingId.Value}&status=success";
+					return Redirect(frontendSuccessUrl);
+				}
+				else
+				{
+					var frontendUrl = _configuration["App:FrontendUrl"];
+					var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
+					var frontendErrorUrl = $"{frontendUrl}{errorPath}?bookingId={bookingId.Value}&error=system_error";
+					return Redirect(frontendErrorUrl);
+				}
+			}
+			else
+			{
+				_logger.LogInformation("VNPay return: Payment failed. ResponseCode: {Code}", responseCode);
+				var frontendUrl = _configuration["App:FrontendUrl"];
+				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
+				var frontendFailUrl = $"{frontendUrl}{failedPath}?bookingId={bookingId.Value}&status=failed&code={responseCode}";
+				return Redirect(frontendFailUrl);
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error processing VNPay return URL");
+			var frontendUrl = _configuration["App:FrontendUrl"];
+			var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
+			var frontendErrorUrl = $"{frontendUrl}{errorPath}?error=system_error";
+			return Redirect(frontendErrorUrl);
+		}
+	}
+
+	/// <summary>
+	/// VNPay IPN (Instant Payment Notification) - Webhook từ VNPay
+	/// </summary>
+	[HttpPost("/api/payment/vnpay-ipn")]
+	[AllowAnonymous]
+	public async Task<IActionResult> VNPayIPN([FromForm] Dictionary<string, string> vnpayData)
+	{
+		try
+		{
+			_logger.LogInformation("=== VNPAY IPN RECEIVED ===");
+			_logger.LogInformation("VNPay IPN Data: {Data}", System.Text.Json.JsonSerializer.Serialize(vnpayData));
+
+			// Verify payment response
+			var secureHash = vnpayData.ContainsKey("vnp_SecureHash") ? vnpayData["vnp_SecureHash"] : "";
+			var isValid = _vnPayService.VerifyPaymentResponse(vnpayData, secureHash);
+
+			if (!isValid)
+			{
+				_logger.LogWarning("VNPay IPN: Invalid payment signature");
+				return StatusCode(200, new { RspCode = "97", Message = "Invalid signature" });
+			}
+
+			// Lấy bookingId từ response
+			var bookingId = _vnPayService.GetBookingIdFromResponse(vnpayData);
+			if (!bookingId.HasValue)
+			{
+				_logger.LogWarning("VNPay IPN: Cannot extract bookingId from response");
+				return StatusCode(200, new { RspCode = "99", Message = "Cannot extract bookingId" });
+			}
+
+			// Kiểm tra response code
+			var responseCode = vnpayData.ContainsKey("vnp_ResponseCode") ? vnpayData["vnp_ResponseCode"] : "";
+			var transactionStatus = vnpayData.ContainsKey("vnp_TransactionStatus") ? vnpayData["vnp_TransactionStatus"] : "";
+
+			// VNPay: ResponseCode = "00" và TransactionStatus = "00" là thành công
+			var isPaymentSuccess = responseCode == "00" && transactionStatus == "00";
+
+			if (isPaymentSuccess)
+			{
+				// Xác nhận thanh toán với payment method VNPAY
+				_logger.LogInformation("VNPay IPN: Payment successful, confirming payment for booking {BookingId} with method VNPAY", bookingId.Value);
+				var confirmed = await _paymentService.ConfirmPaymentAsync(bookingId.Value, "VNPAY");
+
+				if (confirmed)
+				{
+					_logger.LogInformation("VNPay IPN: Payment confirmed successfully for booking {BookingId}", bookingId.Value);
+					// VNPay yêu cầu trả về RspCode = "00" để báo đã xử lý thành công
+					return StatusCode(200, new { RspCode = "00", Message = "Confirm success" });
+				}
+				else
+				{
+					_logger.LogWarning("VNPay IPN: Failed to confirm payment for booking {BookingId}", bookingId.Value);
+					return StatusCode(200, new { RspCode = "99", Message = "Confirm failed" });
+				}
+			}
+			else
+			{
+				_logger.LogInformation("VNPay IPN: Payment not successful. ResponseCode: {Code}, TransactionStatus: {Status}", responseCode, transactionStatus);
+				// Vẫn trả về success để VNPay không retry
+				return StatusCode(200, new { RspCode = "00", Message = "Payment not successful" });
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error processing VNPay IPN");
+			// Trả về error để VNPay retry
+			return StatusCode(200, new { RspCode = "99", Message = "Internal error" });
+		}
+	}
+
+	/// <summary>
 	/// Webhook endpoint để nhận callback từ SePay khi có giao dịch thanh toán
 	/// URL: https://spring25-swp391-se1825-group5-be.onrender.com/api/payment/sepay-webhook
 	/// </summary>
@@ -307,14 +551,9 @@ public class PaymentController : ControllerBase
 	{
 		try
 		{
-			// Log webhook payload để debug
-			_logger.LogInformation("=== SEPAY WEBHOOK RECEIVED ===");
-			_logger.LogInformation("SePay Webhook Data: {WebhookData}", System.Text.Json.JsonSerializer.Serialize(request));
-
 			// Validate request
 			if (request == null)
 			{
-				_logger.LogWarning("SePay webhook received null request");
 				return BadRequest(new { success = false, message = "Invalid webhook payload" });
 			}
 
@@ -355,7 +594,6 @@ public class PaymentController : ControllerBase
 						if (int.TryParse(bookingIdStr, out var extractedBookingId))
 						{
 							bookingId = extractedBookingId;
-							_logger.LogInformation("SePay webhook: Extracted bookingId {BookingId} from Description: {Description}", extractedBookingId, descriptionText);
 						}
 					}
 				}
@@ -386,11 +624,8 @@ public class PaymentController : ControllerBase
 
 			if (!bookingId.HasValue || bookingId.Value <= 0)
 			{
-				_logger.LogWarning("SePay webhook: Cannot extract bookingId from payload. Data: {Data}", System.Text.Json.JsonSerializer.Serialize(request));
 				return BadRequest(new { success = false, message = "Cannot extract bookingId from webhook payload" });
 			}
-
-			_logger.LogInformation("SePay webhook: Extracted bookingId = {BookingId}", bookingId.Value);
 
 			// Kiểm tra trạng thái thanh toán từ SePay
 			// SePay gọi webhook khi thanh toán thành công, nếu có Description chứa "BankAPINotify" thì coi như thành công
@@ -410,34 +645,27 @@ public class PaymentController : ControllerBase
 
 			if (!isPaymentSuccess)
 			{
-				_logger.LogInformation("SePay webhook: Payment not successful. Status: {Status}, Code: {Code}, Description: {Description}", paymentStatus, request.Code, description);
 				// Trả về 200 OK để SePay không retry, nhưng không xử lý payment
 				return Ok(new { success = true, message = "Webhook received but payment not successful" });
 			}
 
-			_logger.LogInformation("SePay webhook: Payment confirmed as successful. Status: {Status}, Code: {Code}, Description: {Description}", paymentStatus, request.Code, description);
-
-			// Xác nhận thanh toán
-			_logger.LogInformation("SePay webhook: Payment successful, confirming payment for booking {BookingId}", bookingId.Value);
-			var confirmed = await _paymentService.ConfirmPaymentAsync(bookingId.Value);
+			// Xác nhận thanh toán với payment method SEPAY
+			var confirmed = await _paymentService.ConfirmPaymentAsync(bookingId.Value, "SEPAY");
 
 			if (confirmed)
 			{
-				_logger.LogInformation("SePay webhook: Payment confirmed successfully for booking {BookingId}", bookingId.Value);
 				// Trả về HTTP 200-299 để SePay biết đã nhận được thành công
 				return Ok(new { success = true, message = "Payment confirmed successfully", bookingId = bookingId.Value });
 			}
 			else
 			{
-				_logger.LogWarning("SePay webhook: Failed to confirm payment for booking {BookingId}", bookingId.Value);
 				// Trả về 200 OK nhưng với success = false để SePay không retry
 				// Nếu muốn SePay retry, có thể trả về 500
 				return Ok(new { success = false, message = "Failed to confirm payment", bookingId = bookingId.Value });
 			}
 		}
-		catch (Exception ex)
+		catch (Exception)
 		{
-			_logger.LogError(ex, "Error processing SePay webhook");
 			// Trả về 500 để SePay retry webhook
 			return StatusCode(500, new { success = false, message = "Internal server error processing webhook" });
 		}

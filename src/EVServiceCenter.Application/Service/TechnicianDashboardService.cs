@@ -35,17 +35,17 @@ namespace EVServiceCenter.Application.Service
             {
                 var stats = await GetStatsAsync(technicianId);
                 var today = DateTime.Today;
-                
+
                 // Lấy upcoming bookings (booking hôm nay và ngày mai)
                 var allBookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
-                var upcomingBookings = allBookings.Where(b => 
-                    b.CreatedAt.Date >= today && 
+                var upcomingBookings = allBookings.Where(b =>
+                    b.CreatedAt.Date >= today &&
                     (b.Status == "CONFIRMED" || b.Status == "PENDING")
                 ).Take(5).ToList();
 
                 // Lấy lịch hôm nay
                 var todaySchedule = await GetTodayScheduleAsync(technicianId);
-                
+
                 // Lấy performance summary
                 var performance = await GetPerformanceAsync(technicianId);
 
@@ -94,7 +94,7 @@ namespace EVServiceCenter.Application.Service
             {
                 var allBookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
                 var pendingBookings = allBookings.Where(b => b.Status == "PENDING").ToList();
-                
+
                 var totalCount = pendingBookings.Count;
                 var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
                 var pagedBookings = pendingBookings.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
@@ -121,7 +121,7 @@ namespace EVServiceCenter.Application.Service
             {
                 var allBookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
                 var inProgressBookings = allBookings.Where(b => b.Status == "IN_PROGRESS").ToList();
-                
+
                 var totalCount = inProgressBookings.Count;
                 var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
                 var pagedBookings = inProgressBookings.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
@@ -148,7 +148,7 @@ namespace EVServiceCenter.Application.Service
             {
                 var allBookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
                 var completedBookings = allBookings.Where(b => b.Status == "COMPLETED" || b.Status == "PAID").ToList();
-                
+
                 var totalCount = completedBookings.Count;
                 var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
                 var pagedBookings = completedBookings.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
@@ -207,12 +207,12 @@ namespace EVServiceCenter.Application.Service
                 var startOfWeek = today.AddDays(-(int)today.DayOfWeek);
                 var startOfMonth = new DateTime(today.Year, today.Month, 1);
 
-                var thisWeekBookings = allBookings.Where(b => 
-                    b.CreatedAt >= startOfWeek && 
+                var thisWeekBookings = allBookings.Where(b =>
+                    b.CreatedAt >= startOfWeek &&
                     (b.Status == "COMPLETED" || b.Status == "PAID")).ToList();
 
-                var thisMonthBookings = allBookings.Where(b => 
-                    b.CreatedAt >= startOfMonth && 
+                var thisMonthBookings = allBookings.Where(b =>
+                    b.CreatedAt >= startOfMonth &&
                     (b.Status == "COMPLETED" || b.Status == "PAID")).ToList();
 
                 return new PerformanceSummary
@@ -246,7 +246,7 @@ namespace EVServiceCenter.Application.Service
             {
                 var today = DateTime.Today;
                 var slots = await _technicianTimeSlotRepository.GetByTechnicianAndDateAsync(technicianId, today);
-                
+
                 return slots.Select(s => new TodayScheduleItem
                 {
                     TimeSlot = s.Slot?.SlotTime.ToString() ?? "",
@@ -291,13 +291,13 @@ namespace EVServiceCenter.Application.Service
                 SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
                 TechnicianSlotId = booking.TechnicianSlotId ?? 0,
                 SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "",
-                SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "",
+                SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel != "SA" && booking.TechnicianTimeSlot?.Slot?.SlotLabel != "CH" ? booking.TechnicianTimeSlot?.Slot?.SlotLabel : null,
                 CustomerName = booking.Customer?.User?.FullName ?? "Unknown",
                 CustomerPhone = booking.Customer?.User?.PhoneNumber ?? "",
                 VehiclePlate = booking.Vehicle?.LicensePlate ?? "",
                 WorkStartTime = null,
                 WorkEndTime = null,
-                
+
                 // Dashboard fields
                 BookingDate = booking.CreatedAt.Date,
                 VehicleInfo = $"{booking.Vehicle?.VehicleModel?.ModelName} - {booking.Vehicle?.LicensePlate}",

@@ -97,16 +97,19 @@ namespace EVServiceCenter.Application.Service
 
                 foreach (var timeSlot in timeSlots)
                 {
+                    var slotLabel = timeSlot.SlotLabel;
+                    if (slotLabel == "SA" || slotLabel == "CH")
+                    {
+                        slotLabel = null;
+                    }
                     var timeSlotAvailability = new TimeSlotAvailability
                     {
                         SlotId = timeSlot.SlotId,
                         SlotTime = timeSlot.SlotTime.ToString(),
-                        SlotLabel = timeSlot.SlotLabel,
+                        SlotLabel = slotLabel,
                         IsAvailable = false,
                         AvailableTechnicians = new List<TechnicianAvailability>()
                     };
-
-                    // Check availability for each technician
                     foreach (var technician in centerTechnicians)
                     {
                         var isTechnicianAvailable = !bookingsForDate.Any(b =>
@@ -211,11 +214,16 @@ namespace EVServiceCenter.Application.Service
                             var isRealtimeAvailable = !isBooked &&
                                 (techTimeSlot == null || (techTimeSlot.IsAvailable && techTimeSlot.BookingId == null));
 
+                            var slotLabel = slot.SlotLabel;
+                            if (slotLabel == "SA" || slotLabel == "CH")
+                            {
+                                slotLabel = null;
+                            }
                             availableTimeSlots.Add(new AvailableTimeSlot
                             {
                                 SlotId = slotId,
                             SlotTime = slot.SlotTime,
-                            SlotLabel = slot.SlotLabel,
+                                SlotLabel = slotLabel,
                                 IsAvailable = !isBooked,
                                 IsRealtimeAvailable = isRealtimeAvailable,
                                 TechnicianId = technician.TechnicianId,

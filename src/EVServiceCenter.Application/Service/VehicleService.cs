@@ -199,6 +199,8 @@ namespace EVServiceCenter.Application.Service
                 CurrentMileage = vehicle.CurrentMileage,
                 LastServiceDate = vehicle.LastServiceDate,
                 CreatedAt = vehicle.CreatedAt,
+                ModelId = vehicle.ModelId,
+                ModelImageUrl = vehicle.VehicleModel?.ImageUrl,
                 CustomerName = vehicle.Customer?.User?.FullName ?? "Khách vãng lai",
                 CustomerPhone = vehicle.Customer?.User?.PhoneNumber ?? string.Empty
             };

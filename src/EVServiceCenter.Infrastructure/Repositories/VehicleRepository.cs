@@ -22,6 +22,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Vehicles
                 .Include(v => v.Customer)
                 .Include(v => v.Customer.User)
+                .Include(v => v.VehicleModel)
                 .OrderByDescending(v => v.CreatedAt)
                 .ToListAsync();
         }
@@ -31,6 +32,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Vehicles
                 .Include(v => v.Customer)
                 .Include(v => v.Customer.User)
+                .Include(v => v.VehicleModel)
                 .FirstOrDefaultAsync(v => v.VehicleId == vehicleId);
         }
 

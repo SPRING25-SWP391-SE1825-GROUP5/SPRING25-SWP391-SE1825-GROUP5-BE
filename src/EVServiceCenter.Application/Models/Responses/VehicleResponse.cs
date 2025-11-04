@@ -14,6 +14,10 @@ namespace EVServiceCenter.Application.Models.Responses
         // PurchaseDate, NextServiceDue removed
         public DateTime CreatedAt { get; set; }
         
+        // Model information
+        public int? ModelId { get; set; }
+        public string? ModelImageUrl { get; set; }
+        
         // Related data
         public required string CustomerName { get; set; }
         public required string CustomerPhone { get; set; }

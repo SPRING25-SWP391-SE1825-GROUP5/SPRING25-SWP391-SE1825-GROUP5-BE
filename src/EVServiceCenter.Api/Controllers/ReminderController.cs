@@ -18,12 +18,18 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IMaintenanceReminderRepository _repo;
         private readonly IEmailService _email;
         private readonly MaintenanceReminderOptions _options;
+        private readonly IBookingRepository _bookingRepository;
+        private readonly INotificationService _notificationService;
+        private readonly IEmailTemplateRenderer _templateRenderer;
 
-        public ReminderController(IMaintenanceReminderRepository repo, IEmailService email, IOptions<MaintenanceReminderOptions> options)
+        public ReminderController(IMaintenanceReminderRepository repo, IEmailService email, IOptions<MaintenanceReminderOptions> options, IBookingRepository bookingRepository, INotificationService notificationService, IEmailTemplateRenderer templateRenderer)
         {
             _repo = repo;
             _email = email;
             _options = options.Value;
+            _bookingRepository = bookingRepository;
+            _notificationService = notificationService;
+            _templateRenderer = templateRenderer;
         }
 
 
@@ -45,7 +51,11 @@ namespace EVServiceCenter.Api.Controllers
                     DueDate = it.DueDate.HasValue ? DateOnly.FromDateTime(it.DueDate.Value) : null,
                     DueMileage = it.DueMileage,
                     IsCompleted = false,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    Type = it.Type ?? EVServiceCenter.Domain.Enums.ReminderType.MAINTENANCE,
+                    Status = EVServiceCenter.Domain.Enums.ReminderStatus.PENDING,
+                    CadenceDays = it.CadenceDays,
+                    UpdatedAt = DateTime.UtcNow
                 };
                 var r = await _repo.CreateAsync(entity);
                 created.Add(r);
@@ -80,7 +90,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, data = items });
         }
 
-        public class CreateReminderRequest { public int VehicleId { get; set; } public int? ServiceId { get; set; } public DateTime? DueDate { get; set; } public int? DueMileage { get; set; } }
+        public class CreateReminderRequest { public int VehicleId { get; set; } public int? ServiceId { get; set; } public DateTime? DueDate { get; set; } public int? DueMileage { get; set; } public int? CadenceDays { get; set; } public EVServiceCenter.Domain.Enums.ReminderType? Type { get; set; } }
         [HttpPost]
         [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateReminderRequest req)
@@ -93,7 +103,11 @@ namespace EVServiceCenter.Api.Controllers
                 DueDate = req.DueDate.HasValue ? DateOnly.FromDateTime(req.DueDate.Value) : null,
                 DueMileage = req.DueMileage,
                 IsCompleted = false,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                Type = req.Type ?? EVServiceCenter.Domain.Enums.ReminderType.MAINTENANCE,
+                Status = EVServiceCenter.Domain.Enums.ReminderStatus.PENDING,
+                CadenceDays = req.CadenceDays,
+                UpdatedAt = DateTime.UtcNow
             };
             var created = await _repo.CreateAsync(entity);
             return CreatedAtAction(nameof(GetById), new { id = created.ReminderId }, new { success = true, data = created });
@@ -164,15 +178,61 @@ namespace EVServiceCenter.Api.Controllers
         [Authorize(Roles = "ADMIN,STAFF")]
         public async Task<IActionResult> DispatchAppointments([FromBody] AppointmentDispatchRequest req)
         {
-            var centerId = req?.CenterId;
             var now = DateTime.UtcNow;
-            var to = now.AddHours(req?.WindowHours ?? _options.AppointmentReminderHours);
-            // Đơn giản: lấy bookings tạo trong khoảng (placeholder vì không có BookingDate trong entity)
-            // Có thể thay bằng thực thể/thuộc tính phù hợp nếu sẵn có
-            var upcomingBookings = await Task.FromResult(new System.Collections.Generic.List<object>());
+            var baseDate = req?.Date ?? now;
+            var windowHours = req?.WindowHours ?? _options.AppointmentReminderHours;
+            var windowEnd = baseDate.AddHours(windowHours);
+
+            var bookings = req?.CenterId.HasValue == true
+                ? await _bookingRepository.GetBookingsByCenterIdAsync(req.CenterId.Value, 1, int.MaxValue, "CONFIRMED", null, null, "createdAt", "desc")
+                : await _bookingRepository.GetAllBookingsAsync();
+
+            var candidates = bookings
+                .Where(b => (b.Status == "CONFIRMED" || b.Status == "IN_PROGRESS") && b.TechnicianSlotId.HasValue)
+                .ToList();
+
+            var detailed = new System.Collections.Generic.List<EVServiceCenter.Domain.Entities.Booking>();
+            foreach (var b in candidates)
+            {
+                var full = await _bookingRepository.GetBookingDetailAsync(b.BookingId);
+                if (full?.TechnicianTimeSlot?.Slot != null)
+                {
+                    detailed.Add(full);
+                }
+            }
+
+            var withinWindow = detailed
+                .Select(b => new
+                {
+                    Booking = b,
+                    At = new DateTime(b.TechnicianTimeSlot!.WorkDate.Year, b.TechnicianTimeSlot.WorkDate.Month, b.TechnicianTimeSlot.WorkDate.Day,
+                                      b.TechnicianTimeSlot.Slot.SlotTime.Hour, b.TechnicianTimeSlot.Slot.SlotTime.Minute, b.TechnicianTimeSlot.Slot.SlotTime.Second, DateTimeKind.Utc)
+                })
+                .Where(x => x.At >= now && x.At <= windowEnd)
+                .ToList();
+
             var sent = 0;
-            // Placeholder gửi 0 do thiếu BookingDate; giữ endpoint để FE tích hợp sớm
-            return Ok(new { success = true, sent, windowHours = (req?.WindowHours ?? _options.AppointmentReminderHours) });
+            foreach (var x in withinWindow)
+            {
+                var email = x.Booking.Customer?.User?.Email;
+                if (string.IsNullOrWhiteSpace(email)) continue;
+                var subject = "Nhắc lịch hẹn";
+                var body = await _templateRenderer.RenderAsync("AppointmentReminder", new System.Collections.Generic.Dictionary<string, string>
+                {
+                    ["bookingId"] = x.Booking.BookingId.ToString(),
+                    ["centerName"] = x.Booking.Center?.CenterName ?? string.Empty,
+                    ["appointmentUtc"] = x.At.ToString("u")
+                });
+                await _email.SendEmailAsync(email, subject, body);
+                var userId = x.Booking.Customer?.User?.UserId ?? 0;
+                if (userId > 0)
+                {
+                    await _notificationService.SendBookingNotificationAsync(userId, subject, $"Booking #{x.Booking.BookingId} lúc {x.At:u}", "APPOINTMENT");
+                }
+                sent++;
+            }
+
+            return Ok(new { success = true, sent, windowHours });
         }
 
         [HttpPost("{id:int}/send-test")]
@@ -220,9 +280,20 @@ namespace EVServiceCenter.Api.Controllers
             {
                 var email = r.Vehicle?.Customer?.User?.Email;
                 if (string.IsNullOrWhiteSpace(email)) continue;
-                var subject = $"Nhắc bảo dưỡng xe #{r.VehicleId}";
-                var body = $"<p>Xin chào, lịch bảo dưỡng của bạn sắp đến hạn.</p>";
+                var subject = "Nhắc bảo dưỡng";
+                var body = await _templateRenderer.RenderAsync("MaintenanceReminder", new System.Collections.Generic.Dictionary<string, string>
+                {
+                    ["vehicleId"] = r.VehicleId.ToString(),
+                    ["serviceId"] = (r.ServiceId?.ToString() ?? string.Empty),
+                    ["dueDate"] = (r.DueDate?.ToDateTime(TimeOnly.MinValue).ToString("u") ?? string.Empty),
+                    ["dueMileage"] = (r.DueMileage?.ToString() ?? string.Empty)
+                });
                 await _email.SendEmailAsync(email, subject, body);
+                var userId = r.Vehicle?.Customer?.User?.UserId ?? 0;
+                if (userId > 0)
+                {
+                    await _notificationService.SendBookingNotificationAsync(userId, subject, $"Xe #{r.VehicleId} đến hạn bảo dưỡng", "MAINTENANCE");
+                }
                 sent++;
             }
             return Ok(new { success = true, sent });

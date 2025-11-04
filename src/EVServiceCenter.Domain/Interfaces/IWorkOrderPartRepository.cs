@@ -9,9 +9,14 @@ namespace EVServiceCenter.Domain.Interfaces
     {
         Task<List<WorkOrderPart>> GetByBookingIdAsync(int bookingId);
         Task<List<WorkOrderPart>> GetByCenterAndDateRangeAsync(int centerId, DateTime startDate, DateTime endDate);
+        Task<WorkOrderPart?> GetByIdAsync(int workOrderPartId);
         Task<WorkOrderPart> AddAsync(WorkOrderPart item);
         Task<WorkOrderPart> UpdateAsync(WorkOrderPart item);
         Task DeleteAsync(int bookingId, int partId);
+
+        Task<WorkOrderPart?> ApproveAsync(int id, decimal unitPrice, int approvedByUserId, DateTime approvedAtUtc);
+        Task<WorkOrderPart?> RejectAsync(int id, int rejectedByUserId, DateTime rejectedAtUtc);
+        Task<(bool Success, string? Error, WorkOrderPart? Item)> ConsumeWithInventoryAsync(int id, int centerId, DateTime consumedAtUtc, int consumedByUserId);
     }
 }
 

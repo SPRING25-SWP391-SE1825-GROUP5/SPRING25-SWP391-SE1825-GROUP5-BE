@@ -28,6 +28,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IServiceChecklistRepository _serviceChecklistRepository;
         private readonly IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
         private readonly ILogger<BookingService> _logger;
+        private readonly IWorkOrderPartRepository _workOrderPartRepository;
 
 
         public BookingService(
@@ -44,7 +45,8 @@ namespace EVServiceCenter.Application.Service
             IMaintenanceChecklistRepository maintenanceChecklistRepository,
             IServiceChecklistRepository serviceChecklistRepository,
             IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository,
-            ILogger<BookingService> logger)
+            ILogger<BookingService> logger,
+            IWorkOrderPartRepository workOrderPartRepository)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -60,6 +62,7 @@ namespace EVServiceCenter.Application.Service
             _serviceChecklistRepository = serviceChecklistRepository;
             _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
             _logger = logger;
+            _workOrderPartRepository = workOrderPartRepository;
         }
 
         public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int>? serviceIds = null)
@@ -586,6 +589,16 @@ namespace EVServiceCenter.Application.Service
                 // Update booking status
                 booking.Status = request.Status.ToUpper();
                 booking.UpdatedAt = DateTime.UtcNow;
+
+                if (string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId);
+                    var hasDraft = parts.Any(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.DRAFT);
+                    if (hasDraft)
+                    {
+                        throw new ArgumentException("Không thể chuyển COMPLETED khi còn phụ tùng DRAFT");
+                    }
+                }
 
                 // Handle package usage based on status change
                 if (booking.AppliedCreditId.HasValue)

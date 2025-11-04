@@ -10,6 +10,7 @@ using System.Linq;
 using EVServiceCenter.Application.Service;
 using EVServiceCenter.Domain.Entities;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Configuration;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -35,8 +36,13 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly EVServiceCenter.Domain.Interfaces.ITechnicianRepository _technicianRepository;
         private readonly ICustomerService _customerService;
         private readonly ITechnicianService _technicianService;
+        private readonly EVServiceCenter.Domain.Interfaces.IWorkOrderPartRepository _workOrderPartRepository;
+        private readonly EVServiceCenter.Domain.Interfaces.IPartRepository _partRepository;
+        private readonly EVServiceCenter.Application.Interfaces.IEmailService _emailService;
+        private readonly EVServiceCenter.Application.Interfaces.IEmailTemplateRenderer _templateRenderer;
+        private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
 
-    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub, Microsoft.Extensions.Options.IOptions<EVServiceCenter.Application.Configurations.BookingRealtimeOptions> realtimeOptions, IGuestBookingService guestBookingService, EVServiceCenter.Application.Service.PaymentService paymentService, EVServiceCenter.Domain.Interfaces.IInvoiceRepository invoiceRepository, INotificationService notificationService, EVServiceCenter.Domain.Interfaces.IPaymentRepository paymentRepository, EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepository, EVServiceCenter.Domain.Interfaces.ITechnicianRepository technicianRepository, ICustomerService customerService, ITechnicianService technicianService)
+    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub, Microsoft.Extensions.Options.IOptions<EVServiceCenter.Application.Configurations.BookingRealtimeOptions> realtimeOptions, IGuestBookingService guestBookingService, EVServiceCenter.Application.Service.PaymentService paymentService, EVServiceCenter.Domain.Interfaces.IInvoiceRepository invoiceRepository, INotificationService notificationService, EVServiceCenter.Domain.Interfaces.IPaymentRepository paymentRepository, EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepository, EVServiceCenter.Domain.Interfaces.ITechnicianRepository technicianRepository, ICustomerService customerService, ITechnicianService technicianService, EVServiceCenter.Domain.Interfaces.IWorkOrderPartRepository workOrderPartRepository, EVServiceCenter.Domain.Interfaces.IPartRepository partRepository, EVServiceCenter.Application.Interfaces.IEmailService emailService, EVServiceCenter.Application.Interfaces.IEmailTemplateRenderer templateRenderer, Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
         _bookingService = bookingService;
         _bookingHistoryService = bookingHistoryService;
@@ -56,6 +62,11 @@ namespace EVServiceCenter.WebAPI.Controllers
         _technicianRepository = technicianRepository;
         _customerService = customerService;
         _technicianService = technicianService;
+        _workOrderPartRepository = workOrderPartRepository;
+        _partRepository = partRepository;
+        _emailService = emailService;
+        _templateRenderer = templateRenderer;
+        _configuration = configuration;
         }
 
         [HttpGet("availability")]
@@ -360,6 +371,29 @@ namespace EVServiceCenter.WebAPI.Controllers
                         $"Bạn có booking mới từ {booking.CustomerName} cho dịch vụ vào {booking.BookingDate:dd/MM/yyyy} lúc {booking.SlotTime}",
                         "BOOKING"
                     );
+                }
+
+                // Auto-confirm when created by staff if enabled
+                var staffAutoConfirm = _configuration.GetValue<bool>("Booking:StaffAutoConfirmEnabled", false);
+                if (staffAutoConfirm && (User.IsInRole("STAFF") || User.IsInRole("ADMIN") || User.IsInRole("MANAGER")))
+                {
+                    await _bookingService.UpdateBookingStatusAsync(booking.BookingId, new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = "CONFIRMED" });
+                    booking = await _bookingService.GetBookingByIdAsync(booking.BookingId);
+                }
+
+                // Email confirmation to customer
+                var bookingDetailForEmail = await _bookingRepository.GetBookingWithDetailsByIdAsync(booking.BookingId);
+                var customerEmail = bookingDetailForEmail?.Customer?.User?.Email;
+                if (!string.IsNullOrWhiteSpace(customerEmail))
+                {
+                    var html = await _templateRenderer.RenderAsync("BookingCreated", new System.Collections.Generic.Dictionary<string, string>
+                    {
+                        ["bookingId"] = booking.BookingId.ToString(),
+                        ["centerName"] = booking.CenterName,
+                        ["date"] = booking.BookingDate.ToString("yyyy-MM-dd"),
+                        ["time"] = booking.SlotTime
+                    });
+                    await _emailService.SendEmailAsync(customerEmail, staffAutoConfirm ? "Xác nhận đặt lịch" : "Đặt lịch thành công", html);
                 }
 
                 var message = (!string.IsNullOrWhiteSpace(request.PackageCode))
@@ -823,6 +857,107 @@ namespace EVServiceCenter.WebAPI.Controllers
                 "CANCELLED" => $"Booking #{bookingId} đã bị hủy.",
                 _ => $"Booking #{bookingId} đã được cập nhật trạng thái thành {status}."
             };
+        }
+
+        public class CreateWorkOrderPartRequest { public int PartId { get; set; } public int Quantity { get; set; } }
+        [HttpPost("{bookingId:int}/parts")]
+        [Authorize(Roles = "TECHNICIAN,STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> CreateWorkOrderPart(int bookingId, [FromBody] CreateWorkOrderPartRequest req)
+        {
+            if (req == null || req.PartId <= 0 || req.Quantity <= 0) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ" });
+            var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            if (!string.Equals(booking.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase)) return BadRequest(new { success = false, message = "Chỉ được thêm phụ tùng khi booking đang IN_PROGRESS" });
+            var part = await _partRepository.GetPartByIdAsync(req.PartId);
+            if (part == null || !part.IsActive) return BadRequest(new { success = false, message = "Phụ tùng không hợp lệ" });
+            var entity = new WorkOrderPart { BookingId = bookingId, PartId = req.PartId, QuantityUsed = req.Quantity, CreatedAt = DateTime.UtcNow };
+            var saved = await _workOrderPartRepository.AddAsync(entity);
+            return Ok(new { success = true, data = new { saved.WorkOrderPartId, saved.BookingId, saved.PartId, saved.QuantityUsed, saved.Status } });
+        }
+
+        [HttpPut("{bookingId:int}/parts/{id:int}/approve")]
+        [Authorize(Roles = "STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> ApproveWorkOrderPart(int bookingId, int id)
+        {
+            var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            if (!string.Equals(booking.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase)) return BadRequest(new { success = false, message = "Chỉ được duyệt khi booking đang IN_PROGRESS" });
+            var item = await _workOrderPartRepository.GetByIdAsync(id);
+            if (item == null || item.BookingId != bookingId) return NotFound(new { success = false, message = "Item không tồn tại" });
+            var part = await _partRepository.GetPartByIdAsync(item.PartId);
+            if (part == null) return BadRequest(new { success = false, message = "Phụ tùng không tồn tại" });
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
+            var userId = int.TryParse(userIdClaim, out var uid) ? uid : 0;
+            var updated = await _workOrderPartRepository.ApproveAsync(id, part.Price, userId, DateTime.UtcNow);
+            if (updated == null) return NotFound(new { success = false, message = "Không duyệt được" });
+            var details = await _bookingRepository.GetBookingWithDetailsByIdAsync(bookingId);
+            var customerUserId = details?.Customer?.UserId;
+            if (customerUserId.HasValue)
+            {
+                await _notificationService.SendBookingNotificationAsync(customerUserId.Value, "Phụ tùng phát sinh đã duyệt", $"Phụ tùng #{updated.PartId} đã được duyệt", "WORKORDER_PART");
+            }
+            return Ok(new { success = true, data = new { updated.WorkOrderPartId, updated.Status, updated.UnitPrice } });
+        }
+
+        [HttpPut("{bookingId:int}/parts/{id:int}/consume")]
+        [Authorize(Roles = "STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> ConsumeWorkOrderPart(int bookingId, int id)
+        {
+            var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            if (!string.Equals(booking.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase)) return BadRequest(new { success = false, message = "Chỉ được xác nhận sử dụng khi booking đang IN_PROGRESS" });
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
+            var userId = int.TryParse(userIdClaim, out var uid) ? uid : 0;
+            var result = await _workOrderPartRepository.ConsumeWithInventoryAsync(id, booking.CenterId, DateTime.UtcNow, userId);
+            if (!result.Success)
+            {
+                var code = result.Error ?? "ERROR";
+                var message = code switch
+                {
+                    "INSUFFICIENT_STOCK" => "Tồn kho không đủ",
+                    "PART_NOT_IN_INVENTORY" => "Kho không có phụ tùng này",
+                    _ => "Không thể xác nhận sử dụng"
+                };
+                return BadRequest(new { success = false, error = code, message });
+            }
+            var updated = result.Item!;
+            var details2 = await _bookingRepository.GetBookingWithDetailsByIdAsync(bookingId);
+            var customerUserId2 = details2?.Customer?.UserId;
+            if (customerUserId2.HasValue)
+            {
+                await _notificationService.SendBookingNotificationAsync(customerUserId2.Value, "Phụ tùng phát sinh đã sử dụng", $"Phụ tùng #{updated.PartId} đã được xác nhận sử dụng", "WORKORDER_PART");
+            }
+            return Ok(new { success = true, data = new { updated.WorkOrderPartId, updated.Status } });
+        }
+
+        [HttpPut("{bookingId:int}/parts/{id:int}/reject")]
+        [Authorize(Roles = "STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> RejectWorkOrderPart(int bookingId, int id)
+        {
+            var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
+            if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
+            if (!string.Equals(booking.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase)) return BadRequest(new { success = false, message = "Chỉ được từ chối khi booking đang IN_PROGRESS" });
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
+            var userId = int.TryParse(userIdClaim, out var uid) ? uid : 0;
+            var updated = await _workOrderPartRepository.RejectAsync(id, userId, DateTime.UtcNow);
+            if (updated == null || updated.BookingId != bookingId) return NotFound(new { success = false, message = "Không từ chối được" });
+            var details3 = await _bookingRepository.GetBookingWithDetailsByIdAsync(bookingId);
+            var customerUserId3 = details3?.Customer?.UserId;
+            if (customerUserId3.HasValue)
+            {
+                await _notificationService.SendBookingNotificationAsync(customerUserId3.Value, "Phụ tùng phát sinh bị từ chối", $"Phụ tùng #{updated.PartId} đã bị từ chối", "WORKORDER_PART");
+            }
+            return Ok(new { success = true, data = new { updated.WorkOrderPartId, updated.Status } });
+        }
+
+        [HttpGet("{bookingId:int}/parts")]
+        [Authorize]
+        public async Task<IActionResult> ListWorkOrderParts(int bookingId)
+        {
+            var items = await _workOrderPartRepository.GetByBookingIdAsync(bookingId);
+            var totalApproved = items.Where(i => i.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.APPROVED || i.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.CONSUMED)
+                .Sum(i => (i.UnitPrice ?? (i.Part?.Price ?? 0)) * i.QuantityUsed);
+            return Ok(new { success = true, data = new { items = items.Select(i => new { i.WorkOrderPartId, i.PartId, partName = i.Part?.PartName, i.QuantityUsed, i.Status, i.UnitPrice }), totals = new { approved = totalApproved } } });
         }
     }
 

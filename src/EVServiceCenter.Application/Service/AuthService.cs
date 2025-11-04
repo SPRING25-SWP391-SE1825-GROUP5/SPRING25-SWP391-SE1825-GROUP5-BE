@@ -290,6 +290,21 @@ namespace EVServiceCenter.Application.Service
                 staffId = staff?.StaffId;
                 centerId = staff?.CenterId;
             }
+            else if (user.Role == "MANAGER")
+            {
+                var staff = await _staffRepository.GetStaffByUserIdAsync(user.UserId);
+                staffId = staff?.StaffId;
+                centerId = staff?.CenterId;
+                if (!centerId.HasValue)
+                {
+                    var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);
+                    if (technician != null)
+                    {
+                        technicianId = technician.TechnicianId;
+                        centerId = technician.CenterId;
+                    }
+                }
+            }
             else if (user.Role == "TECHNICIAN")
             {
                 var technician = await _technicianRepository.GetTechnicianByUserIdAsync(user.UserId);

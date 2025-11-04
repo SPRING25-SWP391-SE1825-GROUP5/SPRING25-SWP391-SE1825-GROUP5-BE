@@ -187,32 +187,24 @@ namespace EVServiceCenter.WebAPI.Controllers
                     data = new
                     {
                         token = result.AccessToken,
-                        userId = result.UserId,  // Top level để FE dễ truy cập
-                        customerId = result.CustomerId,  // Top level để FE dễ truy cập
-                        staffId = result.StaffId,  // Top level để FE dễ truy cập
-                        technicianId = result.TechnicianId,  // Top level để FE dễ truy cập
-                        user = new
-                        {
-                            id = result.UserId,
-                            userId = result.UserId,
-                            customerId = result.CustomerId,
-                            staffId = result.StaffId,
-                            technicianId = result.TechnicianId,
-                            email = result.Email ?? "",
-                            fullName = result.FullName,
-                            phoneNumber = result.PhoneNumber ?? "",
-                            dateOfBirth = result.DateOfBirth,
-                            address = result.Address ?? "",
-                            gender = result.Gender ?? "",
-                            avatarUrl = result.AvatarUrl ?? "",
-                            role = result.Role,
-                            isActive = result.IsActive,
-                            emailVerified = result.EmailVerified,
-                            centerId = result.CenterId,
-                            centerName = result.CenterName,
-                            createdAt = result.CreatedAt,
-                            updatedAt = result.UpdatedAt
-                        }
+                        userId = result.UserId,
+                        customerId = result.CustomerId,
+                        staffId = result.StaffId,
+                        technicianId = result.TechnicianId,
+                        email = result.Email ?? "",
+                        fullName = result.FullName,
+                        phoneNumber = result.PhoneNumber ?? "",
+                        dateOfBirth = result.DateOfBirth,
+                        address = result.Address ?? "",
+                        gender = result.Gender ?? "",
+                        avatarUrl = result.AvatarUrl ?? "",
+                        role = result.Role,
+                        isActive = result.IsActive,
+                        emailVerified = result.EmailVerified,
+                        centerId = result.CenterId,
+                        centerName = result.CenterName,
+                        createdAt = result.CreatedAt,
+                        updatedAt = result.UpdatedAt
                     }
                 };
 
@@ -623,32 +615,24 @@ namespace EVServiceCenter.WebAPI.Controllers
                     data = new
                     {
                         token = result.AccessToken,
-                        userId = result.UserId,  // Top level để FE dễ truy cập
-                        customerId = result.CustomerId,  // Top level để FE dễ truy cập
-                        staffId = result.StaffId,  // Top level để FE dễ truy cập
-                        technicianId = result.TechnicianId,  // Top level để FE dễ truy cập
-                        user = new
-                        {
-                            id = result.UserId,
-                            userId = result.UserId,
-                            customerId = result.CustomerId,
-                            staffId = result.StaffId,
-                            technicianId = result.TechnicianId,
-                            email = result.Email ?? "",
-                            fullName = result.FullName,
-                            phoneNumber = result.PhoneNumber ?? "",
-                            dateOfBirth = result.DateOfBirth,
-                            address = result.Address ?? "",
-                            gender = result.Gender ?? "",
-                            avatarUrl = result.AvatarUrl ?? "",
-                            role = result.Role,
-                            isActive = result.IsActive,
-                            emailVerified = result.EmailVerified,
-                            centerId = result.CenterId,
-                            centerName = result.CenterName,
-                            createdAt = result.CreatedAt,
-                            updatedAt = result.UpdatedAt
-                        }
+                        userId = result.UserId,
+                        customerId = result.CustomerId,
+                        staffId = result.StaffId,
+                        technicianId = result.TechnicianId,
+                        email = result.Email ?? "",
+                        fullName = result.FullName,
+                        phoneNumber = result.PhoneNumber ?? "",
+                        dateOfBirth = result.DateOfBirth,
+                        address = result.Address ?? "",
+                        gender = result.Gender ?? "",
+                        avatarUrl = result.AvatarUrl ?? "",
+                        role = result.Role,
+                        isActive = result.IsActive,
+                        emailVerified = result.EmailVerified,
+                        centerId = result.CenterId,
+                        centerName = result.CenterName,
+                        createdAt = result.CreatedAt,
+                        updatedAt = result.UpdatedAt
                     }
                 };
 

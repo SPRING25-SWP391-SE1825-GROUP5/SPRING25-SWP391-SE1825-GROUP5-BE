@@ -22,6 +22,7 @@ public class PaymentController : ControllerBase
     private readonly IPayOSService _payOSService;
     private readonly IVNPayService _vnPayService;
     private readonly IBookingRepository _bookingRepo;
+    private readonly IOrderRepository _orderRepository;
     private readonly IInvoiceRepository _invoiceRepo;
     private readonly IPaymentRepository _paymentRepo;
     private readonly IWorkOrderPartRepository _workOrderPartRepo;
@@ -33,6 +34,7 @@ public class PaymentController : ControllerBase
         IPayOSService payOSService,
         IVNPayService vnPayService,
         IBookingRepository bookingRepo,
+        IOrderRepository orderRepository,
         IInvoiceRepository invoiceRepo,
         IPaymentRepository paymentRepo,
         IWorkOrderPartRepository workOrderPartRepo,
@@ -44,6 +46,7 @@ public class PaymentController : ControllerBase
         _payOSService = payOSService;
         _vnPayService = vnPayService;
         _bookingRepo = bookingRepo;
+        _orderRepository = orderRepository;
         _invoiceRepo = invoiceRepo;
         _paymentRepo = paymentRepo;
         _workOrderPartRepo = workOrderPartRepo;
@@ -61,6 +64,14 @@ public class PaymentController : ControllerBase
 			if (booking == null)
 			{
 				return NotFound(new { success = false, message = "Không tìm thấy booking" });
+			}
+
+			if (booking.Status != "COMPLETED")
+			{
+				return BadRequest(new {
+					success = false,
+					message = $"Chỉ có thể tạo payment link khi booking đã hoàn thành (COMPLETED). Trạng thái hiện tại: {booking.Status ?? "N/A"}"
+				});
 			}
 
 			var totalAmount = booking.Service?.BasePrice ?? 0;
@@ -197,47 +208,127 @@ public class PaymentController : ControllerBase
 
 	[AllowAnonymous]
 	[HttpGet("/api/payment/result")]
-	public async Task<IActionResult> PaymentResult([FromQuery] int bookingId, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] string? desc = null)
+	public async Task<IActionResult> PaymentResult([FromQuery] int? bookingId, [FromQuery] int? orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] string? desc = null)
 	{
-		if (bookingId <= 0)
-		{
-			return BadRequest(new { success = false, message = "Thiếu bookingId từ PayOS" });
-		}
-
 		var payOSConfirmed = status == "PAID" && code == "00";
 		var confirmed = false;
-
-		if (payOSConfirmed)
-	{
-		try
-		{
-				confirmed = await _paymentService.ConfirmPaymentAsync(bookingId);
-			}
-			catch (Exception)
-			{
-				// Handle error silently
-			}
-		}
-
 		var frontendUrl = _configuration["App:FrontendUrl"];
 
-		if (payOSConfirmed && confirmed)
+		if (orderCode.HasValue && orderCode.Value > 0)
 		{
-			var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
-			var frontendSuccessUrl = $"{frontendUrl}{successPath}?bookingId={bookingId}&status=success";
-			return Redirect(frontendSuccessUrl);
+			var orderId = orderCode.Value;
+			var order = await _orderRepository.GetByIdAsync(orderId);
+			var booking = bookingId.HasValue && bookingId.Value > 0
+				? await _bookingRepo.GetBookingByIdAsync(bookingId.Value)
+				: null;
+
+			if (order != null)
+			{
+				if (payOSConfirmed)
+				{
+					try
+					{
+						confirmed = await _paymentService.ConfirmOrderPaymentAsync(orderId);
+					}
+					catch (Exception ex)
+					{
+						_logger.LogError(ex, "Error confirming order payment for order {OrderId}", orderId);
+					}
+				}
+
+				if (payOSConfirmed && confirmed)
+				{
+					var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
+					var frontendSuccessUrl = $"{frontendUrl}{successPath}?orderId={orderId}&status=success";
+					return Redirect(frontendSuccessUrl);
+				}
+				else if (payOSConfirmed && !confirmed)
+				{
+					var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
+					var frontendErrorUrl = $"{frontendUrl}{errorPath}?orderId={orderId}&error=system_error";
+					return Redirect(frontendErrorUrl);
+				}
+				else
+				{
+					var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
+					var frontendFailUrl = $"{frontendUrl}{failedPath}?orderId={orderId}&status={status}&code={code}";
+					return Redirect(frontendFailUrl);
+				}
+			}
+			else if (booking != null)
+			{
+				if (payOSConfirmed)
+				{
+					try
+					{
+						confirmed = await _paymentService.ConfirmPaymentAsync(booking.BookingId);
+					}
+					catch (Exception ex)
+					{
+						_logger.LogError(ex, "Error confirming booking payment for booking {BookingId}", booking.BookingId);
+					}
+				}
+
+				if (payOSConfirmed && confirmed)
+				{
+					var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
+					var frontendSuccessUrl = $"{frontendUrl}{successPath}?bookingId={booking.BookingId}&status=success";
+					return Redirect(frontendSuccessUrl);
+				}
+				else if (payOSConfirmed && !confirmed)
+				{
+					var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
+					var frontendErrorUrl = $"{frontendUrl}{errorPath}?bookingId={booking.BookingId}&error=system_error";
+					return Redirect(frontendErrorUrl);
+				}
+				else
+				{
+					var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
+					var frontendFailUrl = $"{frontendUrl}{failedPath}?bookingId={booking.BookingId}&status={status}&code={code}";
+					return Redirect(frontendFailUrl);
+				}
+			}
+			else
+			{
+				return BadRequest(new { success = false, message = "Không tìm thấy order hoặc booking với orderCode: " + orderCode.Value });
+			}
 		}
-		else if (payOSConfirmed && !confirmed)
+		else if (bookingId.HasValue && bookingId.Value > 0)
 		{
-			var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
-			var frontendErrorUrl = $"{frontendUrl}{errorPath}?bookingId={bookingId}&error=system_error";
-			return Redirect(frontendErrorUrl);
+			if (payOSConfirmed)
+			{
+				try
+				{
+					confirmed = await _paymentService.ConfirmPaymentAsync(bookingId.Value);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Error confirming booking payment for booking {BookingId}", bookingId.Value);
+				}
+			}
+
+			if (payOSConfirmed && confirmed)
+			{
+				var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
+				var frontendSuccessUrl = $"{frontendUrl}{successPath}?bookingId={bookingId.Value}&status=success";
+				return Redirect(frontendSuccessUrl);
+			}
+			else if (payOSConfirmed && !confirmed)
+			{
+				var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
+				var frontendErrorUrl = $"{frontendUrl}{errorPath}?bookingId={bookingId.Value}&error=system_error";
+				return Redirect(frontendErrorUrl);
+			}
+			else
+			{
+				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
+				var frontendFailUrl = $"{frontendUrl}{failedPath}?bookingId={bookingId.Value}&status={status}&code={code}";
+				return Redirect(frontendFailUrl);
+			}
 		}
 		else
 		{
-			var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-			var frontendFailUrl = $"{frontendUrl}{failedPath}?bookingId={bookingId}&status={status}&code={code}";
-			return Redirect(frontendFailUrl);
+			return BadRequest(new { success = false, message = "Thiếu bookingId hoặc orderCode từ PayOS" });
 		}
 	}
 

@@ -18,12 +18,20 @@ public interface IOrderService
     Task<bool> ExistsAsync(int orderId);
     Task<List<OrderItemSimpleResponse>> GetItemsAsync(int orderId);
 
-    // Cart operations (Order with Status = "CART")
+    [Obsolete("Use ICartService for cart operations. This method is kept for backward compatibility.")]
     Task<OrderResponse> GetOrCreateCartAsync(int customerId);
+    [Obsolete("Use ICartService for cart operations.")]
     Task<List<OrderItemSimpleResponse>> GetCartItemsAsync(int cartOrderId);
+    [Obsolete("Use ICartService for cart operations.")]
     Task<OrderResponse> AddItemToCartAsync(int cartOrderId, int partId, int quantity);
+    [Obsolete("Use ICartService for cart operations.")]
     Task<OrderResponse> UpdateCartItemQuantityAsync(int cartOrderId, int orderItemId, int quantity);
+    [Obsolete("Use ICartService for cart operations.")]
     Task<OrderResponse> RemoveCartItemAsync(int cartOrderId, int orderItemId);
+    [Obsolete("Use ICartService for cart operations.")]
     Task<OrderResponse> ClearCartAsync(int cartOrderId);
+    [Obsolete("Use ICartService for cart operations.")]
     Task<OrderResponse> CheckoutCartAsync(int cartOrderId);
+
+    Task<OrderResponse> CheckoutCartFromRedisAsync(int customerId);
 }

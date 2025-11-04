@@ -34,12 +34,13 @@ public class PaymentService
     private readonly IMaintenanceChecklistResultRepository _checklistResultRepository;
     private readonly IPromotionService _promotionService;
     private readonly ILogger<PaymentService> _logger;
+    private readonly INotificationService _notificationService;
     private readonly ICustomerServiceCreditRepository _customerServiceCreditRepository;
     private readonly IPdfInvoiceService _pdfInvoiceService;
 
     private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService, INotificationService notificationService)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -58,6 +59,7 @@ public class PaymentService
         _logger = logger;
         _customerServiceCreditRepository = customerServiceCreditRepository;
         _pdfInvoiceService = pdfInvoiceService;
+        _notificationService = notificationService;
         }
 
 	/// <summary>
@@ -69,10 +71,12 @@ public class PaymentService
 	/// </summary>
 	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId)
 	{
-		// Validation riêng cho Booking
 		var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
-		if (booking.Status == "CANCELLED") throw new InvalidOperationException("Booking đã bị hủy");
+		if (booking.Status == "CANCELLED" || booking.Status == "CANCELED")
+			throw new InvalidOperationException("Booking đã bị hủy");
+		if (booking.Status != "COMPLETED")
+			throw new InvalidOperationException("Chỉ có thể tạo payment link khi booking đã hoàn thành (COMPLETED). Trạng thái hiện tại: " + (booking.Status ?? "N/A"));
 
         // Tính tổng tiền theo logic: (gói hoặc dịch vụ lẻ) + parts - promotion
         var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
@@ -703,6 +707,11 @@ public class PaymentService
 
 			_logger.LogInformation("=== HOÀN THÀNH CẬP NHẬT DATABASE ===");
 			_logger.LogInformation("Payment confirmed for booking {BookingId}, invoice {InvoiceId}, payment {PaymentId}", booking.BookingId, invoice.InvoiceId, payment.PaymentId);
+        if (booking.Customer?.User?.UserId != null)
+        {
+            var uid = booking.Customer.User.UserId;
+            await _notificationService.SendBookingNotificationAsync(uid, $"Đặt lịch #{booking.BookingId}", "Thanh toán thành công", "BOOKING");
+        }
 		return true;
 	}
 		else
@@ -710,6 +719,109 @@ public class PaymentService
 			_logger.LogInformation("Thanh toán chưa thành công hoặc không tìm thấy booking. Booking: {BookingFound}", booking != null ? "Found" : "Not Found");
 		return false;
 		}
+	}
+
+	public async Task<bool> ConfirmOrderPaymentAsync(int orderId, string paymentMethod = "PAYOS")
+	{
+		if (orderId <= 0)
+		{
+			_logger.LogWarning("ConfirmOrderPaymentAsync called with invalid orderId: {OrderId}", orderId);
+			return false;
+		}
+
+		_logger.LogInformation("=== BẮT ĐẦU CONFIRM ORDER PAYMENT ===");
+		_logger.LogInformation("ConfirmOrderPaymentAsync called with orderId: {OrderId}, paymentMethod: {PaymentMethod}", orderId, paymentMethod);
+
+		var order = await _orderRepository.GetByIdAsync(orderId);
+		if (order == null)
+		{
+			_logger.LogWarning("Không tìm thấy order với ID: {OrderId}", orderId);
+			return false;
+		}
+
+		_logger.LogInformation("Tìm thấy order {OrderId} với status hiện tại: {CurrentStatus}", orderId, order.Status);
+
+		if (order.Status == "PAID" || order.Status == "COMPLETED")
+		{
+			_logger.LogInformation("Order {OrderId} đã được thanh toán rồi", orderId);
+			return true;
+		}
+
+		_logger.LogInformation("=== BẮT ĐẦU CẬP NHẬT DATABASE ===");
+		_logger.LogInformation("Thanh toán thành công cho order {OrderId}, đang cập nhật database...", order.OrderId);
+
+		Domain.Entities.Invoice? invoice = null;
+		Domain.Entities.Payment? payment = null;
+
+		using (var scope = new System.Transactions.TransactionScope(System.Transactions.TransactionScopeAsyncFlowOption.Enabled))
+		{
+			try
+			{
+				_logger.LogInformation("Cập nhật order {OrderId} từ {OldStatus} thành PAID", order.OrderId, order.Status);
+				order.Status = "PAID";
+				order.UpdatedAt = DateTime.UtcNow;
+				await _orderRepository.UpdateAsync(order);
+				_logger.LogInformation("Đã cập nhật order {OrderId} thành PAID", order.OrderId);
+
+				_logger.LogInformation("Tạo/cập nhật invoice cho order {OrderId}", order.OrderId);
+				var existingInvoices = order.Invoices?.ToList() ?? new List<Domain.Entities.Invoice>();
+				invoice = existingInvoices.FirstOrDefault();
+
+				if (invoice == null)
+				{
+					_logger.LogInformation("Tạo invoice mới cho order {OrderId}", order.OrderId);
+					invoice = new Domain.Entities.Invoice
+					{
+						OrderId = order.OrderId,
+						CustomerId = order.CustomerId,
+						Email = order.Customer?.User?.Email,
+						Phone = order.Customer?.User?.PhoneNumber,
+						Status = "PAID",
+						CreatedAt = DateTime.UtcNow
+					};
+					invoice = await _invoiceRepository.CreateMinimalAsync(invoice);
+					_logger.LogInformation("Đã tạo invoice {InvoiceId} cho order {OrderId}", invoice.InvoiceId, order.OrderId);
+				}
+				else
+				{
+					_logger.LogInformation("Invoice {InvoiceId} đã tồn tại cho order {OrderId}", invoice.InvoiceId, order.OrderId);
+					invoice.Status = "PAID";
+				}
+
+				var totalAmount = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? 0m;
+				var amount = (int)Math.Round(totalAmount);
+
+				_logger.LogInformation("Tạo payment record cho order {OrderId}", order.OrderId);
+				payment = new Domain.Entities.Payment
+				{
+					PaymentCode = $"PAY{paymentMethod}{DateTime.UtcNow:yyyyMMddHHmmss}{orderId}",
+					InvoiceId = invoice.InvoiceId,
+					PaymentMethod = paymentMethod,
+					Amount = amount,
+					Status = "PAID",
+					PaidAt = DateTime.UtcNow,
+					CreatedAt = DateTime.UtcNow
+				};
+				payment = await _paymentRepository.CreateAsync(payment);
+				_logger.LogInformation("Đã tạo payment {PaymentId} cho order {OrderId}", payment.PaymentId, order.OrderId);
+
+				scope.Complete();
+				_logger.LogInformation("=== CẬP NHẬT DATABASE THÀNH CÔNG ===");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "=== LỖI KHI CẬP NHẬT DATABASE ===");
+				throw;
+			}
+		}
+
+		_logger.LogInformation("Payment confirmed for order {OrderId}, invoice {InvoiceId}, payment {PaymentId}", order.OrderId, invoice?.InvoiceId, payment?.PaymentId);
+        if (order.Customer?.User?.UserId != null)
+        {
+            var uid = order.Customer.User.UserId;
+            await _notificationService.SendBookingNotificationAsync(uid, $"Đơn hàng #{order.OrderId}", "Thanh toán thành công", "ORDER");
+        }
+		return true;
 	}
 }
 

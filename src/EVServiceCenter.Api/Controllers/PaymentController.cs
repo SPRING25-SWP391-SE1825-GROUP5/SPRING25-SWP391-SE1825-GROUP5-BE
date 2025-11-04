@@ -27,6 +27,7 @@ public class PaymentController : ControllerBase
     private readonly IPaymentRepository _paymentRepo;
     private readonly IWorkOrderPartRepository _workOrderPartRepo;
     private readonly ICustomerServiceCreditRepository _customerServiceCreditRepo;
+    private readonly IPromotionRepository _promotionRepo;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PaymentController> _logger;
 
@@ -39,6 +40,7 @@ public class PaymentController : ControllerBase
         IPaymentRepository paymentRepo,
         IWorkOrderPartRepository workOrderPartRepo,
         ICustomerServiceCreditRepository customerServiceCreditRepo,
+        IPromotionRepository promotionRepo,
         IConfiguration configuration,
         ILogger<PaymentController> logger)
 	{
@@ -51,6 +53,7 @@ public class PaymentController : ControllerBase
         _paymentRepo = paymentRepo;
         _workOrderPartRepo = workOrderPartRepo;
         _customerServiceCreditRepo = customerServiceCreditRepo;
+        _promotionRepo = promotionRepo;
         _configuration = configuration;
         _logger = logger;
 	}
@@ -135,13 +138,16 @@ public class PaymentController : ControllerBase
 			decimal packageDiscountAmount = 0m;
 			decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
 			decimal partsAmount = 0m;
+			decimal promotionDiscountAmount = 0m;
 
 			// Tính parts amount
-			var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
-			if (workOrderParts != null && workOrderParts.Any())
-			{
-				partsAmount = workOrderParts.Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
-			}
+            var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
+            if (workOrderParts != null && workOrderParts.Any())
+            {
+                partsAmount = workOrderParts
+                    .Where(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.APPROVED || p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.CONSUMED)
+                    .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
+            }
 
 			// Tính package discount và package price nếu có
 			if (booking.AppliedCreditId.HasValue)
@@ -161,8 +167,17 @@ public class PaymentController : ControllerBase
 				}
 			}
 
-			// Total = packagePrice (nếu lần đầu) + (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) + parts
-			decimal totalAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice) + partsAmount;
+			// Tính promotion discount
+			var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
+			if (userPromotions != null && userPromotions.Any())
+			{
+				promotionDiscountAmount = userPromotions
+					.Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+					.Sum(up => up.DiscountAmount);
+			}
+
+			// Total = packagePrice (nếu lần đầu) + (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) + parts - promotionDiscount
+			decimal totalAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice) + partsAmount - promotionDiscountAmount;
 
 			var amount = (int)Math.Round(totalAmount);
 			if (amount < 1000) amount = 1000; // Min amount
@@ -428,13 +443,16 @@ public class PaymentController : ControllerBase
 			decimal packageDiscountAmount = 0m;
 			decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
 			decimal partsAmount = 0m;
+			decimal promotionDiscountAmount = 0m;
 
 			// Tính parts amount
-			var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
-			if (workOrderParts != null && workOrderParts.Any())
-			{
-				partsAmount = workOrderParts.Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
-			}
+            var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
+            if (workOrderParts != null && workOrderParts.Any())
+            {
+                partsAmount = workOrderParts
+                    .Where(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.APPROVED || p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.CONSUMED)
+                    .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
+            }
 
 			// Tính package discount và package price nếu có
 			if (booking.AppliedCreditId.HasValue)
@@ -454,8 +472,17 @@ public class PaymentController : ControllerBase
 				}
 			}
 
-			// Total = packagePrice (nếu lần đầu) + (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) + parts
-			decimal totalAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice) + partsAmount;
+			// Tính promotion discount
+			var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
+			if (userPromotions != null && userPromotions.Any())
+			{
+				promotionDiscountAmount = userPromotions
+					.Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+					.Sum(up => up.DiscountAmount);
+			}
+
+			// Total = packagePrice (nếu lần đầu) + (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) + parts - promotionDiscount
+			decimal totalAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice) + partsAmount - promotionDiscountAmount;
 
 			var amount = (decimal)Math.Round(totalAmount);
 			var minAmount = _configuration.GetValue<decimal>("VNPay:MinAmount", 1000);

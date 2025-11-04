@@ -37,6 +37,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using System.Security.Claims;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 
 // ============================================================================
@@ -59,7 +60,10 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 // ============================================================================
 // CORE SERVICES REGISTRATION
 // ============================================================================
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(o =>
+{
+    o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
@@ -74,6 +78,8 @@ builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS
 builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection("GuestSession"));
 builder.Services.Configure<PromotionOptions>(builder.Configuration.GetSection("Promotion"));
 builder.Services.Configure<MaintenanceReminderOptions>(builder.Configuration.GetSection("MaintenanceReminder"));
+builder.Services.Configure<AppointmentReminderOptions>(builder.Configuration.GetSection(AppointmentReminderOptions.SectionName));
+builder.Services.Configure<MaintenanceReminderSchedulerOptions>(builder.Configuration.GetSection(MaintenanceReminderSchedulerOptions.SectionName));
 builder.Services.Configure<ExportOptions>(builder.Configuration.GetSection("ExportOptions"));
 builder.Services.Configure<CartOptions>(builder.Configuration.GetSection(CartOptions.SectionName));
 builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
@@ -383,6 +389,7 @@ builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 // Removed: IServicePartRepository registration (ServiceParts deprecated)
 builder.Services.AddScoped<IWorkOrderPartRepository, WorkOrderPartRepository>();
 builder.Services.AddScoped<IMaintenanceChecklistRepository, MaintenanceChecklistRepository>();
+builder.Services.AddScoped<IMaintenanceReminderRepository, MaintenanceReminderRepository>();
 // Removed: IMaintenanceChecklistItemRepository
 builder.Services.AddScoped<IMaintenanceChecklistResultRepository, MaintenanceChecklistResultRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
@@ -419,6 +426,8 @@ builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 builder.Services.AddHostedService<SlotAvailabilityUpdateService>();
 builder.Services.AddHostedService<PromotionExpiredUpdateService>();
 builder.Services.AddHostedService<ServicePackageExpiredUpdateService>();
+builder.Services.AddHostedService<AppointmentReminderDispatcherService>();
+builder.Services.AddHostedService<MaintenanceReminderDispatcherService>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");
@@ -587,7 +596,10 @@ builder.Services.AddCors(options =>
 // ============================================================================
 
 // Controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(o =>
+{
+    o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 
 // Swagger Configuration

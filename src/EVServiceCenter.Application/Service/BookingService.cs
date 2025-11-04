@@ -28,6 +28,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IServiceChecklistRepository _serviceChecklistRepository;
         private readonly IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
         private readonly ILogger<BookingService> _logger;
+        private readonly IWorkOrderPartRepository _workOrderPartRepository;
 
 
         public BookingService(
@@ -44,7 +45,8 @@ namespace EVServiceCenter.Application.Service
             IMaintenanceChecklistRepository maintenanceChecklistRepository,
             IServiceChecklistRepository serviceChecklistRepository,
             IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository,
-            ILogger<BookingService> logger)
+            ILogger<BookingService> logger,
+            IWorkOrderPartRepository workOrderPartRepository)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -60,6 +62,7 @@ namespace EVServiceCenter.Application.Service
             _serviceChecklistRepository = serviceChecklistRepository;
             _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
             _logger = logger;
+            _workOrderPartRepository = workOrderPartRepository;
         }
 
         public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int>? serviceIds = null)
@@ -587,6 +590,16 @@ namespace EVServiceCenter.Application.Service
                 booking.Status = request.Status.ToUpper();
                 booking.UpdatedAt = DateTime.UtcNow;
 
+                if (string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId);
+                    var hasDraftOrPending = parts.Any(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.DRAFT || p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL);
+                    if (hasDraftOrPending)
+                    {
+                        throw new ArgumentException("Không thể chuyển COMPLETED khi còn phụ tùng chưa được xử lý (DRAFT hoặc PENDING_CUSTOMER_APPROVAL)");
+                    }
+                }
+
                 // Handle package usage based on status change
                 if (booking.AppliedCreditId.HasValue)
                 {
@@ -721,10 +734,7 @@ namespace EVServiceCenter.Application.Service
                 }
             }
 
-            // Determine matched schedule for display
-            DateOnly? scheduleDate = null;
-            byte? scheduleDow = null;
-            // CenterSchedule removed: keep schedule info null
+            // CenterSchedule removed in current model; no schedule metadata to compute
 
             // Load package information if applied
             string? packageCode = null;
@@ -773,7 +783,6 @@ namespace EVServiceCenter.Application.Service
             return new BookingResponse
             {
                 BookingId = booking.BookingId,
-                BookingCode = null,
                 CustomerId = booking.CustomerId,
                 CustomerName = booking.Customer?.User?.FullName ?? "N/A",
                 VehicleId = booking.VehicleId,
@@ -788,8 +797,6 @@ namespace EVServiceCenter.Application.Service
                 TechnicianSlotId = booking.TechnicianSlotId,
                 SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0, // Get SlotId from TechnicianTimeSlot
                 SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
-                CenterScheduleDate = scheduleDate,
-                CenterScheduleDayOfWeek = scheduleDow,
 
                 Status = booking.Status ?? string.Empty,
                 SpecialRequests = booking.SpecialRequests ?? string.Empty,

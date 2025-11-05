@@ -341,6 +341,7 @@ builder.Services.AddScoped<IBookingReportsService, EVServiceCenter.Application.S
 builder.Services.AddScoped<ITechnicianReportsService, EVServiceCenter.Application.Service.TechnicianReportsService>();
 builder.Services.AddScoped<IInventoryReportsService, EVServiceCenter.Application.Service.InventoryReportsService>();
 builder.Services.AddScoped<ITechnicianDashboardService, EVServiceCenter.Application.Service.TechnicianDashboardService>();
+builder.Services.AddScoped<IDashboardSummaryService, EVServiceCenter.Application.Service.DashboardSummaryService>();
 // WorkOrderService removed - functionality merged into BookingService
 
 // E-commerce services

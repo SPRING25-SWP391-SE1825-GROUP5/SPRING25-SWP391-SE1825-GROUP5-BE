@@ -19,6 +19,7 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IBookingReportsService _bookingReportsService;
         private readonly ITechnicianReportsService _technicianReportsService;
         private readonly IInventoryReportsService _inventoryReportsService;
+        private readonly IDashboardSummaryService _dashboardSummaryService;
 		
 		public ReportsController(
             IPartsUsageReportService partsUsageReportService, 
@@ -26,6 +27,7 @@ namespace EVServiceCenter.Api.Controllers
             IBookingReportsService bookingReportsService,
             ITechnicianReportsService technicianReportsService,
             IInventoryReportsService inventoryReportsService,
+            IDashboardSummaryService dashboardSummaryService,
             ILogger<ReportsController> logger)
             : base(logger)
         {
@@ -34,6 +36,7 @@ namespace EVServiceCenter.Api.Controllers
             _bookingReportsService = bookingReportsService;
             _technicianReportsService = technicianReportsService;
             _inventoryReportsService = inventoryReportsService;
+            _dashboardSummaryService = dashboardSummaryService;
 		}
 
 		/// <summary>
@@ -333,6 +336,63 @@ namespace EVServiceCenter.Api.Controllers
                     success = true,
                     message = "Lấy báo cáo sử dụng kho thành công",
                     data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy KPI tổng quan của toàn hệ thống (Dashboard Summary)
+        /// </summary>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
+        /// <returns>Dashboard Summary với các KPI: Tổng doanh thu, Tổng nhân viên, Tổng booking hoàn thành, Doanh thu dịch vụ, Doanh thu phụ tùng</returns>
+        [HttpGet("dashboard-summary")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetDashboardSummary(
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null)
+        {
+            try
+            {
+                // Validate date range nếu cả hai đều được cung cấp
+                if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"
+                    });
+                }
+
+                var request = new DashboardSummaryRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate
+                };
+
+                var result = await _dashboardSummaryService.GetDashboardSummaryAsync(request);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy KPI tổng quan thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
                 });
             }
             catch (Exception ex)

@@ -610,10 +610,20 @@ namespace EVServiceCenter.Application.Service
                 if (string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
                 {
                     var parts = await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId);
-                    var hasDraftOrPending = parts.Any(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.DRAFT || p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL);
+                    var hasDraftOrPending = parts.Any(p => p.Status == "DRAFT" || p.Status == "PENDING_CUSTOMER_APPROVAL");
                     if (hasDraftOrPending)
                     {
                         throw new ArgumentException("Không thể chuyển COMPLETED khi còn phụ tùng chưa được xử lý (DRAFT hoặc PENDING_CUSTOMER_APPROVAL)");
+                    }
+
+                    var checklist = await _maintenanceChecklistRepository.GetByBookingIdAsync(booking.BookingId);
+                    if (checklist != null)
+                    {
+                        var checklistStatus = (checklist.Status ?? string.Empty).ToUpperInvariant();
+                        if (checklistStatus != "COMPLETED")
+                        {
+                            throw new ArgumentException("Không thể chuyển booking sang COMPLETED khi checklist chưa được xác nhận hoàn thành. Vui lòng gọi API /api/maintenance-checklist/{bookingId}/confirm để xác nhận checklist trước.");
+                        }
                     }
                 }
 

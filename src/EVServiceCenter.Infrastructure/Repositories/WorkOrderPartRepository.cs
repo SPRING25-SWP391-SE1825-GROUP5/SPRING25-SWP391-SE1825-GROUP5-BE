@@ -6,7 +6,6 @@ using EVServiceCenter.Infrastructure.Configurations;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
-using EVServiceCenter.Domain.Enums;
 
 namespace EVServiceCenter.Infrastructure.Repositories
 {
@@ -47,22 +46,17 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             // Nếu status là PENDING_CUSTOMER_APPROVAL (từ FAIL evaluation), không cộng dồn với existing
             // Vì đây là yêu cầu thay thế cụ thể, không phải thêm số lượng
-            if (item.Status != WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL)
-        {
-            var existing = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.BookingId == item.BookingId && x.PartId == item.PartId);
-            if (existing != null)
+            if (item.Status != "PENDING_CUSTOMER_APPROVAL")
             {
-                // Upsert: cộng dồn số lượng
-                existing.QuantityUsed += item.QuantityUsed;
-                    existing.UpdatedAt = System.DateTime.UtcNow;
-                await _db.SaveChangesAsync();
-                return existing;
+                var existing = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.BookingId == item.BookingId && x.PartId == item.PartId);
+                if (existing != null)
+                {
+                    // Upsert: cộng dồn số lượng
+                    existing.QuantityUsed += item.QuantityUsed;
+                    await _db.SaveChangesAsync();
+                    return existing;
+                }
             }
-            }
-
-            // Safety defaults nếu caller chưa set
-            if (item.CreatedAt == default) item.CreatedAt = System.DateTime.UtcNow;
-            if (item.UpdatedAt == default) item.UpdatedAt = item.CreatedAt;
 
             _db.WorkOrderParts.Add(item);
             await _db.SaveChangesAsync();
@@ -86,26 +80,39 @@ namespace EVServiceCenter.Infrastructure.Repositories
             }
         }
 
-        public async Task<WorkOrderPart?> ApproveAsync(int id, int approvedByUserId, DateTime approvedAtUtc)
+        public async Task<(bool Success, string? Error, WorkOrderPart? Item)> ApproveAsync(int id, int centerId, int approvedByUserId, DateTime approvedAtUtc)
         {
-            var entity = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.WorkOrderPartId == id);
-            if (entity == null) return null;
-            entity.Status = WorkOrderPartStatus.APPROVED;
-            entity.ApprovedAt = approvedAtUtc;
-            entity.ApprovedByUserId = approvedByUserId;
-            entity.UpdatedAt = approvedAtUtc;
-            await _db.SaveChangesAsync();
-            return entity;
+            using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                var entity = await _db.WorkOrderParts.Include(x => x.Part).FirstOrDefaultAsync(x => x.WorkOrderPartId == id);
+                if (entity == null) return (false, "NOT_FOUND", null);
+
+                var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.BookingId == entity.BookingId);
+                if (booking == null) return (false, "BOOKING_NOT_FOUND", null);
+                if (booking.CenterId != centerId) return (false, "CENTER_MISMATCH", null);
+
+            // Phê duyệt KHÔNG trừ kho, KHÔNG tiêu thụ. Chỉ ghi nhận ApprovedByStaffId.
+            // Việc trừ kho và tiêu thụ sẽ được thực hiện ở bước ConsumeWithInventoryAsync.
+            entity.ApprovedByStaffId = approvedByUserId;
+                // Không đổi Status tại đây (giữ nguyên DRAFT hoặc trạng thái hiện tại)
+                await _db.SaveChangesAsync();
+
+                await tx.CommitAsync();
+                return (true, null, entity);
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<WorkOrderPart?> RejectAsync(int id, int rejectedByUserId, DateTime rejectedAtUtc)
         {
             var entity = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.WorkOrderPartId == id);
             if (entity == null) return null;
-            entity.Status = WorkOrderPartStatus.REJECTED;
-            entity.ApprovedAt = rejectedAtUtc;
-            entity.ApprovedByUserId = rejectedByUserId;
-            entity.UpdatedAt = rejectedAtUtc;
+            entity.Status = "REJECTED";
             await _db.SaveChangesAsync();
             return entity;
         }
@@ -114,9 +121,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             var entity = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.WorkOrderPartId == id);
             if (entity == null) return null;
-            if (entity.Status != WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL) return null;
-            entity.Status = WorkOrderPartStatus.DRAFT;
-            entity.UpdatedAt = System.DateTime.UtcNow;
+            if (entity.Status != "PENDING_CUSTOMER_APPROVAL") return null;
+            entity.Status = "DRAFT";
             await _db.SaveChangesAsync();
             return entity;
         }
@@ -125,9 +131,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             var entity = await _db.WorkOrderParts.FirstOrDefaultAsync(x => x.WorkOrderPartId == id);
             if (entity == null) return null;
-            if (entity.Status != WorkOrderPartStatus.PENDING_CUSTOMER_APPROVAL) return null;
-            entity.Status = WorkOrderPartStatus.REJECTED;
-            entity.UpdatedAt = System.DateTime.UtcNow;
+            if (entity.Status != "PENDING_CUSTOMER_APPROVAL") return null;
+            entity.Status = "REJECTED";
             await _db.SaveChangesAsync();
             return entity;
         }
@@ -153,10 +158,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
             inventory.LastUpdated = consumedAtUtc;
             await _db.SaveChangesAsync();
 
-            entity.Status = WorkOrderPartStatus.CONSUMED;
+            entity.Status = "CONSUMED";
             entity.ConsumedAt = consumedAtUtc;
-            entity.ConsumedByUserId = consumedByUserId;
-            entity.UpdatedAt = consumedAtUtc;
             await _db.SaveChangesAsync();
 
             await tx.CommitAsync();

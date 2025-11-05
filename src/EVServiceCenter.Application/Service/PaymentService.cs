@@ -84,8 +84,9 @@ public class PaymentService
         var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
         decimal packageDiscountAmount = 0m;
         decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
-        decimal promotionDiscountAmount = 0m; // TODO: tích hợp khi có khuyến mãi
+        decimal promotionDiscountAmount = 0m;
         decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
+            .Where(p => p.Status == "CONSUMED")
             .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
 
         if (booking.AppliedCreditId.HasValue)
@@ -105,9 +106,23 @@ public class PaymentService
             }
         }
 
-        // total = packagePrice (nếu lần đầu) + (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) - promotion + parts
-        decimal totalAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice)
-                               - promotionDiscountAmount + partsAmount;
+        // Tính promotion discount từ UserPromotions đã áp dụng
+        var userPromotions = await _promotionRepository.GetUserPromotionsByBookingAsync(booking.BookingId);
+        if (userPromotions != null && userPromotions.Any())
+        {
+            promotionDiscountAmount = userPromotions
+                .Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+                .Sum(up => up.DiscountAmount);
+        }
+
+        // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
+        var serviceComponent = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
+        if (promotionDiscountAmount > serviceComponent)
+        {
+            promotionDiscountAmount = serviceComponent;
+        }
+        // total = packagePrice (nếu lần đầu) + serviceComponent - promotion + parts
+        decimal totalAmount = packagePrice + serviceComponent - promotionDiscountAmount + partsAmount;
 
         var amount = (int)Math.Round(totalAmount); // VNĐ integer
         if (amount < _options.MinAmount) amount = _options.MinAmount;
@@ -118,8 +133,8 @@ public class PaymentService
         var rawDesc = $"Booking #{booking.BookingId}";
         var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
-		var returnUrl = (_options.ReturnUrl ?? string.Empty);
-		var cancelUrl = (_options.CancelUrl ?? string.Empty);
+        var returnUrl = ($"{_options.ReturnUrl ?? string.Empty}?bookingId={booking.BookingId}");
+        var cancelUrl = ($"{_options.CancelUrl ?? string.Empty}?bookingId={booking.BookingId}");
 
 		// Chuẩn hóa canonical theo thứ tự khóa cố định, không encode, dùng invariant formatting
 		var canonical = string.Create(CultureInfo.InvariantCulture, $"amount={amount}&cancelUrl={cancelUrl}&description={description}&orderCode={orderCode}&returnUrl={returnUrl}");
@@ -543,7 +558,7 @@ public class PaymentService
 					decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
 					decimal promotionDiscountAmount = 0m;
 					decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
-						.Where(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.APPROVED || p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.CONSUMED)
+						.Where(p => p.Status == "CONSUMED")
 						.Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
 
 					if (booking.AppliedCreditId.HasValue)
@@ -572,8 +587,13 @@ public class PaymentService
 							.Sum(up => up.DiscountAmount);
 					}
 
-					decimal paymentAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice)
-											  - promotionDiscountAmount + partsAmount;
+                    // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
+                    var serviceComponent = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
+                    if (promotionDiscountAmount > serviceComponent)
+                    {
+                        promotionDiscountAmount = serviceComponent;
+                    }
+                    decimal paymentAmount = packagePrice + serviceComponent - promotionDiscountAmount + partsAmount;
 
 					// Tạo payment record
 					_logger.LogInformation("Tạo payment record cho booking {BookingId} với amount {Amount}, method {PaymentMethod}", booking.BookingId, paymentAmount, paymentMethod);

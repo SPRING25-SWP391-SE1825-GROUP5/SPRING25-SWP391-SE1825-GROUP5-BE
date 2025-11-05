@@ -17,10 +17,14 @@ public sealed class MaintenanceReminderConfiguration : IEntityTypeConfiguration<
         entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
 
         entity.Property(e => e.Type)
-            .HasConversion<int>();
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .HasColumnType("nvarchar(50)");
 
         entity.Property(e => e.Status)
-            .HasConversion<int>();
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .HasColumnType("nvarchar(50)");
 
         entity.Property(e => e.CompletedAt).HasPrecision(0);
         entity.Property(e => e.CreatedAt)

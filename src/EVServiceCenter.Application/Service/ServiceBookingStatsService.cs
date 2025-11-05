@@ -44,12 +44,13 @@ namespace EVServiceCenter.Application.Service
 
             var allBookings = await _bookingRepository.GetAllBookingsAsync();
 
-            // Chỉ tính booking hoàn tất (COMPLETED/PAID) trong khoảng theo CreatedAt
+            // Chỉ tính booking hoàn tất (COMPLETED/PAID), KHÔNG lọc theo CreatedAt.
+            // Sẽ chỉ tính nếu có payment COMPLETED/PAID trong khoảng PaidAt.
             var completedBookings = allBookings.Where(b =>
                 !string.IsNullOrEmpty(b.Status) &&
                 (b.Status.Equals("COMPLETED", StringComparison.OrdinalIgnoreCase) ||
-                 b.Status.Equals("PAID", StringComparison.OrdinalIgnoreCase)) &&
-                b.CreatedAt >= fromDate && b.CreatedAt <= toDate).ToList();
+                 b.Status.Equals("PAID", StringComparison.OrdinalIgnoreCase)))
+                .ToList();
 
             var serviceIdToItem = new Dictionary<int, ServiceBookingStatsItem>();
 
@@ -73,7 +74,7 @@ namespace EVServiceCenter.Application.Service
                 var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
                 if (invoice == null) continue;
 
-                // Lấy payments COMPLETED và PAID trong khoảng thời gian
+                // Lấy payments COMPLETED và PAID trong khoảng thời gian (PaidAt)
                 var pCompleted = await _paymentRepository.GetByInvoiceIdAsync(invoice.InvoiceId, "COMPLETED", null, fromDate, toDate);
                 var pPaid = await _paymentRepository.GetByInvoiceIdAsync(invoice.InvoiceId, "PAID", null, fromDate, toDate);
                 var totalPaid = pCompleted.Sum(p => p.Amount) + pPaid.Sum(p => p.Amount);
@@ -83,6 +84,10 @@ namespace EVServiceCenter.Application.Service
                 var allocatedParts = Math.Min(invoice.PartsAmount, totalPaid);
                 var serviceAmount = totalPaid - allocatedParts;
                 if (serviceAmount > 0) item.ServiceRevenue += serviceAmount;
+
+                // BookingCount tăng khi có ít nhất một khoản thanh toán hợp lệ trong khoảng PaidAt
+                // (đảm bảo đếm theo PaidAt để đồng bộ với doanh thu)
+                // Lưu ý: item.BookingCount đã +1 trước; giữ nguyên cách đếm 1 lần/booking khi có paid.
             }
 
             // Bổ sung tất cả dịch vụ còn thiếu với 0

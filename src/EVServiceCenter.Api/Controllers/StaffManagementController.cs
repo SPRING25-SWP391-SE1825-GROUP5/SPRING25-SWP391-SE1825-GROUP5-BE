@@ -26,6 +26,52 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         #region Current User APIs
 
+        /// <summary>
+        /// Lấy thông tin Staff hiện tại từ user đăng nhập (dùng để biết center được gán)
+        /// </summary>
+        [HttpGet("staff/current")]
+        [Authorize(Roles = "STAFF,MANAGER,ADMIN")] // Cho phép STAFF và quản trị xem
+        public async Task<IActionResult> GetCurrentStaff()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                                   ?? User.FindFirst("userId")?.Value
+                                   ?? User.FindFirst("sub")?.Value
+                                   ?? User.FindFirst("nameid")?.Value;
+
+                if (!int.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new { success = false, message = "Không thể xác định người dùng" });
+                }
+
+                var staff = await _staffManagementService.GetStaffByUserIdAsync(userId);
+
+                return Ok(new {
+                    success = true,
+                    message = "Lấy thông tin nhân viên hiện tại thành công",
+                    data = new {
+                        staffId = staff.StaffId,
+                        userId = staff.UserId,
+                        fullName = staff.UserFullName,
+                        email = staff.UserEmail,
+                        phoneNumber = staff.UserPhoneNumber,
+                        centerId = staff.CenterId,
+                        centerName = staff.CenterName,
+                        isActive = staff.IsActive,
+                        createdAt = staff.CreatedAt
+                    }
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
 
         #endregion
 

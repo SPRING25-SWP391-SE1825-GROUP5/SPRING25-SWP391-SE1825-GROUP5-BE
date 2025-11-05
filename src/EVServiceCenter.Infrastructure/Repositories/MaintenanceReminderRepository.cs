@@ -14,7 +14,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         private readonly EVDbContext _db;
         public MaintenanceReminderRepository(EVDbContext db) { _db = db; }
 
-        public async Task<List<MaintenanceReminder>> QueryAsync(int? customerId, int? vehicleId, string status, DateTime? from, DateTime? to)
+        public async Task<List<MaintenanceReminder>> QueryAsync(int? customerId, int? vehicleId, string? status, DateTime? from, DateTime? to)
         {
             var q = _db.MaintenanceReminders
                 .Include(r => r.Vehicle)

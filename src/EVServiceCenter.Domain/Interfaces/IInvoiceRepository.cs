@@ -14,6 +14,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<Invoice?> GetByIdAsync(int invoiceId);
         Task<System.Collections.Generic.List<Invoice>> GetAllAsync();
         Task<System.Collections.Generic.List<Invoice>> GetByCustomerIdAsync(int customerId);
+        Task UpdateStatusAsync(int invoiceId, string status);
     }
 }
 

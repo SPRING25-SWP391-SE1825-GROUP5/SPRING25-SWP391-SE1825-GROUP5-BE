@@ -1,7 +1,6 @@
 using EVServiceCenter.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using EVServiceCenter.Domain.Enums;
 
 namespace EVServiceCenter.Infrastructure.Configurations.EntityTypeConfigurations;
 
@@ -19,13 +18,15 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
         entity.Property(e => e.BookingId).HasColumnName("BookingID");
         entity.Property(e => e.PartId).HasColumnName("PartID");
         entity.Property(e => e.VehicleModelPartId).HasColumnName("VehicleModelPartID");
+        entity.Property(e => e.CategoryId).HasColumnName("CategoryID");
 
-        entity.Property(e => e.Status).HasConversion<int>();
+        entity.Property(e => e.Status).HasColumnType("nvarchar(50)").HasMaxLength(50);
         // No UnitPrice column mapped; pricing resolved from Parts at time of calculation
-        entity.Property(e => e.CreatedAt).HasPrecision(0).HasDefaultValueSql("(sysdatetime())");
-        entity.Property(e => e.UpdatedAt).HasPrecision(0);
-        entity.Property(e => e.ApprovedAt).HasPrecision(0);
+        // Removed CreatedAt/UpdatedAt/ApprovedAt mappings per requirements
         entity.Property(e => e.ConsumedAt).HasPrecision(0);
+
+        // Map ApprovedByStaffId to column ApprovedByStaffId (new)
+        entity.Property<int?>(nameof(WorkOrderPart.ApprovedByStaffId)).HasColumnName("ApprovedByStaffId");
 
 
         entity.HasOne(d => d.Booking)
@@ -42,5 +43,10 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
             .WithMany()
             .HasForeignKey(d => d.VehicleModelPartId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(d => d.Category)
+            .WithMany()
+            .HasForeignKey(d => d.CategoryId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }

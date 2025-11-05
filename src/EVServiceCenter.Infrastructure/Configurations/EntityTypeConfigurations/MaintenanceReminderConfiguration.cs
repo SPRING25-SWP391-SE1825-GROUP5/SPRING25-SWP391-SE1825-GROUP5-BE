@@ -18,11 +18,13 @@ public sealed class MaintenanceReminderConfiguration : IEntityTypeConfiguration<
 
         entity.Property(e => e.Type)
             .HasConversion<string>()
-            .HasMaxLength(32);
+            .HasMaxLength(50)
+            .HasColumnType("nvarchar(50)");
 
         entity.Property(e => e.Status)
             .HasConversion<string>()
-            .HasMaxLength(32);
+            .HasMaxLength(50)
+            .HasColumnType("nvarchar(50)");
 
         entity.Property(e => e.CompletedAt).HasPrecision(0);
         entity.Property(e => e.CreatedAt)

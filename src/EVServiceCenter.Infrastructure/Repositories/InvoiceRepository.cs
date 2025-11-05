@@ -74,6 +74,15 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Where(i => i.CustomerId == customerId)
                 .ToListAsync();
         }
+
+        public async Task UpdateStatusAsync(int invoiceId, string status)
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE [dbo].[Invoices]
+                SET [Status] = {status}
+                WHERE [InvoiceID] = {invoiceId}
+            ");
+        }
     }
 }
 

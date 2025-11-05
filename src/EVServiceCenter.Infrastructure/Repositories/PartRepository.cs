@@ -89,5 +89,14 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Select(pcm => pcm.Part!)
                 .ToListAsync();
         }
+
+        public async Task<int?> GetFirstCategoryIdForPartAsync(int partId)
+        {
+            return await _context.PartCategoryMaps
+                .AsNoTracking()
+                .Where(pcm => pcm.PartId == partId)
+                .Select(pcm => (int?)pcm.CategoryId)
+                .FirstOrDefaultAsync();
+        }
     }
 }

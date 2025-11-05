@@ -77,23 +77,8 @@ public class PaymentController : ControllerBase
 				});
 			}
 
-			var totalAmount = booking.Service?.BasePrice ?? 0;
-
-			if (booking.AppliedCredit != null)
-			{
-				totalAmount -= booking.AppliedCredit.RemainingCredits;
-			}
-
-			var description = $"Thanh toán vé #{bookingId}";
-
-			var customerName = booking.Customer?.User?.FullName ?? "Khách hàng";
-
-			var checkoutUrl = await _payOSService.CreatePaymentLinkAsync(
-				bookingId,
-				totalAmount,
-				description,
-				customerName
-			);
+            // Dùng service chuẩn để tính tổng tiền: dịch vụ/gói + parts CONSUMED - khuyến mãi
+            var checkoutUrl = await _paymentService.CreateBookingPaymentLinkAsync(bookingId);
 
 			return Ok(new {
 				success = true,
@@ -145,7 +130,7 @@ public class PaymentController : ControllerBase
             if (workOrderParts != null && workOrderParts.Any())
             {
                 partsAmount = workOrderParts
-                    .Where(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.APPROVED || p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.CONSUMED)
+                    .Where(p => p.Status == "CONSUMED")
                     .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
             }
 
@@ -176,8 +161,14 @@ public class PaymentController : ControllerBase
 					.Sum(up => up.DiscountAmount);
 			}
 
-			// Total = packagePrice (nếu lần đầu) + (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) + parts - promotionDiscount
-			decimal totalAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice) + partsAmount - promotionDiscountAmount;
+            // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
+            var serviceComponent = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
+            if (promotionDiscountAmount > serviceComponent)
+            {
+                promotionDiscountAmount = serviceComponent;
+            }
+            // Total = packagePrice (nếu lần đầu) + serviceComponent + parts - promotionDiscount
+            decimal totalAmount = packagePrice + serviceComponent + partsAmount - promotionDiscountAmount;
 
 			var amount = (int)Math.Round(totalAmount);
 			if (amount < 1000) amount = 1000; // Min amount
@@ -229,7 +220,7 @@ public class PaymentController : ControllerBase
 		var confirmed = false;
 		var frontendUrl = _configuration["App:FrontendUrl"];
 
-		if (orderCode.HasValue && orderCode.Value > 0)
+        if (orderCode.HasValue && orderCode.Value > 0)
 		{
 			var orderId = orderCode.Value;
 			var order = await _orderRepository.GetByIdAsync(orderId);
@@ -270,42 +261,51 @@ public class PaymentController : ControllerBase
 					return Redirect(frontendFailUrl);
 				}
 			}
-			else if (booking != null)
+            else
 			{
-				if (payOSConfirmed)
-				{
-					try
-					{
-						confirmed = await _paymentService.ConfirmPaymentAsync(booking.BookingId);
-					}
-					catch (Exception ex)
-					{
-						_logger.LogError(ex, "Error confirming booking payment for booking {BookingId}", booking.BookingId);
-					}
-				}
+                // Fallback: PayOS orderCode đối với Booking chính là bookingId
+                if (booking == null)
+                {
+                    booking = await _bookingRepo.GetBookingByIdAsync(orderId);
+                }
 
-				if (payOSConfirmed && confirmed)
+                if (booking != null)
 				{
-					var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
-					var frontendSuccessUrl = $"{frontendUrl}{successPath}?bookingId={booking.BookingId}&status=success";
-					return Redirect(frontendSuccessUrl);
-				}
-				else if (payOSConfirmed && !confirmed)
-				{
-					var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
-					var frontendErrorUrl = $"{frontendUrl}{errorPath}?bookingId={booking.BookingId}&error=system_error";
-					return Redirect(frontendErrorUrl);
+                    if (payOSConfirmed)
+                    {
+                        try
+                        {
+                            confirmed = await _paymentService.ConfirmPaymentAsync(booking.BookingId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error confirming booking payment for booking {BookingId}", booking.BookingId);
+                        }
+                    }
+
+                    if (payOSConfirmed && confirmed)
+                    {
+                        var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
+                        var frontendSuccessUrl = $"{frontendUrl}{successPath}?bookingId={booking.BookingId}&status=success";
+                        return Redirect(frontendSuccessUrl);
+                    }
+                    else if (payOSConfirmed && !confirmed)
+                    {
+                        var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
+                        var frontendErrorUrl = $"{frontendUrl}{errorPath}?bookingId={booking.BookingId}&error=system_error";
+                        return Redirect(frontendErrorUrl);
+                    }
+                    else
+                    {
+                        var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
+                        var frontendFailUrl = $"{frontendUrl}{failedPath}?bookingId={booking.BookingId}&status={status}&code={code}";
+                        return Redirect(frontendFailUrl);
+                    }
 				}
 				else
 				{
-					var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-					var frontendFailUrl = $"{frontendUrl}{failedPath}?bookingId={booking.BookingId}&status={status}&code={code}";
-					return Redirect(frontendFailUrl);
+                    return BadRequest(new { success = false, message = "Không tìm thấy order hoặc booking với orderCode: " + orderCode.Value });
 				}
-			}
-			else
-			{
-				return BadRequest(new { success = false, message = "Không tìm thấy order hoặc booking với orderCode: " + orderCode.Value });
 			}
 		}
 		else if (bookingId.HasValue && bookingId.Value > 0)
@@ -404,9 +404,24 @@ public class PaymentController : ControllerBase
 
 	[HttpGet("/api/payment/cancel")]
 	[AllowAnonymous]
-	public IActionResult Cancel([FromQuery] int bookingId, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = true)
+    public async Task<IActionResult> Cancel([FromQuery] int bookingId, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = true)
 	{
-		// Redirect về trang hủy thanh toán trên FE
+        // Ghi nhận hủy thanh toán (không đổi Booking.Status)
+        try
+        {
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking != null && booking.Status == "COMPLETED")
+            {
+                var invoice = await _invoiceRepo.GetByBookingIdAsync(booking.BookingId);
+                if (invoice != null && !string.Equals(invoice.Status, "PAID", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _invoiceRepo.UpdateStatusAsync(invoice.InvoiceId, "CANCELLED");
+                }
+            }
+        }
+        catch { /* swallow to not block redirect */ }
+
+        // Redirect về trang hủy thanh toán trên FE
 		var frontendUrl = _configuration["App:FrontendUrl"];
 		var cancelledPath = _configuration["App:PaymentRedirects:CancelledPath"];
 		var frontendCancelUrl = $"{frontendUrl}{cancelledPath}?bookingId={bookingId}&status={status}&code={code}";
@@ -450,7 +465,7 @@ public class PaymentController : ControllerBase
             if (workOrderParts != null && workOrderParts.Any())
             {
                 partsAmount = workOrderParts
-                    .Where(p => p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.APPROVED || p.Status == EVServiceCenter.Domain.Enums.WorkOrderPartStatus.CONSUMED)
+                    .Where(p => p.Status == "CONSUMED")
                     .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
             }
 
@@ -481,8 +496,14 @@ public class PaymentController : ControllerBase
 					.Sum(up => up.DiscountAmount);
 			}
 
-			// Total = packagePrice (nếu lần đầu) + (dùng gói: packageDiscountAmount; dùng lẻ: serviceBasePrice) + parts - promotionDiscount
-			decimal totalAmount = packagePrice + (booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice) + partsAmount - promotionDiscountAmount;
+            // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
+            var serviceComponent2 = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
+            if (promotionDiscountAmount > serviceComponent2)
+            {
+                promotionDiscountAmount = serviceComponent2;
+            }
+            // Total = packagePrice (nếu lần đầu) + serviceComponent + parts - promotionDiscount
+            decimal totalAmount = packagePrice + serviceComponent2 + partsAmount - promotionDiscountAmount;
 
 			var amount = (decimal)Math.Round(totalAmount);
 			var minAmount = _configuration.GetValue<decimal>("VNPay:MinAmount", 1000);

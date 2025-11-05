@@ -4,6 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Configurations;
 using EVServiceCenter.Application.Interfaces;
+using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Domain.Enums;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -40,8 +42,11 @@ namespace EVServiceCenter.Api.HostedServices
                     var windowHours = _options.WindowHours ?? _maintenanceOptions.AppointmentReminderHours;
                     var windowEnd = now.AddHours(windowHours);
 
+                    var reminderRepo = scope.ServiceProvider.GetRequiredService<IMaintenanceReminderRepository>();
                     var bookings = await bookingRepo.GetAllBookingsAsync();
                     var candidates = bookings.Where(b => (b.Status == "CONFIRMED" || b.Status == "IN_PROGRESS") && b.TechnicianSlotId.HasValue).ToList();
+
+                    var sentBookingIds = new System.Collections.Generic.HashSet<int>();
 
                     foreach (var b in candidates)
                     {
@@ -52,12 +57,52 @@ namespace EVServiceCenter.Api.HostedServices
                         if (at < now || at > windowEnd) continue;
                         var emailTo = full.Customer?.User?.Email;
                         if (string.IsNullOrWhiteSpace(emailTo)) continue;
+
+                        var existingReminders = await reminderRepo.QueryAsync(
+                            customerId: full.Customer?.CustomerId,
+                            vehicleId: full.VehicleId,
+                            status: null,
+                            from: null,
+                            to: null
+                        );
+                        var appointmentReminder = existingReminders
+                            .FirstOrDefault(r => r.Type == ReminderType.APPOINTMENT && r.VehicleId == full.VehicleId);
+
+                        if (sentBookingIds.Contains(full.BookingId))
+                        {
+                            continue;
+                        }
+
+                        if (appointmentReminder != null && appointmentReminder.LastSentAt.HasValue)
+                        {
+                            var hoursSinceLastSent = (now - appointmentReminder.LastSentAt.Value).TotalHours;
+                            if (hoursSinceLastSent < 24)
+                            {
+                                continue;
+                            }
+                        }
+
+                        var config = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+                        var frontendUrl = config["App:FrontendUrl"] ?? "http://localhost:3000";
+                        var bookingUrl = $"{frontendUrl}/profile?tab=history";
+                        var fullName = full.Customer?.User?.FullName ?? "Khách hàng";
+                        var centerName = full.Center?.CenterName ?? string.Empty;
+                        var centerAddress = full.Center?.Address ?? string.Empty;
+                        var date = full.TechnicianTimeSlot.WorkDate.ToString("yyyy-MM-dd");
+                        var time = full.TechnicianTimeSlot.Slot.SlotTime.ToString(@"hh\:mm");
+
                         var subject = "Nhắc lịch hẹn";
                         var body = await templates.RenderAsync("AppointmentReminder", new System.Collections.Generic.Dictionary<string, string>
                         {
                             ["bookingId"] = full.BookingId.ToString(),
-                            ["centerName"] = full.Center?.CenterName ?? string.Empty,
-                            ["appointmentUtc"] = at.ToString("u")
+                            ["centerName"] = centerName,
+                            ["centerAddress"] = centerAddress,
+                            ["date"] = date,
+                            ["time"] = time,
+                            ["fullName"] = fullName,
+                            ["bookingUrl"] = bookingUrl,
+                            ["year"] = DateTime.UtcNow.Year.ToString(),
+                            ["supportPhone"] = config["AppSettings:SupportPhone"] ?? "1900-xxxx"
                         });
                         await email.SendEmailAsync(emailTo, subject, body);
                         var userId = full.Customer?.User?.UserId ?? 0;
@@ -65,6 +110,28 @@ namespace EVServiceCenter.Api.HostedServices
                         {
                             await notifications.SendBookingNotificationAsync(userId, subject, $"Booking #{full.BookingId} lúc {at:u}", "APPOINTMENT");
                         }
+
+                        if (appointmentReminder == null)
+                        {
+                            appointmentReminder = new MaintenanceReminder
+                            {
+                                VehicleId = full.VehicleId,
+                                Type = ReminderType.APPOINTMENT,
+                                Status = ReminderStatus.COMPLETED,
+                                LastSentAt = now,
+                                CreatedAt = now,
+                                UpdatedAt = now
+                            };
+                            await reminderRepo.CreateAsync(appointmentReminder);
+                        }
+                        else
+                        {
+                            appointmentReminder.LastSentAt = now;
+                            appointmentReminder.UpdatedAt = now;
+                            await reminderRepo.UpdateAsync(appointmentReminder);
+                        }
+
+                        sentBookingIds.Add(full.BookingId);
                     }
                 }
 

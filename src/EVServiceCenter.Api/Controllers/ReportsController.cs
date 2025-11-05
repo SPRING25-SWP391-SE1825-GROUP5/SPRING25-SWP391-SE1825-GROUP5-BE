@@ -19,6 +19,11 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IBookingReportsService _bookingReportsService;
         private readonly ITechnicianReportsService _technicianReportsService;
         private readonly IInventoryReportsService _inventoryReportsService;
+        private readonly IDashboardSummaryService _dashboardSummaryService;
+        private readonly IRevenueByStoreService _revenueByStoreService;
+        private readonly ITimeslotPopularityService _timeslotPopularityService;
+        private readonly IServiceBookingStatsService _serviceBookingStatsService;
+        private readonly ITotalRevenueService _totalRevenueService;
 		
 		public ReportsController(
             IPartsUsageReportService partsUsageReportService, 
@@ -26,6 +31,11 @@ namespace EVServiceCenter.Api.Controllers
             IBookingReportsService bookingReportsService,
             ITechnicianReportsService technicianReportsService,
             IInventoryReportsService inventoryReportsService,
+            IDashboardSummaryService dashboardSummaryService,
+            IRevenueByStoreService revenueByStoreService,
+            ITimeslotPopularityService timeslotPopularityService,
+            ITotalRevenueService totalRevenueService,
+            IServiceBookingStatsService serviceBookingStatsService,
             ILogger<ReportsController> logger)
             : base(logger)
         {
@@ -34,6 +44,11 @@ namespace EVServiceCenter.Api.Controllers
             _bookingReportsService = bookingReportsService;
             _technicianReportsService = technicianReportsService;
             _inventoryReportsService = inventoryReportsService;
+            _dashboardSummaryService = dashboardSummaryService;
+            _revenueByStoreService = revenueByStoreService;
+            _timeslotPopularityService = timeslotPopularityService;
+            _totalRevenueService = totalRevenueService;
+            _serviceBookingStatsService = serviceBookingStatsService;
 		}
 
 		/// <summary>
@@ -196,6 +211,98 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         /// <summary>
+        /// Thống kê số lượt booking của các dịch vụ và doanh thu dịch vụ (payments PAID/COMPLETED)
+        /// </summary>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
+        [HttpGet("services-booking-stats")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetServiceBookingStats(
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null)
+        {
+            try
+            {
+                if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+                {
+                    return BadRequest(new { success = false, message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc" });
+                }
+
+                var request = new ServiceBookingStatsRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate
+                };
+
+                var result = await _serviceBookingStatsService.GetServiceBookingStatsAsync(request);
+                return Ok(new { success = true, message = "Lấy thống kê dịch vụ thành công", data = result });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Tổng doanh thu toàn hệ thống theo khoảng thời gian và granularity (DAY|MONTH|QUARTER|YEAR)
+        /// </summary>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
+        /// <param name="granularity">DAY | MONTH | QUARTER | YEAR (mặc định: DAY)</param>
+        /// <returns>Danh sách các khoảng thời gian với doanh thu và tổng doanh thu</returns>
+        [HttpGet("total-revenue")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetTotalRevenue(
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] string? granularity = "DAY")
+        {
+            try
+            {
+                if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"
+                    });
+                }
+
+                var request = new TotalRevenueOverTimeRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    Granularity = granularity
+                };
+
+                var result = await _totalRevenueService.GetTotalRevenueOverTimeAsync(request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy tổng doanh thu theo khoảng thời gian thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
         /// Lấy danh sách booking của chi nhánh
         /// </summary>
         /// <param name="centerId">ID chi nhánh</param>
@@ -333,6 +440,177 @@ namespace EVServiceCenter.Api.Controllers
                     success = true,
                     message = "Lấy báo cáo sử dụng kho thành công",
                     data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy KPI tổng quan của toàn hệ thống (Dashboard Summary)
+        /// </summary>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
+        /// <returns>Dashboard Summary với các KPI: Tổng doanh thu, Tổng nhân viên, Tổng booking hoàn thành, Doanh thu dịch vụ, Doanh thu phụ tùng</returns>
+        [HttpGet("dashboard-summary")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetDashboardSummary(
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null)
+        {
+            try
+            {
+                // Validate date range nếu cả hai đều được cung cấp
+                if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"
+                    });
+                }
+
+                var request = new DashboardSummaryRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate
+                };
+
+                var result = await _dashboardSummaryService.GetDashboardSummaryAsync(request);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy KPI tổng quan thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy doanh thu theo cửa hàng để so sánh (Revenue by Store)
+        /// </summary>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
+        /// <returns>Danh sách cửa hàng với doanh thu, phù hợp để vẽ chart so sánh</returns>
+        [HttpGet("revenue-by-store")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetRevenueByStore(
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null)
+        {
+            try
+            {
+                // Validate date range nếu cả hai đều được cung cấp
+                if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"
+                    });
+                }
+
+                var request = new RevenueByStoreRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate
+                };
+
+                var result = await _revenueByStoreService.GetRevenueByStoreAsync(request);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy doanh thu theo cửa hàng thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy thống kê số lượng booking của từng timeslot (Timeslot Popularity)
+        /// </summary>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
+        /// <returns>Danh sách timeslot với số lượng booking, phù hợp để đánh giá popularity</returns>
+        [HttpGet("timeslot-popularity")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetTimeslotPopularity(
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null)
+        {
+            try
+            {
+                // Validate date range nếu cả hai đều được cung cấp
+                if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"
+                    });
+                }
+
+                var request = new TimeslotPopularityRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate
+                };
+
+                var result = await _timeslotPopularityService.GetTimeslotPopularityAsync(request);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy thống kê timeslot popularity thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
                 });
             }
             catch (Exception ex)

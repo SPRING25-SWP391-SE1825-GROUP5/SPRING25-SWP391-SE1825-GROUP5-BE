@@ -35,4 +35,14 @@ public interface ITechnicianTimeSlotRepository
     /// <param name="endDate">Ngày kết thúc</param>
     /// <returns>Danh sách TechnicianTimeSlot với Booking đã include</returns>
     Task<List<TechnicianTimeSlot>> GetByCenterAndDateRangeAsync(int centerId, DateTime startDate, DateTime endDate);
+    
+    /// <summary>
+    /// Đếm số lượng TechnicianTimeSlot có BookingId != null theo SlotId và date range (toàn hệ thống)
+    /// Chỉ đếm Booking có status COMPLETED hoặc PAID
+    /// </summary>
+    /// <param name="slotId">ID của timeslot</param>
+    /// <param name="startDate">Ngày bắt đầu</param>
+    /// <param name="endDate">Ngày kết thúc</param>
+    /// <returns>Số lượng TechnicianTimeSlot đã được assign cho booking có status COMPLETED/PAID</returns>
+    Task<int> CountBookingsBySlotIdAndDateRangeAsync(int slotId, DateTime startDate, DateTime endDate);
 }

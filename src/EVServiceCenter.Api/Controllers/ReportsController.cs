@@ -20,6 +20,7 @@ namespace EVServiceCenter.Api.Controllers
         private readonly ITechnicianReportsService _technicianReportsService;
         private readonly IInventoryReportsService _inventoryReportsService;
         private readonly IDashboardSummaryService _dashboardSummaryService;
+        private readonly IRevenueByStoreService _revenueByStoreService;
 		
 		public ReportsController(
             IPartsUsageReportService partsUsageReportService, 
@@ -28,6 +29,7 @@ namespace EVServiceCenter.Api.Controllers
             ITechnicianReportsService technicianReportsService,
             IInventoryReportsService inventoryReportsService,
             IDashboardSummaryService dashboardSummaryService,
+            IRevenueByStoreService revenueByStoreService,
             ILogger<ReportsController> logger)
             : base(logger)
         {
@@ -37,6 +39,7 @@ namespace EVServiceCenter.Api.Controllers
             _technicianReportsService = technicianReportsService;
             _inventoryReportsService = inventoryReportsService;
             _dashboardSummaryService = dashboardSummaryService;
+            _revenueByStoreService = revenueByStoreService;
 		}
 
 		/// <summary>
@@ -384,6 +387,63 @@ namespace EVServiceCenter.Api.Controllers
                 {
                     success = true,
                     message = "Lấy KPI tổng quan thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy doanh thu theo cửa hàng để so sánh (Revenue by Store)
+        /// </summary>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
+        /// <returns>Danh sách cửa hàng với doanh thu, phù hợp để vẽ chart so sánh</returns>
+        [HttpGet("revenue-by-store")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetRevenueByStore(
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null)
+        {
+            try
+            {
+                // Validate date range nếu cả hai đều được cung cấp
+                if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"
+                    });
+                }
+
+                var request = new RevenueByStoreRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate
+                };
+
+                var result = await _revenueByStoreService.GetRevenueByStoreAsync(request);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy doanh thu theo cửa hàng thành công",
                     data = result
                 });
             }

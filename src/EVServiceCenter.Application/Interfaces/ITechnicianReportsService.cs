@@ -11,7 +11,7 @@ namespace EVServiceCenter.Application.Interfaces
         
         /// <summary>
         /// Lấy thống kê số lượng booking của center và mỗi technician thực hiện trong khoảng thời gian
-        /// Chỉ tính booking có trạng thái PAID hoặc COMPLETED
+        /// Chỉ tính booking có trạng thái PAID (đã thanh toán)
         /// </summary>
         /// <param name="centerId">ID trung tâm</param>
         /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định 30 ngày trước)</param>
@@ -29,5 +29,14 @@ namespace EVServiceCenter.Application.Interfaces
         /// <param name="granularity">Chế độ phân loại: day, week, month, quarter, year (nullable, tự động chọn dựa trên khoảng thời gian)</param>
         /// <returns>Response chứa utilizationRate trung bình và items theo period (nếu có groupBy)</returns>
         Task<UtilizationRateResponse> GetCenterUtilizationRateAsync(int centerId, DateTime? fromDate, DateTime? toDate, string? granularity = null);
+
+        /// <summary>
+        /// Lấy thống kê số lượng slot được đặt theo giờ để đánh giá giờ cao điểm của trung tâm
+        /// </summary>
+        /// <param name="centerId">ID trung tâm</param>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định hôm nay)</param>
+        /// <returns>Response chứa thống kê theo giờ và theo ngày trong tuần</returns>
+        Task<PeakHourStatsResponse> GetPeakHourStatsAsync(int centerId, DateTime? fromDate, DateTime? toDate);
     }
 }

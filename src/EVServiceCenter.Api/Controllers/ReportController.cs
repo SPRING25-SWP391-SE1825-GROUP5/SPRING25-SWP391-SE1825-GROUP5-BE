@@ -222,6 +222,65 @@ namespace EVServiceCenter.Api.Controllers
                 return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy tỉ lệ lấp đầy", error = ex.Message });
             }
         }
+
+        /// <summary>
+        /// Lấy tổng số booking đã nhận của các technician trong chi nhánh để thống kê hiệu suất
+        /// Chỉ tính booking có trạng thái PAID (đã thanh toán)
+        /// GET /api/Report/centers/{centerId}/technicians/booking-stats?from=...&to=...
+        /// </summary>
+        /// <param name="centerId">ID trung tâm</param>
+        /// <param name="from">Ngày bắt đầu (nullable, mặc định 30 ngày trước)</param>
+        /// <param name="to">Ngày kết thúc (nullable, mặc định hôm nay)</param>
+        /// <returns>Response chứa tổng số booking và danh sách technician với số booking đã thực hiện</returns>
+        [HttpGet("centers/{centerId}/technicians/booking-stats")]
+        public async Task<IActionResult> GetTechnicianBookingStats(
+            int centerId,
+            [FromQuery] DateTime? from = null,
+            [FromQuery] DateTime? to = null)
+        {
+            try
+            {
+                var result = await _technicianReportsService.GetTechnicianBookingStatsAsync(centerId, from, to);
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy thống kê booking của technician", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Lấy thống kê số lượng slot được đặt theo giờ để đánh giá giờ cao điểm của trung tâm
+        /// GET /api/Report/centers/{centerId}/peak-hour-stats?from=...&to=...
+        /// </summary>
+        /// <param name="centerId">ID trung tâm</param>
+        /// <param name="from">Ngày bắt đầu (nullable, mặc định 30 ngày trước)</param>
+        /// <param name="to">Ngày kết thúc (nullable, mặc định hôm nay)</param>
+        /// <returns>Response chứa thống kê theo giờ và theo ngày trong tuần</returns>
+        [HttpGet("centers/{centerId}/peak-hour-stats")]
+        public async Task<IActionResult> GetPeakHourStats(
+            int centerId,
+            [FromQuery] DateTime? from = null,
+            [FromQuery] DateTime? to = null)
+        {
+            try
+            {
+                var result = await _technicianReportsService.GetPeakHourStatsAsync(centerId, from, to);
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy thống kê giờ cao điểm", error = ex.Message });
+            }
+        }
     }
 }
 

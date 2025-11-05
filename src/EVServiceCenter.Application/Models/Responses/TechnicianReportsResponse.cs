@@ -107,4 +107,29 @@ namespace EVServiceCenter.Application.Models.Responses
         public int BookedSlots { get; set; }
         public decimal UtilizationRate { get; set; }
     }
+
+    /// <summary>
+    /// Response cho API GetPeakHourStats - thống kê số lượng slot được đặt theo giờ để đánh giá giờ cao điểm
+    /// </summary>
+    public class PeakHourStatsResponse
+    {
+        public bool Success { get; set; } = true;
+        public int CenterId { get; set; }
+        public string? CenterName { get; set; }
+        public int TotalBookedSlots { get; set; }
+        public List<PeakHourStatsItem> HourlyStats { get; set; } = new List<PeakHourStatsItem>();
+        public DateRangeInfo? DateRange { get; set; }
+        public DateTime LastUpdated { get; set; }
+    }
+
+    /// <summary>
+    /// Thống kê số slot được đặt theo giờ (time slot)
+    /// </summary>
+    public class PeakHourStatsItem
+    {
+        public int SlotId { get; set; }
+        public string SlotTime { get; set; } = string.Empty; // Format: "HH:mm"
+        public string SlotLabel { get; set; } = string.Empty;
+        public int TotalBookedSlots { get; set; }
+    }
 }

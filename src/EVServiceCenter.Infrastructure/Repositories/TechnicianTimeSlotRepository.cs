@@ -295,4 +295,15 @@ public class TechnicianTimeSlotRepository : ITechnicianTimeSlotRepository
             .ThenBy(t => t.Slot.SlotTime)
             .ToListAsync();
     }
+
+    public async Task<int> CountBookingsBySlotIdAndDateRangeAsync(int slotId, DateTime startDate, DateTime endDate)
+    {
+        // Đếm số lượng TechnicianTimeSlot có BookingId != null, SlotId = slotId, và WorkDate trong date range
+        return await _context.TechnicianTimeSlots
+            .Where(tts => tts.SlotId == slotId &&
+                         tts.BookingId != null &&
+                         tts.WorkDate >= startDate.Date &&
+                         tts.WorkDate <= endDate.Date)
+            .CountAsync();
+    }
 }

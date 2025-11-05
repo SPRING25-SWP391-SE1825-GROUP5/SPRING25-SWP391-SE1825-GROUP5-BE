@@ -21,6 +21,7 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IInventoryReportsService _inventoryReportsService;
         private readonly IDashboardSummaryService _dashboardSummaryService;
         private readonly IRevenueByStoreService _revenueByStoreService;
+        private readonly ITimeslotPopularityService _timeslotPopularityService;
 		
 		public ReportsController(
             IPartsUsageReportService partsUsageReportService, 
@@ -30,6 +31,7 @@ namespace EVServiceCenter.Api.Controllers
             IInventoryReportsService inventoryReportsService,
             IDashboardSummaryService dashboardSummaryService,
             IRevenueByStoreService revenueByStoreService,
+            ITimeslotPopularityService timeslotPopularityService,
             ILogger<ReportsController> logger)
             : base(logger)
         {
@@ -40,6 +42,7 @@ namespace EVServiceCenter.Api.Controllers
             _inventoryReportsService = inventoryReportsService;
             _dashboardSummaryService = dashboardSummaryService;
             _revenueByStoreService = revenueByStoreService;
+            _timeslotPopularityService = timeslotPopularityService;
 		}
 
 		/// <summary>
@@ -444,6 +447,63 @@ namespace EVServiceCenter.Api.Controllers
                 {
                     success = true,
                     message = "Lấy doanh thu theo cửa hàng thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy thống kê số lượng booking của từng timeslot (Timeslot Popularity)
+        /// </summary>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
+        /// <returns>Danh sách timeslot với số lượng booking, phù hợp để đánh giá popularity</returns>
+        [HttpGet("timeslot-popularity")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetTimeslotPopularity(
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null)
+        {
+            try
+            {
+                // Validate date range nếu cả hai đều được cung cấp
+                if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"
+                    });
+                }
+
+                var request = new TimeslotPopularityRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate
+                };
+
+                var result = await _timeslotPopularityService.GetTimeslotPopularityAsync(request);
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy thống kê timeslot popularity thành công",
                     data = result
                 });
             }

@@ -22,6 +22,7 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IDashboardSummaryService _dashboardSummaryService;
         private readonly IRevenueByStoreService _revenueByStoreService;
         private readonly ITimeslotPopularityService _timeslotPopularityService;
+        private readonly ITotalRevenueService _totalRevenueService;
 		
 		public ReportsController(
             IPartsUsageReportService partsUsageReportService, 
@@ -32,6 +33,7 @@ namespace EVServiceCenter.Api.Controllers
             IDashboardSummaryService dashboardSummaryService,
             IRevenueByStoreService revenueByStoreService,
             ITimeslotPopularityService timeslotPopularityService,
+            ITotalRevenueService totalRevenueService,
             ILogger<ReportsController> logger)
             : base(logger)
         {
@@ -43,6 +45,7 @@ namespace EVServiceCenter.Api.Controllers
             _dashboardSummaryService = dashboardSummaryService;
             _revenueByStoreService = revenueByStoreService;
             _timeslotPopularityService = timeslotPopularityService;
+            _totalRevenueService = totalRevenueService;
 		}
 
 		/// <summary>
@@ -192,6 +195,65 @@ namespace EVServiceCenter.Api.Controllers
                     success = true,
                     message = "Lấy danh sách booking hôm nay thành công",
                     data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Tổng doanh thu toàn hệ thống theo khoảng thời gian và granularity (DAY|MONTH|QUARTER|YEAR)
+        /// </summary>
+        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
+        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
+        /// <param name="granularity">DAY | MONTH | QUARTER | YEAR (mặc định: DAY)</param>
+        /// <returns>Danh sách các khoảng thời gian với doanh thu và tổng doanh thu</returns>
+        [HttpGet("total-revenue")]
+        [Authorize(Roles = "ADMIN,MANAGER")]
+        public async Task<IActionResult> GetTotalRevenue(
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] string? granularity = "DAY")
+        {
+            try
+            {
+                if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc"
+                    });
+                }
+
+                var request = new TotalRevenueOverTimeRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    Granularity = granularity
+                };
+
+                var result = await _totalRevenueService.GetTotalRevenueOverTimeAsync(request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy tổng doanh thu theo khoảng thời gian thành công",
+                    data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
                 });
             }
             catch (Exception ex)

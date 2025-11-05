@@ -109,17 +109,23 @@ namespace EVServiceCenter.Application.Service
 
                 decimal totalRevenue = 0;
 
-                // Tính tổng từ tất cả payments COMPLETED của tất cả invoices trong date range
+                // Tính tổng từ tất cả payments COMPLETED/PAID của tất cả invoices trong date range
                 foreach (var invoice in allInvoices)
                 {
                     var completedPayments = await _paymentRepository.GetByInvoiceIdAsync(
-                        invoice.InvoiceId, 
-                        status: "COMPLETED", 
-                        method: null, 
-                        from: fromDate, 
+                        invoice.InvoiceId,
+                        status: "COMPLETED",
+                        method: null,
+                        from: fromDate,
                         to: toDate);
-                    
-                    totalRevenue += completedPayments.Sum(p => p.Amount);
+                    var paidPayments = await _paymentRepository.GetByInvoiceIdAsync(
+                        invoice.InvoiceId,
+                        status: "PAID",
+                        method: null,
+                        from: fromDate,
+                        to: toDate);
+
+                    totalRevenue += completedPayments.Sum(p => p.Amount) + paidPayments.Sum(p => p.Amount);
                 }
 
                 return totalRevenue;
@@ -183,69 +189,47 @@ namespace EVServiceCenter.Application.Service
         }
 
         /// <summary>
-        /// Tính doanh thu từ dịch vụ của toàn hệ thống trong date range
-        /// Doanh thu dịch vụ = Tổng tiền dịch vụ từ invoice (tính từ booking -> service price)
+        /// Tính doanh thu từ dịch vụ của toàn hệ thống trong date range.
+        /// Nguyên tắc: Phân bổ trực tiếp từ tổng tiền thanh toán COMPLETED theo từng hóa đơn.
+        /// Đảm bảo: totalRevenue = serviceRevenue + partsRevenue.
+        /// serviceRevenue = max(0, totalPaymentAmount - allocatedPartsAmount),
+        /// trong đó allocatedPartsAmount = min(invoice.PartsAmount, totalPaymentAmount).
         /// </summary>
         private async Task<decimal> GetServiceRevenueAsync(DateTime fromDate, DateTime toDate)
         {
             try
             {
-                // Lấy tất cả bookings
-                var allBookings = await _bookingRepository.GetAllBookingsAsync();
-
-                // Chỉ tính bookings đã hoàn thành (COMPLETED hoặc PAID) trong date range
-                var completedBookings = allBookings.Where(b => 
-                    !string.IsNullOrEmpty(b.Status) && 
-                    (b.Status.ToUpperInvariant() == "COMPLETED" || b.Status.ToUpperInvariant() == "PAID") &&
-                    b.CreatedAt >= fromDate && b.CreatedAt <= toDate);
+                // Lấy tất cả invoices
+                var allInvoices = await _invoiceRepository.GetAllAsync();
 
                 decimal serviceRevenue = 0;
 
-                // Với mỗi booking hoàn thành, lấy invoice và tính doanh thu dịch vụ
-                foreach (var booking in completedBookings)
+                foreach (var invoice in allInvoices)
                 {
-                    var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
-                    if (invoice == null) continue;
-
-                    // Lấy payments COMPLETED của invoice này trong date range
+                    // Lấy payments COMPLETED và PAID của invoice trong date range
                     var completedPayments = await _paymentRepository.GetByInvoiceIdAsync(
-                        invoice.InvoiceId, 
-                        status: "COMPLETED", 
-                        method: null, 
-                        from: fromDate, 
+                        invoice.InvoiceId,
+                        status: "COMPLETED",
+                        method: null,
+                        from: fromDate,
+                        to: toDate);
+                    var paidPayments = await _paymentRepository.GetByInvoiceIdAsync(
+                        invoice.InvoiceId,
+                        status: "PAID",
+                        method: null,
+                        from: fromDate,
                         to: toDate);
 
-                    // Doanh thu dịch vụ = Tổng amount của payments - PartsAmount - Discounts
-                    // Hoặc đơn giản hơn: tính từ Service.BasePrice của booking
-                    if (booking.Service != null)
+                    var totalPaymentAmount = completedPayments.Sum(p => p.Amount) + paidPayments.Sum(p => p.Amount);
+                    if (totalPaymentAmount <= 0) continue;
+
+                    // Phân bổ phần phụ tùng tối đa bằng PartsAmount nhưng không vượt quá số tiền đã thu
+                    var allocatedPartsAmount = Math.Min(invoice.PartsAmount, totalPaymentAmount);
+                    var allocatedServiceAmount = totalPaymentAmount - allocatedPartsAmount;
+
+                    if (allocatedServiceAmount > 0)
                     {
-                        // Tính từ service BasePrice (chưa trừ discount)
-                        var servicePrice = booking.Service.BasePrice;
-                        
-                        // Nếu có payments, lấy phần dịch vụ từ payments
-                        // Giả sử: serviceRevenue = totalPaymentAmount - partsAmount - discounts
-                        var totalPaymentAmount = completedPayments.Sum(p => p.Amount);
-                        
-                        // Trừ đi phần phụ tùng và discount
-                        var partsAmount = invoice.PartsAmount;
-                        var discounts = invoice.PackageDiscountAmount + invoice.PromotionDiscountAmount;
-                        
-                        // Doanh thu dịch vụ = Tổng payment - Phần phụ tùng - Discount
-                        // Hoặc đơn giản: tính từ service price trừ discount
-                        var serviceAmount = totalPaymentAmount > 0 
-                            ? totalPaymentAmount - partsAmount - discounts
-                            : servicePrice - discounts;
-                        
-                        // Đảm bảo không âm
-                        if (serviceAmount > 0)
-                        {
-                            serviceRevenue += serviceAmount;
-                        }
-                        else if (servicePrice > 0)
-                        {
-                            // Fallback: nếu không có payment, dùng service price
-                            serviceRevenue += servicePrice;
-                        }
+                        serviceRevenue += allocatedServiceAmount;
                     }
                 }
 
@@ -259,8 +243,10 @@ namespace EVServiceCenter.Application.Service
         }
 
         /// <summary>
-        /// Tính doanh thu từ phụ tùng của toàn hệ thống trong date range
-        /// Doanh thu phụ tùng = Tổng PartsAmount từ tất cả invoices của bookings đã hoàn thành
+        /// Tính doanh thu từ phụ tùng của toàn hệ thống trong date range.
+        /// Nguyên tắc: Phân bổ trực tiếp từ tổng tiền thanh toán COMPLETED theo từng hóa đơn.
+        /// Đảm bảo: totalRevenue = serviceRevenue + partsRevenue.
+        /// partsRevenue = min(invoice.PartsAmount, totalPaymentAmount)
         /// </summary>
         private async Task<decimal> GetPartsRevenueAsync(DateTime fromDate, DateTime toDate)
         {
@@ -271,35 +257,31 @@ namespace EVServiceCenter.Application.Service
 
                 decimal partsRevenue = 0;
 
-                // Tính tổng PartsAmount từ các invoices có booking đã hoàn thành
                 foreach (var invoice in allInvoices)
                 {
-                    if (invoice.BookingId == null) continue;
+                    // Lấy payments COMPLETED và PAID của invoice trong date range
+                    var completedPayments = await _paymentRepository.GetByInvoiceIdAsync(
+                        invoice.InvoiceId,
+                        status: "COMPLETED",
+                        method: null,
+                        from: fromDate,
+                        to: toDate);
+                    var paidPayments = await _paymentRepository.GetByInvoiceIdAsync(
+                        invoice.InvoiceId,
+                        status: "PAID",
+                        method: null,
+                        from: fromDate,
+                        to: toDate);
 
-                    var booking = await _bookingRepository.GetBookingByIdAsync(invoice.BookingId.Value);
-                    if (booking == null) continue;
+                    var totalPaymentAmount = completedPayments.Sum(p => p.Amount) + paidPayments.Sum(p => p.Amount);
+                    if (totalPaymentAmount <= 0) continue;
 
-                    // Chỉ tính invoices của bookings đã hoàn thành trong date range
-                    var isCompleted = !string.IsNullOrEmpty(booking.Status) && 
-                                     (booking.Status.ToUpperInvariant() == "COMPLETED" || 
-                                      booking.Status.ToUpperInvariant() == "PAID") &&
-                                     booking.CreatedAt >= fromDate && booking.CreatedAt <= toDate;
+                    // Phân bổ phần phụ tùng tối đa bằng PartsAmount nhưng không vượt quá số tiền đã thu
+                    var allocatedPartsAmount = Math.Min(invoice.PartsAmount, totalPaymentAmount);
 
-                    if (isCompleted)
+                    if (allocatedPartsAmount > 0)
                     {
-                        // Kiểm tra xem có payment COMPLETED không trong date range
-                        var completedPayments = await _paymentRepository.GetByInvoiceIdAsync(
-                            invoice.InvoiceId, 
-                            status: "COMPLETED", 
-                            method: null, 
-                            from: fromDate, 
-                            to: toDate);
-
-                        // Chỉ tính nếu có payment thành công
-                        if (completedPayments.Any())
-                        {
-                            partsRevenue += invoice.PartsAmount;
-                        }
+                        partsRevenue += allocatedPartsAmount;
                     }
                 }
 

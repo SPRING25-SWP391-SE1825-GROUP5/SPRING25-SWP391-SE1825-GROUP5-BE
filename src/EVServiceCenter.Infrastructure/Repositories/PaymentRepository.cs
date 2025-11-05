@@ -70,6 +70,45 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
             return payments;
         }
+
+        public async Task<List<Payment>> GetCompletedPaymentsByDateRangeAsync(DateTime fromDate, DateTime toDate)
+        {
+            // Lấy tất cả payments COMPLETED trong khoảng PaidAt và include Invoice (để dùng PartsAmount nếu cần)
+            return await _db.Payments
+                .Include(p => p.Invoice)
+                .Where(p => p.Status == "COMPLETED"
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
+                         && p.PaidAt <= toDate)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync();
+        }
+
+        public async Task<List<Payment>> GetPaymentsByDateRangeAsync(string status, DateTime fromDate, DateTime toDate)
+        {
+            status = status.Trim();
+            return await _db.Payments
+                .Include(p => p.Invoice)
+                .Where(p => p.Status == status
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
+                         && p.PaidAt <= toDate)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync();
+        }
+
+        public async Task<List<Payment>> GetPaymentsByStatusesAndDateRangeAsync(IEnumerable<string> statuses, DateTime fromDate, DateTime toDate)
+        {
+            var statusSet = statuses.Select(s => s.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return await _db.Payments
+                .Include(p => p.Invoice)
+                .Where(p => statusSet.Contains(p.Status)
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
+                         && p.PaidAt <= toDate)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync();
+        }
     }
 }
 

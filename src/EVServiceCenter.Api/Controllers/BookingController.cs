@@ -73,6 +73,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
         }
 
+        [AllowAnonymous]
         [HttpGet("availability")]
         public async Task<IActionResult> GetAvailability(
             [FromQuery] int centerId,
@@ -88,6 +89,56 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
 
                 var serviceIdList = new List<int>();
+                if (!string.IsNullOrWhiteSpace(serviceIds))
+                {
+                    var serviceIdStrings = serviceIds.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var serviceIdString in serviceIdStrings)
+                    {
+                        if (int.TryParse(serviceIdString.Trim(), out var serviceId))
+                        {
+                            serviceIdList.Add(serviceId);
+                        }
+                    }
+                }
+
+                var availability = await _bookingService.GetAvailabilityAsync(centerId, bookingDate, serviceIdList);
+
+                return Ok(new {
+                    success = true,
+                    message = "Lấy thông tin khả dụng thành công",
+                    data = availability
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        // Public alias to keep backward compatibility with FE calling /available-times
+        [AllowAnonymous]
+        [HttpGet("available-times")]
+        public async Task<IActionResult> GetAvailableTimesPublic(
+            [FromQuery] int centerId,
+            [FromQuery] string date,
+            [FromQuery] string? serviceIds = null)
+        {
+            try
+            {
+                if (centerId <= 0)
+                    return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ" });
+
+                if (!DateOnly.TryParse(date, out var bookingDate))
+                    return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
+
+                var serviceIdList = new System.Collections.Generic.List<int>();
                 if (!string.IsNullOrWhiteSpace(serviceIds))
                 {
                     var serviceIdStrings = serviceIds.Split(',', StringSplitOptions.RemoveEmptyEntries);
@@ -435,7 +486,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> GetBookingById(int id)
         {
             try

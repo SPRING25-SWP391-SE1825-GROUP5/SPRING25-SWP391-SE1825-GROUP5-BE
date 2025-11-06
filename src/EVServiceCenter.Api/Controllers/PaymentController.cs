@@ -460,7 +460,11 @@ public class PaymentController : ControllerBase
                 .Where(p => string.Equals(p.Status, "CONSUMED", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            var partsDetails = consumedParts.Select(p => new
+            // Tách 2 nhóm: lấy từ kho trung tâm vs phụ tùng do khách cung cấp
+            var inventoryParts = consumedParts.Where(p => !p.IsCustomerSupplied).ToList();
+            var customerSuppliedParts = consumedParts.Where(p => p.IsCustomerSupplied && p.SourceOrderItemId.HasValue).ToList();
+
+            var partsDetails = inventoryParts.Select(p => new
             {
                 partId = p.PartId,
                 name = p.Part?.PartName,
@@ -469,6 +473,24 @@ public class PaymentController : ControllerBase
                 amount = (p.Part?.Price ?? 0m) * p.QuantityUsed
             }).ToList();
             var partsAmount = partsDetails.Sum(x => x.amount);
+
+            // Load đơn giá tham chiếu từ OrderItem cho parts khách cung cấp
+            var orderItemIds = customerSuppliedParts.Select(p => p.SourceOrderItemId!.Value).Distinct().ToList();
+            var refPrices = new Dictionary<int, decimal>();
+            foreach (var id in orderItemIds)
+            {
+                var oi = await _orderRepository.GetOrderItemByIdAsync(id);
+                if (oi != null) refPrices[id] = oi.UnitPrice;
+            }
+            var customerSuppliedDetails = customerSuppliedParts.Select(p => new
+            {
+                partId = p.PartId,
+                name = p.Part?.PartName,
+                qty = p.QuantityUsed,
+                referenceUnitPrice = p.SourceOrderItemId.HasValue && refPrices.ContainsKey(p.SourceOrderItemId.Value) ? refPrices[p.SourceOrderItemId.Value] : 0m,
+                amount = 0m, // không tính tiền hàng – khách tự cung cấp
+                sourceOrderItemId = p.SourceOrderItemId
+            }).ToList();
 
             // Khuyến mãi (chỉ áp dụng phần dịch vụ/gói)
             decimal promotionDiscountAmount = 0m;
@@ -498,7 +520,10 @@ public class PaymentController : ControllerBase
                     bookingId = booking.BookingId,
                     service = new { name = booking.Service?.ServiceName, basePrice = serviceBasePrice },
                     package = new { applied = booking.AppliedCreditId.HasValue, firstTimePrice = packagePrice, discountAmount = packageDiscountAmount },
-                    parts = partsDetails,
+                    parts = new {
+                        fromInventory = partsDetails,
+                        fromCustomer = customerSuppliedDetails
+                    },
                     partsAmount,
                     promotion = new { applied = promotionDiscountAmount > 0, discountAmount = promotionDiscountAmount },
                     subtotal = serviceBasePrice,

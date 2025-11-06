@@ -31,4 +31,9 @@ public partial class WorkOrderPart
     public virtual Booking Booking { get; set; }
 
     public virtual PartCategory? Category { get; set; }
+
+    // Đánh dấu hàng do khách cung cấp và liên kết về OrderItem nguồn
+    public bool IsCustomerSupplied { get; set; }
+
+    public int? SourceOrderItemId { get; set; }
 }

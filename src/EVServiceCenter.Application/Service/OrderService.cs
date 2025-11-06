@@ -16,17 +16,23 @@ public class OrderService : IOrderService
     private readonly ICustomerRepository _customerRepository;
     private readonly IPartRepository _partRepository;
     private readonly ICartService _cartService;
+    private readonly ICenterRepository _centerRepository;
+    private readonly IInventoryRepository _inventoryRepository;
 
     public OrderService(
         IOrderRepository orderRepository,
         ICustomerRepository customerRepository,
         IPartRepository partRepository,
-        ICartService cartService)
+        ICartService cartService,
+        ICenterRepository centerRepository,
+        IInventoryRepository inventoryRepository)
     {
         _orderRepository = orderRepository;
         _customerRepository = customerRepository;
         _partRepository = partRepository;
         _cartService = cartService;
+        _centerRepository = centerRepository;
+        _inventoryRepository = inventoryRepository;
     }
 
     public async Task<List<OrderResponse>> GetByCustomerIdAsync(int customerId)
@@ -91,11 +97,15 @@ public class OrderService : IOrderService
 
         var createdOrder = await _orderRepository.AddAsync(order);
 
-        // Lịch sử trạng thái đã bỏ theo yêu cầu
-
-        // Không cần xóa giỏ hàng nữa
-
-        return MapToResponse(createdOrder);
+        // Gợi ý center fulfill gần nhất dựa vào toạ độ + items
+        var suggestion = await SuggestCenterAsync(request.Latitude, request.Longitude, orderItems);
+        var resp = MapToResponse(createdOrder);
+        if (suggestion != null)
+        {
+            resp.SuggestedFulfillmentCenterId = suggestion.Value.centerId;
+            resp.SuggestedFulfillmentDistanceKm = suggestion.Value.distanceKm;
+        }
+        return resp;
     }
 
     public async Task<OrderResponse> CreateQuickOrderAsync(QuickOrderRequest request)
@@ -146,9 +156,14 @@ public class OrderService : IOrderService
 
         var created = await _orderRepository.AddAsync(order);
 
-        // Lịch sử trạng thái đã bỏ theo yêu cầu
-
-        return MapToResponse(created);
+        var suggestion = await SuggestCenterAsync(request.Latitude, request.Longitude, orderItems);
+        var resp = MapToResponse(created);
+        if (suggestion != null)
+        {
+            resp.SuggestedFulfillmentCenterId = suggestion.Value.centerId;
+            resp.SuggestedFulfillmentDistanceKm = suggestion.Value.distanceKm;
+        }
+        return resp;
     }
 
     public async Task<List<OrderItemSimpleResponse>> GetItemsAsync(int orderId)
@@ -372,5 +387,39 @@ public class OrderService : IOrderService
         await _cartService.ClearCartAsync(customerId);
 
         return MapToResponse(created);
+    }
+
+    private async Task<(int centerId, double distanceKm)?> SuggestCenterAsync(double? lat, double? lng, IEnumerable<OrderItem> items)
+    {
+        if (lat == null || lng == null) return null;
+        var centers = await _centerRepository.GetActiveCentersAsync();
+        var centersWithGeo = centers
+            .Where(c => c.Latitude.HasValue && c.Longitude.HasValue)
+            .Select(c => new { c.CenterId, Lat = (double)c.Latitude!.Value, Lng = (double)c.Longitude!.Value })
+            .ToList();
+        if (centersWithGeo.Count == 0) return null;
+
+        (int centerId, double distanceKm)? best = null;
+        foreach (var c in centersWithGeo)
+        {
+            var inv = await _inventoryRepository.GetInventoryByCenterIdAsync(c.CenterId);
+            var parts = inv?.InventoryParts ?? new List<InventoryPart>();
+            bool ok = items.All(oi => parts.Any(p => p.PartId == oi.PartId && p.CurrentStock >= oi.Quantity));
+            if (!ok) continue;
+
+            var d = HaversineKm(lat.Value, lng.Value, c.Lat, c.Lng);
+            if (best == null || d < best.Value.distanceKm) best = (c.CenterId, d);
+        }
+        return best;
+    }
+
+    private static double HaversineKm(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double R = 6371d;
+        double dLat = (lat2 - lat1) * Math.PI / 180d;
+        double dLng = (lng2 - lng1) * Math.PI / 180d;
+        double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos(lat1 * Math.PI / 180d) * Math.Cos(lat2 * Math.PI / 180d) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        double c = 2 * Math.Asin(Math.Min(1, Math.Sqrt(a)));
+        return R * c;
     }
 }

@@ -15,6 +15,8 @@ public sealed class OrderItemConfiguration : IEntityTypeConfiguration<OrderItem>
         entity.Property(e => e.OrderId).HasColumnName("OrderID");
         entity.Property(e => e.PartId).HasColumnName("PartID");
 
+        entity.Property(e => e.ConsumedQty).HasColumnName("ConsumedQty");
+
         entity.Property(e => e.UnitPrice).HasColumnType("decimal(10, 2)");
 
         entity.HasOne(d => d.Order)

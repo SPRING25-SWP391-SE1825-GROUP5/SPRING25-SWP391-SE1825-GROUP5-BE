@@ -17,6 +17,10 @@ public class OrderResponse
     public DateTime UpdatedAt { get; set; }
     public required List<OrderItemResponse> OrderItems { get; set; } = new List<OrderItemResponse>();
     // Removed: StatusHistory (history table dropped)
+
+    // Gợi ý center fulfill gần nhất (không lưu DB, chỉ trả về lúc tạo đơn)
+    public int? SuggestedFulfillmentCenterId { get; set; }
+    public double? SuggestedFulfillmentDistanceKm { get; set; }
 }
 
 public class OrderItemResponse

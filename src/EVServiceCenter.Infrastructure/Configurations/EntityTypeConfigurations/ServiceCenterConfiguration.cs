@@ -20,6 +20,14 @@ public sealed class ServiceCenterConfiguration : IEntityTypeConfiguration<Servic
             .HasMaxLength(255);
         entity.Property(e => e.PhoneNumber).HasMaxLength(20);
 
+        // Geo columns (nullable) mapped to existing DB columns Latitude/Longitude DECIMAL(9,6)
+        entity.Property(e => e.Latitude)
+            .HasColumnType("decimal(9,6)")
+            .IsRequired(false);
+        entity.Property(e => e.Longitude)
+            .HasColumnType("decimal(9,6)")
+            .IsRequired(false);
+
         entity.Property(e => e.IsActive).HasDefaultValue(true);
         entity.Property(e => e.CreatedAt)
             .HasPrecision(0)

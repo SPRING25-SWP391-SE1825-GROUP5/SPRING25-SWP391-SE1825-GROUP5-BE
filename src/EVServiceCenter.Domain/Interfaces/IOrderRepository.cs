@@ -17,14 +17,18 @@ public interface IOrderRepository
     Task<bool> ExistsAsync(int orderId);
     Task<bool> ExistsByOrderNumberAsync(string orderNumber);
     Task<string> GenerateOrderNumberAsync();
-    Task<List<Order>> GetOrdersByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10, 
-        string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+    Task<List<Order>> GetOrdersByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10,
+        string? status = null, DateTime? fromDate = null, DateTime? toDate = null,
         string sortBy = "orderDate", string sortOrder = "desc");
-    Task<int> CountOrdersByCustomerIdAsync(int customerId, string? status = null, 
+    Task<int> CountOrdersByCustomerIdAsync(int customerId, string? status = null,
         DateTime? fromDate = null, DateTime? toDate = null);
     Task<Order?> GetOrderWithDetailsByIdAsync(int orderId);
 
     // Cart helpers
     Task<Order?> GetCartByCustomerIdAsync(int customerId);
     Task<OrderItem?> FindItemAsync(int orderId, int partId);
+
+    // OrderItem helpers
+    Task<OrderItem?> GetOrderItemByIdAsync(int orderItemId);
+    Task UpdateOrderItemAsync(OrderItem item);
 }

@@ -14,9 +14,12 @@ public partial class OrderItem
 
     public decimal UnitPrice { get; set; }
 
+    // Số lượng đã được dùng để thay thế tại trung tâm (hàng của khách)
+    public int ConsumedQty { get; set; }
+
     public virtual Order Order { get; set; }
 
     public virtual Part Part { get; set; }
 
-    
+
 }

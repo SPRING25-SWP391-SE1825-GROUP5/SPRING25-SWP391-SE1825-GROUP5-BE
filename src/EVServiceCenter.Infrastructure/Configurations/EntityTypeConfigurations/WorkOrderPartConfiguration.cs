@@ -12,12 +12,9 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
         entity.HasKey(e => e.WorkOrderPartId);
         entity.ToTable("WorkOrderParts", "dbo");
 
-        entity.HasIndex(e => e.VehicleModelPartId);
-
         entity.Property(e => e.WorkOrderPartId).HasColumnName("WorkOrderPartID");
         entity.Property(e => e.BookingId).HasColumnName("BookingID");
         entity.Property(e => e.PartId).HasColumnName("PartID");
-        entity.Property(e => e.VehicleModelPartId).HasColumnName("VehicleModelPartID");
         entity.Property(e => e.CategoryId).HasColumnName("CategoryID");
 
         entity.Property(e => e.Status).HasColumnType("nvarchar(50)").HasMaxLength(50);
@@ -38,11 +35,6 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
             .WithMany(p => p.WorkOrderParts)
             .HasForeignKey(d => d.PartId)
             .OnDelete(DeleteBehavior.ClientSetNull);
-
-        entity.HasOne(d => d.VehicleModelPart)
-            .WithMany()
-            .HasForeignKey(d => d.VehicleModelPartId)
-            .OnDelete(DeleteBehavior.Restrict);
 
         entity.HasOne(d => d.Category)
             .WithMany()

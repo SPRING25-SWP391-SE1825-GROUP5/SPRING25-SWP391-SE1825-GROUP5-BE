@@ -163,26 +163,39 @@ public class PaymentService
 		var response = await _httpClient.SendAsync(request);
 		var responseText = await response.Content.ReadAsStringAsync();
 
-		// Xử lý trường hợp "Đơn thanh toán đã tồn tại"
-		if (!response.IsSuccessStatusCode)
-		{
-			var errorJson = JsonDocument.Parse(responseText).RootElement;
-			var code = errorJson.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
-			var desc = errorJson.TryGetProperty("desc", out var errorDescElem) ? errorDescElem.GetString() : null;
+        // Xử lý trường hợp "Đơn thanh toán đã tồn tại"
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorJson = JsonDocument.Parse(responseText).RootElement;
+            var code = errorJson.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
+            var desc = errorJson.TryGetProperty("desc", out var errorDescElem) ? errorDescElem.GetString() : null;
 
-			if (code == "231" && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
-			{
-				// Lấy link cũ từ PayOS
-				var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
-				if (!string.IsNullOrEmpty(existingUrl))
-				{
-					return existingUrl;
-				}
-				// Nếu không lấy được link cũ, tiếp tục throw exception
-			}
+            if (code == "231" && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
+            {
+                // Ưu tiên lấy checkoutUrl trực tiếp từ error response nếu có
+                if (errorJson.TryGetProperty("data", out var errData) && errData.ValueKind == JsonValueKind.Object)
+                {
+                    if (errData.TryGetProperty("checkoutUrl", out var errUrl) && errUrl.ValueKind == JsonValueKind.String)
+                    {
+                        var reuseUrl = errUrl.GetString();
+                        if (!string.IsNullOrEmpty(reuseUrl))
+                        {
+                            return reuseUrl;
+                        }
+                    }
+                }
 
-		response.EnsureSuccessStatusCode();
-		}
+                // Fallback: Lấy link cũ từ PayOS
+                var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
+                if (!string.IsNullOrEmpty(existingUrl))
+                {
+                    return existingUrl;
+                }
+                // Nếu không lấy được link cũ, tiếp tục throw exception
+            }
+
+        response.EnsureSuccessStatusCode();
+        }
 
         var json = JsonDocument.Parse(responseText).RootElement;
         if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&

@@ -605,7 +605,8 @@ public class PaymentService
 						Status = "COMPLETED",
 						PaymentCode = bookingId.ToString(),
 						CreatedAt = DateTime.UtcNow,
-						PaidAt = DateTime.UtcNow
+						PaidAt = DateTime.UtcNow,
+						PaidByUserID = booking.Customer?.User?.UserId
 					};
 					await _paymentRepository.CreateAsync(payment);
 					_logger.LogInformation("Đã tạo payment {PaymentId} cho booking {BookingId} với method {PaymentMethod}", payment.PaymentId, booking.BookingId, paymentMethod);
@@ -832,7 +833,8 @@ public class PaymentService
 					Amount = amount,
 					Status = "PAID",
 					PaidAt = DateTime.UtcNow,
-					CreatedAt = DateTime.UtcNow
+					CreatedAt = DateTime.UtcNow,
+					PaidByUserID = order.Customer?.User?.UserId
 				};
 				payment = await _paymentRepository.CreateAsync(payment);
 				_logger.LogInformation("Đã tạo payment {PaymentId} cho order {OrderId}", payment.PaymentId, order.OrderId);

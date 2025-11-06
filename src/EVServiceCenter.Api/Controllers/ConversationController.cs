@@ -212,5 +212,59 @@ namespace EVServiceCenter.Api.Controllers
                 return HandleException(ex, "Cập nhật thời gian đọc cuối cùng");
             }
         }
+
+        [HttpPut("{conversationId}/reassign-center")]
+        [Authorize(Policy = "AdminOrStaff")]
+        public async Task<IActionResult> ReassignCenter(long conversationId, [FromBody] ReassignCenterRequest request)
+        {
+            try
+            {
+                var validationResult = ValidateModelState();
+                if (validationResult != null) return validationResult;
+
+                var result = await _conversationService.ReassignCenterAsync(conversationId, request.NewCenterId, request.Reason);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Chuyển trung tâm");
+            }
+        }
+
+        [HttpGet("staff/{staffId}")]
+        [Authorize(Policy = "AdminOrStaff")]
+        public async Task<IActionResult> GetConversationsByStaff(int staffId, [FromQuery] int page = 0, [FromQuery] int pageSize = 0)
+        {
+            try
+            {
+                var result = await _conversationService.GetConversationsByStaffIdAsync(staffId, page, pageSize);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Lấy danh sách cuộc trò chuyện của staff");
+            }
+        }
+
+        [HttpGet("unassigned")]
+        [Authorize(Policy = "AdminOrStaff")]
+        public async Task<IActionResult> GetUnassignedConversations([FromQuery] int page = 0, [FromQuery] int pageSize = 0)
+        {
+            try
+            {
+                var result = await _conversationService.GetUnassignedConversationsAsync(page, pageSize);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Lấy danh sách cuộc trò chuyện chưa được assign");
+            }
+        }
+    }
+
+    public class ReassignCenterRequest
+    {
+        public int NewCenterId { get; set; }
+        public string? Reason { get; set; }
     }
 }

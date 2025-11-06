@@ -210,6 +210,25 @@ public class PaymentController : ControllerBase
 
 
 
+    [HttpPost("booking/{bookingId:int}/cancel-link")]
+    public async Task<IActionResult> CancelBookingPaymentLink([FromRoute] int bookingId)
+    {
+        try
+        {
+            // orderCode của Booking chính là bookingId
+            var ok = await _payOSService.CancelPaymentLinkAsync(bookingId);
+            if (ok)
+            {
+                return Ok(new { success = true, message = "Đã hủy link PayOS hiện tại" });
+            }
+            return StatusCode(502, new { success = false, message = "Hủy link PayOS thất bại hoặc link không tồn tại" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = $"Lỗi hủy link thanh toán: {ex.Message}" });
+        }
+    }
+
 
 
 	[AllowAnonymous]

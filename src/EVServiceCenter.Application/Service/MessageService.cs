@@ -38,13 +38,13 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                
+
                 if (!await _conversationRepository.ConversationExistsAsync(request.ConversationId))
                 {
                     throw new ArgumentException($"Conversation with ID {request.ConversationId} not found");
                 }
 
-                
+
                 if (!request.SenderUserId.HasValue && string.IsNullOrEmpty(request.SenderGuestSessionId))
                 {
                     throw new ArgumentException("Either SenderUserId or SenderGuestSessionId must be provided");
@@ -63,10 +63,16 @@ namespace EVServiceCenter.Application.Service
 
                 var createdMessage = await _messageRepository.CreateMessageAsync(message);
 
-                
+                // Reload message với navigation properties trước khi broadcast
+                var reloadedMessage = await _messageRepository.GetMessageByIdAsync(createdMessage.MessageId);
+                if (reloadedMessage != null)
+                {
+                    createdMessage = reloadedMessage;
+                }
+
                 await _conversationRepository.UpdateLastMessageAsync(
-                    request.ConversationId, 
-                    createdMessage.MessageId, 
+                    request.ConversationId,
+                    createdMessage.MessageId,
                     createdMessage.CreatedAt);
 
                 // Broadcast message to all conversation members via SignalR
@@ -138,7 +144,7 @@ namespace EVServiceCenter.Application.Service
                     return false;
                 }
 
-                
+
                 message.Content = "[Message deleted]";
                 message.AttachmentUrl = null;
 
@@ -257,11 +263,20 @@ namespace EVServiceCenter.Application.Service
 
                 var createdReply = await _messageRepository.CreateMessageAsync(replyMessage);
 
-                
+                // Reload message với navigation properties trước khi broadcast
+                var reloadedReply = await _messageRepository.GetMessageByIdAsync(createdReply.MessageId);
+                if (reloadedReply != null)
+                {
+                    createdReply = reloadedReply;
+                }
+
                 await _conversationRepository.UpdateLastMessageAsync(
                     originalMessage.ConversationId,
                     createdReply.MessageId,
                     createdReply.CreatedAt);
+
+                // Broadcast reply message to all conversation members via SignalR
+                await BroadcastMessageToConversationAsync(createdReply);
 
                 return await MapToMessageResponseAsync(createdReply);
             }
@@ -310,7 +325,7 @@ namespace EVServiceCenter.Application.Service
                     responses.Add(await MapToMessageResponseAsync(message));
                 }
 
-                
+
                 return responses
                     .Skip((request.Page - 1) * request.PageSize)
                     .Take(request.PageSize)
@@ -399,7 +414,7 @@ namespace EVServiceCenter.Application.Service
                 IsGuest = !message.SenderUserId.HasValue
             };
 
-            
+
             if (message.SenderUserId.HasValue && message.SenderUser != null)
             {
                 response.SenderName = message.SenderUser.FullName;
@@ -413,7 +428,7 @@ namespace EVServiceCenter.Application.Service
                 response.SenderAvatar = null;
             }
 
-            
+
             if (message.ReplyToMessageId.HasValue && message.ReplyToMessage != null)
             {
                 response.ReplyToMessage = await MapToMessageResponseAsync(message.ReplyToMessage);
@@ -422,12 +437,12 @@ namespace EVServiceCenter.Application.Service
             return response;
         }
 
-       
+
         private async Task BroadcastMessageToConversationAsync(Message message)
         {
             try
             {
-             
+
                 var messageData = new
                 {
                     MessageId = message.MessageId,
@@ -437,30 +452,40 @@ namespace EVServiceCenter.Application.Service
                     ReplyToMessageId = message.ReplyToMessageId,
                     SenderUserId = message.SenderUserId,
                     SenderGuestSessionId = message.SenderGuestSessionId,
-                    SenderName = message.SenderUserId.HasValue && message.SenderUser != null 
-                        ? message.SenderUser.FullName 
+                    SenderName = message.SenderUserId.HasValue && message.SenderUser != null
+                        ? message.SenderUser.FullName
                         : "Guest User",
-                    SenderEmail = message.SenderUserId.HasValue && message.SenderUser != null 
-                        ? message.SenderUser.Email 
+                    SenderEmail = message.SenderUserId.HasValue && message.SenderUser != null
+                        ? message.SenderUser.Email
                         : null,
-                    SenderAvatar = message.SenderUserId.HasValue && message.SenderUser != null 
-                        ? message.SenderUser.AvatarUrl 
+                    SenderAvatar = message.SenderUserId.HasValue && message.SenderUser != null
+                        ? message.SenderUser.AvatarUrl
                         : null,
                     CreatedAt = message.CreatedAt,
-                    IsGuest = !message.SenderUserId.HasValue
+                    IsGuest = !message.SenderUserId.HasValue,
+                    ReplyToMessage = message.ReplyToMessageId.HasValue && message.ReplyToMessage != null ? new
+                    {
+                        MessageId = message.ReplyToMessage.MessageId,
+                        Content = message.ReplyToMessage.Content,
+                        SenderUserId = message.ReplyToMessage.SenderUserId,
+                        SenderName = message.ReplyToMessage.SenderUserId.HasValue && message.ReplyToMessage.SenderUser != null
+                            ? message.ReplyToMessage.SenderUser.FullName
+                            : "Guest User",
+                        CreatedAt = message.ReplyToMessage.CreatedAt
+                    } : null
                 };
 
-                
+
                 await _chatHubService.BroadcastMessageToConversationAsync(message.ConversationId, messageData);
-                
-                _logger.LogInformation("Broadcasted message {MessageId} to conversation {ConversationId}", 
+
+                _logger.LogInformation("Broadcasted message {MessageId} to conversation {ConversationId}",
                     message.MessageId, message.ConversationId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error broadcasting message {MessageId} to conversation {ConversationId}", 
+                _logger.LogError(ex, "Error broadcasting message {MessageId} to conversation {ConversationId}",
                     message.MessageId, message.ConversationId);
-                
+
             }
         }
     }

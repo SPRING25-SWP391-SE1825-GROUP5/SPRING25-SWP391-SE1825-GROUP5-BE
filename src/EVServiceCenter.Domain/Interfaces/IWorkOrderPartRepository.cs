@@ -13,6 +13,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<WorkOrderPart> AddAsync(WorkOrderPart item);
         Task<WorkOrderPart> UpdateAsync(WorkOrderPart item);
         Task DeleteAsync(int bookingId, int partId);
+        Task<bool> DeleteByIdAsync(int workOrderPartId);
 
         Task<(bool Success, string? Error, WorkOrderPart? Item)> ApproveAsync(int id, int centerId, int approvedByUserId, DateTime approvedAtUtc);
         Task<WorkOrderPart?> RejectAsync(int id, int rejectedByUserId, DateTime rejectedAtUtc);

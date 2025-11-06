@@ -14,11 +14,13 @@ namespace EVServiceCenter.WebAPI.Controllers
     public class CenterController : ControllerBase
     {
         private readonly ICenterService _centerService;
+        private readonly IInventoryService _inventoryService;
         private static System.Collections.Generic.List<(int centerId, double lat, double lng)>? _geoCache;
 
-        public CenterController(ICenterService centerService)
+        public CenterController(ICenterService centerService, IInventoryService inventoryService)
         {
             _centerService = centerService;
+            _inventoryService = inventoryService;
         }
 
         /// <summary>
@@ -117,6 +119,75 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         private class GeoItem { public int centerId { get; set; } public double lat { get; set; } public double lng { get; set; } }
+
+        // ========== Nearest fulfillment (distance + stock) ==========
+        public class NearestFulfillmentQuery { public double lat { get; set; } public double lng { get; set; } public string items { get; set; } = string.Empty; }
+
+        [HttpGet("nearest-fulfillment")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetNearestFulfillment([FromQuery] NearestFulfillmentQuery q)
+        {
+            if (q.lat < -90 || q.lat > 90 || q.lng < -180 || q.lng > 180)
+                return BadRequest(new { success = false, message = "Toạ độ không hợp lệ" });
+
+            // Parse items: format "partId:qty,partId:qty"
+            var parsed = new System.Collections.Generic.List<(int partId, int qty)>();
+            foreach (var token in (q.items ?? string.Empty).Split(',', System.StringSplitOptions.RemoveEmptyEntries))
+            {
+                var p = token.Split(':', System.StringSplitOptions.RemoveEmptyEntries);
+                if (p.Length == 2 && int.TryParse(p[0], out var pid) && int.TryParse(p[1], out var qty) && pid > 0 && qty > 0)
+                    parsed.Add((pid, qty));
+            }
+            if (parsed.Count == 0)
+                return BadRequest(new { success = false, message = "items rỗng hoặc không đúng định dạng partId:qty" });
+
+            // Load active centers
+            var centersPage = await _centerService.GetActiveCentersAsync(1, int.MaxValue, null, null);
+            var centers = centersPage.Centers.Select(c => new { c.CenterId, c.CenterName }).ToList();
+
+            // We need lat/lng from DB; fall back to geo file cache if service responses don't include it
+            if (_geoCache == null)
+            {
+                try
+                {
+                    var path = System.IO.Path.Combine(System.AppContext.BaseDirectory, "wwwroot", "center-geo.json");
+                    if (System.IO.File.Exists(path))
+                    {
+                        var json = await System.IO.File.ReadAllTextAsync(path);
+                        var arr = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<GeoItem>>(json) ?? new();
+                        _geoCache = arr.Select(x => (x.centerId, x.lat, x.lng)).ToList();
+                    }
+                    else
+                    {
+                        _geoCache = new();
+                    }
+                }
+                catch { _geoCache = new(); }
+            }
+
+            // For each center: check stock via inventory service, then compute distance using geo cache
+            var feasible = new System.Collections.Generic.List<(int centerId, string name, double distanceKm)>();
+            foreach (var c in centers)
+            {
+                var geo = _geoCache.FirstOrDefault(g => g.centerId == c.CenterId);
+                if (geo.centerId == 0) continue; // skip if no geo
+
+                var inv = await _inventoryService.GetInventoryByCenterIdAsync(c.CenterId);
+                var parts = inv.InventoryParts ?? new System.Collections.Generic.List<InventoryPartResponse>();
+                bool ok = parsed.All(req =>
+                    parts.Any(p => p.PartId == req.partId && (p.CurrentStock) >= req.qty));
+                if (!ok) continue;
+
+                var dist = HaversineKm(q.lat, q.lng, geo.lat, geo.lng);
+                feasible.Add((c.CenterId, c.CenterName, dist));
+            }
+
+            var result = feasible.OrderBy(x => x.distanceKm).FirstOrDefault();
+            if (result.centerId == 0)
+                return Ok(new { success = true, data = (object?)null, message = "Không có trung tâm nào đủ hàng" });
+
+            return Ok(new { success = true, data = new { centerId = result.centerId, name = result.name, distanceKm = System.Math.Round(result.distanceKm, 2) } });
+        }
 
         /// <summary>
         /// Lấy danh sách trung tâm đang hoạt động với phân trang và tìm kiếm

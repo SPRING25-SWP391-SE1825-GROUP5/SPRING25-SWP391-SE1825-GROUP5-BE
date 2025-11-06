@@ -24,7 +24,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
             {
                 return await _context.Conversations
                     .Include(c => c.LastMessage)
-                    .Include(c => c.Messages)
                     .OrderByDescending(c => c.LastMessageAt ?? c.CreatedAt)
                     .ToListAsync();
             }
@@ -70,7 +69,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _context.Conversations
                 .Include(c => c.LastMessage)
-                .Include(c => c.Messages)
                 .Include(c => c.ConversationMembers)
                     .ThenInclude(cm => cm.User) // Eager load User data for each member
                 .Where(c => c.ConversationMembers.Any(cm => cm.UserId == userId))
@@ -82,7 +80,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _context.Conversations
                 .Include(c => c.LastMessage)
-                .Include(c => c.Messages)
                 .Include(c => c.ConversationMembers)
                     .ThenInclude(cm => cm.User) // Eager load User data for each member
                 .Where(c => c.ConversationMembers.Any(cm => cm.GuestSessionId == guestSessionId))
@@ -94,7 +91,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             var query = _context.Conversations
                 .Include(c => c.LastMessage)
-                .Include(c => c.Messages)
                 .AsQueryable();
 
             if (userId1.HasValue && userId2.HasValue)
@@ -135,7 +131,6 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             var query = _context.Conversations
                 .Include(c => c.LastMessage)
-                .Include(c => c.Messages)
                 .AsQueryable();
 
             if (!string.IsNullOrEmpty(searchTerm))

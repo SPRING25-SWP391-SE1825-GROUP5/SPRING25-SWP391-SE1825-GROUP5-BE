@@ -41,6 +41,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(m => m.Conversation)
                 .Include(m => m.SenderUser)
                 .Include(m => m.ReplyToMessage)
+                    .ThenInclude(r => r!.SenderUser)
                 .FirstOrDefaultAsync(m => m.MessageId == messageId);
         }
 

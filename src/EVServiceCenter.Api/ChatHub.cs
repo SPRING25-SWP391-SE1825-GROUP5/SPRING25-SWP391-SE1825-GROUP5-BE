@@ -15,41 +15,41 @@ namespace EVServiceCenter.Api
             this.logger = logger;
         }
 
-        
+
         private string? GetCurrentUserId()
         {
-            var userIdClaim = Context.User?.FindFirst("nameid") ?? 
-                             Context.User?.FindFirst("UserId") ?? 
+            var userIdClaim = Context.User?.FindFirst("nameid") ??
+                             Context.User?.FindFirst("UserId") ??
                              Context.User?.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
-            
+
             return userIdClaim?.Value;
         }
 
-        
+
         private string? GetCurrentUserRole()
         {
             return Context.User?.FindFirst("role")?.Value;
         }
 
-        
+
         private string? GetCurrentUserEmail()
         {
             return Context.User?.FindFirst("email")?.Value;
         }
 
-        
+
         public async Task JoinConversation(long conversationId)
         {
             var userId = GetCurrentUserId();
             var userRole = GetCurrentUserRole();
             var userEmail = GetCurrentUserEmail();
-            
+
             var group = $"conversation:{conversationId}";
             await Groups.AddToGroupAsync(Context.ConnectionId, group);
-            
-            logger.LogInformation("User {UserId} ({Role}) {ConnectionId} joined conversation {ConversationId}", 
+
+            logger.LogInformation("User {UserId} ({Role}) {ConnectionId} joined conversation {ConversationId}",
                 userId, userRole, Context.ConnectionId, conversationId);
-            
+
             // Notify other users in the conversation that someone joined
             await Clients.OthersInGroup(group).SendAsync("UserJoined", new
             {
@@ -66,13 +66,13 @@ namespace EVServiceCenter.Api
         {
             var userId = GetCurrentUserId();
             var userRole = GetCurrentUserRole();
-            
+
             var group = $"conversation:{conversationId}";
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, group);
-            
-            logger.LogInformation("User {UserId} ({Role}) {ConnectionId} left conversation {ConversationId}", 
+
+            logger.LogInformation("User {UserId} ({Role}) {ConnectionId} left conversation {ConversationId}",
                 userId, userRole, Context.ConnectionId, conversationId);
-            
+
             // Notify other users in the conversation that someone left
             await Clients.OthersInGroup(group).SendAsync("UserLeft", new
             {
@@ -84,9 +84,9 @@ namespace EVServiceCenter.Api
             });
         }
 
-        
 
-       
+
+
         /// <summary>
         /// Sends a message to a conversation group (for testing purposes)
         /// Note: Real messages should be sent via MessageController -> MessageService
@@ -96,7 +96,7 @@ namespace EVServiceCenter.Api
             var userId = GetCurrentUserId();
             var userRole = GetCurrentUserRole();
             var userEmail = GetCurrentUserEmail();
-            
+
             var group = $"conversation:{conversationId}";
             await Clients.Group(group).SendAsync("ReceiveMessage", new
             {
@@ -109,8 +109,8 @@ namespace EVServiceCenter.Api
                 Timestamp = System.DateTime.UtcNow,
                 IsTestMessage = true
             });
-            
-            logger.LogInformation("Test message sent to conversation {ConversationId} by user {UserId} ({Role}) {ConnectionId}", 
+
+            logger.LogInformation("Test message sent to conversation {ConversationId} by user {UserId} ({Role}) {ConnectionId}",
                 conversationId, userId, userRole, Context.ConnectionId);
         }
 
@@ -122,10 +122,10 @@ namespace EVServiceCenter.Api
             var currentUserId = GetCurrentUserId();
             var currentUserRole = GetCurrentUserRole();
             var currentUserEmail = GetCurrentUserEmail();
-            
+
             // Use provided userId or fall back to current user
             var senderUserId = userId ?? currentUserId;
-            
+
             var group = $"conversation:{conversationId}";
             await Clients.OthersInGroup(group).SendAsync("UserTyping", new
             {
@@ -138,21 +138,51 @@ namespace EVServiceCenter.Api
                 IsTyping = isTyping,
                 Timestamp = System.DateTime.UtcNow
             });
-            
-            logger.LogInformation("Typing notification sent to conversation {ConversationId} by user {UserId} ({Role}) {ConnectionId}", 
+
+            logger.LogInformation("Typing notification sent to conversation {ConversationId} by user {UserId} ({Role}) {ConnectionId}",
                 conversationId, senderUserId, currentUserRole, Context.ConnectionId);
         }
 
-        
+        /// <summary>
+        /// Joins a user-specific group for notifications
+        /// </summary>
+        public async Task JoinUserGroup(string userId)
+        {
+            var currentUserId = GetCurrentUserId();
+            var userRole = GetCurrentUserRole();
+
+            // Only allow users to join their own group
+            if (string.IsNullOrEmpty(userId) || userId != currentUserId)
+            {
+                return;
+            }
+
+            var group = $"user:{userId}";
+            await Groups.AddToGroupAsync(Context.ConnectionId, group);
+        }
+
+        /// <summary>
+        /// Leaves a user-specific group
+        /// </summary>
+        public async Task LeaveUserGroup(string userId)
+        {
+            var currentUserId = GetCurrentUserId();
+            var userRole = GetCurrentUserRole();
+
+            var group = $"user:{userId}";
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, group);
+        }
+
+
         public override async Task OnConnectedAsync()
         {
             var userId = GetCurrentUserId();
             var userRole = GetCurrentUserRole();
             var userEmail = GetCurrentUserEmail();
-            
-            logger.LogInformation("User {UserId} ({Role}) {ConnectionId} connected", 
+
+            logger.LogInformation("User {UserId} ({Role}) {ConnectionId} connected",
                 userId, userRole, Context.ConnectionId);
-            
+
             await base.OnConnectedAsync();
         }
 
@@ -160,10 +190,10 @@ namespace EVServiceCenter.Api
         {
             var userId = GetCurrentUserId();
             var userRole = GetCurrentUserRole();
-            
-            logger.LogInformation("User {UserId} ({Role}) {ConnectionId} disconnected. Exception: {Exception}", 
+
+            logger.LogInformation("User {UserId} ({Role}) {ConnectionId} disconnected. Exception: {Exception}",
                 userId, userRole, Context.ConnectionId, exception?.Message);
-            
+
             await base.OnDisconnectedAsync(exception);
         }
     }

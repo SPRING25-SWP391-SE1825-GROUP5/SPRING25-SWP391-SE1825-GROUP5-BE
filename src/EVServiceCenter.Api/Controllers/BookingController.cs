@@ -44,8 +44,9 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly EVServiceCenter.Domain.Interfaces.IMaintenanceChecklistRepository _maintenanceChecklistRepository;
         private readonly EVServiceCenter.Domain.Interfaces.IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
         private readonly EVServiceCenter.Domain.Interfaces.IOrderRepository _orderRepository;
+        private readonly EVServiceCenter.Domain.Interfaces.IInventoryRepository _inventoryRepository;
 
-    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub, Microsoft.Extensions.Options.IOptions<EVServiceCenter.Application.Configurations.BookingRealtimeOptions> realtimeOptions, IGuestBookingService guestBookingService, EVServiceCenter.Application.Service.PaymentService paymentService, EVServiceCenter.Domain.Interfaces.IInvoiceRepository invoiceRepository, INotificationService notificationService, EVServiceCenter.Domain.Interfaces.IPaymentRepository paymentRepository, EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepository, EVServiceCenter.Domain.Interfaces.ITechnicianRepository technicianRepository, ICustomerService customerService, ITechnicianService technicianService, EVServiceCenter.Domain.Interfaces.IWorkOrderPartRepository workOrderPartRepository, EVServiceCenter.Domain.Interfaces.IPartRepository partRepository, EVServiceCenter.Application.Interfaces.IEmailService emailService, EVServiceCenter.Application.Interfaces.IEmailTemplateRenderer templateRenderer, Microsoft.Extensions.Configuration.IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IMaintenanceChecklistRepository maintenanceChecklistRepository, EVServiceCenter.Domain.Interfaces.IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository, EVServiceCenter.Domain.Interfaces.IOrderRepository orderRepository)
+    public BookingController(IBookingService bookingService, IBookingHistoryService bookingHistoryService, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub, Microsoft.Extensions.Options.IOptions<EVServiceCenter.Application.Configurations.BookingRealtimeOptions> realtimeOptions, IGuestBookingService guestBookingService, EVServiceCenter.Application.Service.PaymentService paymentService, EVServiceCenter.Domain.Interfaces.IInvoiceRepository invoiceRepository, INotificationService notificationService, EVServiceCenter.Domain.Interfaces.IPaymentRepository paymentRepository, EVServiceCenter.Domain.Interfaces.IBookingRepository bookingRepository, EVServiceCenter.Domain.Interfaces.ITechnicianRepository technicianRepository, ICustomerService customerService, ITechnicianService technicianService, EVServiceCenter.Domain.Interfaces.IWorkOrderPartRepository workOrderPartRepository, EVServiceCenter.Domain.Interfaces.IPartRepository partRepository, EVServiceCenter.Application.Interfaces.IEmailService emailService, EVServiceCenter.Application.Interfaces.IEmailTemplateRenderer templateRenderer, Microsoft.Extensions.Configuration.IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IMaintenanceChecklistRepository maintenanceChecklistRepository, EVServiceCenter.Domain.Interfaces.IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository, EVServiceCenter.Domain.Interfaces.IOrderRepository orderRepository, EVServiceCenter.Domain.Interfaces.IInventoryRepository inventoryRepository)
         {
         _bookingService = bookingService;
         _bookingHistoryService = bookingHistoryService;
@@ -73,6 +74,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         _maintenanceChecklistRepository = maintenanceChecklistRepository;
         _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
             _orderRepository = orderRepository;
+        _inventoryRepository = inventoryRepository;
         }
 
         [AllowAnonymous]
@@ -1181,6 +1183,146 @@ namespace EVServiceCenter.WebAPI.Controllers
             await _workOrderPartRepository.UpdateAsync(wop);
 
             return Ok(new { success = true, data = new { wop.WorkOrderPartId, wop.PartId, wop.QuantityUsed, wop.IsCustomerSupplied, wop.SourceOrderItemId, availableAfter = oi.Quantity - oi.ConsumedQty } });
+        }
+
+        public class ReplacePartRequest { public int NewPartId { get; set; } public int? Quantity { get; set; } }
+
+        [HttpPut("{bookingId:int}/parts/{workOrderPartId:int}/replace-part")]
+        [Authorize(Roles = "TECHNICIAN,STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> ReplaceWorkOrderPart(int bookingId, int workOrderPartId, [FromBody] ReplacePartRequest req)
+        {
+            try
+            {
+                if (req == null || req.NewPartId <= 0)
+                    return BadRequest(new { success = false, message = "PartId mới không hợp lệ" });
+
+                // 1. Validate booking exists và status
+                var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
+                if (booking == null)
+                    return NotFound(new { success = false, message = "Booking không tồn tại" });
+
+                if (!string.Equals(booking.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase))
+                    return BadRequest(new { success = false, message = "Chỉ được thay thế phụ tùng khi booking đang IN_PROGRESS" });
+
+                // 2. Validate workOrderPart exists và thuộc booking
+                var item = await _workOrderPartRepository.GetByIdAsync(workOrderPartId);
+                if (item == null || item.BookingId != bookingId)
+                    return NotFound(new { success = false, message = "WorkOrderPart không tồn tại" });
+
+                // 3. Check status - chỉ cho phép khi DRAFT
+                if (item.Status != "DRAFT")
+                    return BadRequest(new { success = false, message = "Chỉ được thay thế phụ tùng khi trạng thái là DRAFT" });
+
+                if (item.Status == "CONSUMED")
+                    return BadRequest(new { success = false, message = "Không thể thay thế phụ tùng đã được tiêu thụ (CONSUMED)" });
+
+                // 4. Validate Part mới
+                var newPart = await _partRepository.GetPartByIdAsync(req.NewPartId);
+                if (newPart == null || !newPart.IsActive)
+                    return BadRequest(new { success = false, message = "Phụ tùng mới không hợp lệ hoặc không còn hoạt động" });
+
+                // 5. Check CategoryId match (nếu có)
+                if (item.CategoryId.HasValue)
+                {
+                    var newPartCategoryId = await _partRepository.GetFirstCategoryIdForPartAsync(req.NewPartId);
+                    if (newPartCategoryId == null || newPartCategoryId.Value != item.CategoryId.Value)
+                        return BadRequest(new { success = false, message = "Phụ tùng mới không thuộc đúng nhóm hạng mục yêu cầu" });
+                }
+
+                // 6. Check Part mới có trong inventory của center không
+                var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(booking.CenterId);
+                if (inventory == null)
+                    return BadRequest(new { success = false, message = "Chi nhánh chưa có kho" });
+
+                var invPart = inventory.InventoryParts?.FirstOrDefault(ip => ip.PartId == req.NewPartId);
+                if (invPart == null)
+                    return BadRequest(new { success = false, message = "Phụ tùng mới không có trong kho của chi nhánh" });
+
+                // 7. Lưu thông tin cũ trước khi update
+                var oldPartId = item.PartId;
+                var oldQuantity = item.QuantityUsed;
+
+                // 8. Update PartId và Quantity (nếu có)
+                item.PartId = req.NewPartId;
+                if (req.Quantity.HasValue && req.Quantity.Value > 0)
+                {
+                    item.QuantityUsed = req.Quantity.Value;
+                }
+                // Nếu không có Quantity trong request, giữ nguyên QuantityUsed hiện tại
+
+                var updated = await _workOrderPartRepository.UpdateAsync(item);
+
+                return Ok(new {
+                    success = true,
+                    message = "Thay thế phụ tùng thành công",
+                    data = new {
+                        updated.WorkOrderPartId,
+                        oldPartId = oldPartId,
+                        newPartId = updated.PartId,
+                        oldQuantity = oldQuantity,
+                        newQuantity = updated.QuantityUsed,
+                        status = updated.Status
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        [HttpDelete("{bookingId:int}/parts/{workOrderPartId:int}")]
+        [Authorize(Roles = "TECHNICIAN,STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> RemoveWorkOrderPart(int bookingId, int workOrderPartId)
+        {
+            try
+            {
+                // 1. Validate booking exists và status
+                var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
+                if (booking == null)
+                    return NotFound(new { success = false, message = "Booking không tồn tại" });
+
+                if (!string.Equals(booking.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase))
+                    return BadRequest(new { success = false, message = "Chỉ được xóa phụ tùng khi booking đang IN_PROGRESS" });
+
+                // 2. Validate workOrderPart exists và thuộc booking
+                var item = await _workOrderPartRepository.GetByIdAsync(workOrderPartId);
+                if (item == null || item.BookingId != bookingId)
+                    return NotFound(new { success = false, message = "WorkOrderPart không tồn tại" });
+
+                // 3. Check status có được phép remove không
+                if (item.Status == "CONSUMED")
+                    return BadRequest(new { success = false, message = "Không thể xóa phụ tùng đã được tiêu thụ (CONSUMED)" });
+
+                if (item.Status != "DRAFT" && item.Status != "PENDING_CUSTOMER_APPROVAL")
+                    return BadRequest(new { success = false, message = "Chỉ được xóa phụ tùng ở trạng thái DRAFT hoặc PENDING_CUSTOMER_APPROVAL" });
+
+                // 4. Gọi repository DeleteByIdAsync
+                var deleted = await _workOrderPartRepository.DeleteByIdAsync(workOrderPartId);
+                if (!deleted)
+                    return NotFound(new { success = false, message = "Không thể xóa WorkOrderPart" });
+
+                // 5. Return success response
+                return Ok(new {
+                    success = true,
+                    message = "Xóa phụ tùng thành công",
+                    data = new {
+                        workOrderPartId,
+                        bookingId,
+                        partId = item.PartId
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
         }
     }
 

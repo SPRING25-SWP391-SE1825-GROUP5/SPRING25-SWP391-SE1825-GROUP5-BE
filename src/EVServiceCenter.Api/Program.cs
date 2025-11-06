@@ -468,6 +468,30 @@ builder.Services.AddAuthentication(options =>
     // Custom JWT error handling events
     options.Events = new JwtBearerEvents
     {
+        // SignalR requires token to be read from query string
+        OnMessageReceived = context =>
+        {
+            // For SignalR connections, read token from query string
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+
+            // If this is a SignalR hub connection and token is in query string
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            // Otherwise, try to get token from Authorization header
+            else
+            {
+                var authHeader = context.Request.Headers["Authorization"].ToString();
+                if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Token = authHeader.Substring("Bearer ".Length).Trim();
+                }
+            }
+
+            return Task.CompletedTask;
+        },
         OnAuthenticationFailed = context =>
         {
             if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))

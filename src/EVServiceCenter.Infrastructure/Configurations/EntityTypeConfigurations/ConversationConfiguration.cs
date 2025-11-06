@@ -17,22 +17,26 @@ public sealed class ConversationConfiguration : IEntityTypeConfiguration<Convers
         entity.Property(e => e.ConversationId)
             .HasColumnName("ConversationID")
             .ValueGeneratedOnAdd();
-        
+
         entity.Property(e => e.Subject)
             .HasMaxLength(255)
             .IsRequired(false);
-        
+
         entity.Property(e => e.LastMessageAt)
             .IsRequired(false);
-        
+
         entity.Property(e => e.LastMessageId)
             .HasColumnName("LastMessageID")
             .IsRequired(false);
-        
+
         entity.Property(e => e.CreatedAt)
             .HasDefaultValueSql("(sysutcdatetime())");
-        
+
         entity.Property(e => e.UpdatedAt)
+            .IsRequired(false);
+
+        entity.Property(e => e.AssignedStaffId)
+            .HasColumnName("AssignedStaffId")
             .IsRequired(false);
 
         // Configure relationships
@@ -40,6 +44,15 @@ public sealed class ConversationConfiguration : IEntityTypeConfiguration<Convers
             .WithMany()
             .HasForeignKey(e => e.LastMessageId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasOne(e => e.AssignedStaff)
+            .WithMany()
+            .HasForeignKey(e => e.AssignedStaffId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        entity.HasIndex(e => e.AssignedStaffId)
+            .HasDatabaseName("IX_Conversations_AssignedStaff")
+            .HasFilter("[AssignedStaffId] IS NOT NULL");
 
         entity.HasMany(e => e.Messages)
             .WithOne()

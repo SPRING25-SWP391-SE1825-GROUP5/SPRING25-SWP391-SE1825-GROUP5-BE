@@ -402,6 +402,101 @@ public class PaymentController : ControllerBase
 
 
 
+    /// <summary>
+    /// Breakdown chi tiết số tiền cần thanh toán cho Booking: dịch vụ/gói, phụ tùng (đã tiêu thụ), khuyến mãi, tổng cộng
+    /// </summary>
+    [HttpGet("booking/{bookingId:int}/breakdown")]
+    [Authorize]
+    public async Task<IActionResult> GetBookingPaymentBreakdown([FromRoute] int bookingId)
+    {
+        try
+        {
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking == null)
+            {
+                return NotFound(new { success = false, message = "Không tìm thấy booking" });
+            }
+
+            // Dịch vụ/gói
+            var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+            decimal packageDiscountAmount = 0m;
+            decimal packagePrice = 0m; // Giá mua gói (chỉ lần đầu)
+
+            if (booking.AppliedCreditId.HasValue)
+            {
+                var appliedCredit = await _customerServiceCreditRepo.GetByIdAsync(booking.AppliedCreditId.Value);
+                if (appliedCredit?.ServicePackage != null)
+                {
+                    packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+                    if (appliedCredit.UsedCredits == 0)
+                    {
+                        packagePrice = appliedCredit.ServicePackage.Price;
+                    }
+                }
+            }
+
+            // Phụ tùng phát sinh (đã tiêu thụ)
+            var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
+            var consumedParts = (workOrderParts ?? new List<Domain.Entities.WorkOrderPart>())
+                .Where(p => string.Equals(p.Status, "CONSUMED", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var partsDetails = consumedParts.Select(p => new
+            {
+                partId = p.PartId,
+                name = p.Part?.PartName,
+                qty = p.QuantityUsed,
+                unitPrice = p.Part?.Price ?? 0m,
+                amount = (p.Part?.Price ?? 0m) * p.QuantityUsed
+            }).ToList();
+            var partsAmount = partsDetails.Sum(x => x.amount);
+
+            // Khuyến mãi (chỉ áp dụng phần dịch vụ/gói)
+            decimal promotionDiscountAmount = 0m;
+            var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
+            if (userPromotions != null && userPromotions.Any())
+            {
+                promotionDiscountAmount = userPromotions
+                    .Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+                    .Sum(up => up.DiscountAmount);
+            }
+
+            // Không cho khuyến mãi vượt quá phần dịch vụ/gói
+            var serviceComponent = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
+            if (promotionDiscountAmount > serviceComponent)
+            {
+                promotionDiscountAmount = serviceComponent;
+            }
+
+            // Tổng cộng
+            var total = packagePrice + serviceComponent - promotionDiscountAmount + partsAmount;
+
+            var response = new
+            {
+                success = true,
+                data = new
+                {
+                    bookingId = booking.BookingId,
+                    service = new { name = booking.Service?.ServiceName, basePrice = serviceBasePrice },
+                    package = new { applied = booking.AppliedCreditId.HasValue, firstTimePrice = packagePrice, discountAmount = packageDiscountAmount },
+                    parts = partsDetails,
+                    partsAmount,
+                    promotion = new { applied = promotionDiscountAmount > 0, discountAmount = promotionDiscountAmount },
+                    subtotal = serviceBasePrice,
+                    total,
+                    notes = "Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói; phụ tùng không áp dụng khuyến mãi."
+                }
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error building booking payment breakdown for {BookingId}", bookingId);
+            return StatusCode(500, new { success = false, message = $"Lỗi tạo breakdown thanh toán: {ex.Message}" });
+        }
+    }
+
 	[HttpGet("/api/payment/cancel")]
 	[AllowAnonymous]
     public async Task<IActionResult> Cancel([FromQuery] int bookingId, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] bool cancel = true)

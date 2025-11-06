@@ -83,6 +83,7 @@ builder.Services.Configure<MaintenanceReminderSchedulerOptions>(builder.Configur
 builder.Services.Configure<ExportOptions>(builder.Configuration.GetSection("ExportOptions"));
 builder.Services.Configure<CartOptions>(builder.Configuration.GetSection(CartOptions.SectionName));
 builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
+builder.Services.Configure<ChatSettings>(builder.Configuration.GetSection(ChatSettings.SectionName));
 
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
 var redisOptions = builder.Configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>() ?? new RedisOptions();

@@ -11,5 +11,7 @@ namespace EVServiceCenter.Application.Models.Requests
         [Required(ErrorMessage = "Danh sách thành viên là bắt buộc")]
         [MinLength(1, ErrorMessage = "Cuộc trò chuyện phải có ít nhất 1 thành viên")]
         public List<AddMemberToConversationRequest> Members { get; set; } = new List<AddMemberToConversationRequest>();
+
+        public int? PreferredCenterId { get; set; }
     }
 }

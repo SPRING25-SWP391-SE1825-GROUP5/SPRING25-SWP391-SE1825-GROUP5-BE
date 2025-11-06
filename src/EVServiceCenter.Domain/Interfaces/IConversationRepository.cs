@@ -18,5 +18,8 @@ namespace EVServiceCenter.Domain.Interfaces
         Task UpdateLastMessageAsync(long conversationId, long messageId, DateTime lastMessageAt);
         Task<List<Conversation>> GetConversationsWithPaginationAsync(int page = 1, int pageSize = 10, string? searchTerm = null);
         Task<int> CountConversationsAsync(string? searchTerm = null);
+        Task<int> CountActiveConversationsByStaffIdAsync(int staffId);
+        Task<List<Conversation>> GetConversationsByStaffIdAsync(int staffId, int page = 1, int pageSize = 10);
+        Task<List<Conversation>> GetUnassignedConversationsAsync(int page = 1, int pageSize = 10);
     }
 }

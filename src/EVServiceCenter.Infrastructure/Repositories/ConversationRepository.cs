@@ -41,6 +41,10 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(c => c.Messages)
                 .Include(c => c.ConversationMembers)
                     .ThenInclude(cm => cm.User)
+                .Include(c => c.AssignedStaff)
+                    .ThenInclude(s => s!.User)
+                .Include(c => c.AssignedStaff)
+                    .ThenInclude(s => s!.Center)
                 .FirstOrDefaultAsync(c => c.ConversationId == conversationId);
         }
 
@@ -156,6 +160,41 @@ namespace EVServiceCenter.Infrastructure.Repositories
             }
 
             return await query.CountAsync();
+        }
+
+        public async Task<int> CountActiveConversationsByStaffIdAsync(int staffId)
+        {
+            return await _context.Conversations
+                .Where(c => c.AssignedStaffId == staffId && c.AssignedStaffId != null)
+                .CountAsync();
+        }
+
+        public async Task<List<Conversation>> GetConversationsByStaffIdAsync(int staffId, int page = 1, int pageSize = 10)
+        {
+            return await _context.Conversations
+                .Include(c => c.LastMessage)
+                .Include(c => c.AssignedStaff)
+                    .ThenInclude(s => s!.User)
+                .Include(c => c.AssignedStaff)
+                    .ThenInclude(s => s!.Center)
+                .Where(c => c.AssignedStaffId == staffId)
+                .OrderByDescending(c => c.LastMessageAt ?? c.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+
+        public async Task<List<Conversation>> GetUnassignedConversationsAsync(int page = 1, int pageSize = 10)
+        {
+            return await _context.Conversations
+                .Include(c => c.LastMessage)
+                .Include(c => c.ConversationMembers)
+                    .ThenInclude(cm => cm.User)
+                .Where(c => c.AssignedStaffId == null)
+                .OrderByDescending(c => c.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
         }
     }
 }

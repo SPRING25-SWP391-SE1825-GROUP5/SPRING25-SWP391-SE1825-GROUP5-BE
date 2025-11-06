@@ -18,7 +18,11 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
         entity.Property(e => e.VehicleId).HasColumnName("VehicleID");
         entity.Property(e => e.AppliedCreditId).HasColumnName("AppliedCreditId");
-        
+        entity.Property(e => e.PayOSOrderCode).HasColumnName("PayOSOrderCode");
+
+        // Unique index cho PayOSOrderCode để đảm bảo không trùng
+        entity.HasIndex(e => e.PayOSOrderCode).IsUnique().HasFilter("[PayOSOrderCode] IS NOT NULL");
+
         // Fields migrated from WorkOrder
         // TechnicianId removed - now derived from TechnicianTimeSlot
         entity.Property(e => e.CurrentMileage).HasColumnName("CurrentMileage");

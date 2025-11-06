@@ -67,11 +67,12 @@ public class PaymentService
 	/// <summary>
 	/// Tạo payment link cho Booking
 	/// HOÀN TOÀN ĐỘC LẬP với CreateOrderPaymentLinkAsync
-	/// - Sử dụng bookingId làm PayOS orderCode
+	/// - Sử dụng bookingId làm PayOS orderCode (1, 2, 3, ...)
+	/// - Order sẽ dùng orderCode = orderId + 1000000 để tránh conflict
 	/// - Logic tính toán amount riêng (service + parts - package - promotion)
 	/// - Validation riêng cho Booking
 	/// </summary>
-	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId)
+	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId, bool isRetry = false)
 	{
 		var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
@@ -127,9 +128,22 @@ public class PaymentService
         var amount = (int)Math.Round(totalAmount); // VNĐ integer
         if (amount < _options.MinAmount) amount = _options.MinAmount;
 
-		// Booking sử dụng bookingId làm orderCode cho PayOS
-		// Lưu ý: Đảm bảo bookingId và orderId không conflict (thường có auto-increment riêng)
-		var orderCode = booking.BookingId;
+		// Generate hoặc lấy PayOSOrderCode từ Booking
+		// Nếu chưa có, generate unique PayOSOrderCode và lưu vào database
+		int orderCode;
+		if (booking.PayOSOrderCode.HasValue)
+		{
+			orderCode = booking.PayOSOrderCode.Value;
+			_logger.LogInformation("Sử dụng PayOSOrderCode hiện có cho bookingId {BookingId}: {OrderCode}", bookingId, orderCode);
+		}
+		else
+		{
+			orderCode = await GenerateUniquePayOSOrderCodeAsync();
+			// Update trực tiếp PayOSOrderCode trong database
+			await _bookingRepository.UpdatePayOSOrderCodeAsync(bookingId, orderCode);
+			booking.PayOSOrderCode = orderCode; // Update local entity để dùng tiếp
+			_logger.LogInformation("Generated và lưu PayOSOrderCode mới cho bookingId {BookingId}: {OrderCode}", bookingId, orderCode);
+		}
         var rawDesc = $"Booking #{booking.BookingId}";
         var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
@@ -163,58 +177,89 @@ public class PaymentService
 		var response = await _httpClient.SendAsync(request);
 		var responseText = await response.Content.ReadAsStringAsync();
 
-        // Xử lý trường hợp "Đơn thanh toán đã tồn tại"
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorJson = JsonDocument.Parse(responseText).RootElement;
-            var code = errorJson.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
-            var desc = errorJson.TryGetProperty("desc", out var errorDescElem) ? errorDescElem.GetString() : null;
+        // Parse response để check code (PayOS có thể trả về HTTP 200 nhưng code 231 trong body)
+        var json = JsonDocument.Parse(responseText).RootElement;
+        var code = json.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
+        var desc = json.TryGetProperty("desc", out var descElem) ? descElem.GetString() : null;
 
-            if (code == "231" && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
+        // Xử lý trường hợp "Đơn thanh toán đã tồn tại" (code 231)
+        // PayOS có thể trả về HTTP 200 nhưng code 231 trong response body
+        if (code == "231" && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
+        {
+            _logger.LogInformation("PayOS trả về code 231 (payment exists) cho bookingId {BookingId}, đang lấy payment link hiện có...", bookingId);
+
+            // Ưu tiên lấy checkoutUrl trực tiếp từ response nếu có
+            if (json.TryGetProperty("data", out var errData) && errData.ValueKind == JsonValueKind.Object)
             {
-                // Ưu tiên lấy checkoutUrl trực tiếp từ error response nếu có
-                if (errorJson.TryGetProperty("data", out var errData) && errData.ValueKind == JsonValueKind.Object)
+                if (errData.TryGetProperty("checkoutUrl", out var errUrl) && errUrl.ValueKind == JsonValueKind.String)
                 {
-                    if (errData.TryGetProperty("checkoutUrl", out var errUrl) && errUrl.ValueKind == JsonValueKind.String)
+                    var reuseUrl = errUrl.GetString();
+                    if (!string.IsNullOrEmpty(reuseUrl))
                     {
-                        var reuseUrl = errUrl.GetString();
-                        if (!string.IsNullOrEmpty(reuseUrl))
-                        {
-                            return reuseUrl;
-                        }
+                        _logger.LogInformation("Tìm thấy checkoutUrl trong response cho bookingId {BookingId}", bookingId);
+                        return reuseUrl;
                     }
                 }
-
-                // Fallback: Lấy link cũ từ PayOS
-                var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
-                if (!string.IsNullOrEmpty(existingUrl))
-                {
-                    return existingUrl;
-                }
-                // Nếu không lấy được link cũ, tiếp tục throw exception
             }
 
-        response.EnsureSuccessStatusCode();
+            // Fallback: Lấy link cũ từ PayOS API
+            var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
+            if (!string.IsNullOrEmpty(existingUrl))
+            {
+                _logger.LogInformation("Đã lấy được payment link hiện có từ PayOS cho bookingId {BookingId}", bookingId);
+                return existingUrl;
+            }
+
+            // Nếu không lấy được link cũ (có thể payment đã CANCELLED), thử cancel và tạo lại
+            // Chỉ retry 1 lần để tránh infinite loop
+            if (!isRetry)
+            {
+                _logger.LogInformation("Không tìm thấy checkoutUrl cho bookingId {BookingId}, thử cancel payment cũ và tạo lại...", bookingId);
+                var cancelled = await CancelPaymentLinkAsync(orderCode);
+                if (cancelled)
+                {
+                    _logger.LogInformation("Đã cancel payment cũ cho bookingId {BookingId}, retry tạo payment link...", bookingId);
+                    // Retry tạo payment link sau khi cancel (chỉ retry 1 lần)
+                    return await CreateBookingPaymentLinkAsync(bookingId, isRetry: true);
+                }
+            }
+
+            // Nếu không cancel được hoặc đã retry rồi, throw exception với message rõ ràng
+            _logger.LogWarning("Không thể lấy payment link hiện có từ PayOS cho bookingId {BookingId}. PayOS đã báo payment exists nhưng không tìm thấy link và không thể cancel.", bookingId);
+            throw new InvalidOperationException($"Đơn thanh toán đã tồn tại trên PayOS cho booking #{bookingId}, nhưng không thể lấy được payment link. Vui lòng liên hệ hỗ trợ hoặc thử lại sau.");
         }
 
-        var json = JsonDocument.Parse(responseText).RootElement;
+        // Nếu không phải lỗi 231, check HTTP status code
+        if (!response.IsSuccessStatusCode)
+        {
+            var message =
+                desc
+                ?? (json.TryGetProperty("message", out var msgElem) && msgElem.ValueKind == JsonValueKind.String ? msgElem.GetString() : null)
+                ?? "Không nhận được checkoutUrl từ PayOS";
+            throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
+        }
+
+        // Parse success response
         if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
             dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
         {
             return urlElem.GetString();
         }
 
-        var message =
-            (json.TryGetProperty("message", out var msgElem) && msgElem.ValueKind == JsonValueKind.String ? msgElem.GetString() : null)
-            ?? (json.TryGetProperty("desc", out var descElem) && descElem.ValueKind == JsonValueKind.String ? descElem.GetString() : null)
+        // Nếu không tìm thấy checkoutUrl trong success response
+        var errorMessage =
+            desc
+            ?? (json.TryGetProperty("message", out var msgElem2) && msgElem2.ValueKind == JsonValueKind.String ? msgElem2.GetString() : null)
             ?? "Không nhận được checkoutUrl từ PayOS";
-        throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
+        throw new InvalidOperationException($"Tạo link PayOS thất bại: {errorMessage}. Response: {responseText}");
     }
 
     /// <summary>
     /// Lấy payment link hiện có từ PayOS cho Order
     /// HOÀN TOÀN ĐỘC LẬP với Booking payment methods
-    /// - Sử dụng orderId làm PayOS orderCode (khác bookingId)
+    /// - Sử dụng orderId + 1000000 làm PayOS orderCode để tránh conflict với Booking
+    /// - Booking: orderCode = bookingId (1, 2, 3, ...)
+    /// - Order: orderCode = orderId + 1000000 (1000001, 1000002, ...)
     /// - Validation riêng cho Order
     /// </summary>
     public async Task<string?> GetExistingOrderPaymentLinkAsync(int orderId)
@@ -273,15 +318,19 @@ public class PaymentService
         }
 
         // Tất cả validation đã pass, lấy payment link từ PayOS
-        // Order sử dụng orderId làm orderCode cho PayOS
-        return await GetExistingPaymentLinkAsync(orderId);
+        // Sử dụng PayOSOrderCode đã lưu trong Order
+        if (!order.PayOSOrderCode.HasValue)
+        {
+            throw new InvalidOperationException($"Order #{orderId} chưa có PayOSOrderCode. Vui lòng tạo payment link trước.");
+        }
+        return await GetExistingPaymentLinkAsync(order.PayOSOrderCode.Value);
     }
 
     /// <summary>
     /// Helper method: Lấy payment link từ PayOS bằng orderCode
     /// DÙNG CHUNG bởi cả Booking và Order, nhưng orderCode khác nhau nên không conflict
-    /// - Booking: orderCode = bookingId
-    /// - Order: orderCode = orderId
+    /// - Booking: orderCode = bookingId (1, 2, 3, ...)
+    /// - Order: orderCode = orderId + 1000000 (1000001, 1000002, 1000003, ...)
     /// Method này là thread-safe và không có side effects
     /// </summary>
     private async Task<string?> GetExistingPaymentLinkAsync(int orderCode)
@@ -303,13 +352,35 @@ public class PaymentService
             }
 
             var json = JsonDocument.Parse(responseText).RootElement;
-            if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
-                dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
+
+            // Check status của payment
+            string? paymentStatus = null;
+            if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object)
             {
-                return urlElem.GetString();
+                if (dataElem.TryGetProperty("status", out var statusElem) && statusElem.ValueKind == JsonValueKind.String)
+                {
+                    paymentStatus = statusElem.GetString();
+                }
+
+                // Nếu có checkoutUrl, trả về
+                if (dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
+                {
+                    var checkoutUrl = urlElem.GetString();
+                    if (!string.IsNullOrEmpty(checkoutUrl))
+                    {
+                        return checkoutUrl;
+                    }
+                }
             }
 
-            _logger.LogWarning("Không tìm thấy checkoutUrl trong response cho orderCode {OrderCode}: {ResponseText}", orderCode, responseText);
+            // Nếu không có checkoutUrl, check status
+            if (paymentStatus == "CANCELLED")
+            {
+                _logger.LogInformation("Payment cho orderCode {OrderCode} đã bị CANCELLED, sẽ cancel và tạo lại", orderCode);
+                return null; // Return null để trigger cancel và tạo lại
+            }
+
+            _logger.LogWarning("Không tìm thấy checkoutUrl trong response cho orderCode {OrderCode}, status: {Status}, Response: {ResponseText}", orderCode, paymentStatus, responseText);
             return null;
         }
         catch (Exception ex)
@@ -319,10 +390,48 @@ public class PaymentService
         }
     }
 
+    private async Task<bool> CancelPaymentLinkAsync(int orderCode)
+    {
+        try
+        {
+            var cancelUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
+            using var request = new HttpRequestMessage(HttpMethod.Delete, new Uri(cancelUrl));
+            request.Headers.Add("x-client-id", _options.ClientId);
+            request.Headers.Add("x-api-key", _options.ApiKey);
+
+            var response = await _httpClient.SendAsync(request);
+            var responseText = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Đã cancel payment link cho orderCode {OrderCode}", orderCode);
+                return true;
+            }
+
+            // Nếu PayOS trả về 404, có thể payment đã không còn tồn tại (đã bị xóa hoặc đã CANCELLED)
+            // Trong trường hợp này, coi như đã cancel thành công
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogInformation("Payment cho orderCode {OrderCode} không còn tồn tại trên PayOS (404), coi như đã cancel thành công", orderCode);
+                return true;
+            }
+
+            _logger.LogWarning("Không thể cancel payment link cho orderCode {OrderCode}: {ResponseText}", orderCode, responseText);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi cancel payment link cho orderCode {OrderCode}", orderCode);
+            return false;
+        }
+    }
+
     /// <summary>
     /// Tạo payment link cho Order
     /// HOÀN TOÀN ĐỘC LẬP với CreateBookingPaymentLinkAsync
-    /// - Sử dụng orderId làm PayOS orderCode (khác bookingId)
+    /// - Sử dụng orderId + 1000000 làm PayOS orderCode để tránh conflict với Booking
+    /// - Booking: orderCode = bookingId (1, 2, 3, ...)
+    /// - Order: orderCode = orderId + 1000000 (1000001, 1000002, ...)
     /// - Logic tính toán amount riêng (sum order items)
     /// - Validation chi tiết riêng cho Order
     /// - cancelUrl: URL riêng cho order cancel (nếu null, dùng cancel URL mặc định từ config)
@@ -388,9 +497,22 @@ public class PaymentService
             }
         }
 
-        // Order sử dụng orderId làm orderCode cho PayOS
-        // Lưu ý: Đảm bảo bookingId và orderId không conflict (thường có auto-increment riêng)
-        var orderCode = orderId;
+        // Generate hoặc lấy PayOSOrderCode từ Order
+        // Nếu chưa có, generate unique PayOSOrderCode và lưu vào database
+        int orderCode;
+        if (order.PayOSOrderCode.HasValue)
+        {
+            orderCode = order.PayOSOrderCode.Value;
+            _logger.LogInformation("Sử dụng PayOSOrderCode hiện có cho orderId {OrderId}: {OrderCode}", orderId, orderCode);
+        }
+        else
+        {
+            orderCode = await GenerateUniquePayOSOrderCodeAsync();
+            // Update trực tiếp PayOSOrderCode trong database
+            await _orderRepository.UpdatePayOSOrderCodeAsync(orderId, orderCode);
+            order.PayOSOrderCode = orderCode; // Update local entity để dùng tiếp
+            _logger.LogInformation("Generated và lưu PayOSOrderCode mới cho orderId {OrderId}: {OrderCode}", orderId, orderCode);
+        }
         var rawDesc = $"Order #{order.OrderId}";
         var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
@@ -480,7 +602,60 @@ public class PaymentService
 		throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
 	}
 
-	private static string ComputeHmacSha256Hex(string data, string key)
+    /// <summary>
+    /// Generate unique PayOS orderCode
+    /// Sử dụng timestamp + random để đảm bảo unique
+    /// Format: YYYYMMDDHHMMSS + random 4 digits (1000-9999)
+    /// Ví dụ: 20251107120000 + 1234 = 202511071200001234
+    /// </summary>
+    private int GenerateUniquePayOSOrderCode()
+    {
+        var random = new Random();
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        var randomPart = random.Next(1000, 10000); // 4 digits: 1000-9999
+        var orderCodeStr = timestamp + randomPart.ToString();
+
+        // Parse to int, nếu quá lớn thì dùng hash
+        if (int.TryParse(orderCodeStr, out var orderCode) && orderCode > 0)
+        {
+            return orderCode;
+        }
+
+        // Fallback: dùng hash của timestamp + random
+        var hash = Math.Abs((timestamp + randomPart).GetHashCode());
+        // Đảm bảo là số dương và đủ lớn để tránh conflict
+        return Math.Max(100000000, hash);
+    }
+
+    /// <summary>
+    /// Generate và đảm bảo unique PayOSOrderCode
+    /// Check cả Booking và Order để đảm bảo không trùng
+    /// Retry nếu trùng (rất hiếm)
+    /// </summary>
+    private async Task<int> GenerateUniquePayOSOrderCodeAsync(int maxRetries = 10)
+    {
+        for (int i = 0; i < maxRetries; i++)
+        {
+            var orderCode = GenerateUniquePayOSOrderCode();
+
+            // Check xem có Booking hoặc Order nào đã dùng PayOSOrderCode này chưa
+            var bookingExists = await _bookingRepository.PayOSOrderCodeExistsAsync(orderCode);
+            var orderExists = await _orderRepository.PayOSOrderCodeExistsAsync(orderCode);
+
+            if (!bookingExists && !orderExists)
+            {
+                _logger.LogInformation("Generated unique PayOSOrderCode: {OrderCode}", orderCode);
+                return orderCode;
+            }
+
+            _logger.LogWarning("Generated PayOSOrderCode {OrderCode} đã tồn tại, retry {Retry}/{MaxRetries}", orderCode, i + 1, maxRetries);
+            await Task.Delay(10); // Đợi một chút để timestamp thay đổi
+        }
+
+        throw new InvalidOperationException("Không thể generate unique PayOSOrderCode sau nhiều lần thử");
+    }
+
+    private static string ComputeHmacSha256Hex(string data, string key)
 	{
 		if (string.IsNullOrEmpty(key)) return string.Empty;
 		using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key));

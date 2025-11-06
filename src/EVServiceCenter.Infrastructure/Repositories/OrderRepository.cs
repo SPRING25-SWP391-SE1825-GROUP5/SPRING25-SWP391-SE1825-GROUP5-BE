@@ -70,9 +70,21 @@ public class OrderRepository : IOrderRepository
 
     public async Task<Order> UpdateAsync(Order order)
     {
-        _context.Orders.Update(order);
-        await _context.SaveChangesAsync();
-        return order;
+        var existing = await _context.Orders.FindAsync(order.OrderId);
+        if (existing != null)
+        {
+            // Update properties
+            _context.Entry(existing).CurrentValues.SetValues(order);
+            await _context.SaveChangesAsync();
+            return existing;
+        }
+        else
+        {
+            // Fallback: nếu không tìm thấy, dùng Update
+            _context.Orders.Update(order);
+            await _context.SaveChangesAsync();
+            return order;
+        }
     }
 
     public async Task DeleteAsync(int orderId)
@@ -226,5 +238,31 @@ public class OrderRepository : IOrderRepository
     {
         _context.Update(item);
         await _context.SaveChangesAsync();
+    }
+
+    public async Task<Order?> GetOrderByPayOSOrderCodeAsync(int payOSOrderCode)
+    {
+        return await _context.Orders
+            .FirstOrDefaultAsync(o => o.PayOSOrderCode == payOSOrderCode);
+    }
+
+    public async Task<bool> PayOSOrderCodeExistsAsync(int payOSOrderCode)
+    {
+        return await _context.Orders
+            .AnyAsync(o => o.PayOSOrderCode == payOSOrderCode);
+    }
+
+    public async Task UpdatePayOSOrderCodeAsync(int orderId, int payOSOrderCode)
+    {
+        var order = await _context.Orders.FindAsync(orderId);
+        if (order != null)
+        {
+            order.PayOSOrderCode = payOSOrderCode;
+            await _context.SaveChangesAsync();
+        }
+        else
+        {
+            throw new InvalidOperationException($"Order {orderId} không tồn tại");
+        }
     }
 }

@@ -13,5 +13,9 @@ namespace EVServiceCenter.Application.Models.Requests
         public List<AddMemberToConversationRequest> Members { get; set; } = new List<AddMemberToConversationRequest>();
 
         public int? PreferredCenterId { get; set; }
+
+        public decimal? CustomerLatitude { get; set; }
+
+        public decimal? CustomerLongitude { get; set; }
     }
 }

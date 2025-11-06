@@ -46,11 +46,6 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
             .HasForeignKey(d => d.SourceOrderItemId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        entity.HasOne(d => d.VehicleModelPart)
-            .WithMany()
-            .HasForeignKey(d => d.VehicleModelPartId)
-            .OnDelete(DeleteBehavior.Restrict);
-
         entity.HasOne(d => d.Category)
             .WithMany()
             .HasForeignKey(d => d.CategoryId)

@@ -31,4 +31,9 @@ public interface IOrderRepository
     // OrderItem helpers
     Task<OrderItem?> GetOrderItemByIdAsync(int orderItemId);
     Task UpdateOrderItemAsync(OrderItem item);
+
+    // PayOSOrderCode helpers
+    Task<Order?> GetOrderByPayOSOrderCodeAsync(int payOSOrderCode);
+    Task<bool> PayOSOrderCodeExistsAsync(int payOSOrderCode);
+    Task UpdatePayOSOrderCodeAsync(int orderId, int payOSOrderCode);
 }

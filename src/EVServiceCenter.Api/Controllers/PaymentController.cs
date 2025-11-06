@@ -215,8 +215,15 @@ public class PaymentController : ControllerBase
     {
         try
         {
-            // orderCode của Booking chính là bookingId
-            var ok = await _payOSService.CancelPaymentLinkAsync(bookingId);
+            // PayOSOrderCode là unique random number được lưu trong Booking/Order
+            // Không còn dùng offset, tìm trực tiếp bằng PayOSOrderCode
+            // Lấy PayOSOrderCode từ Booking để cancel
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking?.PayOSOrderCode == null)
+            {
+                return BadRequest(new { success = false, message = "Booking không có PayOSOrderCode" });
+            }
+            var ok = await _payOSService.CancelPaymentLinkAsync(booking.PayOSOrderCode.Value);
             if (ok)
             {
                 return Ok(new { success = true, message = "Đã hủy link PayOS hiện tại" });
@@ -241,52 +248,53 @@ public class PaymentController : ControllerBase
 
         if (orderCode.HasValue && orderCode.Value > 0)
 		{
-			var orderId = orderCode.Value;
-			var order = await _orderRepository.GetByIdAsync(orderId);
+			// Tìm Booking hoặc Order dựa trên PayOSOrderCode
+			// PayOSOrderCode là unique random number, không còn dùng offset
+			var bookingByPayOSCode = await _bookingRepo.GetBookingByPayOSOrderCodeAsync(orderCode.Value);
+			var orderByPayOSCode = await _orderRepository.GetOrderByPayOSOrderCodeAsync(orderCode.Value);
+
+			var order = orderByPayOSCode;
 			var booking = bookingId.HasValue && bookingId.Value > 0
 				? await _bookingRepo.GetBookingByIdAsync(bookingId.Value)
-				: null;
+				: bookingByPayOSCode;
 
 			if (order != null)
 			{
+				var actualOrderId = order.OrderId;
 				if (payOSConfirmed)
 				{
 					try
 					{
-						confirmed = await _paymentService.ConfirmOrderPaymentAsync(orderId);
+						confirmed = await _paymentService.ConfirmOrderPaymentAsync(actualOrderId);
 					}
 					catch (Exception ex)
 					{
-						_logger.LogError(ex, "Error confirming order payment for order {OrderId}", orderId);
+						_logger.LogError(ex, "Error confirming order payment for order {OrderId}", actualOrderId);
 					}
 				}
 
 				if (payOSConfirmed && confirmed)
 				{
 					var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
-					var frontendSuccessUrl = $"{frontendUrl}{successPath}?orderId={orderId}&status=success";
+					var frontendSuccessUrl = $"{frontendUrl}{successPath}?orderId={actualOrderId}&status=success";
 					return Redirect(frontendSuccessUrl);
 				}
 				else if (payOSConfirmed && !confirmed)
 				{
 					var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
-					var frontendErrorUrl = $"{frontendUrl}{errorPath}?orderId={orderId}&error=system_error";
+					var frontendErrorUrl = $"{frontendUrl}{errorPath}?orderId={actualOrderId}&error=system_error";
 					return Redirect(frontendErrorUrl);
 				}
 				else
 				{
 					var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-					var frontendFailUrl = $"{frontendUrl}{failedPath}?orderId={orderId}&status={status}&code={code}";
+					var frontendFailUrl = $"{frontendUrl}{failedPath}?orderId={actualOrderId}&status={status}&code={code}";
 					return Redirect(frontendFailUrl);
 				}
 			}
             else
 			{
-                // Fallback: PayOS orderCode đối với Booking chính là bookingId
-                if (booking == null)
-                {
-                    booking = await _bookingRepo.GetBookingByIdAsync(orderId);
-                }
+                // Fallback: Nếu không tìm thấy Order, booking đã được tìm ở trên
 
                 if (booking != null)
 				{

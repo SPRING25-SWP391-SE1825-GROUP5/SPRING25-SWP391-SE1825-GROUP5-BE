@@ -13,11 +13,14 @@ public partial class Order
 
     public string? Notes { get; set; }
 
-    
+
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
+
+    // PayOS orderCode - unique random number để tránh conflict với Booking
+    public int? PayOSOrderCode { get; set; }
 
     public virtual Customer Customer { get; set; }
 

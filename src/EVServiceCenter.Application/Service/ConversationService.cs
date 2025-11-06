@@ -22,6 +22,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IAuthRepository _authRepository;
         private readonly IBookingRepository _bookingRepository;
         private readonly IStaffRepository _staffRepository;
+        private readonly ICenterRepository _centerRepository;
         private readonly IChatHubService _chatHubService;
         private readonly ChatSettings _chatSettings;
         private readonly ILogger<ConversationService> _logger;
@@ -33,6 +34,7 @@ namespace EVServiceCenter.Application.Service
             IAuthRepository authRepository,
             IBookingRepository bookingRepository,
             IStaffRepository staffRepository,
+            ICenterRepository centerRepository,
             IChatHubService chatHubService,
             IOptions<ChatSettings> chatSettings,
             ILogger<ConversationService> logger)
@@ -43,6 +45,7 @@ namespace EVServiceCenter.Application.Service
             _authRepository = authRepository;
             _bookingRepository = bookingRepository;
             _staffRepository = staffRepository;
+            _centerRepository = centerRepository;
             _chatHubService = chatHubService;
             _chatSettings = chatSettings.Value;
             _logger = logger;
@@ -52,14 +55,37 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                var conversation = new Conversation
-                {
-                    Subject = request.Subject,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
+                // Log incoming request for debugging
+                _logger.LogInformation(
+                    "CreateConversationAsync called with {MemberCount} members. Members: {Members}",
+                    request.Members.Count,
+                    string.Join(", ", request.Members.Select(m =>
+                        $"Role={m.RoleInConversation}, UserId={m.UserId?.ToString() ?? "(null)"}, GuestSessionId='{m.GuestSessionId ?? "(null)"}'")));
 
-                var createdConversation = await _conversationRepository.CreateConversationAsync(conversation);
+                // Normalize and validate members first
+                foreach (var memberRequest in request.Members)
+                {
+                    // Normalize GuestSessionId: trim and convert empty string to null
+                    if (!string.IsNullOrWhiteSpace(memberRequest.GuestSessionId))
+                    {
+                        memberRequest.GuestSessionId = memberRequest.GuestSessionId.Trim();
+                    }
+                    else
+                    {
+                        memberRequest.GuestSessionId = null;
+                    }
+                }
+
+                // Validate that we have at least one valid member before processing
+                bool hasValidMember = request.Members.Any(m =>
+                    m.UserId.HasValue || !string.IsNullOrWhiteSpace(m.GuestSessionId));
+
+                if (!hasValidMember)
+                {
+                    _logger.LogError(
+                        "Cannot create conversation: No valid members found (all members have both UserId and GuestSessionId as null/empty)");
+                    throw new ArgumentException("Conversation must have at least one member with either UserId or GuestSessionId");
+                }
 
                 // Find customer from members
                 int? customerUserId = null;
@@ -75,6 +101,42 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
+                // Check if customer already has an active conversation (prevent duplicate conversations)
+                if (customerUserId.HasValue || !string.IsNullOrWhiteSpace(customerGuestSessionId))
+                {
+                    Conversation? existingConversation = null;
+
+                    if (customerUserId.HasValue)
+                    {
+                        var customerConversations = await _conversationRepository.GetConversationsByUserIdAsync(customerUserId.Value);
+                        // Get the most recent conversation
+                        existingConversation = customerConversations.FirstOrDefault();
+                    }
+                    else if (!string.IsNullOrWhiteSpace(customerGuestSessionId))
+                    {
+                        var guestConversations = await _conversationRepository.GetConversationsByGuestSessionIdAsync(customerGuestSessionId);
+                        existingConversation = guestConversations.FirstOrDefault();
+                    }
+
+                    if (existingConversation != null)
+                    {
+                        _logger.LogInformation(
+                            "Customer (UserId: {UserId}, GuestSessionId: {GuestSessionId}) already has conversation {ConversationId}. Returning existing conversation.",
+                            customerUserId, customerGuestSessionId ?? "(null)", existingConversation.ConversationId);
+                        return await MapToConversationResponseAsync(existingConversation);
+                    }
+                }
+
+                var conversation = new Conversation
+                {
+                    Subject = request.Subject,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                var createdConversation = await _conversationRepository.CreateConversationAsync(conversation);
+                _logger.LogInformation("Created new conversation {ConversationId}", createdConversation.ConversationId);
+
                 // Add members to conversation
                 foreach (var memberRequest in request.Members)
                 {
@@ -82,19 +144,51 @@ namespace EVServiceCenter.Application.Service
                     if (_chatSettings.Roles.StaffRoles.Contains(memberRequest.RoleInConversation)
                         && !memberRequest.UserId.HasValue)
                     {
+                        _logger.LogInformation(
+                            "Skipping placeholder staff member with role {Role} (no UserId)",
+                            memberRequest.RoleInConversation);
                         continue;
                     }
+
+                    // Normalize GuestSessionId again (in case it wasn't normalized earlier)
+                    string? normalizedGuestSessionId = string.IsNullOrWhiteSpace(memberRequest.GuestSessionId)
+                        ? null
+                        : memberRequest.GuestSessionId.Trim();
+
+                    // Skip members with both UserId and GuestSessionId as null/empty (violates CK_ConversationMembers_ActorXor constraint)
+                    bool hasUserId = memberRequest.UserId.HasValue;
+                    bool hasGuestSessionId = !string.IsNullOrWhiteSpace(normalizedGuestSessionId);
+
+                    if (!hasUserId && !hasGuestSessionId)
+                    {
+                        _logger.LogWarning(
+                            "Skipping member with role {Role} because both UserId and GuestSessionId are null/empty. UserId: {UserId}, GuestSessionId: '{GuestSessionId}'",
+                            memberRequest.RoleInConversation,
+                            memberRequest.UserId,
+                            memberRequest.GuestSessionId ?? "(null)");
+                        continue;
+                    }
+
+                    _logger.LogInformation(
+                        "Adding member to conversation {ConversationId}: Role={Role}, UserId={UserId}, GuestSessionId='{GuestSessionId}'",
+                        createdConversation.ConversationId,
+                        memberRequest.RoleInConversation,
+                        memberRequest.UserId?.ToString() ?? "(null)",
+                        normalizedGuestSessionId ?? "(null)");
 
                     var member = new ConversationMember
                     {
                         ConversationId = createdConversation.ConversationId,
                         UserId = memberRequest.UserId,
-                        GuestSessionId = memberRequest.GuestSessionId,
+                        GuestSessionId = normalizedGuestSessionId, // Use normalized value (null instead of empty string)
                         RoleInConversation = memberRequest.RoleInConversation,
                         LastReadAt = null
                     };
 
                     await _conversationMemberRepository.CreateConversationMemberAsync(member);
+                    _logger.LogInformation(
+                        "Successfully added member {MemberId} to conversation {ConversationId}",
+                        member.MemberId, createdConversation.ConversationId);
                 }
 
                 // Auto-assign staff if customer exists and there is no REAL staff member in request
@@ -104,7 +198,17 @@ namespace EVServiceCenter.Application.Service
 
                 if (!hasStaffMember && customerUserId.HasValue && _chatSettings.Assignment.AutoAssignEnabled)
                 {
-                    var assignedStaff = await AssignStaffAsync(customerUserId.Value, request.PreferredCenterId);
+                    // Get customer location (priority: request location, fallback: booking center location)
+                    var (customerLat, customerLng) = await GetCustomerLocationAsync(
+                        customerUserId.Value,
+                        request.CustomerLatitude,
+                        request.CustomerLongitude);
+
+                    var assignedStaff = await AssignStaffAsync(
+                        customerUserId.Value,
+                        request.PreferredCenterId,
+                        customerLat,
+                        customerLng);
 
                     if (assignedStaff != null)
                     {
@@ -692,28 +796,70 @@ namespace EVServiceCenter.Application.Service
             return response;
         }
 
-        private async Task<Staff?> AssignStaffAsync(int customerUserId, int? preferredCenterId = null)
+        private async Task<Staff?> AssignStaffAsync(int customerUserId, int? preferredCenterId = null, double? customerLat = null, double? customerLng = null)
         {
             try
             {
                 int? targetCenterId = null;
 
-                // Strategy 1: Check customer's recent booking
-                var customerBookings = await _bookingRepository.GetByCustomerIdAsync(customerUserId);
-                var recentBooking = customerBookings
-                    .Where(b => b.CenterId > 0)
-                    .OrderByDescending(b => b.CreatedAt)
-                    .FirstOrDefault();
-
-                if (recentBooking != null && recentBooking.CenterId > 0)
+                // Strategy 0: If customer location is provided, find nearest center using Haversine
+                if (customerLat.HasValue && customerLng.HasValue)
                 {
-                    targetCenterId = recentBooking.CenterId;
-                    _logger.LogInformation(
-                        "Found recent booking for customer {CustomerId} at center {CenterId}",
-                        customerUserId, targetCenterId);
+                    var allCenters = await _centerRepository.GetActiveCentersAsync();
+                    var centersWithGeo = allCenters
+                        .Where(c => c.Latitude.HasValue && c.Longitude.HasValue)
+                        .Select(c => new {
+                            CenterId = c.CenterId,
+                            Lat = (double)c.Latitude!.Value,
+                            Lng = (double)c.Longitude!.Value
+                        })
+                        .ToList();
+
+                    if (centersWithGeo.Any())
+                    {
+                        // Calculate distance to each center and find nearest
+                        var centerDistances = centersWithGeo
+                            .Select(c => new {
+                                c.CenterId,
+                                DistanceKm = HaversineKm(customerLat.Value, customerLng.Value, c.Lat, c.Lng)
+                            })
+                            .OrderBy(c => c.DistanceKm)
+                            .ToList();
+
+                        var nearestCenter = centerDistances.First();
+                        targetCenterId = nearestCenter.CenterId;
+
+                        _logger.LogInformation(
+                            "Found nearest center {CenterId} at distance {DistanceKm:F2} km for customer {CustomerId} at ({Lat}, {Lng})",
+                            nearestCenter.CenterId, nearestCenter.DistanceKm, customerUserId, customerLat.Value, customerLng.Value);
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "No centers with geo coordinates found, falling back to other strategies for customer {CustomerId}",
+                            customerUserId);
+                    }
                 }
 
-                // Strategy 2: Use preferred center if provided
+                // Strategy 1: Check customer's recent booking (if no location-based center found)
+                if (!targetCenterId.HasValue)
+                {
+                    var customerBookings = await _bookingRepository.GetByCustomerIdAsync(customerUserId);
+                    var recentBooking = customerBookings
+                        .Where(b => b.CenterId > 0)
+                        .OrderByDescending(b => b.CreatedAt)
+                        .FirstOrDefault();
+
+                    if (recentBooking != null && recentBooking.CenterId > 0)
+                    {
+                        targetCenterId = recentBooking.CenterId;
+                        _logger.LogInformation(
+                            "Found recent booking for customer {CustomerId} at center {CenterId}",
+                            customerUserId, targetCenterId);
+                    }
+                }
+
+                // Strategy 2: Use preferred center if provided (overrides booking if set)
                 if (preferredCenterId.HasValue && preferredCenterId.Value > 0)
                 {
                     targetCenterId = preferredCenterId.Value;
@@ -802,6 +948,60 @@ namespace EVServiceCenter.Application.Service
                 _logger.LogError(ex, "Error assigning staff to conversation for customer {CustomerId}", customerUserId);
                 return null;
             }
+        }
+
+        private async Task<(double? lat, double? lng)> GetCustomerLocationAsync(int customerUserId, decimal? requestLat, decimal? requestLng)
+        {
+            try
+            {
+                // Priority 1: Use location from request if provided
+                if (requestLat.HasValue && requestLng.HasValue)
+                {
+                    _logger.LogInformation(
+                        "Using customer location from request: ({Lat}, {Lng}) for customer {CustomerId}",
+                        requestLat.Value, requestLng.Value, customerUserId);
+                    return ((double)requestLat.Value, (double)requestLng.Value);
+                }
+
+                // Priority 2: Fallback to booking center location
+                var customerBookings = await _bookingRepository.GetByCustomerIdAsync(customerUserId);
+                var recentBooking = customerBookings
+                    .Where(b => b.CenterId > 0)
+                    .OrderByDescending(b => b.CreatedAt)
+                    .FirstOrDefault();
+
+                if (recentBooking != null && recentBooking.CenterId > 0)
+                {
+                    var center = await _centerRepository.GetCenterByIdAsync(recentBooking.CenterId);
+                    if (center != null && center.Latitude.HasValue && center.Longitude.HasValue)
+                    {
+                        _logger.LogInformation(
+                            "Using center location from recent booking: Center {CenterId} ({Lat}, {Lng}) for customer {CustomerId}",
+                            center.CenterId, center.Latitude.Value, center.Longitude.Value, customerUserId);
+                        return ((double)center.Latitude.Value, (double)center.Longitude.Value);
+                    }
+                }
+
+                _logger.LogInformation(
+                    "No location found for customer {CustomerId} (no request location and no booking with center location)",
+                    customerUserId);
+                return (null, null);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting customer location for customer {CustomerId}", customerUserId);
+                return (null, null);
+            }
+        }
+
+        private static double HaversineKm(double lat1, double lng1, double lat2, double lng2)
+        {
+            const double R = 6371d;
+            double dLat = (lat2 - lat1) * Math.PI / 180d;
+            double dLng = (lng2 - lng1) * Math.PI / 180d;
+            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos(lat1 * Math.PI / 180d) * Math.Cos(lat2 * Math.PI / 180d) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+            double c = 2 * Math.Asin(Math.Min(1, Math.Sqrt(a)));
+            return R * c;
         }
     }
 }

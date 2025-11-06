@@ -342,6 +342,11 @@ builder.Services.AddScoped<IBookingReportsService, EVServiceCenter.Application.S
 builder.Services.AddScoped<ITechnicianReportsService, EVServiceCenter.Application.Service.TechnicianReportsService>();
 builder.Services.AddScoped<IInventoryReportsService, EVServiceCenter.Application.Service.InventoryReportsService>();
 builder.Services.AddScoped<ITechnicianDashboardService, EVServiceCenter.Application.Service.TechnicianDashboardService>();
+builder.Services.AddScoped<IDashboardSummaryService, EVServiceCenter.Application.Service.DashboardSummaryService>();
+builder.Services.AddScoped<IRevenueByStoreService, EVServiceCenter.Application.Service.RevenueByStoreService>();
+builder.Services.AddScoped<ITimeslotPopularityService, EVServiceCenter.Application.Service.TimeslotPopularityService>();
+builder.Services.AddScoped<ITotalRevenueService, EVServiceCenter.Application.Service.TotalRevenueService>();
+builder.Services.AddScoped<IServiceBookingStatsService, EVServiceCenter.Application.Service.ServiceBookingStatsService>();
 // WorkOrderService removed - functionality merged into BookingService
 
 // E-commerce services

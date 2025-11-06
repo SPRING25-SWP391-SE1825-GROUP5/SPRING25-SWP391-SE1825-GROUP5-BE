@@ -158,13 +158,23 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         /// <summary>
-        /// Lấy technician time slots theo center ID
+        /// Lấy technician time slots theo center ID (public)
+        /// Optional: lọc theo startDate/endDate và phân trang để phục vụ khách hàng.
         /// </summary>
         /// <param name="centerId">ID của center</param>
+        /// <param name="startDate">Ngày bắt đầu (yyyy-MM-dd)</param>
+        /// <param name="endDate">Ngày kết thúc (yyyy-MM-dd)</param>
+        /// <param name="page">Trang (>=1)</param>
+        /// <param name="pageSize">Kích thước trang (1-100)</param>
         /// <returns>Danh sách technician time slots</returns>
         [HttpGet("center/{centerId}")]
-        [Authorize(Policy = "StaffOrAdmin")]
-        public async Task<IActionResult> GetTechnicianTimeSlotsByCenterId(int centerId)
+        [AllowAnonymous]
+        public async Task<IActionResult> GetTechnicianTimeSlotsByCenterId(
+            int centerId,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 100)
         {
             try
             {
@@ -175,15 +185,34 @@ namespace EVServiceCenter.Api.Controllers
                 foreach (var technician in technicians)
                 {
                     var timeSlots = await _technicianTimeSlotService.GetTechnicianTimeSlotsByTechnicianIdAsync(technician.TechnicianId);
+                    // Lọc theo khoảng ngày nếu có
+                    if (startDate.HasValue || endDate.HasValue)
+                    {
+                        var s = startDate?.Date ?? DateTime.MinValue.Date;
+                        var e = endDate?.Date ?? DateTime.MaxValue.Date;
+                        timeSlots = timeSlots
+                            .Where(ts => ts.WorkDate.Date >= s && ts.WorkDate.Date <= e)
+                            .ToList();
+                    }
                     allTimeSlots.AddRange(timeSlots);
                 }
+                // Phân trang nhẹ nhàng để giảm payload
+                if (page < 1) page = 1;
+                if (pageSize < 1) pageSize = 1; else if (pageSize > 100) pageSize = 100;
+                var total = allTimeSlots.Count;
+                var items = allTimeSlots
+                    .OrderBy(ts => ts.WorkDate)
+                    .ThenBy(ts => ts.SlotTime)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
 
                 return Ok(new
                 {
                     success = true,
                     message = "Lấy lịch technician theo trung tâm thành công",
-                    data = allTimeSlots,
-                    total = allTimeSlots.Count
+                    data = items,
+                    total
                 });
             }
             catch (Exception ex)

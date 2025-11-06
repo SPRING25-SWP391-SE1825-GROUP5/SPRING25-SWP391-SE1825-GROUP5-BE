@@ -16,7 +16,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<List<MaintenanceChecklistResult>> GetByChecklistIdAsync(int checklistId)
         {
             return await _db.MaintenanceChecklistResults
-                .Include(r => r.Part) // Include Part entity để lấy PartName và Description
+                .Include(r => r.Category)
                 .Where(r => r.ChecklistId == checklistId)
                 .ToListAsync();
         }
@@ -30,11 +30,11 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 existing = await _db.MaintenanceChecklistResults
                     .FirstOrDefaultAsync(r => r.ResultId == result.ResultId);
             }
-            else
+            else if (result.CategoryId.HasValue)
             {
-                // Nếu không có ResultId, dùng khóa tự nhiên (ChecklistId, PartId)
+                // Nếu không có ResultId nhưng có CategoryId: check theo (ChecklistId, CategoryId)
                 existing = await _db.MaintenanceChecklistResults
-                    .FirstOrDefaultAsync(r => r.ChecklistId == result.ChecklistId && r.PartId == result.PartId);
+                    .FirstOrDefaultAsync(r => r.ChecklistId == result.ChecklistId && r.CategoryId == result.CategoryId);
             }
 
             if (existing == null)
@@ -48,6 +48,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 existing.Description = result.Description;
                 existing.Result = result.Result;
                 existing.Status = result.Status;
+                existing.CategoryId = result.CategoryId;
             }
             await _db.SaveChangesAsync();
         }

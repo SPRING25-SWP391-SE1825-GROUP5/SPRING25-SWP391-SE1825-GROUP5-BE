@@ -28,6 +28,8 @@ namespace EVServiceCenter.Application.Service
         private readonly IServiceChecklistRepository _serviceChecklistRepository;
         private readonly IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
         private readonly ILogger<BookingService> _logger;
+        private readonly IWorkOrderPartRepository _workOrderPartRepository;
+        private readonly IPartRepository _partRepository;
 
 
         public BookingService(
@@ -44,7 +46,9 @@ namespace EVServiceCenter.Application.Service
             IMaintenanceChecklistRepository maintenanceChecklistRepository,
             IServiceChecklistRepository serviceChecklistRepository,
             IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository,
-            ILogger<BookingService> logger)
+            ILogger<BookingService> logger,
+            IWorkOrderPartRepository workOrderPartRepository,
+            IPartRepository partRepository)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -60,6 +64,8 @@ namespace EVServiceCenter.Application.Service
             _serviceChecklistRepository = serviceChecklistRepository;
             _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
             _logger = logger;
+            _workOrderPartRepository = workOrderPartRepository;
+            _partRepository = partRepository;
         }
 
         public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int>? serviceIds = null)
@@ -97,16 +103,19 @@ namespace EVServiceCenter.Application.Service
 
                 foreach (var timeSlot in timeSlots)
                 {
+                    var slotLabel = timeSlot.SlotLabel;
+                    if (slotLabel == "SA" || slotLabel == "CH")
+                    {
+                        slotLabel = null;
+                    }
                     var timeSlotAvailability = new TimeSlotAvailability
                     {
                         SlotId = timeSlot.SlotId,
                         SlotTime = timeSlot.SlotTime.ToString(),
-                        SlotLabel = timeSlot.SlotLabel,
+                        SlotLabel = slotLabel,
                         IsAvailable = false,
                         AvailableTechnicians = new List<TechnicianAvailability>()
                     };
-
-                    // Check availability for each technician
                     foreach (var technician in centerTechnicians)
                     {
                         var isTechnicianAvailable = !bookingsForDate.Any(b =>
@@ -211,11 +220,16 @@ namespace EVServiceCenter.Application.Service
                             var isRealtimeAvailable = !isBooked &&
                                 (techTimeSlot == null || (techTimeSlot.IsAvailable && techTimeSlot.BookingId == null));
 
+                            var slotLabel = slot.SlotLabel;
+                            if (slotLabel == "SA" || slotLabel == "CH")
+                            {
+                                slotLabel = null;
+                            }
                             availableTimeSlots.Add(new AvailableTimeSlot
                             {
                                 SlotId = slotId,
                             SlotTime = slot.SlotTime,
-                            SlotLabel = slot.SlotLabel,
+                                SlotLabel = slotLabel,
                                 IsAvailable = !isBooked,
                                 IsRealtimeAvailable = isRealtimeAvailable,
                                 TechnicianId = technician.TechnicianId,
@@ -514,17 +528,31 @@ namespace EVServiceCenter.Application.Service
                     var templateItems = await _serviceChecklistRepository.GetItemsByTemplateAsync(template.TemplateID);
                     if (templateItems != null && templateItems.Any())
                     {
-                        var seedResults = templateItems.Select(i => new MaintenanceChecklistResult
-                        {
-                            ChecklistId = checklist.ChecklistId,
-                            PartId = i.PartID,
-                            Description = i.Part?.PartName ?? string.Empty,
-                            Result = null, // chưa đánh giá
-                            Status = "PENDING"
-                        }).ToList();
+                        var seedResults = new List<MaintenanceChecklistResult>();
 
-                        await _maintenanceChecklistResultRepository.UpsertManyAsync(seedResults);
-                        _logger.LogInformation("Đã seed {Count} MaintenanceChecklistResults cho checklist {ChecklistId}", seedResults.Count, checklist.ChecklistId);
+                        foreach (var templateItem in templateItems.Where(i => i.CategoryId.HasValue))
+                        {
+                            // Tạo 1 MaintenanceChecklistResult cho mỗi category (không phải cho từng part)
+                            var categoryId = templateItem.CategoryId!.Value;
+                            seedResults.Add(new MaintenanceChecklistResult
+                            {
+                                ChecklistId = checklist.ChecklistId,
+                                CategoryId = categoryId,
+                                Description = templateItem.Category?.CategoryName ?? string.Empty,
+                                Result = null,
+                                Status = "PENDING"
+                            });
+                        }
+
+                        if (seedResults.Any())
+                        {
+                            await _maintenanceChecklistResultRepository.UpsertManyAsync(seedResults);
+                            _logger.LogInformation("Đã seed {Count} MaintenanceChecklistResults cho checklist {ChecklistId}", seedResults.Count, checklist.ChecklistId);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Template {TemplateId} không có parts để seed MaintenanceChecklistResults", template.TemplateID);
+                        }
                     }
                     else
                     {
@@ -578,6 +606,26 @@ namespace EVServiceCenter.Application.Service
                 // Update booking status
                 booking.Status = request.Status.ToUpper();
                 booking.UpdatedAt = DateTime.UtcNow;
+
+                if (string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId);
+                    var hasDraftOrPending = parts.Any(p => p.Status == "DRAFT" || p.Status == "PENDING_CUSTOMER_APPROVAL");
+                    if (hasDraftOrPending)
+                    {
+                        throw new ArgumentException("Không thể chuyển COMPLETED khi còn phụ tùng chưa được xử lý (DRAFT hoặc PENDING_CUSTOMER_APPROVAL)");
+                    }
+
+                    var checklist = await _maintenanceChecklistRepository.GetByBookingIdAsync(booking.BookingId);
+                    if (checklist != null)
+                    {
+                        var checklistStatus = (checklist.Status ?? string.Empty).ToUpperInvariant();
+                        if (checklistStatus != "COMPLETED")
+                        {
+                            throw new ArgumentException("Không thể chuyển booking sang COMPLETED khi checklist chưa được xác nhận hoàn thành. Vui lòng gọi API /api/maintenance-checklist/{bookingId}/confirm để xác nhận checklist trước.");
+                        }
+                    }
+                }
 
                 // Handle package usage based on status change
                 if (booking.AppliedCreditId.HasValue)
@@ -713,10 +761,7 @@ namespace EVServiceCenter.Application.Service
                 }
             }
 
-            // Determine matched schedule for display
-            DateOnly? scheduleDate = null;
-            byte? scheduleDow = null;
-            // CenterSchedule removed: keep schedule info null
+            // CenterSchedule removed in current model; no schedule metadata to compute
 
             // Load package information if applied
             string? packageCode = null;
@@ -765,7 +810,6 @@ namespace EVServiceCenter.Application.Service
             return new BookingResponse
             {
                 BookingId = booking.BookingId,
-                BookingCode = null,
                 CustomerId = booking.CustomerId,
                 CustomerName = booking.Customer?.User?.FullName ?? "N/A",
                 VehicleId = booking.VehicleId,
@@ -780,8 +824,6 @@ namespace EVServiceCenter.Application.Service
                 TechnicianSlotId = booking.TechnicianSlotId,
                 SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0, // Get SlotId from TechnicianTimeSlot
                 SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
-                CenterScheduleDate = scheduleDate,
-                CenterScheduleDayOfWeek = scheduleDow,
 
                 Status = booking.Status ?? string.Empty,
                 SpecialRequests = booking.SpecialRequests ?? string.Empty,
@@ -947,9 +989,9 @@ namespace EVServiceCenter.Application.Service
             var validTransitions = new Dictionary<string, List<string>>
             {
                 { "PENDING", new List<string> { "CONFIRMED", "CANCELLED" } },
-                { "CONFIRMED", new List<string> { "IN_PROGRESS", "CANCELLED" } },
-                { "IN_PROGRESS", new List<string> { "COMPLETED", "CANCELLED" } },
-                { "COMPLETED", new List<string> { "PAID" } }, // Cho phép chuyển sang PAID nếu cần
+                { "CONFIRMED", new List<string> { "IN_PROGRESS" } },
+                { "IN_PROGRESS", new List<string> { "COMPLETED" } },
+                { "COMPLETED", new List<string> { "PAID" } },
                 { "PAID", new List<string>() },
                 { "CANCELLED", new List<string>() }
             };

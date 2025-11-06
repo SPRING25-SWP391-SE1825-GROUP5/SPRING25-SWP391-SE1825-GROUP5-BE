@@ -11,13 +11,24 @@ public partial class WorkOrderPart
 
     public int PartId { get; set; }
 
-    public int? VehicleModelPartId { get; set; }
+    public int? CategoryId { get; set; }
 
     public int QuantityUsed { get; set; }
+
+    public string Status { get; set; } = "DRAFT";
+
+    // Removed: CreatedAt, UpdatedAt, ApprovedAt per requirements
+
+    // Renamed: ApprovedByUserId -> ApprovedByStaffId (references StaffId)
+    public int? ApprovedByStaffId { get; set; }
+
+    public DateTime? ConsumedAt { get; set; }
+
+    // Removed: ConsumedByUserId per requirements
 
     public virtual Part Part { get; set; }
 
     public virtual Booking Booking { get; set; }
 
-    public virtual VehicleModelPart? VehicleModelPart { get; set; }
+    public virtual PartCategory? Category { get; set; }
 }

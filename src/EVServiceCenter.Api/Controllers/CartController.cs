@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Service;
@@ -13,22 +12,23 @@ namespace EVServiceCenter.Api.Controllers;
 [Authorize(Policy = "AuthenticatedUser")]
 public class CartController : ControllerBase
 {
+    private readonly ICartService _cartService;
     private readonly IOrderService _orderService;
     private readonly PaymentService _paymentService;
 
-    public CartController(IOrderService orderService, PaymentService paymentService)
+    public CartController(ICartService cartService, IOrderService orderService, PaymentService paymentService)
     {
+        _cartService = cartService;
         _orderService = orderService;
         _paymentService = paymentService;
     }
 
-    // GET /api/Cart/customer/{customerId}
     [HttpGet("customer/{customerId:int}")]
     public async Task<IActionResult> GetOrCreateCart(int customerId)
     {
         try
         {
-            var cart = await _orderService.GetOrCreateCartAsync(customerId);
+            var cart = await _cartService.GetOrCreateCartAsync(customerId);
             return Ok(new { success = true, data = cart });
         }
         catch (Exception ex)
@@ -37,13 +37,12 @@ public class CartController : ControllerBase
         }
     }
 
-    // GET /api/Cart/{cartId}/items
-    [HttpGet("{cartId:int}/items")]
-    public async Task<IActionResult> GetItems(int cartId)
+    [HttpGet("customer/{customerId:int}/items")]
+    public async Task<IActionResult> GetItems(int customerId)
     {
         try
         {
-            var items = await _orderService.GetCartItemsAsync(cartId);
+            var items = await _cartService.GetCartItemsAsync(customerId);
             return Ok(new { success = true, data = items });
         }
         catch (Exception ex)
@@ -53,13 +52,13 @@ public class CartController : ControllerBase
     }
 
     public class AddCartItemRequest { public int PartId { get; set; } public int Quantity { get; set; } }
-    // POST /api/Cart/{cartId}/items
-    [HttpPost("{cartId:int}/items")]
-    public async Task<IActionResult> AddItem(int cartId, [FromBody] AddCartItemRequest request)
+
+    [HttpPost("customer/{customerId:int}/items")]
+    public async Task<IActionResult> AddItem(int customerId, [FromBody] AddCartItemRequest request)
     {
         try
         {
-            var cart = await _orderService.AddItemToCartAsync(cartId, request.PartId, request.Quantity);
+            var cart = await _cartService.AddItemToCartAsync(customerId, request.PartId, request.Quantity);
             return Ok(new { success = true, data = cart, message = "Đã thêm vào giỏ" });
         }
         catch (Exception ex)
@@ -69,13 +68,13 @@ public class CartController : ControllerBase
     }
 
     public class UpdateCartItemRequest { public int Quantity { get; set; } }
-    // PUT /api/Cart/{cartId}/items/{orderItemId}
-    [HttpPut("{cartId:int}/items/{orderItemId:int}")]
-    public async Task<IActionResult> UpdateItem(int cartId, int orderItemId, [FromBody] UpdateCartItemRequest request)
+
+    [HttpPut("customer/{customerId:int}/items/{partId:int}")]
+    public async Task<IActionResult> UpdateItem(int customerId, int partId, [FromBody] UpdateCartItemRequest request)
     {
         try
         {
-            var cart = await _orderService.UpdateCartItemQuantityAsync(cartId, orderItemId, request.Quantity);
+            var cart = await _cartService.UpdateCartItemQuantityAsync(customerId, partId, request.Quantity);
             return Ok(new { success = true, data = cart, message = "Đã cập nhật số lượng" });
         }
         catch (Exception ex)
@@ -84,13 +83,12 @@ public class CartController : ControllerBase
         }
     }
 
-    // DELETE /api/Cart/{cartId}/items/{orderItemId}
-    [HttpDelete("{cartId:int}/items/{orderItemId:int}")]
-    public async Task<IActionResult> RemoveItem(int cartId, int orderItemId)
+    [HttpDelete("customer/{customerId:int}/items/{partId:int}")]
+    public async Task<IActionResult> RemoveItem(int customerId, int partId)
     {
         try
         {
-            var cart = await _orderService.RemoveCartItemAsync(cartId, orderItemId);
+            var cart = await _cartService.RemoveCartItemAsync(customerId, partId);
             return Ok(new { success = true, data = cart, message = "Đã xóa sản phẩm khỏi giỏ" });
         }
         catch (Exception ex)
@@ -99,13 +97,12 @@ public class CartController : ControllerBase
         }
     }
 
-    // DELETE /api/Cart/{cartId}/items
-    [HttpDelete("{cartId:int}/items")]
-    public async Task<IActionResult> ClearItems(int cartId)
+    [HttpDelete("customer/{customerId:int}/items")]
+    public async Task<IActionResult> ClearItems(int customerId)
     {
         try
         {
-            var cart = await _orderService.ClearCartAsync(cartId);
+            var cart = await _cartService.ClearCartAsync(customerId);
             return Ok(new { success = true, data = cart, message = "Đã xóa toàn bộ giỏ hàng" });
         }
         catch (Exception ex)
@@ -114,13 +111,13 @@ public class CartController : ControllerBase
         }
     }
 
-    // POST /api/Cart/{cartId}/checkout
-    [HttpPost("{cartId:int}/checkout")]
-    public async Task<IActionResult> Checkout(int cartId)
+    [HttpPost("customer/{customerId:int}/checkout")]
+    public async Task<IActionResult> Checkout(int customerId)
     {
         try
         {
-            var order = await _orderService.CheckoutCartAsync(cartId);
+            var order = await _orderService.CheckoutCartFromRedisAsync(customerId);
+
             string? checkoutUrl = null;
             try
             {
@@ -128,7 +125,6 @@ public class CartController : ControllerBase
             }
             catch
             {
-                // If payment link fails, still return order; frontend may retry payment later
             }
             return Ok(new { success = true, data = order, checkoutUrl });
         }

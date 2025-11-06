@@ -9,6 +9,8 @@ using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.IRepositories;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using EVServiceCenter.Application.Configurations;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -18,6 +20,10 @@ namespace EVServiceCenter.Application.Service
         private readonly IMessageRepository _messageRepository;
         private readonly IConversationMemberRepository _conversationMemberRepository;
         private readonly IAuthRepository _authRepository;
+        private readonly IBookingRepository _bookingRepository;
+        private readonly IStaffRepository _staffRepository;
+        private readonly IChatHubService _chatHubService;
+        private readonly ChatSettings _chatSettings;
         private readonly ILogger<ConversationService> _logger;
 
         public ConversationService(
@@ -25,12 +31,20 @@ namespace EVServiceCenter.Application.Service
             IMessageRepository messageRepository,
             IConversationMemberRepository conversationMemberRepository,
             IAuthRepository authRepository,
+            IBookingRepository bookingRepository,
+            IStaffRepository staffRepository,
+            IChatHubService chatHubService,
+            IOptions<ChatSettings> chatSettings,
             ILogger<ConversationService> logger)
         {
             _conversationRepository = conversationRepository;
             _messageRepository = messageRepository;
             _conversationMemberRepository = conversationMemberRepository;
             _authRepository = authRepository;
+            _bookingRepository = bookingRepository;
+            _staffRepository = staffRepository;
+            _chatHubService = chatHubService;
+            _chatSettings = chatSettings.Value;
             _logger = logger;
         }
 
@@ -47,9 +61,30 @@ namespace EVServiceCenter.Application.Service
 
                 var createdConversation = await _conversationRepository.CreateConversationAsync(conversation);
 
+                // Find customer from members
+                int? customerUserId = null;
+                string? customerGuestSessionId = null;
+
+                foreach (var memberRequest in request.Members)
+                {
+                    if (memberRequest.RoleInConversation == _chatSettings.Roles.Customer)
+                    {
+                        customerUserId = memberRequest.UserId;
+                        customerGuestSessionId = memberRequest.GuestSessionId;
+                        break;
+                    }
+                }
+
                 // Add members to conversation
                 foreach (var memberRequest in request.Members)
                 {
+                    // Skip placeholder staff entries (role is staff but no concrete user)
+                    if (_chatSettings.Roles.StaffRoles.Contains(memberRequest.RoleInConversation)
+                        && !memberRequest.UserId.HasValue)
+                    {
+                        continue;
+                    }
+
                     var member = new ConversationMember
                     {
                         ConversationId = createdConversation.ConversationId,
@@ -60,6 +95,39 @@ namespace EVServiceCenter.Application.Service
                     };
 
                     await _conversationMemberRepository.CreateConversationMemberAsync(member);
+                }
+
+                // Auto-assign staff if customer exists and there is no REAL staff member in request
+                bool hasStaffMember = request.Members.Any(m =>
+                    _chatSettings.Roles.StaffRoles.Contains(m.RoleInConversation)
+                    && m.UserId.HasValue);
+
+                if (!hasStaffMember && customerUserId.HasValue && _chatSettings.Assignment.AutoAssignEnabled)
+                {
+                    var assignedStaff = await AssignStaffAsync(customerUserId.Value, request.PreferredCenterId);
+
+                    if (assignedStaff != null)
+                    {
+                        createdConversation.AssignedStaffId = assignedStaff.StaffId;
+                        await _conversationRepository.UpdateConversationAsync(createdConversation);
+
+                        // Add staff as member
+                        var staffMember = new ConversationMember
+                        {
+                            ConversationId = createdConversation.ConversationId,
+                            UserId = assignedStaff.UserId,
+                            RoleInConversation = _chatSettings.Roles.Staff,
+                            LastReadAt = null
+                        };
+                        await _conversationMemberRepository.CreateConversationMemberAsync(staffMember);
+
+                        // Notify staff via SignalR
+                        await _chatHubService.NotifyNewConversationAsync(assignedStaff.UserId, createdConversation.ConversationId);
+
+                        _logger.LogInformation(
+                            "Auto-assigned staff {StaffId} (User {UserId}) to conversation {ConversationId}",
+                            assignedStaff.StaffId, assignedStaff.UserId, createdConversation.ConversationId);
+                    }
                 }
 
                 return await MapToConversationResponseAsync(createdConversation);
@@ -140,7 +208,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Try to find existing conversation
                 var existingConversation = await _conversationRepository.GetConversationByMembersAsync(
-                    request.Member1.UserId, 
+                    request.Member1.UserId,
                     request.Member2.UserId,
                     request.Member1.GuestSessionId,
                     request.Member2.GuestSessionId);
@@ -154,6 +222,7 @@ namespace EVServiceCenter.Application.Service
                 var createRequest = new CreateConversationRequest
                 {
                     Subject = request.Subject,
+                    PreferredCenterId = request.PreferredCenterId,
                     Members = new List<AddMemberToConversationRequest>
                     {
                         new AddMemberToConversationRequest
@@ -185,7 +254,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 var conversations = await _conversationRepository.GetConversationsByUserIdAsync(userId);
-                
+
                 var mappedConversations = new List<ConversationResponse>();
                 foreach (var conversation in conversations
                     .Skip((page - 1) * pageSize)
@@ -207,7 +276,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 var conversations = await _conversationRepository.GetConversationsByGuestSessionIdAsync(guestSessionId);
-                
+
                 var mappedConversations = new List<ConversationResponse>();
                 foreach (var conversation in conversations
                     .Skip((page - 1) * pageSize)
@@ -229,7 +298,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 var conversations = await _conversationRepository.GetConversationsWithPaginationAsync(page, pageSize, searchTerm);
-                
+
                 var mappedConversations = new List<ConversationResponse>();
                 foreach (var conversation in conversations)
                 {
@@ -285,12 +354,12 @@ namespace EVServiceCenter.Application.Service
             {
                 var members = await _conversationMemberRepository.GetMembersByConversationIdAsync(conversationId);
                 var responses = new List<ConversationMemberResponse>();
-                
+
                 foreach (var member in members)
                 {
                     responses.Add(await MapToConversationMemberResponseAsync(member));
                 }
-                
+
                 return responses;
             }
             catch (Exception ex)
@@ -346,7 +415,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 await _conversationMemberRepository.UpdateMemberLastReadTimeAsync(conversationId, userId, guestSessionId);
-                
+
                 var conversation = await _conversationRepository.GetConversationByIdAsync(conversationId);
                 if (conversation == null)
                 {
@@ -362,6 +431,135 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<ConversationResponse> ReassignCenterAsync(long conversationId, int newCenterId, string? reason = null)
+        {
+            try
+            {
+                var conversation = await _conversationRepository.GetConversationByIdAsync(conversationId);
+                if (conversation == null)
+                {
+                    throw new ArgumentException($"Conversation with ID {conversationId} not found");
+                }
+
+                var centerStaff = await _staffRepository.GetStaffByCenterIdAsync(newCenterId);
+                var activeStaff = centerStaff.Where(s => s.IsActive).FirstOrDefault();
+
+                if (activeStaff == null)
+                {
+                    throw new ArgumentException(
+                        _chatSettings.Messages.NoActiveStaffInCenter.Replace("{CenterId}", newCenterId.ToString()));
+                }
+
+                var oldStaff = conversation.AssignedStaffId.HasValue
+                    ? await _staffRepository.GetStaffByIdAsync(conversation.AssignedStaffId.Value)
+                    : null;
+
+                if (oldStaff != null)
+                {
+                    await _conversationMemberRepository.RemoveMemberFromConversationAsync(
+                        conversationId,
+                        oldStaff.UserId,
+                        null);
+                }
+
+                var newStaffMember = new ConversationMember
+                {
+                    ConversationId = conversationId,
+                    UserId = activeStaff.UserId,
+                    RoleInConversation = _chatSettings.Roles.Staff
+                };
+                await _conversationMemberRepository.CreateConversationMemberAsync(newStaffMember);
+
+                conversation.AssignedStaffId = activeStaff.StaffId;
+                conversation.UpdatedAt = DateTime.UtcNow;
+                await _conversationRepository.UpdateConversationAsync(conversation);
+
+                await _chatHubService.NotifyCenterReassignedAsync(
+                    conversationId,
+                    oldStaff?.UserId,
+                    activeStaff.UserId,
+                    newCenterId,
+                    reason);
+
+                var centerName = activeStaff.Center?.CenterName ?? newCenterId.ToString();
+                var messageContent = reason != null
+                    ? _chatSettings.Messages.CenterReassignedWithReasonTemplate
+                        .Replace("{CenterName}", centerName)
+                        .Replace("{Reason}", reason)
+                    : _chatSettings.Messages.CenterReassignedTemplate
+                        .Replace("{CenterName}", centerName);
+
+                var systemMessage = new Message
+                {
+                    ConversationId = conversationId,
+                    Content = messageContent,
+                    CreatedAt = DateTime.UtcNow
+                };
+                await _messageRepository.CreateMessageAsync(systemMessage);
+
+                _logger.LogInformation(
+                    "Reassigned conversation {ConversationId} from staff {OldStaffId} to staff {NewStaffId} (center {CenterId})",
+                    conversationId, oldStaff?.StaffId, activeStaff.StaffId, newCenterId);
+
+                return await MapToConversationResponseAsync(conversation);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reassigning center for conversation {ConversationId}", conversationId);
+                throw;
+            }
+        }
+
+        public async Task<List<ConversationResponse>> GetConversationsByStaffIdAsync(int staffId, int page = 0, int pageSize = 0)
+        {
+            try
+            {
+                if (page <= 0) page = _chatSettings.Pagination.DefaultPage;
+                if (pageSize <= 0) pageSize = _chatSettings.Pagination.DefaultPageSize;
+                if (pageSize > _chatSettings.Pagination.MaxPageSize) pageSize = _chatSettings.Pagination.MaxPageSize;
+
+                var conversations = await _conversationRepository.GetConversationsByStaffIdAsync(staffId, page, pageSize);
+                var responses = new List<ConversationResponse>();
+
+                foreach (var conversation in conversations)
+                {
+                    responses.Add(await MapToConversationResponseAsync(conversation));
+                }
+
+                return responses;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting conversations by staff ID: {StaffId}", staffId);
+                throw;
+            }
+        }
+
+        public async Task<List<ConversationResponse>> GetUnassignedConversationsAsync(int page = 0, int pageSize = 0)
+        {
+            try
+            {
+                if (page <= 0) page = _chatSettings.Pagination.DefaultPage;
+                if (pageSize <= 0) pageSize = _chatSettings.Pagination.DefaultPageSize;
+                if (pageSize > _chatSettings.Pagination.MaxPageSize) pageSize = _chatSettings.Pagination.MaxPageSize;
+
+                var conversations = await _conversationRepository.GetUnassignedConversationsAsync(page, pageSize);
+                var responses = new List<ConversationResponse>();
+
+                foreach (var conversation in conversations)
+                {
+                    responses.Add(await MapToConversationResponseAsync(conversation));
+                }
+
+                return responses;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting unassigned conversations");
+                throw;
+            }
+        }
+
         private async Task<ConversationResponse> MapToConversationResponseAsync(Conversation conversation)
         {
             var response = new ConversationResponse
@@ -371,8 +569,18 @@ namespace EVServiceCenter.Application.Service
                 LastMessageAt = conversation.LastMessageAt,
                 LastMessageId = conversation.LastMessageId,
                 CreatedAt = conversation.CreatedAt,
-                UpdatedAt = conversation.UpdatedAt
+                UpdatedAt = conversation.UpdatedAt,
+                AssignedStaffId = conversation.AssignedStaffId
             };
+
+            // Map assigned staff info
+            if (conversation.AssignedStaff != null)
+            {
+                response.AssignedStaffName = conversation.AssignedStaff.User?.FullName;
+                response.AssignedStaffEmail = conversation.AssignedStaff.User?.Email;
+                response.AssignedCenterId = conversation.AssignedStaff.CenterId;
+                response.AssignedCenterName = conversation.AssignedStaff.Center?.CenterName;
+            }
 
             // Map last message
             if (conversation.LastMessage != null)
@@ -398,7 +606,7 @@ namespace EVServiceCenter.Application.Service
                     .OrderByDescending(m => m.CreatedAt)
                     .Take(50)
                     .ToList();
-                
+
                 var messages = new List<MessageResponse>();
                 foreach (var message in recentMessages)
                 {
@@ -482,6 +690,118 @@ namespace EVServiceCenter.Application.Service
             }
 
             return response;
+        }
+
+        private async Task<Staff?> AssignStaffAsync(int customerUserId, int? preferredCenterId = null)
+        {
+            try
+            {
+                int? targetCenterId = null;
+
+                // Strategy 1: Check customer's recent booking
+                var customerBookings = await _bookingRepository.GetByCustomerIdAsync(customerUserId);
+                var recentBooking = customerBookings
+                    .Where(b => b.CenterId > 0)
+                    .OrderByDescending(b => b.CreatedAt)
+                    .FirstOrDefault();
+
+                if (recentBooking != null && recentBooking.CenterId > 0)
+                {
+                    targetCenterId = recentBooking.CenterId;
+                    _logger.LogInformation(
+                        "Found recent booking for customer {CustomerId} at center {CenterId}",
+                        customerUserId, targetCenterId);
+                }
+
+                // Strategy 2: Use preferred center if provided
+                if (preferredCenterId.HasValue && preferredCenterId.Value > 0)
+                {
+                    targetCenterId = preferredCenterId.Value;
+                    _logger.LogInformation(
+                        "Using preferred center {CenterId} for customer {CustomerId}",
+                        preferredCenterId.Value, customerUserId);
+                }
+
+                // Strategy 3: Round-robin by workload (if no center found)
+                if (!targetCenterId.HasValue)
+                {
+                    var allStaff = await _staffRepository.GetAllStaffAsync();
+                    var activeStaff = allStaff.Where(s => s.IsActive).ToList();
+
+                    if (!activeStaff.Any())
+                    {
+                        _logger.LogWarning("No active staff found for assignment");
+                        return null;
+                    }
+
+                    // Calculate workload for each staff
+                    var staffWorkloads = new List<(Staff Staff, int ConversationCount)>();
+                    foreach (var staff in activeStaff)
+                    {
+                        var workload = await _conversationRepository.CountActiveConversationsByStaffIdAsync(staff.StaffId);
+                        staffWorkloads.Add((staff, workload));
+                    }
+
+                    // Select staff with least workload
+                    var selected = staffWorkloads
+                        .OrderBy(s => s.ConversationCount)
+                        .ThenBy(s => s.Staff.StaffId)
+                        .First();
+
+                    _logger.LogInformation(
+                        "Assigned staff {StaffId} (Center {CenterId}) with workload {Workload} to customer {CustomerId}",
+                        selected.Staff.StaffId, selected.Staff.CenterId, selected.ConversationCount, customerUserId);
+
+                    return selected.Staff;
+                }
+
+                // Strategy 4: Find staff from target center
+                if (targetCenterId.HasValue)
+                {
+                    var centerStaff = await _staffRepository.GetStaffByCenterIdAsync(targetCenterId.Value);
+                    var activeStaff = centerStaff.Where(s => s.IsActive).ToList();
+
+                    if (activeStaff.Any())
+                    {
+                        // If multiple staff in center, use round-robin
+                        var staffWorkloads = new List<(Staff Staff, int ConversationCount)>();
+                        foreach (var staff in activeStaff)
+                        {
+                            var workload = await _conversationRepository.CountActiveConversationsByStaffIdAsync(staff.StaffId);
+                            staffWorkloads.Add((staff, workload));
+                        }
+
+                        var selected = staffWorkloads
+                            .OrderBy(s => s.ConversationCount)
+                            .ThenBy(s => s.Staff.StaffId)
+                            .First();
+
+                        _logger.LogInformation(
+                            "Assigned staff {StaffId} from center {CenterId} with workload {Workload} to customer {CustomerId}",
+                            selected.Staff.StaffId, targetCenterId.Value, selected.ConversationCount, customerUserId);
+
+                        return selected.Staff;
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "No active staff found in center {CenterId} for customer {CustomerId}",
+                            targetCenterId.Value, customerUserId);
+
+                        // Fallback to any active staff
+                        var allStaff = await _staffRepository.GetAllStaffAsync();
+                        var anyActiveStaff = allStaff.Where(s => s.IsActive).FirstOrDefault();
+                        return anyActiveStaff;
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error assigning staff to conversation for customer {CustomerId}", customerUserId);
+                return null;
+            }
         }
     }
 }

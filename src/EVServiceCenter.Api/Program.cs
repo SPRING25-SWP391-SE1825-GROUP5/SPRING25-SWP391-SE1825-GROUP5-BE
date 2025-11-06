@@ -37,6 +37,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using System.Security.Claims;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 
 // ============================================================================
@@ -59,7 +60,10 @@ builder.Services.AddDbContext<EVDbContext>(options =>
 // ============================================================================
 // CORE SERVICES REGISTRATION
 // ============================================================================
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(o =>
+{
+    o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
@@ -67,7 +71,6 @@ builder.Services.AddSignalR(options =>
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
 });
 builder.Services.Configure<BookingRealtimeOptions>(builder.Configuration.GetSection("BookingRealtime"));
-// Cache configuration
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<PaymentService>();
@@ -75,25 +78,38 @@ builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS
 builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection("GuestSession"));
 builder.Services.Configure<PromotionOptions>(builder.Configuration.GetSection("Promotion"));
 builder.Services.Configure<MaintenanceReminderOptions>(builder.Configuration.GetSection("MaintenanceReminder"));
+builder.Services.Configure<AppointmentReminderOptions>(builder.Configuration.GetSection(AppointmentReminderOptions.SectionName));
+builder.Services.Configure<MaintenanceReminderSchedulerOptions>(builder.Configuration.GetSection(MaintenanceReminderSchedulerOptions.SectionName));
 builder.Services.Configure<ExportOptions>(builder.Configuration.GetSection("ExportOptions"));
+builder.Services.Configure<CartOptions>(builder.Configuration.GetSection(CartOptions.SectionName));
+builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
+builder.Services.Configure<ChatSettings>(builder.Configuration.GetSection(ChatSettings.SectionName));
 
-// Rate Limiting Configuration
+var redisConnection = builder.Configuration.GetConnectionString("Redis");
+var redisOptions = builder.Configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>() ?? new RedisOptions();
+
+if (!string.IsNullOrEmpty(redisConnection))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnection;
+        options.ConfigurationOptions = StackExchange.Redis.ConfigurationOptions.Parse(redisConnection);
+        options.ConfigurationOptions.ConnectTimeout = redisOptions.ConnectTimeout;
+        options.ConfigurationOptions.SyncTimeout = redisOptions.SyncTimeout;
+        options.ConfigurationOptions.AsyncTimeout = redisOptions.AsyncTimeout;
+        options.ConfigurationOptions.AbortOnConnectFail = redisOptions.AbortOnConnectFail;
+    });
+}
+else
+{
+    builder.Services.AddDistributedMemoryCache();
+}
+
 builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection("RateLimiting"));
 var rateLimitingOptions = builder.Configuration.GetSection("RateLimiting").Get<RateLimitingOptions>() ?? new RateLimitingOptions();
 
 if (rateLimitingOptions.Enabled)
 {
-    // Redis Configuration
-    if (rateLimitingOptions.UseRedis && !string.IsNullOrEmpty(builder.Configuration.GetConnectionString("Redis")))
-    {
-        var redisConnection = builder.Configuration.GetConnectionString("Redis");
-        builder.Services.AddStackExchangeRedisCache(options =>
-        {
-            options.Configuration = redisConnection;
-        });
-    }
-
-    // Rate Limiting Services
     builder.Services.AddRateLimiter(options =>
     {
         // Global Policy
@@ -314,6 +330,7 @@ builder.Services.AddScoped<IBookingStatisticsService, EVServiceCenter.Applicatio
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
 builder.Services.AddHttpClient<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
+builder.Services.AddScoped<EVServiceCenter.Application.Interfaces.IVNPayService, EVServiceCenter.Application.Services.VNPayService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
 builder.Services.AddScoped<ITechnicianAvailabilityService, EVServiceCenter.Application.Service.TechnicianAvailabilityService>();
@@ -325,10 +342,16 @@ builder.Services.AddScoped<IBookingReportsService, EVServiceCenter.Application.S
 builder.Services.AddScoped<ITechnicianReportsService, EVServiceCenter.Application.Service.TechnicianReportsService>();
 builder.Services.AddScoped<IInventoryReportsService, EVServiceCenter.Application.Service.InventoryReportsService>();
 builder.Services.AddScoped<ITechnicianDashboardService, EVServiceCenter.Application.Service.TechnicianDashboardService>();
+builder.Services.AddScoped<IDashboardSummaryService, EVServiceCenter.Application.Service.DashboardSummaryService>();
+builder.Services.AddScoped<IRevenueByStoreService, EVServiceCenter.Application.Service.RevenueByStoreService>();
+builder.Services.AddScoped<ITimeslotPopularityService, EVServiceCenter.Application.Service.TimeslotPopularityService>();
+builder.Services.AddScoped<ITotalRevenueService, EVServiceCenter.Application.Service.TotalRevenueService>();
+builder.Services.AddScoped<IServiceBookingStatsService, EVServiceCenter.Application.Service.ServiceBookingStatsService>();
 // WorkOrderService removed - functionality merged into BookingService
 
 // E-commerce services
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<ICartService, CartService>();
 // Wishlist removed
 // removed: ProductReviewService deprecated
 
@@ -372,6 +395,7 @@ builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 // Removed: IServicePartRepository registration (ServiceParts deprecated)
 builder.Services.AddScoped<IWorkOrderPartRepository, WorkOrderPartRepository>();
 builder.Services.AddScoped<IMaintenanceChecklistRepository, MaintenanceChecklistRepository>();
+builder.Services.AddScoped<IMaintenanceReminderRepository, MaintenanceReminderRepository>();
 // Removed: IMaintenanceChecklistItemRepository
 builder.Services.AddScoped<IMaintenanceChecklistResultRepository, MaintenanceChecklistResultRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
@@ -408,6 +432,8 @@ builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 builder.Services.AddHostedService<SlotAvailabilityUpdateService>();
 builder.Services.AddHostedService<PromotionExpiredUpdateService>();
 builder.Services.AddHostedService<ServicePackageExpiredUpdateService>();
+builder.Services.AddHostedService<AppointmentReminderDispatcherService>();
+builder.Services.AddHostedService<MaintenanceReminderDispatcherService>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JWT");
@@ -576,7 +602,10 @@ builder.Services.AddCors(options =>
 // ============================================================================
 
 // Controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(o =>
+{
+    o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 
 // Swagger Configuration

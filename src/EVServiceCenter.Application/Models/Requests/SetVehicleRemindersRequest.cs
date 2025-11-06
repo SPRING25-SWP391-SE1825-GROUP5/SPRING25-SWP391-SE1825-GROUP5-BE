@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using EVServiceCenter.Domain.Enums;
 
 namespace EVServiceCenter.Application.Models.Requests
 {
@@ -14,9 +15,13 @@ namespace EVServiceCenter.Application.Models.Requests
     {
         [Required]
         public int ServiceId { get; set; }
-        
+
         public DateTime? DueDate { get; set; }
-        
+
         public int? DueMileage { get; set; }
+
+        public ReminderType? Type { get; set; }
+
+        public int? CadenceDays { get; set; }
     }
 }

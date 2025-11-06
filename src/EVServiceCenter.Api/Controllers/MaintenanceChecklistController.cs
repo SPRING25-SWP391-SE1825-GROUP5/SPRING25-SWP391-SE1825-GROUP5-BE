@@ -17,6 +17,9 @@ namespace EVServiceCenter.Api.Controllers
         private readonly IMaintenanceChecklistResultRepository _resultRepo;
         private readonly IPdfInvoiceService _pdfInvoiceService;
         private readonly IBookingRepository _bookingRepo;
+        private readonly IPartRepository _partRepo;
+        private readonly IWorkOrderPartRepository _workOrderPartRepo;
+        private readonly INotificationService _notificationService;
         private readonly Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> _hub;
         // WorkOrderRepository removed - functionality merged into BookingRepository
         // Removed: IServicePartRepository _servicePartRepo;
@@ -26,12 +29,18 @@ namespace EVServiceCenter.Api.Controllers
             IMaintenanceChecklistResultRepository resultRepo,
             IPdfInvoiceService pdfInvoiceService,
             IBookingRepository bookingRepo,
+            IPartRepository partRepo,
+            IWorkOrderPartRepository workOrderPartRepo,
+            INotificationService notificationService,
             Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> hub)
         {
             _checkRepo = checkRepo;
             _resultRepo = resultRepo;
             _pdfInvoiceService = pdfInvoiceService;
             _bookingRepo = bookingRepo;
+            _partRepo = partRepo;
+            _workOrderPartRepo = workOrderPartRepo;
+            _notificationService = notificationService;
             _hub = hub;
             // WorkOrderRepository removed - functionality merged into BookingRepository
         }
@@ -71,8 +80,8 @@ namespace EVServiceCenter.Api.Controllers
             var data = results.Select(r => new
             {
                 resultId = r.ResultId,
-                partId = r.PartId,
-                partName = r.Part?.PartName,
+                categoryId = r.CategoryId,
+                categoryName = r.Category?.CategoryName,
                 description = r.Description,
                 result = r.Result,
                 status = r.Status
@@ -85,57 +94,123 @@ namespace EVServiceCenter.Api.Controllers
             });
         }
 
-        public class UpdateItemRequest { public string Description { get; set; } = string.Empty; public string Result { get; set; } = string.Empty; }
 
-        // PUT /api/maintenance-checklist/{bookingId}/{resultId}
-        [HttpPut("{bookingId:int}/{resultId:int}")]
-        public async Task<IActionResult> UpdateItem(int bookingId, int resultId, [FromBody] UpdateItemRequest req)
+
+        // Đánh giá theo ResultId (kỹ thuật viên đánh giá từng category trong checklist)
+        public class EvaluateResultRequest
         {
-            var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
-            if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
-
-            await _resultRepo.UpsertAsync(new MaintenanceChecklistResult
-            {
-                ResultId = resultId,
-                ChecklistId = checklist.ChecklistId,
-                Description = req.Description,
-                Result = req.Result,
-                Status = string.IsNullOrEmpty(req.Result) || req.Result == "PENDING" ? "PENDING" : "CHECKED"
-            });
-            return Ok(new { success = true });
+            public string Description { get; set; } = string.Empty;
+            public string Result { get; set; } = string.Empty;
+            public bool RequireReplacement { get; set; } = false;
+            public int ReplacementQuantity { get; set; } = 1;
+            public int? ReplacementPartId { get; set; }
         }
 
-        // Đánh giá theo PartID (đúng với yêu cầu: kỹ thuật viên đánh giá từng phụ tùng)
-        public class EvaluatePartRequest { public string Description { get; set; } = string.Empty; public string Result { get; set; } = string.Empty; }
-
-        // PUT /api/maintenance-checklist/{bookingId}/parts/{partId}
-        [HttpPut("{bookingId:int}/parts/{partId:int}")]
-        public async Task<IActionResult> EvaluatePart(int bookingId, int partId, [FromBody] EvaluatePartRequest req)
+        // PUT /api/maintenance-checklist/{bookingId}/results/{resultId}
+        [HttpPut("{bookingId:int}/results/{resultId:int}")]
+        public async Task<IActionResult> EvaluateResult(int bookingId, int resultId, [FromBody] EvaluateResultRequest req)
         {
             // Guard: only allow when booking is IN_PROGRESS
             var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
             if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
             var status = (booking.Status ?? string.Empty).ToUpperInvariant();
-            if (status == "CANCELED" || status == "CANCELLED" || status == "COMPLETED")
+            if (status == "CANCELED" || status == "CANCELLED" || status == "COMPLETED" || status == "PAID")
                 return BadRequest(new { success = false, message = "Không thể đánh giá checklist khi booking đã hoàn tất/hủy" });
+            if (status != "IN_PROGRESS")
+                return BadRequest(new { success = false, message = "Chỉ có thể đánh giá khi booking ở trạng thái IN_PROGRESS" });
 
             var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
-            // Tìm result theo PartID trong checklist này
+            // Tìm result theo ResultId
             var results = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
-            var existing = results.FirstOrDefault(r => r.PartId == partId);
+            var existing = results.FirstOrDefault(r => r.ResultId == resultId);
+            if (existing == null) return NotFound(new { success = false, message = "Checklist result không tồn tại" });
+
+            var normalizedResult = (req?.Result ?? string.Empty).Trim();
+            if (string.Equals(normalizedResult, "FAIL", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(req?.Description))
+            {
+                return BadRequest(new { success = false, message = "Mục đánh giá FAIL bắt buộc phải ghi lý do (description)" });
+            }
 
             var entity = new MaintenanceChecklistResult
             {
-                ResultId = existing?.ResultId ?? 0,
+                ResultId = resultId,
                 ChecklistId = checklist.ChecklistId,
-                PartId = partId,
-                Description = req.Description,
-                Result = req.Result,
-                Status = string.IsNullOrEmpty(req.Result) || req.Result == "PENDING" ? "PENDING" : "CHECKED"
+                CategoryId = existing.CategoryId,
+                Description = req?.Description ?? string.Empty,
+                Result = normalizedResult,
+                Status = string.IsNullOrEmpty(req?.Result) || req?.Result == "PENDING" ? "PENDING" : "CHECKED"
             };
             await _resultRepo.UpsertAsync(entity);
+
+            // Nếu FAIL + requireReplacement = true → tự động tạo WorkOrderPart với part cụ thể
+            if (string.Equals(normalizedResult, "FAIL", StringComparison.OrdinalIgnoreCase) &&
+                req?.RequireReplacement == true &&
+                req.ReplacementPartId.HasValue && req.ReplacementPartId.Value > 0)
+            {
+                var replacementPartId = req.ReplacementPartId.Value;
+                var part = await _partRepo.GetPartByIdAsync(replacementPartId);
+                if (part != null && part.IsActive)
+                {
+                    // Validate: replacement part must belong to the same category as the failed checklist item (if CategoryId exists)
+                    if (existing.CategoryId.HasValue)
+                    {
+                        var partsInCategory = await _partRepo.GetPartsByCategoryIdAsync(existing.CategoryId.Value);
+                        var isInCategory = partsInCategory.Any(p => p.PartId == replacementPartId);
+                        if (!isInCategory)
+                        {
+                            return BadRequest(new {
+                                success = false,
+                                message = $"Phụ tùng {replacementPartId} không thuộc category {existing.CategoryId}. Vui lòng chọn phụ tùng trong category '{existing.Category?.CategoryName ?? "(không rõ)"}'."
+                            });
+                        }
+                    }
+
+                    // Nếu ChecklistResult chưa có CategoryId thì suy ra từ part (nếu có mapping)
+                    int? derivedCategoryId = existing.CategoryId;
+                    if (!derivedCategoryId.HasValue)
+                    {
+                        derivedCategoryId = await _partRepo.GetFirstCategoryIdForPartAsync(replacementPartId);
+                        if (derivedCategoryId.HasValue)
+                        {
+                            existing.CategoryId = derivedCategoryId.Value;
+                            await _resultRepo.UpdateAsync(existing);
+                        }
+                    }
+
+                    var quantity = req.ReplacementQuantity > 0 ? req.ReplacementQuantity : 1;
+                    var existingWorkOrderPart = (await _workOrderPartRepo.GetByBookingIdAsync(bookingId))
+                        .FirstOrDefault(wop => wop.PartId == replacementPartId && wop.Status == "PENDING_CUSTOMER_APPROVAL");
+
+                    if (existingWorkOrderPart == null)
+                    {
+                        var workOrderPart = new WorkOrderPart
+                        {
+                            BookingId = bookingId,
+                            PartId = replacementPartId,
+                                CategoryId = derivedCategoryId,
+                            QuantityUsed = quantity,
+                            Status = "PENDING_CUSTOMER_APPROVAL"
+                        };
+                        await _workOrderPartRepo.AddAsync(workOrderPart);
+
+                        // Gửi notification cho customer
+                        var bookingDetails = await _bookingRepo.GetBookingWithDetailsByIdAsync(bookingId);
+                        var customerUserId = bookingDetails?.Customer?.UserId;
+                        if (customerUserId.HasValue)
+                        {
+                            await _notificationService.SendBookingNotificationAsync(
+                                customerUserId.Value,
+                                "Phụ tùng cần thay thế",
+                                $"Phụ tùng {part.PartName ?? $"#{replacementPartId}"} không đạt tiêu chuẩn. Vui lòng xác nhận có đồng ý thay thế không.",
+                                "WORKORDER_PART"
+                            );
+                        }
+                    }
+                }
+            }
+
             await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("checklist.updated", new object[] { new { bookingId } });
             return Ok(new { success = true });
         }
@@ -150,21 +225,63 @@ namespace EVServiceCenter.Api.Controllers
             var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
             if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
             var status = (booking.Status ?? string.Empty).ToUpperInvariant();
-            if (status == "CANCELED" || status == "CANCELLED" || status == "COMPLETED")
+            if (status == "CANCELED" || status == "CANCELLED" || status == "COMPLETED" || status == "PAID")
                 return BadRequest(new { success = false, message = "Không thể cập nhật checklist khi booking đã hoàn tất/hủy" });
+            if (status != "IN_PROGRESS")
+                return BadRequest(new { success = false, message = "Chỉ có thể cập nhật khi booking ở trạng thái IN_PROGRESS" });
 
             var checklist = await _checkRepo.GetByBookingIdAsync(bookingId);
             if (checklist == null) return NotFound(new { success = false, message = "Checklist chưa được khởi tạo" });
 
             var incoming = (req.Items ?? new System.Collections.Generic.List<BulkRequest.BulkItem>()).ToList();
-            var results = incoming.Select(i => new MaintenanceChecklistResult
+
+            var invalidFailItems = incoming
+                .Select((i, idx) => new { Item = i, Index = idx })
+                .Where(x => string.Equals((x.Item.Result ?? string.Empty).Trim(), "FAIL", StringComparison.OrdinalIgnoreCase)
+                            && string.IsNullOrWhiteSpace(x.Item.Description))
+                .ToList();
+            if (invalidFailItems.Any())
             {
-                ResultId = i.ResultId ?? 0,
+                return BadRequest(new {
+                    success = false,
+                    message = "Các mục FAIL bắt buộc phải ghi lý do (description)",
+                    items = invalidFailItems.Select(x => new { index = x.Index, resultId = x.Item.ResultId })
+                });
+            }
+
+            var existingResults = await _resultRepo.GetByChecklistIdAsync(checklist.ChecklistId);
+            var resultsById = existingResults.ToDictionary(r => r.ResultId);
+
+            var results = new System.Collections.Generic.List<MaintenanceChecklistResult>();
+            foreach (var i in incoming)
+            {
+                if (!i.ResultId.HasValue || i.ResultId.Value <= 0)
+                {
+                    continue;
+                }
+
+                if (!resultsById.TryGetValue(i.ResultId.Value, out var existing))
+                {
+                    continue;
+                }
+
+                if (existing.ChecklistId != checklist.ChecklistId)
+                {
+                    continue;
+                }
+
+                var result = new MaintenanceChecklistResult
+                {
+                    ResultId = existing.ResultId,
                 ChecklistId = checklist.ChecklistId,
+                    CategoryId = existing.CategoryId,
                 Description = i.Description,
-                Result = i.Result,
+                    Result = (i.Result ?? string.Empty).Trim(),
                 Status = string.IsNullOrEmpty(i.Result) || i.Result == "PENDING" ? "PENDING" : "CHECKED"
-            });
+                };
+                results.Add(result);
+            }
+
             await _resultRepo.UpsertManyAsync(results);
             await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("checklist.updated", new object[] { new { bookingId } });
             return Ok(new { success = true });
@@ -270,8 +387,8 @@ namespace EVServiceCenter.Api.Controllers
             public string Status { get; set; } = string.Empty;
         }
 
-        // POST /api/maintenance-checklist/{bookingId}/confirm
-        [HttpPost("{bookingId:int}/confirm")]
+        // PUT /api/maintenance-checklist/{bookingId}/confirm
+        [HttpPut("{bookingId:int}/confirm")]
         public async Task<IActionResult> ConfirmCompletion(int bookingId)
         {
             var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
@@ -304,8 +421,9 @@ namespace EVServiceCenter.Api.Controllers
                     success = false,
                     message = $"Không thể xác nhận hoàn thành. Còn {pendingItems.Count} phụ tùng chưa được đánh giá",
                     pendingItems = pendingItems.Select(item => new {
-                        partId = item.PartId,
-                        partName = item.Part?.PartName,
+                        resultId = item.ResultId,
+                        categoryId = item.CategoryId,
+                        categoryName = item.Category?.CategoryName ?? item.Description,
                         status = item.Status
                     })
                 });

@@ -15,16 +15,18 @@ public class OrderService : IOrderService
     private readonly IOrderRepository _orderRepository;
     private readonly ICustomerRepository _customerRepository;
     private readonly IPartRepository _partRepository;
+    private readonly ICartService _cartService;
 
     public OrderService(
         IOrderRepository orderRepository,
         ICustomerRepository customerRepository,
-        IPartRepository partRepository)
+        IPartRepository partRepository,
+        ICartService cartService)
     {
         _orderRepository = orderRepository;
-    
         _customerRepository = customerRepository;
         _partRepository = partRepository;
+        _cartService = cartService;
     }
 
     public async Task<List<OrderResponse>> GetByCustomerIdAsync(int customerId)
@@ -225,7 +227,6 @@ public class OrderService : IOrderService
         };
     }
 
-    // ============ CART OPERATIONS ============
     public async Task<OrderResponse> GetOrCreateCartAsync(int customerId)
     {
         var customer = await _customerRepository.GetCustomerByIdAsync(customerId);
@@ -273,7 +274,6 @@ public class OrderService : IOrderService
         if (part == null) throw new ArgumentException("Phụ tùng không tồn tại");
         if (!part.IsActive) throw new ArgumentException($"Sản phẩm {part.PartName} đã ngưng hoạt động");
 
-        // merge same part
         var existingItem = order.OrderItems.FirstOrDefault(i => i.PartId == partId);
         if (existingItem != null)
         {
@@ -345,5 +345,32 @@ public class OrderService : IOrderService
         order.UpdatedAt = DateTime.UtcNow;
         var updated = await _orderRepository.UpdateAsync(order);
         return MapToResponse(updated);
+    }
+
+    public async Task<OrderResponse> CheckoutCartFromRedisAsync(int customerId)
+    {
+        var cart = await _cartService.GetCartAsync(customerId);
+        if (cart == null || cart.Items.Count == 0)
+            throw new ArgumentException("Cart không tồn tại hoặc đang trống");
+
+        var order = new Order
+        {
+            CustomerId = customerId,
+            Status = "PENDING",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Notes = null,
+            OrderItems = cart.Items.Select(item => new OrderItem
+            {
+                PartId = item.PartId,
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice
+            }).ToList()
+        };
+
+        var created = await _orderRepository.AddAsync(order);
+        await _cartService.ClearCartAsync(customerId);
+
+        return MapToResponse(created);
     }
 }

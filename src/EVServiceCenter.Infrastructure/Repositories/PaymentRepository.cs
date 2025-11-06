@@ -49,6 +49,66 @@ namespace EVServiceCenter.Infrastructure.Repositories
             if (to.HasValue) query = query.Where(p => p.PaidAt != null && p.PaidAt <= to.Value);
             return await query.OrderBy(p => p.PaidAt).ToListAsync();
         }
+
+        public async Task<List<Payment>> GetCompletedPaymentsByCenterAndDateRangeAsync(int centerId, DateTime fromDate, DateTime toDate)
+        {
+            // Tối ưu query: join Payment -> Invoice -> Booking trong một query để tránh N+1
+            // Lọc payments theo status COMPLETED, PaidAt trong khoảng thời gian, và centerId thông qua Booking
+            var payments = await _db.Payments
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Booking)
+                .Where(p => p.Status == "COMPLETED" 
+                         && p.PaidAt != null 
+                         && p.PaidAt >= fromDate 
+                         && p.PaidAt <= toDate
+                         && p.Invoice != null 
+                         && p.Invoice.BookingId != null
+                         && p.Invoice.Booking != null 
+                         && p.Invoice.Booking.CenterId == centerId)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync();
+
+            return payments;
+        }
+
+        public async Task<List<Payment>> GetCompletedPaymentsByDateRangeAsync(DateTime fromDate, DateTime toDate)
+        {
+            // Lấy tất cả payments COMPLETED trong khoảng PaidAt và include Invoice (để dùng PartsAmount nếu cần)
+            return await _db.Payments
+                .Include(p => p.Invoice)
+                .Where(p => p.Status == "COMPLETED"
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
+                         && p.PaidAt <= toDate)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync();
+        }
+
+        public async Task<List<Payment>> GetPaymentsByDateRangeAsync(string status, DateTime fromDate, DateTime toDate)
+        {
+            status = status.Trim();
+            return await _db.Payments
+                .Include(p => p.Invoice)
+                .Where(p => p.Status == status
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
+                         && p.PaidAt <= toDate)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync();
+        }
+
+        public async Task<List<Payment>> GetPaymentsByStatusesAndDateRangeAsync(IEnumerable<string> statuses, DateTime fromDate, DateTime toDate)
+        {
+            var statusSet = statuses.Select(s => s.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return await _db.Payments
+                .Include(p => p.Invoice)
+                .Where(p => statusSet.Contains(p.Status)
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
+                         && p.PaidAt <= toDate)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync();
+        }
     }
 }
 

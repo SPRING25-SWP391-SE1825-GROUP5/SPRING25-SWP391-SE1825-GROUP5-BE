@@ -11,4 +11,5 @@ public class VehicleModelResponse
     public int VehicleCount { get; set; }
     public int CompatiblePartsCount { get; set; }
     public string? Version { get; set; }
+    public string? ImageUrl { get; set; }
 }

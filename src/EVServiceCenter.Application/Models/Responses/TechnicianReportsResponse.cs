@@ -63,4 +63,73 @@ namespace EVServiceCenter.Application.Models.Responses
         public string CustomerName { get; set; } = string.Empty;
         public string ServiceName { get; set; } = string.Empty;
     }
+
+    /// <summary>
+    /// Response cho API GetTechnicianBookingStats - thống kê số lượng booking của center và mỗi technician
+    /// </summary>
+    public class TechnicianBookingStatsResponse
+    {
+        public bool Success { get; set; } = true;
+        public int TotalBookings { get; set; }
+        public List<TechnicianBookingStatsItem> Technicians { get; set; } = new List<TechnicianBookingStatsItem>();
+    }
+
+    /// <summary>
+    /// Item trong danh sách thống kê booking của technician
+    /// </summary>
+    public class TechnicianBookingStatsItem
+    {
+        public int TechnicianId { get; set; }
+        public string TechnicianName { get; set; } = string.Empty;
+        public int BookingCount { get; set; }
+    }
+
+    /// <summary>
+    /// Response cho API GetCenterUtilizationRate - tỉ lệ lấp đầy của center
+    /// </summary>
+    public class UtilizationRateResponse
+    {
+        public bool Success { get; set; } = true;
+        public decimal AverageUtilizationRate { get; set; }
+        public int TotalSlots { get; set; }
+        public int BookedSlots { get; set; }
+        public string? Granularity { get; set; }
+        public List<UtilizationRateByPeriodItem> Items { get; set; } = new List<UtilizationRateByPeriodItem>();
+    }
+
+    /// <summary>
+    /// Item trong danh sách tỉ lệ lấp đầy theo period
+    /// </summary>
+    public class UtilizationRateByPeriodItem
+    {
+        public string Period { get; set; } = string.Empty;
+        public int TotalSlots { get; set; }
+        public int BookedSlots { get; set; }
+        public decimal UtilizationRate { get; set; }
+    }
+
+    /// <summary>
+    /// Response cho API GetPeakHourStats - thống kê số lượng slot được đặt theo giờ để đánh giá giờ cao điểm
+    /// </summary>
+    public class PeakHourStatsResponse
+    {
+        public bool Success { get; set; } = true;
+        public int CenterId { get; set; }
+        public string? CenterName { get; set; }
+        public int TotalBookedSlots { get; set; }
+        public List<PeakHourStatsItem> HourlyStats { get; set; } = new List<PeakHourStatsItem>();
+        public DateRangeInfo? DateRange { get; set; }
+        public DateTime LastUpdated { get; set; }
+    }
+
+    /// <summary>
+    /// Thống kê số slot được đặt theo giờ (time slot)
+    /// </summary>
+    public class PeakHourStatsItem
+    {
+        public int SlotId { get; set; }
+        public string SlotTime { get; set; } = string.Empty; // Format: "HH:mm"
+        public string SlotLabel { get; set; } = string.Empty;
+        public int TotalBookedSlots { get; set; }
+    }
 }

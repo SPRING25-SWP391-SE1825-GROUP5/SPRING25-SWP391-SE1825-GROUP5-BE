@@ -22,8 +22,8 @@ namespace EVServiceCenter.Application.Service
         private readonly ILogger<TechnicianService> _logger;
 
         public TechnicianService(
-            ITechnicianRepository technicianRepository, 
-            ITimeSlotRepository timeSlotRepository, 
+            ITechnicianRepository technicianRepository,
+            ITimeSlotRepository timeSlotRepository,
             IBookingRepository bookingRepository,
             IMaintenanceChecklistRepository maintenanceChecklistRepository,
             IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository,
@@ -117,13 +117,18 @@ namespace EVServiceCenter.Application.Service
                 var timeSlotAvailability = allTimeSlots.Select(slot =>
                 {
                     // var existingAvailability = availability.FirstOrDefault(a => a.SlotId == slot.SlotId);
-                    
+
+                    var slotLabel = slot.SlotLabel;
+                    if (slotLabel == "SA" || slotLabel == "CH")
+                    {
+                        slotLabel = null;
+                    }
                     return new TimeSlotAvailability
                     {
                         SlotId = slot.SlotId,
                         SlotTime = slot.SlotTime.ToString(),
-                        SlotLabel = slot.SlotLabel,
-                        IsAvailable = true, // existingAvailability?.IsAvailable ?? false,
+                        SlotLabel = slotLabel,
+                        IsAvailable = true,
                         AvailableTechnicians = new List<TechnicianAvailability>()
                     };
                 }).ToList();
@@ -241,7 +246,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Lấy tất cả bookings của technician
                 var bookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
-                
+
                 foreach (var booking in bookings)
                 {
                     var bookingItem = new TechnicianBookingItem
@@ -256,14 +261,14 @@ namespace EVServiceCenter.Application.Service
                         SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
                         TechnicianSlotId = booking.TechnicianTimeSlot?.TechnicianSlotId ?? 0,
                         SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
-                        SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel ?? "N/A", // Thêm SlotLabel
+                        SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel != "SA" && booking.TechnicianTimeSlot?.Slot?.SlotLabel != "CH" ? booking.TechnicianTimeSlot?.Slot?.SlotLabel : null,
                         CustomerName = booking.Customer?.User?.FullName ?? "N/A",
                         CustomerPhone = booking.Customer?.User?.PhoneNumber ?? "N/A",
                         VehiclePlate = booking.Vehicle?.LicensePlate ?? "N/A",
                         WorkStartTime = null, // Booking không có WorkStartTime
                         WorkEndTime = null   // Booking không có WorkEndTime
                     };
-                    
+
                     result.Bookings.Add(bookingItem);
                 }
 
@@ -287,7 +292,7 @@ namespace EVServiceCenter.Application.Service
             {
                 // Lấy booking detail
                 var booking = await _bookingRepository.GetBookingDetailAsync(bookingId);
-                
+
                 if (booking == null)
                 {
                     return new TechnicianBookingDetailResponse
@@ -317,26 +322,26 @@ namespace EVServiceCenter.Application.Service
                     Date = booking.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd") ?? "N/A",
                     SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
                     TechnicianSlotId = booking.TechnicianTimeSlot?.TechnicianSlotId ?? 0,
-                    
+
                     // Service Information
                     ServiceId = booking.ServiceId,
                     ServiceName = booking.Service?.ServiceName ?? "N/A",
                     ServiceDescription = booking.Service?.Description ?? "N/A",
                     ServicePrice = booking.Service?.BasePrice ?? 0,
-                    
+
                     // Center Information
                     CenterId = booking.CenterId,
                     CenterName = booking.Center?.CenterName ?? "N/A",
                     CenterAddress = booking.Center?.Address ?? "N/A",
                     CenterPhone = booking.Center?.PhoneNumber ?? "N/A",
-                    
+
                     // Customer Information
                     CustomerId = booking.CustomerId,
                     CustomerName = booking.Customer?.User?.FullName ?? "N/A",
                     CustomerPhone = booking.Customer?.User?.PhoneNumber ?? "N/A",
                     CustomerAddress = booking.Customer?.User?.Address ?? "N/A",
                     CustomerEmail = booking.Customer?.User?.Email ?? "N/A",
-                    
+
                     // Vehicle Information
                     VehicleId = booking.VehicleId,
                     VehiclePlate = booking.Vehicle?.LicensePlate ?? "N/A",
@@ -344,10 +349,10 @@ namespace EVServiceCenter.Application.Service
                     VehicleColor = booking.Vehicle?.Color ?? "N/A",
                     CurrentMileage = booking.Vehicle?.CurrentMileage ?? 0,
                     LastServiceDate = booking.Vehicle?.LastServiceDate?.ToDateTime(TimeOnly.MinValue),
-                    
+
                     // Maintenance Checklist
                     MaintenanceChecklists = await GetMaintenanceChecklistsAsync(bookingId),
-                    
+
                     // Additional Information
                     SpecialRequests = booking.SpecialRequests ?? "N/A",
                     CreatedAt = booking.CreatedAt,
@@ -387,9 +392,9 @@ namespace EVServiceCenter.Application.Service
                         resultInfos.Add(new MaintenanceChecklistResultInfo
                         {
                             ResultId = resultItem.ResultId,
-                            PartId = resultItem.PartId ?? 0,
-                            PartName = resultItem.Part?.PartName ?? "N/A",
-                            Description = resultItem.Part?.Brand ?? "N/A", // Sử dụng Brand làm Description
+                            CategoryId = resultItem.CategoryId ?? 0,
+                            CategoryName = resultItem.Category?.CategoryName ?? resultItem.Description ?? "N/A",
+                            Description = resultItem.Description ?? "N/A",
                             Result = resultItem.Result,
                             Status = resultItem.Status ?? "PENDING"
                         });

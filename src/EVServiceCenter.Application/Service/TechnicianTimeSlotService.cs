@@ -528,11 +528,16 @@ namespace EVServiceCenter.Application.Service
 
                     foreach (var slot in daySlots)
                     {
+                        var slotLabel = slot.Slot?.SlotLabel;
+                        if (slotLabel == "SA" || slotLabel == "CH")
+                        {
+                            slotLabel = null;
+                        }
                         var timeSlotAvailability = new TimeSlotAvailability
                         {
                             SlotId = slot.SlotId,
                             SlotTime = slot.Slot?.SlotTime.ToString() ?? "N/A",
-                            SlotLabel = slot.Slot?.SlotLabel ?? "N/A",
+                            SlotLabel = slotLabel,
                             IsAvailable = slot.IsAvailable,
                             AvailableTechnicians = new List<TechnicianAvailability>
                             {
@@ -726,14 +731,22 @@ namespace EVServiceCenter.Application.Service
                     TechnicianName = technician.User?.FullName ?? "N/A",
                     WorkDate = currentDate,
                     DayOfWeek = GetDayOfWeekVietnamese(currentDate.DayOfWeek),
-                    TimeSlots = daySlots.Select(slot => new TimeSlotStatus
+                    TimeSlots = daySlots.Select(slot =>
                     {
-                        SlotId = slot.SlotId,
-                        SlotTime = slot.Slot?.SlotTime.ToString() ?? "N/A",
-                        SlotLabel = slot.Slot?.SlotLabel ?? "N/A",
-                        IsAvailable = slot.IsAvailable,
-                        Notes = slot.Notes,
-                        TechnicianSlotId = slot.TechnicianSlotId
+                        var slotLabel = slot.Slot?.SlotLabel;
+                        if (slotLabel == "SA" || slotLabel == "CH")
+                        {
+                            slotLabel = null;
+                        }
+                        return new TimeSlotStatus
+                        {
+                            SlotId = slot.SlotId,
+                            SlotTime = slot.Slot?.SlotTime.ToString() ?? "N/A",
+                            SlotLabel = slotLabel,
+                            IsAvailable = slot.IsAvailable,
+                            Notes = slot.Notes,
+                            TechnicianSlotId = slot.TechnicianSlotId
+                        };
                     }).OrderBy(ts => ts.SlotId).ToList()
                 };
 

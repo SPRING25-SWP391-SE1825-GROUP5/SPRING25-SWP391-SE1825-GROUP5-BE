@@ -412,6 +412,7 @@ builder.Services.AddScoped<IServicePackageRepository, ServicePackageRepository>(
 builder.Services.AddScoped<ICustomerServiceCreditRepository, CustomerServiceCreditRepository>();
 builder.Services.AddScoped<IServiceCategoryRepository, ServiceCategoryRepository>();
 builder.Services.AddScoped<IServiceChecklistRepository, ServiceChecklistRepository>();
+builder.Services.AddScoped<IPartCategoryRepository, PartCategoryRepository>();
 
 // E-commerce repositories
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();

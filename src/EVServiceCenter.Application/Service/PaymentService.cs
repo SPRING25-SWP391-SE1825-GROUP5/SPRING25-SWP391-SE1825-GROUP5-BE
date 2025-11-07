@@ -167,11 +167,31 @@ public class PaymentService
         if (!response.IsSuccessStatusCode)
         {
             var errorJson = JsonDocument.Parse(responseText).RootElement;
-            var code = errorJson.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
-            var desc = errorJson.TryGetProperty("desc", out var errorDescElem) ? errorDescElem.GetString() : null;
-
-            if (code == "231" && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
+            
+            // Parse code - có thể là string hoặc number
+            string? codeStr = null;
+            if (errorJson.TryGetProperty("code", out var codeElem))
             {
+                if (codeElem.ValueKind == JsonValueKind.String)
+                    codeStr = codeElem.GetString();
+                else if (codeElem.ValueKind == JsonValueKind.Number)
+                    codeStr = codeElem.GetInt32().ToString();
+            }
+            
+            var errorDesc = errorJson.TryGetProperty("desc", out var errorDescElem) ? errorDescElem.GetString() : null;
+            var errorMessage = errorJson.TryGetProperty("message", out var errorMsgElem) ? errorMsgElem.GetString() : null;
+
+            // Check code 231 hoặc message/desc chứa "đã tồn tại" / "already exists"
+            bool isDuplicateError = (codeStr == "231") || 
+                (!string.IsNullOrEmpty(errorDesc) && (errorDesc.Contains("đã tồn tại", StringComparison.OrdinalIgnoreCase) || 
+                                                      errorDesc.Contains("already exists", StringComparison.OrdinalIgnoreCase))) ||
+                (!string.IsNullOrEmpty(errorMessage) && (errorMessage.Contains("đã tồn tại", StringComparison.OrdinalIgnoreCase) || 
+                                                         errorMessage.Contains("already exists", StringComparison.OrdinalIgnoreCase)));
+
+            if (isDuplicateError)
+            {
+                _logger.LogInformation("Phát hiện lỗi đơn thanh toán đã tồn tại (code: {Code}), đang lấy link hiện tại cho orderCode {OrderCode}", codeStr, orderCode);
+                
                 // Ưu tiên lấy checkoutUrl trực tiếp từ error response nếu có
                 if (errorJson.TryGetProperty("data", out var errData) && errData.ValueKind == JsonValueKind.Object)
                 {
@@ -180,24 +200,82 @@ public class PaymentService
                         var reuseUrl = errUrl.GetString();
                         if (!string.IsNullOrEmpty(reuseUrl))
                         {
+                            _logger.LogInformation("Đã lấy checkoutUrl từ error response: {Url}", reuseUrl);
                             return reuseUrl;
                         }
                     }
                 }
 
-                // Fallback: Lấy link cũ từ PayOS
+                // Luôn cố gắng lấy link cũ từ PayOS bằng cách gọi GET payment-requests/{orderCode}
+                _logger.LogInformation("Đang gọi PayOS API để lấy link thanh toán hiện tại cho orderCode {OrderCode}", orderCode);
                 var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
                 if (!string.IsNullOrEmpty(existingUrl))
                 {
+                    _logger.LogInformation("Đã lấy checkoutUrl từ PayOS API thành công: {Url}", existingUrl);
                     return existingUrl;
                 }
-                // Nếu không lấy được link cũ, tiếp tục throw exception
+                
+                // Nếu không lấy được link cũ, log error và throw exception với message rõ ràng
+                _logger.LogError("Không thể lấy payment link hiện tại cho orderCode {OrderCode} từ PayOS. PayOS response: {ResponseText}", orderCode, responseText);
+                throw new InvalidOperationException($"Đơn thanh toán đã tồn tại nhưng không thể lấy link hiện tại từ PayOS. Vui lòng thử lại sau hoặc liên hệ hỗ trợ. Response: {responseText}");
             }
 
-        response.EnsureSuccessStatusCode();
+            response.EnsureSuccessStatusCode();
         }
 
         var json = JsonDocument.Parse(responseText).RootElement;
+        
+        // Kiểm tra code trong response (có thể là success nhưng vẫn có code 231)
+        string? responseCodeStr = null;
+        if (json.TryGetProperty("code", out var responseCodeElem))
+        {
+            if (responseCodeElem.ValueKind == JsonValueKind.String)
+                responseCodeStr = responseCodeElem.GetString();
+            else if (responseCodeElem.ValueKind == JsonValueKind.Number)
+                responseCodeStr = responseCodeElem.GetInt32().ToString();
+        }
+        
+        var responseDesc = json.TryGetProperty("desc", out var responseDescElem) ? responseDescElem.GetString() : null;
+        var responseMessage = json.TryGetProperty("message", out var responseMsgElem) ? responseMsgElem.GetString() : null;
+        
+        // Nếu response có code 231 (dù status code là 200), xử lý như lỗi duplicate
+        bool isDuplicateInSuccess = (responseCodeStr == "231") || 
+            (!string.IsNullOrEmpty(responseDesc) && (responseDesc.Contains("đã tồn tại", StringComparison.OrdinalIgnoreCase) || 
+                                                      responseDesc.Contains("already exists", StringComparison.OrdinalIgnoreCase))) ||
+            (!string.IsNullOrEmpty(responseMessage) && (responseMessage.Contains("đã tồn tại", StringComparison.OrdinalIgnoreCase) || 
+                                                         responseMessage.Contains("already exists", StringComparison.OrdinalIgnoreCase)));
+        
+        if (isDuplicateInSuccess)
+        {
+            _logger.LogInformation("Phát hiện code 231 trong success response, đang lấy link hiện tại cho orderCode {OrderCode}", orderCode);
+            
+            // Thử lấy checkoutUrl từ response trước
+            if (json.TryGetProperty("data", out var dupDataElem) && dupDataElem.ValueKind == JsonValueKind.Object &&
+                dupDataElem.TryGetProperty("checkoutUrl", out var dupUrlElem) && dupUrlElem.ValueKind == JsonValueKind.String)
+            {
+                var dupUrl = dupUrlElem.GetString();
+                if (!string.IsNullOrEmpty(dupUrl))
+                {
+                    _logger.LogInformation("Đã lấy checkoutUrl từ success response với code 231: {Url}", dupUrl);
+                    return dupUrl;
+                }
+            }
+            
+            // Luôn cố gắng lấy link cũ từ PayOS
+            _logger.LogInformation("Đang gọi PayOS API để lấy link thanh toán hiện tại cho orderCode {OrderCode} (từ success response)", orderCode);
+            var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
+            if (!string.IsNullOrEmpty(existingUrl))
+            {
+                _logger.LogInformation("Đã lấy checkoutUrl từ PayOS API thành công (từ success response với code 231): {Url}", existingUrl);
+                return existingUrl;
+            }
+            
+            // Nếu không lấy được, log error và throw exception
+            _logger.LogError("Không thể lấy payment link hiện tại cho orderCode {OrderCode} từ PayOS (success response với code 231). Response: {ResponseText}", orderCode, responseText);
+            throw new InvalidOperationException($"Đơn thanh toán đã tồn tại nhưng không thể lấy link hiện tại từ PayOS. Vui lòng thử lại sau hoặc liên hệ hỗ trợ. Response: {responseText}");
+        }
+        
+        // Xử lý response thành công bình thường
         if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
             dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
         {

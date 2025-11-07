@@ -78,11 +78,12 @@ public class PaymentController : ControllerBase
 			}
 
             // Dùng service chuẩn để tính tổng tiền: dịch vụ/gói + parts CONSUMED - khuyến mãi
+            // Service sẽ tự động xử lý trường hợp link đã tồn tại và lấy link hiện tại
             var checkoutUrl = await _paymentService.CreateBookingPaymentLinkAsync(bookingId);
 
 			return Ok(new {
 				success = true,
-				message = "Tạo link thanh toán thành công",
+				message = checkoutUrl != null ? "Link thanh toán đã sẵn sàng" : "Tạo link thanh toán thành công",
 				data = new { checkoutUrl }
 			});
 		}

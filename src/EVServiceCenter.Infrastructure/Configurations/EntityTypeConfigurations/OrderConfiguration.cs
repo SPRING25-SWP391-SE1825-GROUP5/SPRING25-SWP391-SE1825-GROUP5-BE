@@ -13,6 +13,10 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
 
         entity.Property(e => e.OrderId).HasColumnName("OrderID");
         entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
+        entity.Property(e => e.PayOSOrderCode).HasColumnName("PayOSOrderCode");
+
+        // Unique index cho PayOSOrderCode để đảm bảo không trùng
+        entity.HasIndex(e => e.PayOSOrderCode).IsUnique().HasFilter("[PayOSOrderCode] IS NOT NULL");
 
         entity.Property(e => e.Status).HasDefaultValue("PENDING");
 

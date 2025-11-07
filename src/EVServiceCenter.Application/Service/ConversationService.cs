@@ -101,32 +101,7 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Check if customer already has an active conversation (prevent duplicate conversations)
-                if (customerUserId.HasValue || !string.IsNullOrWhiteSpace(customerGuestSessionId))
-                {
-                    Conversation? existingConversation = null;
-
-                    if (customerUserId.HasValue)
-                    {
-                        var customerConversations = await _conversationRepository.GetConversationsByUserIdAsync(customerUserId.Value);
-                        // Get the most recent conversation
-                        existingConversation = customerConversations.FirstOrDefault();
-                    }
-                    else if (!string.IsNullOrWhiteSpace(customerGuestSessionId))
-                    {
-                        var guestConversations = await _conversationRepository.GetConversationsByGuestSessionIdAsync(customerGuestSessionId);
-                        existingConversation = guestConversations.FirstOrDefault();
-                    }
-
-                    if (existingConversation != null)
-                    {
-                        _logger.LogInformation(
-                            "Customer (UserId: {UserId}, GuestSessionId: {GuestSessionId}) already has conversation {ConversationId}. Returning existing conversation.",
-                            customerUserId, customerGuestSessionId ?? "(null)", existingConversation.ConversationId);
-                        return await MapToConversationResponseAsync(existingConversation);
-                    }
-                }
-
+                // Always create new conversation (allow multiple conversations per customer)
                 var conversation = new Conversation
                 {
                     Subject = request.Subject,
@@ -546,6 +521,7 @@ namespace EVServiceCenter.Application.Service
                 }
 
                 var centerStaff = await _staffRepository.GetStaffByCenterIdAsync(newCenterId);
+                centerStaff = FilterNonManagerStaff(centerStaff).ToList();
                 var activeStaff = centerStaff.Where(s => s.IsActive).FirstOrDefault();
 
                 if (activeStaff == null)
@@ -872,7 +848,7 @@ namespace EVServiceCenter.Application.Service
                 if (!targetCenterId.HasValue)
                 {
                     var allStaff = await _staffRepository.GetAllStaffAsync();
-                    var activeStaff = allStaff.Where(s => s.IsActive).ToList();
+                    var activeStaff = FilterNonManagerStaff(allStaff).Where(s => s.IsActive).ToList();
 
                     if (!activeStaff.Any())
                     {
@@ -905,7 +881,7 @@ namespace EVServiceCenter.Application.Service
                 if (targetCenterId.HasValue)
                 {
                     var centerStaff = await _staffRepository.GetStaffByCenterIdAsync(targetCenterId.Value);
-                    var activeStaff = centerStaff.Where(s => s.IsActive).ToList();
+                    var activeStaff = FilterNonManagerStaff(centerStaff).Where(s => s.IsActive).ToList();
 
                     if (activeStaff.Any())
                     {
@@ -934,9 +910,9 @@ namespace EVServiceCenter.Application.Service
                             "No active staff found in center {CenterId} for customer {CustomerId}",
                             targetCenterId.Value, customerUserId);
 
-                        // Fallback to any active staff
+                        // Fallback to any active staff (excluding managers)
                         var allStaff = await _staffRepository.GetAllStaffAsync();
-                        var anyActiveStaff = allStaff.Where(s => s.IsActive).FirstOrDefault();
+                        var anyActiveStaff = FilterNonManagerStaff(allStaff).Where(s => s.IsActive).FirstOrDefault();
                         return anyActiveStaff;
                     }
                 }
@@ -948,6 +924,11 @@ namespace EVServiceCenter.Application.Service
                 _logger.LogError(ex, "Error assigning staff to conversation for customer {CustomerId}", customerUserId);
                 return null;
             }
+        }
+
+        private IEnumerable<Staff> FilterNonManagerStaff(IEnumerable<Staff> staffList)
+        {
+            return staffList.Where(s => s.User != null && s.User.Role != _chatSettings.Roles.Manager);
         }
 
         private async Task<(double? lat, double? lng)> GetCustomerLocationAsync(int customerUserId, decimal? requestLat, decimal? requestLng)

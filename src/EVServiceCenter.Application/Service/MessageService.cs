@@ -45,16 +45,36 @@ namespace EVServiceCenter.Application.Service
                 }
 
 
-                if (!request.SenderUserId.HasValue && string.IsNullOrEmpty(request.SenderGuestSessionId))
+                // Validate: Constraint CK_Messages_SenderXor requires either SenderUserId OR SenderGuestSessionId, not both
+                if (!request.SenderUserId.HasValue && string.IsNullOrWhiteSpace(request.SenderGuestSessionId))
                 {
                     throw new ArgumentException("Either SenderUserId or SenderGuestSessionId must be provided");
+                }
+
+                // Normalize: If both are provided, prioritize SenderUserId and set SenderGuestSessionId to null
+                // If SenderUserId is provided, ensure SenderGuestSessionId is null
+                // If SenderGuestSessionId is provided, ensure SenderUserId is null
+                int? normalizedSenderUserId = request.SenderUserId;
+                string? normalizedSenderGuestSessionId = request.SenderGuestSessionId;
+
+                if (normalizedSenderUserId.HasValue)
+                {
+                    // If userId is provided, guestSessionId must be null
+                    normalizedSenderGuestSessionId = null;
+                }
+                else if (!string.IsNullOrWhiteSpace(normalizedSenderGuestSessionId))
+                {
+                    // If guestSessionId is provided, userId must be null
+                    normalizedSenderUserId = null;
+                    // Normalize guestSessionId (trim whitespace)
+                    normalizedSenderGuestSessionId = normalizedSenderGuestSessionId.Trim();
                 }
 
                 var message = new Message
                 {
                     ConversationId = request.ConversationId,
-                    SenderUserId = request.SenderUserId,
-                    SenderGuestSessionId = request.SenderGuestSessionId,
+                    SenderUserId = normalizedSenderUserId,
+                    SenderGuestSessionId = normalizedSenderGuestSessionId,
                     Content = request.Content,
                     AttachmentUrl = request.AttachmentUrl,
                     ReplyToMessageId = request.ReplyToMessageId,
@@ -250,11 +270,25 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException($"Message with ID {messageId} not found");
                 }
 
+                // Normalize: Constraint CK_Messages_SenderXor requires either SenderUserId OR SenderGuestSessionId, not both
+                int? normalizedSenderUserId = request.SenderUserId;
+                string? normalizedSenderGuestSessionId = request.SenderGuestSessionId;
+
+                if (normalizedSenderUserId.HasValue)
+                {
+                    normalizedSenderGuestSessionId = null;
+                }
+                else if (!string.IsNullOrWhiteSpace(normalizedSenderGuestSessionId))
+                {
+                    normalizedSenderUserId = null;
+                    normalizedSenderGuestSessionId = normalizedSenderGuestSessionId.Trim();
+                }
+
                 var replyMessage = new Message
                 {
                     ConversationId = originalMessage.ConversationId,
-                    SenderUserId = request.SenderUserId,
-                    SenderGuestSessionId = request.SenderGuestSessionId,
+                    SenderUserId = normalizedSenderUserId,
+                    SenderGuestSessionId = normalizedSenderGuestSessionId,
                     Content = request.Content,
                     AttachmentUrl = request.AttachmentUrl,
                     ReplyToMessageId = messageId,
@@ -486,6 +520,30 @@ namespace EVServiceCenter.Application.Service
                 _logger.LogError(ex, "Error broadcasting message {MessageId} to conversation {ConversationId}",
                     message.MessageId, message.ConversationId);
 
+            }
+        }
+
+        public async Task NotifyTypingAsync(long conversationId, int? userId, string? guestSessionId, bool isTyping)
+        {
+            try
+            {
+                // Validate conversation exists
+                if (!await _conversationRepository.ConversationExistsAsync(conversationId))
+                {
+                    throw new ArgumentException($"Conversation with ID {conversationId} not found");
+                }
+
+                // Broadcast typing indicator via ChatHubService
+                await _chatHubService.NotifyTypingAsync(conversationId, userId, guestSessionId, isTyping);
+
+                _logger.LogInformation("Broadcasted typing indicator for conversation {ConversationId}, UserId: {UserId}, GuestSessionId: {GuestSessionId}, IsTyping: {IsTyping}",
+                    conversationId, userId, guestSessionId, isTyping);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error broadcasting typing indicator for conversation {ConversationId}",
+                    conversationId);
+                throw;
             }
         }
     }

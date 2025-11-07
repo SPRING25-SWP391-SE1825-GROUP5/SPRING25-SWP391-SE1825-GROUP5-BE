@@ -127,10 +127,15 @@ namespace EVServiceCenter.Api
             var senderUserId = userId ?? currentUserId;
 
             var group = $"conversation:{conversationId}";
+
+            // Log before sending
+            logger.LogInformation("Preparing to send typing notification: ConversationId={ConversationId}, UserId={UserId}, IsTyping={IsTyping}, Group={Group}, ConnectionId={ConnectionId}",
+                conversationId, senderUserId, isTyping, group, Context.ConnectionId);
+
             await Clients.OthersInGroup(group).SendAsync("UserTyping", new
             {
                 ConversationId = conversationId,
-                UserId = senderUserId,
+                UserId = senderUserId ?? string.Empty, // Ensure not null
                 UserRole = currentUserRole,
                 UserEmail = currentUserEmail,
                 GuestSessionId = guestSessionId,

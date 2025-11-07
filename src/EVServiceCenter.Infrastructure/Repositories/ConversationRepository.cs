@@ -191,5 +191,22 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Take(pageSize)
                 .ToListAsync();
         }
+
+        public async Task DeleteConversationAsync(long conversationId)
+        {
+            var conversation = await _context.Conversations
+                .Include(c => c.ConversationMembers)
+                .Include(c => c.Messages)
+                .FirstOrDefaultAsync(c => c.ConversationId == conversationId);
+
+            if (conversation != null)
+            {
+                // Delete related entities first (if cascade delete is not configured)
+                _context.ConversationMembers.RemoveRange(conversation.ConversationMembers);
+                _context.Messages.RemoveRange(conversation.Messages);
+                _context.Conversations.Remove(conversation);
+                await _context.SaveChangesAsync();
+            }
+        }
     }
 }

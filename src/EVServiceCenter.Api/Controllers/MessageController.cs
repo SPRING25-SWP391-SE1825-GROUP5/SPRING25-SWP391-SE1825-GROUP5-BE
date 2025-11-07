@@ -31,12 +31,29 @@ namespace EVServiceCenter.Api.Controllers
                 if (validationResult != null) return validationResult;
 
 
-                if (!request.SenderUserId.HasValue && string.IsNullOrEmpty(request.SenderGuestSessionId))
+                // Normalize: Constraint CK_Messages_SenderXor requires either SenderUserId OR SenderGuestSessionId, not both
+                // If both are missing, try to get current user ID
+                if (!request.SenderUserId.HasValue && string.IsNullOrWhiteSpace(request.SenderGuestSessionId))
                 {
                     var currentUserId = GetCurrentUserId();
                     if (currentUserId.HasValue)
                     {
                         request.SenderUserId = currentUserId.Value;
+                        request.SenderGuestSessionId = null; // Explicitly set to null
+                    }
+                }
+                else
+                {
+                    // Normalize: If SenderUserId is provided, ensure SenderGuestSessionId is null
+                    // If SenderGuestSessionId is provided, ensure SenderUserId is null
+                    if (request.SenderUserId.HasValue)
+                    {
+                        request.SenderGuestSessionId = null;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(request.SenderGuestSessionId))
+                    {
+                        request.SenderUserId = null;
+                        request.SenderGuestSessionId = request.SenderGuestSessionId.Trim();
                     }
                 }
 
@@ -178,13 +195,29 @@ namespace EVServiceCenter.Api.Controllers
                 var validationResult = ValidateModelState();
                 if (validationResult != null) return validationResult;
 
-                // Fallback to current user if sender not provided
-                if (!request.SenderUserId.HasValue && string.IsNullOrEmpty(request.SenderGuestSessionId))
+               // Normalize: Constraint CK_Messages_SenderXor requires either SenderUserId OR SenderGuestSessionId, not both
+               // If both are missing, try to get current user ID
+               if (!request.SenderUserId.HasValue && string.IsNullOrWhiteSpace(request.SenderGuestSessionId))
                 {
                     var currentUserId = GetCurrentUserId();
                     if (currentUserId.HasValue)
                     {
                         request.SenderUserId = currentUserId.Value;
+                        request.SenderGuestSessionId = null; // Explicitly set to null
+                    }
+                }
+                else
+                {
+                    // Normalize: If SenderUserId is provided, ensure SenderGuestSessionId is null
+                    // If SenderGuestSessionId is provided, ensure SenderUserId is null
+                    if (request.SenderUserId.HasValue)
+                    {
+                        request.SenderGuestSessionId = null;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(request.SenderGuestSessionId))
+                    {
+                        request.SenderUserId = null;
+                        request.SenderGuestSessionId = request.SenderGuestSessionId.Trim();
                     }
                 }
 
@@ -196,6 +229,49 @@ namespace EVServiceCenter.Api.Controllers
 
                 return HandleException(ex, "Gửi tin nhắn");
             }
+        }
+
+        /// <summary>
+        /// Gửi typing indicator cho conversation
+        /// </summary>
+        [HttpPost("conversations/{conversationId}/typing")]
+        public async Task<IActionResult> SendTypingIndicator(long conversationId, [FromBody] TypingIndicatorRequest request)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+                var currentGuestSessionId = request?.GuestSessionId;
+
+                // Validate: Phải có userId hoặc guestSessionId
+                if (!currentUserId.HasValue && string.IsNullOrEmpty(currentGuestSessionId))
+                {
+                    return BadRequest(new { success = false, message = "Phải có userId hoặc guestSessionId" });
+                }
+
+                // Gửi typing indicator qua ChatHubService
+                await _messageService.NotifyTypingAsync(conversationId, currentUserId, currentGuestSessionId, request?.IsTyping ?? true);
+
+                return Ok(new {
+                    success = true,
+                    message = "Đã gửi typing indicator",
+                    data = new {
+                        conversationId,
+                        userId = currentUserId,
+                        guestSessionId = currentGuestSessionId,
+                        isTyping = request?.IsTyping ?? true
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Gửi typing indicator");
+            }
+        }
+
+        public class TypingIndicatorRequest
+        {
+            public bool? IsTyping { get; set; } = true;
+            public string? GuestSessionId { get; set; }
         }
 
 

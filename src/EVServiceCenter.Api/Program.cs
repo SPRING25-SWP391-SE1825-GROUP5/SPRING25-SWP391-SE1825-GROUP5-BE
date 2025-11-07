@@ -74,6 +74,7 @@ builder.Services.Configure<BookingRealtimeOptions>(builder.Configuration.GetSect
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<PaymentService>();
+builder.Services.AddScoped<PaymentService>();
 builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
 builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection("GuestSession"));
 builder.Services.Configure<PromotionOptions>(builder.Configuration.GetSection("Promotion"));

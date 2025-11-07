@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 
 namespace EVServiceCenter.Application.Interfaces
@@ -37,5 +38,14 @@ namespace EVServiceCenter.Application.Interfaces
         /// <param name="newCenterId">The new center ID</param>
         /// <param name="reason">The reason for reassignment (optional)</param>
         Task NotifyCenterReassignedAsync(long conversationId, int? oldStaffUserId, int newStaffUserId, int newCenterId, string? reason = null);
+
+        /// <summary>
+        /// Broadcasts read status update to all members in a conversation
+        /// </summary>
+        /// <param name="conversationId">The conversation ID</param>
+        /// <param name="userId">The user ID who read the message</param>
+        /// <param name="guestSessionId">The guest session ID (optional)</param>
+        /// <param name="lastReadAt">The timestamp when the message was read</param>
+        Task NotifyMessageReadAsync(long conversationId, int? userId, string? guestSessionId, DateTime lastReadAt);
     }
 }

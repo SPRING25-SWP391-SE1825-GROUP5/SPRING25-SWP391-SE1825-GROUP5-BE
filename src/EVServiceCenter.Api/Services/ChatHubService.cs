@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using Microsoft.AspNetCore.SignalR;
@@ -130,6 +131,30 @@ namespace EVServiceCenter.Api.Services
                 throw;
             }
         }
+
+        public async Task NotifyMessageReadAsync(long conversationId, int? userId, string? guestSessionId, DateTime lastReadAt)
+        {
+            try
+            {
+                var groupName = $"{_chatSettings.SignalR.ConversationGroupPrefix}{conversationId}";
+                var readData = new
+                {
+                    ConversationId = conversationId,
+                    UserId = userId,
+                    GuestSessionId = guestSessionId,
+                    LastReadAt = lastReadAt,
+                    Timestamp = System.DateTime.UtcNow
+                };
+
+                await _hubContext.Clients.Group(groupName).SendAsync(_chatSettings.SignalR.MessageReadMethod, readData);
+
+                _logger.LogInformation("Broadcasted read status to conversation {ConversationId}", conversationId);
+            }
+            catch (System.Exception ex)
+            {
+                _logger.LogError(ex, "Error broadcasting read status to conversation {ConversationId}", conversationId);
+                throw;
+            }
+        }
     }
 }
-

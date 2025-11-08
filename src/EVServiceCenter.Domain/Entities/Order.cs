@@ -22,6 +22,9 @@ public partial class Order
     // PayOS orderCode - unique random number để tránh conflict với Booking
     public int? PayOSOrderCode { get; set; }
 
+    // Fulfillment center ID - center nào đã fulfill order này (trừ kho)
+    public int? FulfillmentCenterId { get; set; }
+
     public virtual Customer Customer { get; set; }
 
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
@@ -31,4 +34,7 @@ public partial class Order
     public virtual ICollection<Feedback> Feedbacks { get; set; } = new List<Feedback>();
 
     public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
+
+    // Navigation property cho FulfillmentCenter
+    public virtual ServiceCenter? FulfillmentCenter { get; set; }
 }

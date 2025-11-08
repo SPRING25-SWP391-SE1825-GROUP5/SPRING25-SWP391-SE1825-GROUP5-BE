@@ -11,9 +11,10 @@ namespace EVServiceCenter.Application.Models.Requests
         public int? SenderUserId { get; set; }
         public string? SenderGuestSessionId { get; set; }
 
-        [Required(ErrorMessage = "Nội dung tin nhắn là bắt buộc")]
+        // Content is optional - can be empty if there's an attachment
+        // But at least one of Content or AttachmentUrl must be provided (handled in service layer)
         [StringLength(4000, ErrorMessage = "Nội dung tin nhắn không được vượt quá 4000 ký tự")]
-        public string Content { get; set; } = string.Empty;
+        public string? Content { get; set; }
 
         [StringLength(1000, ErrorMessage = "URL đính kèm không được vượt quá 1000 ký tự")]
         public string? AttachmentUrl { get; set; }

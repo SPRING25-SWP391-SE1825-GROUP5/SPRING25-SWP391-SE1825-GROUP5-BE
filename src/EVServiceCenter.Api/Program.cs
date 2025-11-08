@@ -67,13 +67,16 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
-    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(5); // More frequent keep-alive for faster detection
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    options.MaximumReceiveMessageSize = 32 * 1024; // 32KB max message size
+    options.StreamBufferCapacity = 10; // Buffer capacity for streaming
 });
 builder.Services.Configure<BookingRealtimeOptions>(builder.Configuration.GetSection("BookingRealtime"));
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<PaymentService>();
+builder.Services.AddScoped<PaymentService>();
 builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
 builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection("GuestSession"));
 builder.Services.Configure<PromotionOptions>(builder.Configuration.GetSection("Promotion"));
@@ -748,8 +751,9 @@ app.MapControllers();
 app.MapHub<EVServiceCenter.Api.BookingHub>("/hubs/booking");
 app.MapHub<EVServiceCenter.Api.ChatHub>("/hubs/chat", options =>
 {
-    options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets |
-                       Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
+    options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets; // Only WebSocket for lowest latency
+    options.WebSockets.CloseTimeout = TimeSpan.FromSeconds(5);
+    options.LongPolling.PollTimeout = TimeSpan.FromSeconds(10);
 })
 .RequireAuthorization(); // Add JWT authentication requirement
 

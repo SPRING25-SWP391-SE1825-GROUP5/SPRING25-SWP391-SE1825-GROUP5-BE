@@ -38,10 +38,12 @@ public class PaymentService
     private readonly INotificationService _notificationService;
     private readonly ICustomerServiceCreditRepository _customerServiceCreditRepository;
     private readonly IPdfInvoiceService _pdfInvoiceService;
+    private readonly IInventoryRepository _inventoryRepository;
+    private readonly ICenterRepository _centerRepository;
 
     private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, IPromotionRepository promotionRepository, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService, INotificationService notificationService)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, IPromotionRepository promotionRepository, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService, INotificationService notificationService, IInventoryRepository inventoryRepository, ICenterRepository centerRepository)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -62,6 +64,8 @@ public class PaymentService
         _customerServiceCreditRepository = customerServiceCreditRepository;
         _pdfInvoiceService = pdfInvoiceService;
         _notificationService = notificationService;
+        _inventoryRepository = inventoryRepository;
+        _centerRepository = centerRepository;
         }
 
 	/// <summary>
@@ -1009,7 +1013,47 @@ public class PaymentService
 					invoice.Status = "PAID";
 				}
 
-				var totalAmount = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? 0m;
+				// Tính PartsAmount từ OrderItems
+				var partsAmount = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? 0m;
+				_logger.LogInformation("Tính PartsAmount cho order {OrderId}: {PartsAmount:N0} VNĐ", order.OrderId, partsAmount);
+
+				// Xác định fulfillment center (center có đủ stock cho tất cả items)
+				int? fulfillmentCenterId = null;
+				if (order.OrderItems != null && order.OrderItems.Any())
+				{
+					_logger.LogInformation("Đang xác định fulfillment center cho order {OrderId}...", order.OrderId);
+					fulfillmentCenterId = await DetermineFulfillmentCenterAsync(order.OrderItems);
+
+					if (fulfillmentCenterId.HasValue)
+					{
+						_logger.LogInformation("Đã xác định fulfillment center {CenterId} cho order {OrderId}", fulfillmentCenterId.Value, order.OrderId);
+
+						// Lưu fulfillment center vào Order
+						order.FulfillmentCenterId = fulfillmentCenterId.Value;
+						await _orderRepository.UpdateAsync(order);
+						_logger.LogInformation("Đã lưu fulfillment center {CenterId} vào Order {OrderId}", fulfillmentCenterId.Value, order.OrderId);
+
+						// Trừ kho từ fulfillment center
+						_logger.LogInformation("Đang trừ kho từ fulfillment center {CenterId}...", fulfillmentCenterId.Value);
+						await DeductInventoryFromCenterAsync(fulfillmentCenterId.Value, order.OrderItems);
+						_logger.LogInformation("Đã trừ kho thành công từ fulfillment center {CenterId}", fulfillmentCenterId.Value);
+					}
+					else
+					{
+						_logger.LogWarning("Không tìm thấy fulfillment center có đủ stock cho order {OrderId}", order.OrderId);
+						throw new InvalidOperationException($"Không tìm thấy trung tâm có đủ hàng để fulfill order #{orderId}. Vui lòng kiểm tra lại tồn kho.");
+					}
+				}
+				else
+				{
+					_logger.LogWarning("Order {OrderId} không có OrderItems", order.OrderId);
+				}
+
+				// Update Invoice.PartsAmount
+				_logger.LogInformation("Cập nhật PartsAmount vào Invoice {InvoiceId}: {PartsAmount:N0} VNĐ", invoice.InvoiceId, partsAmount);
+				await _invoiceRepository.UpdateAmountsAsync(invoice.InvoiceId, 0m, 0m, partsAmount);
+
+				var totalAmount = partsAmount;
 				var amount = (int)Math.Round(totalAmount);
 
 				_logger.LogInformation("Tạo payment record cho order {OrderId}", order.OrderId);
@@ -1044,6 +1088,76 @@ public class PaymentService
             await _notificationService.SendBookingNotificationAsync(uid, $"Đơn hàng #{order.OrderId}", "Thanh toán thành công", "ORDER");
         }
 		return true;
+	}
+
+	/// <summary>
+	/// Xác định fulfillment center có đủ stock cho tất cả OrderItems
+	/// Trả về center đầu tiên có đủ stock, hoặc null nếu không tìm thấy
+	/// </summary>
+	private async Task<int?> DetermineFulfillmentCenterAsync(IEnumerable<Domain.Entities.OrderItem> orderItems)
+	{
+		var centers = await _centerRepository.GetActiveCentersAsync();
+
+		foreach (var center in centers)
+		{
+			var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(center.CenterId);
+			if (inventory == null) continue;
+
+			var inventoryParts = inventory.InventoryParts ?? new List<Domain.Entities.InventoryPart>();
+
+			// Kiểm tra xem center này có đủ stock cho tất cả items không
+			bool hasEnoughStock = orderItems.All(oi =>
+			{
+				var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == oi.PartId);
+				return invPart != null && invPart.CurrentStock >= oi.Quantity;
+			});
+
+			if (hasEnoughStock)
+			{
+				_logger.LogInformation("Tìm thấy fulfillment center {CenterId} có đủ stock", center.CenterId);
+				return center.CenterId;
+			}
+		}
+
+		_logger.LogWarning("Không tìm thấy fulfillment center có đủ stock");
+		return null;
+	}
+
+	/// <summary>
+	/// Trừ kho từ fulfillment center cho tất cả OrderItems
+	/// </summary>
+	private async Task DeductInventoryFromCenterAsync(int centerId, IEnumerable<Domain.Entities.OrderItem> orderItems)
+	{
+		var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+		if (inventory == null)
+		{
+			throw new InvalidOperationException($"Không tìm thấy inventory cho center {centerId}");
+		}
+
+		var inventoryParts = inventory.InventoryParts ?? new List<Domain.Entities.InventoryPart>();
+
+		foreach (var orderItem in orderItems)
+		{
+			var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+			if (invPart == null)
+			{
+				throw new InvalidOperationException($"Không tìm thấy part {orderItem.PartId} trong inventory của center {centerId}");
+			}
+
+			if (invPart.CurrentStock < orderItem.Quantity)
+			{
+				throw new InvalidOperationException($"Không đủ stock cho part {orderItem.PartId} trong center {centerId}. Hiện có: {invPart.CurrentStock}, cần: {orderItem.Quantity}");
+			}
+
+			// Trừ kho
+			invPart.CurrentStock -= orderItem.Quantity;
+			_logger.LogInformation("Đã trừ {Quantity} units của part {PartId} từ center {CenterId}. Stock còn lại: {RemainingStock}",
+				orderItem.Quantity, orderItem.PartId, centerId, invPart.CurrentStock);
+		}
+
+		// Save changes
+		await _inventoryRepository.UpdateInventoryAsync(inventory);
+		_logger.LogInformation("Đã cập nhật inventory cho center {CenterId}", centerId);
 	}
 }
 

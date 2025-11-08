@@ -11,17 +11,28 @@ namespace EVServiceCenter.Application.Models.Responses
         public string? SenderGuestSessionId { get; set; }
         public string Content { get; set; } = string.Empty;
         public string? AttachmentUrl { get; set; }
+        public List<AttachmentResponse>? Attachments { get; set; }
         public long? ReplyToMessageId { get; set; }
         public DateTime CreatedAt { get; set; }
-        
+
         // Sender information
         public string? SenderName { get; set; }
         public string? SenderEmail { get; set; }
         public string? SenderAvatar { get; set; }
         public bool IsGuest { get; set; }
-        
+
         // Reply information
         public MessageResponse? ReplyToMessage { get; set; }
         public List<MessageResponse> Replies { get; set; } = new List<MessageResponse>();
+    }
+
+    public class AttachmentResponse
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Type { get; set; } = "image";
+        public string Url { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public long Size { get; set; }
+        public string? Thumbnail { get; set; }
     }
 }

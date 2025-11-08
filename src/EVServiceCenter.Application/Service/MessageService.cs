@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
@@ -44,17 +45,42 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException($"Conversation with ID {request.ConversationId} not found");
                 }
 
+                // Validate: At least one of Content or AttachmentUrl must be provided
+                if (string.IsNullOrWhiteSpace(request.Content) && string.IsNullOrWhiteSpace(request.AttachmentUrl))
+                {
+                    throw new ArgumentException("Either Content or AttachmentUrl must be provided");
+                }
 
-                if (!request.SenderUserId.HasValue && string.IsNullOrEmpty(request.SenderGuestSessionId))
+                // Validate: Constraint CK_Messages_SenderXor requires either SenderUserId OR SenderGuestSessionId, not both
+                if (!request.SenderUserId.HasValue && string.IsNullOrWhiteSpace(request.SenderGuestSessionId))
                 {
                     throw new ArgumentException("Either SenderUserId or SenderGuestSessionId must be provided");
+                }
+
+                // Normalize: If both are provided, prioritize SenderUserId and set SenderGuestSessionId to null
+                // If SenderUserId is provided, ensure SenderGuestSessionId is null
+                // If SenderGuestSessionId is provided, ensure SenderUserId is null
+                int? normalizedSenderUserId = request.SenderUserId;
+                string? normalizedSenderGuestSessionId = request.SenderGuestSessionId;
+
+                if (normalizedSenderUserId.HasValue)
+                {
+                    // If userId is provided, guestSessionId must be null
+                    normalizedSenderGuestSessionId = null;
+                }
+                else if (!string.IsNullOrWhiteSpace(normalizedSenderGuestSessionId))
+                {
+                    // If guestSessionId is provided, userId must be null
+                    normalizedSenderUserId = null;
+                    // Normalize guestSessionId (trim whitespace)
+                    normalizedSenderGuestSessionId = normalizedSenderGuestSessionId.Trim();
                 }
 
                 var message = new Message
                 {
                     ConversationId = request.ConversationId,
-                    SenderUserId = request.SenderUserId,
-                    SenderGuestSessionId = request.SenderGuestSessionId,
+                    SenderUserId = normalizedSenderUserId,
+                    SenderGuestSessionId = normalizedSenderGuestSessionId,
                     Content = request.Content,
                     AttachmentUrl = request.AttachmentUrl,
                     ReplyToMessageId = request.ReplyToMessageId,
@@ -250,11 +276,25 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException($"Message with ID {messageId} not found");
                 }
 
+                // Normalize: Constraint CK_Messages_SenderXor requires either SenderUserId OR SenderGuestSessionId, not both
+                int? normalizedSenderUserId = request.SenderUserId;
+                string? normalizedSenderGuestSessionId = request.SenderGuestSessionId;
+
+                if (normalizedSenderUserId.HasValue)
+                {
+                    normalizedSenderGuestSessionId = null;
+                }
+                else if (!string.IsNullOrWhiteSpace(normalizedSenderGuestSessionId))
+                {
+                    normalizedSenderUserId = null;
+                    normalizedSenderGuestSessionId = normalizedSenderGuestSessionId.Trim();
+                }
+
                 var replyMessage = new Message
                 {
                     ConversationId = originalMessage.ConversationId,
-                    SenderUserId = request.SenderUserId,
-                    SenderGuestSessionId = request.SenderGuestSessionId,
+                    SenderUserId = normalizedSenderUserId,
+                    SenderGuestSessionId = normalizedSenderGuestSessionId,
                     Content = request.Content,
                     AttachmentUrl = request.AttachmentUrl,
                     ReplyToMessageId = messageId,
@@ -407,13 +447,56 @@ namespace EVServiceCenter.Application.Service
                 ConversationId = message.ConversationId,
                 SenderUserId = message.SenderUserId,
                 SenderGuestSessionId = message.SenderGuestSessionId,
-                Content = message.Content ?? string.Empty,
+                Content = message.Content ?? string.Empty, // Ensure Content is never null for response
                 AttachmentUrl = message.AttachmentUrl,
                 ReplyToMessageId = message.ReplyToMessageId,
                 CreatedAt = message.CreatedAt,
                 IsGuest = !message.SenderUserId.HasValue
             };
 
+            // Build attachments array from AttachmentUrl (same logic as BroadcastMessageToConversationAsync)
+            var attachments = new List<AttachmentResponse>();
+            if (!string.IsNullOrEmpty(message.AttachmentUrl))
+            {
+                try
+                {
+                    // Try to parse as JSON array first
+                    var urls = JsonSerializer.Deserialize<List<string>>(message.AttachmentUrl);
+                    if (urls != null && urls.Count > 0)
+                    {
+                        // Multiple URLs (JSON array)
+                        foreach (var url in urls)
+                        {
+                            if (!string.IsNullOrEmpty(url))
+                            {
+                                attachments.Add(new AttachmentResponse
+                                {
+                                    Id = $"att-{message.MessageId}-{attachments.Count}",
+                                    Type = "image",
+                                    Url = url,
+                                    Name = url.Split('/').LastOrDefault() ?? "image",
+                                    Size = 0,
+                                    Thumbnail = url
+                                });
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Not a JSON array, treat as single URL string
+                    attachments.Add(new AttachmentResponse
+                    {
+                        Id = $"att-{message.MessageId}",
+                        Type = "image",
+                        Url = message.AttachmentUrl,
+                        Name = message.AttachmentUrl.Split('/').LastOrDefault() ?? "image",
+                        Size = 0,
+                        Thumbnail = message.AttachmentUrl
+                    });
+                }
+            }
+            response.Attachments = attachments.Count > 0 ? attachments : null;
 
             if (message.SenderUserId.HasValue && message.SenderUser != null)
             {
@@ -443,12 +526,59 @@ namespace EVServiceCenter.Application.Service
             try
             {
 
+                // Build attachments array from AttachmentUrl
+                // AttachmentUrl can be:
+                // 1. A single URL string (backward compatibility)
+                // 2. A JSON array of URLs (for multiple attachments)
+                var attachments = new List<object>();
+                if (!string.IsNullOrEmpty(message.AttachmentUrl))
+                {
+                    try
+                    {
+                        // Try to parse as JSON array first
+                        var urls = JsonSerializer.Deserialize<List<string>>(message.AttachmentUrl);
+                        if (urls != null && urls.Count > 0)
+                        {
+                            // Multiple URLs (JSON array)
+                            foreach (var url in urls)
+                            {
+                                if (!string.IsNullOrEmpty(url))
+                                {
+                                    attachments.Add(new
+                                    {
+                                        id = $"att-{message.MessageId}-{attachments.Count}",
+                                        type = "image",
+                                        url = url,
+                                        name = url.Split('/').LastOrDefault() ?? "image",
+                                        size = 0,
+                                        thumbnail = url
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Not a JSON array, treat as single URL string
+                        attachments.Add(new
+                        {
+                            id = $"att-{message.MessageId}",
+                            type = "image",
+                            url = message.AttachmentUrl,
+                            name = message.AttachmentUrl.Split('/').LastOrDefault() ?? "image",
+                            size = 0,
+                            thumbnail = message.AttachmentUrl
+                        });
+                    }
+                }
+
                 var messageData = new
                 {
                     MessageId = message.MessageId,
                     ConversationId = message.ConversationId,
                     Content = message.Content,
                     AttachmentUrl = message.AttachmentUrl,
+                    Attachments = attachments,
                     ReplyToMessageId = message.ReplyToMessageId,
                     SenderUserId = message.SenderUserId,
                     SenderGuestSessionId = message.SenderGuestSessionId,
@@ -486,6 +616,30 @@ namespace EVServiceCenter.Application.Service
                 _logger.LogError(ex, "Error broadcasting message {MessageId} to conversation {ConversationId}",
                     message.MessageId, message.ConversationId);
 
+            }
+        }
+
+        public async Task NotifyTypingAsync(long conversationId, int? userId, string? guestSessionId, bool isTyping)
+        {
+            try
+            {
+                // Validate conversation exists
+                if (!await _conversationRepository.ConversationExistsAsync(conversationId))
+                {
+                    throw new ArgumentException($"Conversation with ID {conversationId} not found");
+                }
+
+                // Broadcast typing indicator via ChatHubService
+                await _chatHubService.NotifyTypingAsync(conversationId, userId, guestSessionId, isTyping);
+
+                _logger.LogInformation("Broadcasted typing indicator for conversation {ConversationId}, UserId: {UserId}, GuestSessionId: {GuestSessionId}, IsTyping: {IsTyping}",
+                    conversationId, userId, guestSessionId, isTyping);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error broadcasting typing indicator for conversation {ConversationId}",
+                    conversationId);
+                throw;
             }
         }
     }

@@ -45,6 +45,7 @@ public class SignalRSettings
     public string UserTypingMethod { get; set; } = "UserTyping";
     public string NewConversationMethod { get; set; } = "NewConversation";
     public string CenterReassignedMethod { get; set; } = "CenterReassigned";
+    public string MessageReadMethod { get; set; } = "MessageRead";
 }
 
 public class AssignmentSettings

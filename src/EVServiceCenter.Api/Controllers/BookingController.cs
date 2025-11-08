@@ -924,12 +924,12 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             return status switch
             {
-                "CONFIRMED" => $"Booking #{bookingId} của bạn đã được xác nhận. Vui lòng đến đúng giờ hẹn.",
-                "IN_PROGRESS" => $"Booking #{bookingId} đang được thực hiện. Kỹ thuật viên đã bắt đầu làm việc.",
-                "COMPLETED" => $"Booking #{bookingId} đã hoàn thành. Vui lòng thanh toán để hoàn tất.",
-                "PAID" => $"Booking #{bookingId} đã được thanh toán thành công. Cảm ơn bạn!",
-                "CANCELLED" => $"Booking #{bookingId} đã bị hủy. Vui lòng liên hệ trung tâm để biết thêm chi tiết.",
-                _ => $"Booking #{bookingId} đã được cập nhật trạng thái thành {status}."
+                "CONFIRMED" => $"Lịch hẹn #{bookingId} của bạn đã được xác nhận. Vui lòng đến đúng giờ hẹn.",
+                "IN_PROGRESS" => $"Lịch hẹn #{bookingId} của bạn đang được thực hiện.",
+                "COMPLETED" => $"Lịch hẹn #{bookingId} của bạn đã hoàn thành. Vui lòng thanh toán.",
+                "PAID" => $"Lịch hẹn #{bookingId} của bạn đã được thanh toán thành công. Cảm ơn bạn!",
+                "CANCELLED" => $"Lịch hẹn #{bookingId} của bạn đã bị hủy.",
+                _ => $"Lịch hẹn #{bookingId} của bạn đã được cập nhật trạng thái thành {status}."
             };
         }
 
@@ -939,7 +939,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             {
                 "CONFIRMED" => $"Booking #{bookingId} đã được xác nhận. Vui lòng chuẩn bị làm việc.",
                 "IN_PROGRESS" => $"Booking #{bookingId} đang được thực hiện.",
-                "COMPLETED" => $"Booking #{bookingId} đã hoàn thành. Chờ thanh toán.",
+                "COMPLETED" => $"Booking #{bookingId} đã hoàn thành. Chờ khách hàng thanh toán.",
                 "PAID" => $"Booking #{bookingId} đã được thanh toán thành công.",
                 "CANCELLED" => $"Booking #{bookingId} đã bị hủy.",
                 _ => $"Booking #{bookingId} đã được cập nhật trạng thái thành {status}."

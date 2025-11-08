@@ -1017,31 +1017,83 @@ public class PaymentService
 				var partsAmount = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? 0m;
 				_logger.LogInformation("Tính PartsAmount cho order {OrderId}: {PartsAmount:N0} VNĐ", order.OrderId, partsAmount);
 
-				// Xác định fulfillment center (center có đủ stock cho tất cả items)
+				// Xác định fulfillment center
+				// Ưu tiên: Sử dụng FulfillmentCenterId đã lưu trong Order (được chọn từ FE)
+				// Fallback: Tự động chọn center có đủ stock (logic cũ)
 				int? fulfillmentCenterId = null;
 				if (order.OrderItems != null && order.OrderItems.Any())
 				{
-					_logger.LogInformation("Đang xác định fulfillment center cho order {OrderId}...", order.OrderId);
-					fulfillmentCenterId = await DetermineFulfillmentCenterAsync(order.OrderItems);
-
-					if (fulfillmentCenterId.HasValue)
+					// Nếu Order đã có FulfillmentCenterId (được chọn từ FE khi tạo order)
+					if (order.FulfillmentCenterId.HasValue)
 					{
-						_logger.LogInformation("Đã xác định fulfillment center {CenterId} cho order {OrderId}", fulfillmentCenterId.Value, order.OrderId);
+						fulfillmentCenterId = order.FulfillmentCenterId.Value;
+						_logger.LogInformation("Sử dụng FulfillmentCenterId đã lưu {CenterId} cho order {OrderId} (được chọn từ FE)", 
+							fulfillmentCenterId.Value, order.OrderId);
 
-						// Lưu fulfillment center vào Order
-						order.FulfillmentCenterId = fulfillmentCenterId.Value;
-						await _orderRepository.UpdateAsync(order);
-						_logger.LogInformation("Đã lưu fulfillment center {CenterId} vào Order {OrderId}", fulfillmentCenterId.Value, order.OrderId);
+						// Validate lại stock trước khi trừ (có thể đã hết hàng từ lúc tạo order đến lúc thanh toán)
+						var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(fulfillmentCenterId.Value);
+						if (inventory == null)
+						{
+							_logger.LogWarning("Inventory không tồn tại cho center {CenterId} của order {OrderId}", 
+								fulfillmentCenterId.Value, order.OrderId);
+							throw new InvalidOperationException($"Kho của chi nhánh ID {fulfillmentCenterId.Value} không tồn tại. Vui lòng chọn chi nhánh khác.");
+						}
 
-						// Trừ kho từ fulfillment center
-						_logger.LogInformation("Đang trừ kho từ fulfillment center {CenterId}...", fulfillmentCenterId.Value);
+						var inventoryParts = inventory.InventoryParts ?? new List<Domain.Entities.InventoryPart>();
+						foreach (var orderItem in order.OrderItems)
+						{
+							var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+							if (invPart == null)
+							{
+								_logger.LogWarning("Part {PartId} không có trong inventory của center {CenterId} cho order {OrderId}", 
+									orderItem.PartId, fulfillmentCenterId.Value, order.OrderId);
+								throw new InvalidOperationException(
+									$"Phụ tùng ID {orderItem.PartId} không có trong kho của chi nhánh ID {fulfillmentCenterId.Value}. " +
+									$"Vui lòng chọn chi nhánh khác.");
+							}
+
+							if (invPart.CurrentStock < orderItem.Quantity)
+							{
+								_logger.LogWarning("Không đủ stock cho part {PartId} trong center {CenterId} cho order {OrderId}. Hiện có: {CurrentStock}, cần: {Quantity}", 
+									orderItem.PartId, fulfillmentCenterId.Value, order.OrderId, invPart.CurrentStock, orderItem.Quantity);
+								throw new InvalidOperationException(
+									$"Không đủ hàng cho phụ tùng ID {orderItem.PartId} tại chi nhánh ID {fulfillmentCenterId.Value}. " +
+									$"Hiện có: {invPart.CurrentStock}, cần: {orderItem.Quantity}. Vui lòng chọn chi nhánh khác.");
+							}
+						}
+
+						// Trừ kho từ fulfillment center đã chọn
+						_logger.LogInformation("Đang trừ kho từ fulfillment center {CenterId} (được chọn từ FE)...", fulfillmentCenterId.Value);
 						await DeductInventoryFromCenterAsync(fulfillmentCenterId.Value, order.OrderItems);
 						_logger.LogInformation("Đã trừ kho thành công từ fulfillment center {CenterId}", fulfillmentCenterId.Value);
 					}
 					else
 					{
-						_logger.LogWarning("Không tìm thấy fulfillment center có đủ stock cho order {OrderId}", order.OrderId);
-						throw new InvalidOperationException($"Không tìm thấy trung tâm có đủ hàng để fulfill order #{orderId}. Vui lòng kiểm tra lại tồn kho.");
+						// Fallback: Tự động chọn center có đủ stock (logic cũ - backward compatibility)
+						_logger.LogInformation("Order {OrderId} chưa có FulfillmentCenterId, đang tự động chọn center có đủ stock...", order.OrderId);
+						fulfillmentCenterId = await DetermineFulfillmentCenterAsync(order.OrderItems);
+
+						if (fulfillmentCenterId.HasValue)
+						{
+							_logger.LogInformation("Đã tự động chọn fulfillment center {CenterId} cho order {OrderId}", 
+								fulfillmentCenterId.Value, order.OrderId);
+
+							// Lưu fulfillment center vào Order
+							order.FulfillmentCenterId = fulfillmentCenterId.Value;
+							await _orderRepository.UpdateAsync(order);
+							_logger.LogInformation("Đã lưu fulfillment center {CenterId} vào Order {OrderId}", 
+								fulfillmentCenterId.Value, order.OrderId);
+
+							// Trừ kho từ fulfillment center
+							_logger.LogInformation("Đang trừ kho từ fulfillment center {CenterId}...", fulfillmentCenterId.Value);
+							await DeductInventoryFromCenterAsync(fulfillmentCenterId.Value, order.OrderItems);
+							_logger.LogInformation("Đã trừ kho thành công từ fulfillment center {CenterId}", fulfillmentCenterId.Value);
+						}
+						else
+						{
+							_logger.LogWarning("Không tìm thấy fulfillment center có đủ stock cho order {OrderId}", order.OrderId);
+							throw new InvalidOperationException($"Không tìm thấy trung tâm có đủ hàng để fulfill order #{orderId}. Vui lòng kiểm tra lại tồn kho.");
+						}
 					}
 				}
 				else

@@ -255,6 +255,37 @@ public class OrderController : ControllerBase
     }
 
     /// <summary>
+    /// Cập nhật fulfillment center cho đơn hàng
+    /// </summary>
+    [HttpPut("{orderId}/fulfillment-center")]
+    public async Task<IActionResult> UpdateFulfillmentCenter(int orderId, [FromBody] UpdateFulfillmentCenterRequest request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+            }
+
+            var order = await _orderService.UpdateFulfillmentCenterAsync(orderId, request);
+            return Ok(new { success = true, data = order, message = "Đã cập nhật chi nhánh thành công" });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Lấy tất cả đơn hàng (Admin)
     /// </summary>
     [HttpGet("admin")]

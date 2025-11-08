@@ -36,6 +36,7 @@ public class OrderRepository : IOrderRepository
             .Include(o => o.Customer)
             .Include(o => o.OrderItems)
                 .ThenInclude(oi => oi.Part)
+            .Include(o => o.FulfillmentCenter)  // Include FulfillmentCenter để lấy tên chi nhánh
             // Removed: OrderStatusHistories
             .FirstOrDefaultAsync(o => o.OrderId == orderId);
     }

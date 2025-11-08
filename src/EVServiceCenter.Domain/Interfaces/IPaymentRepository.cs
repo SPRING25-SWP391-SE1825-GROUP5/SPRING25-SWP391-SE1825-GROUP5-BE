@@ -37,6 +37,25 @@ namespace EVServiceCenter.Domain.Interfaces
         /// Lấy tất cả payments theo danh sách trạng thái và khoảng thời gian PaidAt (toàn hệ thống)
         /// </summary>
         Task<List<Payment>> GetPaymentsByStatusesAndDateRangeAsync(IEnumerable<string> statuses, DateTime fromDate, DateTime toDate);
+
+        /// <summary>
+        /// Lấy payments từ orders (e-commerce) theo FulfillmentCenterId và khoảng thời gian PaidAt
+        /// Tối ưu query bằng cách join Payment -> Invoice -> Order trong một query
+        /// </summary>
+        /// <param name="centerId">ID trung tâm (FulfillmentCenterId)</param>
+        /// <param name="fromDate">Ngày bắt đầu (filter theo PaidAt)</param>
+        /// <param name="toDate">Ngày kết thúc (filter theo PaidAt)</param>
+        /// <returns>Danh sách payments với Invoice và Order đã include</returns>
+        Task<List<Payment>> GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync(int centerId, DateTime fromDate, DateTime toDate);
+
+        /// <summary>
+        /// Lấy payments PAID từ orders (e-commerce) theo FulfillmentCenterId và khoảng thời gian PaidAt
+        /// </summary>
+        /// <param name="centerId">ID trung tâm (FulfillmentCenterId)</param>
+        /// <param name="fromDate">Ngày bắt đầu (filter theo PaidAt)</param>
+        /// <param name="toDate">Ngày kết thúc (filter theo PaidAt)</param>
+        /// <returns>Danh sách payments với Invoice và Order đã include</returns>
+        Task<List<Payment>> GetPaidPaymentsByFulfillmentCenterAndDateRangeAsync(int centerId, DateTime fromDate, DateTime toDate);
     }
 }
 

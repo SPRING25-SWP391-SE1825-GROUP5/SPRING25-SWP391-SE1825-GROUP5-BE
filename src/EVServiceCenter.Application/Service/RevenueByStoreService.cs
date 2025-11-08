@@ -114,8 +114,9 @@ namespace EVServiceCenter.Application.Service
 
         /// <summary>
         /// Tính doanh thu cho một cửa hàng cụ thể
-        /// Sử dụng repository method tối ưu để lấy payments COMPLETED/PAID theo centerId và date range (theo PaidAt)
-        /// Đảm bảo đồng nhất với DashboardSummaryService và ServiceBookingStatsService
+        /// Tổng doanh thu = Booking revenue + Order revenue
+        /// - Booking revenue: từ payments của bookings có CenterId = centerId
+        /// - Order revenue: từ payments của orders có FulfillmentCenterId = centerId
         /// </summary>
         private async Task<StoreRevenueData> CalculateStoreRevenueAsync(
             int centerId,
@@ -125,40 +126,59 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Sử dụng repository method tối ưu để lấy payments COMPLETED theo centerId và date range (theo PaidAt)
-                var completedPayments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(
+                // ========== BOOKING REVENUE ==========
+                // Lấy payments COMPLETED từ bookings của center này
+                var completedBookingPayments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(
                     centerId, 
                     fromDate, 
                     toDate);
 
-                // Lấy tất cả payments PAID trong date range với Invoice và Booking đã include
-                // Sau đó filter theo centerId
+                // Lấy payments PAID từ bookings của center này
                 var statuses = new[] { "PAID" };
                 var allPaidPayments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(
                     statuses, 
                     fromDate, 
                     toDate);
 
-                // Filter payments PAID theo centerId thông qua Invoice -> Booking
-                var paidPaymentsForCenter = allPaidPayments
+                // Filter payments PAID từ bookings theo centerId
+                var paidBookingPayments = allPaidPayments
                     .Where(p => p.Invoice != null 
                              && p.Invoice.BookingId != null 
                              && p.Invoice.Booking != null 
                              && p.Invoice.Booking.CenterId == centerId)
                     .ToList();
 
-                // Tính tổng doanh thu từ payments COMPLETED và PAID
-                var totalRevenue = completedPayments.Sum(p => (decimal)p.Amount) 
-                                 + paidPaymentsForCenter.Sum(p => (decimal)p.Amount);
+                // Tính booking revenue
+                var bookingRevenue = completedBookingPayments.Sum(p => (decimal)p.Amount) 
+                                   + paidBookingPayments.Sum(p => (decimal)p.Amount);
 
-                // Đếm số booking đã hoàn thành: đếm số invoice unique có payments trong date range
-                var completedInvoiceIds = completedPayments
+                // ========== ORDER REVENUE ==========
+                // Lấy payments COMPLETED hoặc PAID từ orders có FulfillmentCenterId = centerId
+                // Note: GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync đã lấy cả COMPLETED và PAID
+                var orderPayments = await _paymentRepository.GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync(
+                    centerId, 
+                    fromDate, 
+                    toDate);
+
+                // Tính order revenue
+                var orderRevenue = orderPayments.Sum(p => (decimal)p.Amount);
+
+                // ========== TỔNG DOANH THU ==========
+                // Tổng doanh thu = Booking revenue + Order revenue
+                var totalRevenue = bookingRevenue + orderRevenue;
+
+                // Đếm số booking đã hoàn thành: đếm số invoice unique có payments từ bookings
+                var completedBookingInvoiceIds = completedBookingPayments
                     .Select(p => p.InvoiceId)
-                    .Concat(paidPaymentsForCenter.Select(p => p.InvoiceId))
+                    .Concat(paidBookingPayments.Select(p => p.InvoiceId))
                     .Distinct()
                     .ToList();
 
-                var completedCount = completedInvoiceIds.Count;
+                var completedCount = completedBookingInvoiceIds.Count;
+
+                _logger.LogInformation(
+                    "Tính doanh thu cho center {CenterId}: Booking revenue = {BookingRevenue}, Order revenue = {OrderRevenue}, Total = {TotalRevenue}",
+                    centerId, bookingRevenue, orderRevenue, totalRevenue);
 
                 return new StoreRevenueData
                 {

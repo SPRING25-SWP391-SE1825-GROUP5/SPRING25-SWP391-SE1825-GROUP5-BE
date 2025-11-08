@@ -25,7 +25,7 @@ namespace EVServiceCenter.Application.Models.Responses
         public decimal TotalRevenue { get; set; }
 
         /// <summary>
-        /// Tổng số nhân viên của toàn hệ thống (STAFF + TECHNICIAN)
+        /// Tổng số nhân viên của toàn hệ thống (STAFF + TECHNICIAN + MANAGER, chỉ đếm user active)
         /// </summary>
         public int TotalEmployees { get; set; }
 

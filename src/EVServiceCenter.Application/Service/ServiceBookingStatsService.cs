@@ -42,21 +42,37 @@ namespace EVServiceCenter.Application.Service
 
             _logger.LogInformation("Service booking stats from {From} to {To}", fromDate, toDate);
 
-            var allBookings = await _bookingRepository.GetAllBookingsAsync();
+            // Tối ưu: Lấy tất cả payments COMPLETED/PAID trong date range (theo PaidAt) với Invoice và Booking đã include
+            // Đảm bảo đồng nhất với DashboardSummaryService và RevenueByStoreService
+            var statuses = new[] { "COMPLETED", "PAID" };
+            var payments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(
+                statuses, 
+                fromDate, 
+                toDate);
 
-            // Chỉ tính booking hoàn tất (COMPLETED/PAID), KHÔNG lọc theo CreatedAt.
-            // Sẽ chỉ tính nếu có payment COMPLETED/PAID trong khoảng PaidAt.
-            var completedBookings = allBookings.Where(b =>
-                !string.IsNullOrEmpty(b.Status) &&
-                (b.Status.Equals("COMPLETED", StringComparison.OrdinalIgnoreCase) ||
-                 b.Status.Equals("PAID", StringComparison.OrdinalIgnoreCase)))
+            // Lọc chỉ payments có Invoice và Booking (loại bỏ payments từ Order)
+            var bookingPayments = payments
+                .Where(p => p.Invoice != null 
+                         && p.Invoice.BookingId != null 
+                         && p.Invoice.Booking != null)
+                .ToList();
+
+            // Nhóm payments theo InvoiceId để tính toán
+            var invoicePayments = bookingPayments
+                .GroupBy(p => p.InvoiceId)
                 .ToList();
 
             var serviceIdToItem = new Dictionary<int, ServiceBookingStatsItem>();
 
-            foreach (var booking in completedBookings)
+            foreach (var invoiceGroup in invoicePayments)
             {
+                var invoice = invoiceGroup.First().Invoice;
+                if (invoice == null || invoice.Booking == null) continue;
+
+                var booking = invoice.Booking;
                 var serviceId = booking.ServiceId;
+                
+                // Khởi tạo item nếu chưa có
                 if (!serviceIdToItem.TryGetValue(serviceId, out var item))
                 {
                     item = new ServiceBookingStatsItem
@@ -69,25 +85,23 @@ namespace EVServiceCenter.Application.Service
                     serviceIdToItem[serviceId] = item;
                 }
 
-                item.BookingCount += 1;
-
-                var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
-                if (invoice == null) continue;
-
-                // Lấy payments COMPLETED và PAID trong khoảng thời gian (PaidAt)
-                var pCompleted = await _paymentRepository.GetByInvoiceIdAsync(invoice.InvoiceId, "COMPLETED", null, fromDate, toDate);
-                var pPaid = await _paymentRepository.GetByInvoiceIdAsync(invoice.InvoiceId, "PAID", null, fromDate, toDate);
-                var totalPaid = pCompleted.Sum(p => p.Amount) + pPaid.Sum(p => p.Amount);
+                // Tính tổng số tiền đã thanh toán cho invoice này
+                var totalPaid = invoiceGroup.Sum(p => (decimal)p.Amount);
                 if (totalPaid <= 0) continue;
 
                 // Phân bổ phần dịch vụ từ totalPaid bằng cách trừ phần phụ tùng tối đa
+                // Logic đồng nhất với DashboardSummaryService
                 var allocatedParts = Math.Min(invoice.PartsAmount, totalPaid);
                 var serviceAmount = totalPaid - allocatedParts;
-                if (serviceAmount > 0) item.ServiceRevenue += serviceAmount;
+                
+                if (serviceAmount > 0)
+                {
+                    item.ServiceRevenue += serviceAmount;
+                }
 
-                // BookingCount tăng khi có ít nhất một khoản thanh toán hợp lệ trong khoảng PaidAt
-                // (đảm bảo đếm theo PaidAt để đồng bộ với doanh thu)
-                // Lưu ý: item.BookingCount đã +1 trước; giữ nguyên cách đếm 1 lần/booking khi có paid.
+                // Đếm booking: mỗi invoice unique = 1 booking
+                // Chỉ đếm khi có payment trong date range (đảm bảo đồng bộ với doanh thu)
+                item.BookingCount += 1;
             }
 
             // Bổ sung tất cả dịch vụ còn thiếu với 0

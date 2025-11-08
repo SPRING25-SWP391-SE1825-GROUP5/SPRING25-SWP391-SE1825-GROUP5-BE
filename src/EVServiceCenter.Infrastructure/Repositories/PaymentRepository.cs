@@ -102,6 +102,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
             var statusSet = statuses.Select(s => s.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
             return await _db.Payments
                 .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Booking)
+                        .ThenInclude(b => b.Service)
                 .Where(p => statusSet.Contains(p.Status)
                          && p.PaidAt != null
                          && p.PaidAt >= fromDate

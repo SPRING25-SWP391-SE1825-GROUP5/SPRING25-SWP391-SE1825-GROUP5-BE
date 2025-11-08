@@ -114,6 +114,8 @@ namespace EVServiceCenter.Application.Service
 
         /// <summary>
         /// Tính doanh thu cho một cửa hàng cụ thể
+        /// Sử dụng repository method tối ưu để lấy payments COMPLETED/PAID theo centerId và date range (theo PaidAt)
+        /// Đảm bảo đồng nhất với DashboardSummaryService và ServiceBookingStatsService
         /// </summary>
         private async Task<StoreRevenueData> CalculateStoreRevenueAsync(
             int centerId,
@@ -123,44 +125,40 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Lấy tất cả bookings của cửa hàng trong date range
-                var allBookings = await _bookingRepository.GetBookingsByCenterIdAsync(
+                // Sử dụng repository method tối ưu để lấy payments COMPLETED theo centerId và date range (theo PaidAt)
+                var completedPayments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(
                     centerId, 
-                    page: 1, 
-                    pageSize: int.MaxValue, 
-                    status: null, 
-                    fromDate: fromDate, 
-                    toDate: toDate);
+                    fromDate, 
+                    toDate);
 
-                // Lọc chỉ bookings đã hoàn thành (COMPLETED hoặc PAID)
-                var completedBookings = allBookings.Where(b => 
-                    !string.IsNullOrEmpty(b.Status) && 
-                    (b.Status.ToUpperInvariant() == "COMPLETED" || b.Status.ToUpperInvariant() == "PAID")).ToList();
+                // Lấy tất cả payments PAID trong date range với Invoice và Booking đã include
+                // Sau đó filter theo centerId
+                var statuses = new[] { "PAID" };
+                var allPaidPayments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(
+                    statuses, 
+                    fromDate, 
+                    toDate);
 
-                decimal totalRevenue = 0;
-                int completedCount = completedBookings.Count;
+                // Filter payments PAID theo centerId thông qua Invoice -> Booking
+                var paidPaymentsForCenter = allPaidPayments
+                    .Where(p => p.Invoice != null 
+                             && p.Invoice.BookingId != null 
+                             && p.Invoice.Booking != null 
+                             && p.Invoice.Booking.CenterId == centerId)
+                    .ToList();
 
-                // Tính doanh thu từ payments COMPLETED của các bookings này
-                foreach (var booking in completedBookings)
-                {
-                    var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
-                    if (invoice == null) continue;
+                // Tính tổng doanh thu từ payments COMPLETED và PAID
+                var totalRevenue = completedPayments.Sum(p => (decimal)p.Amount) 
+                                 + paidPaymentsForCenter.Sum(p => (decimal)p.Amount);
 
-                    // Lấy payments COMPLETED của invoice trong date range
-                    var completedPayments = await _paymentRepository.GetByInvoiceIdAsync(
-                        invoice.InvoiceId,
-                        status: "COMPLETED",
-                        method: null,
-                        from: fromDate,
-                        to: toDate);
+                // Đếm số booking đã hoàn thành: đếm số invoice unique có payments trong date range
+                var completedInvoiceIds = completedPayments
+                    .Select(p => p.InvoiceId)
+                    .Concat(paidPaymentsForCenter.Select(p => p.InvoiceId))
+                    .Distinct()
+                    .ToList();
 
-                    // Tính tổng doanh thu từ payments
-                    var paymentAmount = completedPayments
-                        .Where(p => p.PaidAt >= fromDate && p.PaidAt <= toDate)
-                        .Sum(p => p.Amount);
-
-                    totalRevenue += paymentAmount;
-                }
+                var completedCount = completedInvoiceIds.Count;
 
                 return new StoreRevenueData
                 {

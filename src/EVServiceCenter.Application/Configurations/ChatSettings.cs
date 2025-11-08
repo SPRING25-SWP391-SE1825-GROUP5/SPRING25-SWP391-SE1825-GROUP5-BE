@@ -45,6 +45,7 @@ public class SignalRSettings
     public string UserTypingMethod { get; set; } = "UserTyping";
     public string NewConversationMethod { get; set; } = "NewConversation";
     public string CenterReassignedMethod { get; set; } = "CenterReassigned";
+    public string MessageReadMethod { get; set; } = "MessageRead";
 }
 
 public class AssignmentSettings
@@ -53,5 +54,6 @@ public class AssignmentSettings
     public string Strategy { get; set; } = "BookingFirst"; // BookingFirst, PreferredCenter, RoundRobin
     public bool UseWorkloadBalancing { get; set; } = true;
     public int MaxWorkloadThreshold { get; set; } = 50; // Max conversations per staff
+    public int StaffResponseTimeoutMinutes { get; set; } = 1; // Timeout for auto-reassign when staff doesn't respond
 }
 

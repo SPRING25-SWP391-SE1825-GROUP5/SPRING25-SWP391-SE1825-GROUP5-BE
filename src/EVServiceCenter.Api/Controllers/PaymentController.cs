@@ -78,11 +78,12 @@ public class PaymentController : ControllerBase
 			}
 
             // Dùng service chuẩn để tính tổng tiền: dịch vụ/gói + parts CONSUMED - khuyến mãi
+            // Service sẽ tự động xử lý trường hợp link đã tồn tại và lấy link hiện tại
             var checkoutUrl = await _paymentService.CreateBookingPaymentLinkAsync(bookingId);
 
 			return Ok(new {
 				success = true,
-				message = "Tạo link thanh toán thành công",
+				message = checkoutUrl != null ? "Link thanh toán đã sẵn sàng" : "Tạo link thanh toán thành công",
 				data = new { checkoutUrl }
 			});
 		}
@@ -215,8 +216,15 @@ public class PaymentController : ControllerBase
     {
         try
         {
-            // orderCode của Booking chính là bookingId
-            var ok = await _payOSService.CancelPaymentLinkAsync(bookingId);
+            // PayOSOrderCode là unique random number được lưu trong Booking/Order
+            // Không còn dùng offset, tìm trực tiếp bằng PayOSOrderCode
+            // Lấy PayOSOrderCode từ Booking để cancel
+            var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+            if (booking?.PayOSOrderCode == null)
+            {
+                return BadRequest(new { success = false, message = "Booking không có PayOSOrderCode" });
+            }
+            var ok = await _payOSService.CancelPaymentLinkAsync(booking.PayOSOrderCode.Value);
             if (ok)
             {
                 return Ok(new { success = true, message = "Đã hủy link PayOS hiện tại" });
@@ -241,52 +249,53 @@ public class PaymentController : ControllerBase
 
         if (orderCode.HasValue && orderCode.Value > 0)
 		{
-			var orderId = orderCode.Value;
-			var order = await _orderRepository.GetByIdAsync(orderId);
+			// Tìm Booking hoặc Order dựa trên PayOSOrderCode
+			// PayOSOrderCode là unique random number, không còn dùng offset
+			var bookingByPayOSCode = await _bookingRepo.GetBookingByPayOSOrderCodeAsync(orderCode.Value);
+			var orderByPayOSCode = await _orderRepository.GetOrderByPayOSOrderCodeAsync(orderCode.Value);
+
+			var order = orderByPayOSCode;
 			var booking = bookingId.HasValue && bookingId.Value > 0
 				? await _bookingRepo.GetBookingByIdAsync(bookingId.Value)
-				: null;
+				: bookingByPayOSCode;
 
 			if (order != null)
 			{
+				var actualOrderId = order.OrderId;
 				if (payOSConfirmed)
 				{
 					try
 					{
-						confirmed = await _paymentService.ConfirmOrderPaymentAsync(orderId);
+						confirmed = await _paymentService.ConfirmOrderPaymentAsync(actualOrderId);
 					}
 					catch (Exception ex)
 					{
-						_logger.LogError(ex, "Error confirming order payment for order {OrderId}", orderId);
+						_logger.LogError(ex, "Error confirming order payment for order {OrderId}", actualOrderId);
 					}
 				}
 
 				if (payOSConfirmed && confirmed)
 				{
 					var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
-					var frontendSuccessUrl = $"{frontendUrl}{successPath}?orderId={orderId}&status=success";
+					var frontendSuccessUrl = $"{frontendUrl}{successPath}?orderId={actualOrderId}&status=success";
 					return Redirect(frontendSuccessUrl);
 				}
 				else if (payOSConfirmed && !confirmed)
 				{
 					var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
-					var frontendErrorUrl = $"{frontendUrl}{errorPath}?orderId={orderId}&error=system_error";
+					var frontendErrorUrl = $"{frontendUrl}{errorPath}?orderId={actualOrderId}&error=system_error";
 					return Redirect(frontendErrorUrl);
 				}
 				else
 				{
 					var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-					var frontendFailUrl = $"{frontendUrl}{failedPath}?orderId={orderId}&status={status}&code={code}";
+					var frontendFailUrl = $"{frontendUrl}{failedPath}?orderId={actualOrderId}&status={status}&code={code}";
 					return Redirect(frontendFailUrl);
 				}
 			}
             else
 			{
-                // Fallback: PayOS orderCode đối với Booking chính là bookingId
-                if (booking == null)
-                {
-                    booking = await _bookingRepo.GetBookingByIdAsync(orderId);
-                }
+                // Fallback: Nếu không tìm thấy Order, booking đã được tìm ở trên
 
                 if (booking != null)
 				{
@@ -460,7 +469,11 @@ public class PaymentController : ControllerBase
                 .Where(p => string.Equals(p.Status, "CONSUMED", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            var partsDetails = consumedParts.Select(p => new
+            // Tách 2 nhóm: lấy từ kho trung tâm vs phụ tùng do khách cung cấp
+            var inventoryParts = consumedParts.Where(p => !p.IsCustomerSupplied).ToList();
+            var customerSuppliedParts = consumedParts.Where(p => p.IsCustomerSupplied && p.SourceOrderItemId.HasValue).ToList();
+
+            var partsDetails = inventoryParts.Select(p => new
             {
                 partId = p.PartId,
                 name = p.Part?.PartName,
@@ -469,6 +482,24 @@ public class PaymentController : ControllerBase
                 amount = (p.Part?.Price ?? 0m) * p.QuantityUsed
             }).ToList();
             var partsAmount = partsDetails.Sum(x => x.amount);
+
+            // Load đơn giá tham chiếu từ OrderItem cho parts khách cung cấp
+            var orderItemIds = customerSuppliedParts.Select(p => p.SourceOrderItemId!.Value).Distinct().ToList();
+            var refPrices = new Dictionary<int, decimal>();
+            foreach (var id in orderItemIds)
+            {
+                var oi = await _orderRepository.GetOrderItemByIdAsync(id);
+                if (oi != null) refPrices[id] = oi.UnitPrice;
+            }
+            var customerSuppliedDetails = customerSuppliedParts.Select(p => new
+            {
+                partId = p.PartId,
+                name = p.Part?.PartName,
+                qty = p.QuantityUsed,
+                referenceUnitPrice = p.SourceOrderItemId.HasValue && refPrices.ContainsKey(p.SourceOrderItemId.Value) ? refPrices[p.SourceOrderItemId.Value] : 0m,
+                amount = 0m, // không tính tiền hàng – khách tự cung cấp
+                sourceOrderItemId = p.SourceOrderItemId
+            }).ToList();
 
             // Khuyến mãi (chỉ áp dụng phần dịch vụ/gói)
             decimal promotionDiscountAmount = 0m;
@@ -498,7 +529,10 @@ public class PaymentController : ControllerBase
                     bookingId = booking.BookingId,
                     service = new { name = booking.Service?.ServiceName, basePrice = serviceBasePrice },
                     package = new { applied = booking.AppliedCreditId.HasValue, firstTimePrice = packagePrice, discountAmount = packageDiscountAmount },
-                    parts = partsDetails,
+                    parts = new {
+                        fromInventory = partsDetails,
+                        fromCustomer = customerSuppliedDetails
+                    },
                     partsAmount,
                     promotion = new { applied = promotionDiscountAmount > 0, discountAmount = promotionDiscountAmount },
                     subtotal = serviceBasePrice,

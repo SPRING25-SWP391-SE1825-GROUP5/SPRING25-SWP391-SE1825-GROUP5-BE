@@ -202,7 +202,37 @@ namespace EVServiceCenter.Application.Service
                 else
                 {
                     response.Success = false;
-                    response.Message = "Không thể tạo lịch nào. Tất cả ngày trong khoảng đã có lịch cho slot này.";
+                    // Phân biệt giữa các trường hợp: chỉ cuối tuần, chỉ đã có lịch, hoặc cả hai
+                    var totalDaysInRange = (int)(request.EndDate.Date - request.StartDate.Date).TotalDays + 1;
+                    
+                    if (weekendDaysSkipped == totalDaysInRange)
+                    {
+                        // Tất cả ngày trong khoảng đều là cuối tuần
+                        response.Message = $"Không thể tạo lịch nào. Tất cả {totalDaysInRange} ngày trong khoảng đều là cuối tuần (Thứ 7 và Chủ nhật) và đã được tự động bỏ qua: {string.Join(", ", weekendDatesSkipped)}. Vui lòng chọn khoảng ngày khác bao gồm các ngày trong tuần.";
+                    }
+                    else if (skippedDates.Count == (totalDaysInRange - weekendDaysSkipped))
+                    {
+                        // Tất cả ngày làm việc (không phải cuối tuần) đều đã có lịch
+                        var workingDaysCount = totalDaysInRange - weekendDaysSkipped;
+                        response.Message = $"Không thể tạo lịch nào. Tất cả {workingDaysCount} ngày làm việc trong khoảng đã có lịch cho slot này: {string.Join(", ", skippedDates)}.";
+                        if (weekendDaysSkipped > 0)
+                        {
+                            response.Message += $" Đã tự động bỏ qua {weekendDaysSkipped} ngày cuối tuần: {string.Join(", ", weekendDatesSkipped)}.";
+                        }
+                    }
+                    else
+                    {
+                        // Trường hợp tổng hợp (có cả cuối tuần và đã có lịch)
+                        response.Message = "Không thể tạo lịch nào. ";
+                        if (weekendDaysSkipped > 0)
+                        {
+                            response.Message += $"Đã tự động bỏ qua {weekendDaysSkipped} ngày cuối tuần: {string.Join(", ", weekendDatesSkipped)}. ";
+                        }
+                        if (skippedDates.Count > 0)
+                        {
+                            response.Message += $"Tất cả ngày làm việc còn lại đã có lịch: {string.Join(", ", skippedDates)}.";
+                        }
+                    }
                 }
 
                 response.CreatedTimeSlots = createdTimeSlots;

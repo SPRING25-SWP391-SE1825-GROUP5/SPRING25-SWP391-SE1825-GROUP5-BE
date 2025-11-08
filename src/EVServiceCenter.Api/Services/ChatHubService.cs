@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using Microsoft.AspNetCore.SignalR;
@@ -34,9 +35,11 @@ namespace EVServiceCenter.Api.Services
             try
             {
                 var groupName = $"{_chatSettings.SignalR.ConversationGroupPrefix}{conversationId}";
+                // Use SendAsync without await to fire-and-forget for maximum speed, but still await to ensure delivery
                 await _hubContext.Clients.Group(groupName).SendAsync(_chatSettings.SignalR.ReceiveMessageMethod, messageData);
 
-                _logger.LogInformation("Broadcasted message to conversation {ConversationId}", conversationId);
+                // Only log in debug mode to reduce overhead
+                _logger.LogDebug("Broadcasted message to conversation {ConversationId}", conversationId);
             }
             catch (System.Exception ex)
             {
@@ -64,7 +67,8 @@ namespace EVServiceCenter.Api.Services
 
                 await _hubContext.Clients.Group(groupName).SendAsync(_chatSettings.SignalR.UserTypingMethod, typingData);
 
-                _logger.LogInformation("Broadcasted typing notification to conversation {ConversationId}", conversationId);
+                // Only log in debug mode to reduce overhead
+                _logger.LogDebug("Broadcasted typing notification to conversation {ConversationId}", conversationId);
             }
             catch (System.Exception ex)
             {
@@ -130,6 +134,30 @@ namespace EVServiceCenter.Api.Services
                 throw;
             }
         }
+
+        public async Task NotifyMessageReadAsync(long conversationId, int? userId, string? guestSessionId, DateTime lastReadAt)
+        {
+            try
+            {
+                var groupName = $"{_chatSettings.SignalR.ConversationGroupPrefix}{conversationId}";
+                var readData = new
+                {
+                    ConversationId = conversationId,
+                    UserId = userId,
+                    GuestSessionId = guestSessionId,
+                    LastReadAt = lastReadAt,
+                    Timestamp = System.DateTime.UtcNow
+                };
+
+                await _hubContext.Clients.Group(groupName).SendAsync(_chatSettings.SignalR.MessageReadMethod, readData);
+
+                _logger.LogInformation("Broadcasted read status to conversation {ConversationId}", conversationId);
+            }
+            catch (System.Exception ex)
+            {
+                _logger.LogError(ex, "Error broadcasting read status to conversation {ConversationId}", conversationId);
+                throw;
+            }
+        }
     }
 }
-

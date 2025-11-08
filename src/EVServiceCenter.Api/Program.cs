@@ -67,13 +67,16 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
-    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(5); // More frequent keep-alive for faster detection
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    options.MaximumReceiveMessageSize = 32 * 1024; // 32KB max message size
+    options.StreamBufferCapacity = 10; // Buffer capacity for streaming
 });
 builder.Services.Configure<BookingRealtimeOptions>(builder.Configuration.GetSection("BookingRealtime"));
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient<PaymentService>();
+builder.Services.AddScoped<PaymentService>();
 builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
 builder.Services.Configure<GuestSessionOptions>(builder.Configuration.GetSection("GuestSession"));
 builder.Services.Configure<PromotionOptions>(builder.Configuration.GetSection("Promotion"));
@@ -412,6 +415,7 @@ builder.Services.AddScoped<IServicePackageRepository, ServicePackageRepository>(
 builder.Services.AddScoped<ICustomerServiceCreditRepository, CustomerServiceCreditRepository>();
 builder.Services.AddScoped<IServiceCategoryRepository, ServiceCategoryRepository>();
 builder.Services.AddScoped<IServiceChecklistRepository, ServiceChecklistRepository>();
+builder.Services.AddScoped<IPartCategoryRepository, PartCategoryRepository>();
 
 // E-commerce repositories
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
@@ -468,6 +472,30 @@ builder.Services.AddAuthentication(options =>
     // Custom JWT error handling events
     options.Events = new JwtBearerEvents
     {
+        // SignalR requires token to be read from query string
+        OnMessageReceived = context =>
+        {
+            // For SignalR connections, read token from query string
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+
+            // If this is a SignalR hub connection and token is in query string
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            // Otherwise, try to get token from Authorization header
+            else
+            {
+                var authHeader = context.Request.Headers["Authorization"].ToString();
+                if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Token = authHeader.Substring("Bearer ".Length).Trim();
+                }
+            }
+
+            return Task.CompletedTask;
+        },
         OnAuthenticationFailed = context =>
         {
             if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
@@ -723,8 +751,9 @@ app.MapControllers();
 app.MapHub<EVServiceCenter.Api.BookingHub>("/hubs/booking");
 app.MapHub<EVServiceCenter.Api.ChatHub>("/hubs/chat", options =>
 {
-    options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets |
-                       Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
+    options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets; // Only WebSocket for lowest latency
+    options.WebSockets.CloseTimeout = TimeSpan.FromSeconds(5);
+    options.LongPolling.PollTimeout = TimeSpan.FromSeconds(10);
 })
 .RequireAuthorization(); // Add JWT authentication requirement
 

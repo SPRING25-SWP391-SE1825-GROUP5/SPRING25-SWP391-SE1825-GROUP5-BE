@@ -13,6 +13,17 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
 
         entity.Property(e => e.OrderId).HasColumnName("OrderID");
         entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
+        entity.Property(e => e.PayOSOrderCode).HasColumnName("PayOSOrderCode");
+        entity.Property(e => e.FulfillmentCenterId).HasColumnName("FulfillmentCenterID");
+
+        // Unique index cho PayOSOrderCode để đảm bảo không trùng
+        entity.HasIndex(e => e.PayOSOrderCode).IsUnique().HasFilter("[PayOSOrderCode] IS NOT NULL");
+
+        // Foreign key cho FulfillmentCenterId
+        entity.HasOne(d => d.FulfillmentCenter)
+            .WithMany()
+            .HasForeignKey(d => d.FulfillmentCenterId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         entity.Property(e => e.Status).HasDefaultValue("PENDING");
 

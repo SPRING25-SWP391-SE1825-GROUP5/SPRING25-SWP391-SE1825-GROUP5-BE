@@ -25,6 +25,10 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
         // Map ApprovedByStaffId to column ApprovedByStaffId (new)
         entity.Property<int?>(nameof(WorkOrderPart.ApprovedByStaffId)).HasColumnName("ApprovedByStaffId");
 
+        // Customer-supplied flags
+        entity.Property(e => e.IsCustomerSupplied).HasColumnName("IsCustomerSupplied");
+        entity.Property(e => e.SourceOrderItemId).HasColumnName("SourceOrderItemId");
+
 
         entity.HasOne(d => d.Booking)
             .WithMany()
@@ -35,6 +39,12 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
             .WithMany(p => p.WorkOrderParts)
             .HasForeignKey(d => d.PartId)
             .OnDelete(DeleteBehavior.ClientSetNull);
+
+        // Optional FK to OrderItems (if present in DB)
+        entity.HasOne<OrderItem>()
+            .WithMany()
+            .HasForeignKey(d => d.SourceOrderItemId)
+            .OnDelete(DeleteBehavior.NoAction);
 
         entity.HasOne(d => d.Category)
             .WithMany()

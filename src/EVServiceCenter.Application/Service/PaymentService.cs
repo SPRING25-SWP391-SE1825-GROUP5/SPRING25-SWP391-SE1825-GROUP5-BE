@@ -38,10 +38,12 @@ public class PaymentService
     private readonly INotificationService _notificationService;
     private readonly ICustomerServiceCreditRepository _customerServiceCreditRepository;
     private readonly IPdfInvoiceService _pdfInvoiceService;
+    private readonly IInventoryRepository _inventoryRepository;
+    private readonly ICenterRepository _centerRepository;
 
     private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, IPromotionRepository promotionRepository, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService, INotificationService notificationService)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, IPromotionRepository promotionRepository, ILogger<PaymentService> logger, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService, INotificationService notificationService, IInventoryRepository inventoryRepository, ICenterRepository centerRepository)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -62,16 +64,19 @@ public class PaymentService
         _customerServiceCreditRepository = customerServiceCreditRepository;
         _pdfInvoiceService = pdfInvoiceService;
         _notificationService = notificationService;
+        _inventoryRepository = inventoryRepository;
+        _centerRepository = centerRepository;
         }
 
 	/// <summary>
 	/// Tạo payment link cho Booking
 	/// HOÀN TOÀN ĐỘC LẬP với CreateOrderPaymentLinkAsync
-	/// - Sử dụng bookingId làm PayOS orderCode
+	/// - Sử dụng bookingId làm PayOS orderCode (1, 2, 3, ...)
+	/// - Order sẽ dùng orderCode = orderId + 1000000 để tránh conflict
 	/// - Logic tính toán amount riêng (service + parts - package - promotion)
 	/// - Validation riêng cho Booking
 	/// </summary>
-	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId)
+	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId, bool isRetry = false)
 	{
 		var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
@@ -127,9 +132,22 @@ public class PaymentService
         var amount = (int)Math.Round(totalAmount); // VNĐ integer
         if (amount < _options.MinAmount) amount = _options.MinAmount;
 
-		// Booking sử dụng bookingId làm orderCode cho PayOS
-		// Lưu ý: Đảm bảo bookingId và orderId không conflict (thường có auto-increment riêng)
-		var orderCode = booking.BookingId;
+		// Generate hoặc lấy PayOSOrderCode từ Booking
+		// Nếu chưa có, generate unique PayOSOrderCode và lưu vào database
+		int orderCode;
+		if (booking.PayOSOrderCode.HasValue)
+		{
+			orderCode = booking.PayOSOrderCode.Value;
+			_logger.LogInformation("Sử dụng PayOSOrderCode hiện có cho bookingId {BookingId}: {OrderCode}", bookingId, orderCode);
+		}
+		else
+		{
+			orderCode = await GenerateUniquePayOSOrderCodeAsync();
+			// Update trực tiếp PayOSOrderCode trong database
+			await _bookingRepository.UpdatePayOSOrderCodeAsync(bookingId, orderCode);
+			booking.PayOSOrderCode = orderCode; // Update local entity để dùng tiếp
+			_logger.LogInformation("Generated và lưu PayOSOrderCode mới cho bookingId {BookingId}: {OrderCode}", bookingId, orderCode);
+		}
         var rawDesc = $"Booking #{booking.BookingId}";
         var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
@@ -163,58 +181,89 @@ public class PaymentService
 		var response = await _httpClient.SendAsync(request);
 		var responseText = await response.Content.ReadAsStringAsync();
 
-        // Xử lý trường hợp "Đơn thanh toán đã tồn tại"
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorJson = JsonDocument.Parse(responseText).RootElement;
-            var code = errorJson.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
-            var desc = errorJson.TryGetProperty("desc", out var errorDescElem) ? errorDescElem.GetString() : null;
+        // Parse response để check code (PayOS có thể trả về HTTP 200 nhưng code 231 trong body)
+        var json = JsonDocument.Parse(responseText).RootElement;
+        var code = json.TryGetProperty("code", out var codeElem) ? codeElem.GetString() : null;
+        var desc = json.TryGetProperty("desc", out var descElem) ? descElem.GetString() : null;
 
-            if (code == "231" && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
+        // Xử lý trường hợp "Đơn thanh toán đã tồn tại" (code 231)
+        // PayOS có thể trả về HTTP 200 nhưng code 231 trong response body
+        if (code == "231" && desc?.Contains("Đơn thanh toán đã tồn tại") == true)
+        {
+            _logger.LogInformation("PayOS trả về code 231 (payment exists) cho bookingId {BookingId}, đang lấy payment link hiện có...", bookingId);
+
+            // Ưu tiên lấy checkoutUrl trực tiếp từ response nếu có
+            if (json.TryGetProperty("data", out var errData) && errData.ValueKind == JsonValueKind.Object)
             {
-                // Ưu tiên lấy checkoutUrl trực tiếp từ error response nếu có
-                if (errorJson.TryGetProperty("data", out var errData) && errData.ValueKind == JsonValueKind.Object)
+                if (errData.TryGetProperty("checkoutUrl", out var errUrl) && errUrl.ValueKind == JsonValueKind.String)
                 {
-                    if (errData.TryGetProperty("checkoutUrl", out var errUrl) && errUrl.ValueKind == JsonValueKind.String)
+                    var reuseUrl = errUrl.GetString();
+                    if (!string.IsNullOrEmpty(reuseUrl))
                     {
-                        var reuseUrl = errUrl.GetString();
-                        if (!string.IsNullOrEmpty(reuseUrl))
-                        {
-                            return reuseUrl;
-                        }
+                        _logger.LogInformation("Tìm thấy checkoutUrl trong response cho bookingId {BookingId}", bookingId);
+                        return reuseUrl;
                     }
                 }
-
-                // Fallback: Lấy link cũ từ PayOS
-                var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
-                if (!string.IsNullOrEmpty(existingUrl))
-                {
-                    return existingUrl;
-                }
-                // Nếu không lấy được link cũ, tiếp tục throw exception
             }
 
-        response.EnsureSuccessStatusCode();
+            // Fallback: Lấy link cũ từ PayOS API
+            var existingUrl = await GetExistingPaymentLinkAsync(orderCode);
+            if (!string.IsNullOrEmpty(existingUrl))
+            {
+                _logger.LogInformation("Đã lấy được payment link hiện có từ PayOS cho bookingId {BookingId}", bookingId);
+                return existingUrl;
+            }
+
+            // Nếu không lấy được link cũ (có thể payment đã CANCELLED), thử cancel và tạo lại
+            // Chỉ retry 1 lần để tránh infinite loop
+            if (!isRetry)
+            {
+                _logger.LogInformation("Không tìm thấy checkoutUrl cho bookingId {BookingId}, thử cancel payment cũ và tạo lại...", bookingId);
+                var cancelled = await CancelPaymentLinkAsync(orderCode);
+                if (cancelled)
+                {
+                    _logger.LogInformation("Đã cancel payment cũ cho bookingId {BookingId}, retry tạo payment link...", bookingId);
+                    // Retry tạo payment link sau khi cancel (chỉ retry 1 lần)
+                    return await CreateBookingPaymentLinkAsync(bookingId, isRetry: true);
+                }
+            }
+
+            // Nếu không cancel được hoặc đã retry rồi, throw exception với message rõ ràng
+            _logger.LogWarning("Không thể lấy payment link hiện có từ PayOS cho bookingId {BookingId}. PayOS đã báo payment exists nhưng không tìm thấy link và không thể cancel.", bookingId);
+            throw new InvalidOperationException($"Đơn thanh toán đã tồn tại trên PayOS cho booking #{bookingId}, nhưng không thể lấy được payment link. Vui lòng liên hệ hỗ trợ hoặc thử lại sau.");
         }
 
-        var json = JsonDocument.Parse(responseText).RootElement;
+        // Nếu không phải lỗi 231, check HTTP status code
+        if (!response.IsSuccessStatusCode)
+        {
+            var message =
+                desc
+                ?? (json.TryGetProperty("message", out var msgElem) && msgElem.ValueKind == JsonValueKind.String ? msgElem.GetString() : null)
+                ?? "Không nhận được checkoutUrl từ PayOS";
+            throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
+        }
+
+        // Parse success response
         if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
             dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
         {
             return urlElem.GetString();
         }
 
-        var message =
-            (json.TryGetProperty("message", out var msgElem) && msgElem.ValueKind == JsonValueKind.String ? msgElem.GetString() : null)
-            ?? (json.TryGetProperty("desc", out var descElem) && descElem.ValueKind == JsonValueKind.String ? descElem.GetString() : null)
+        // Nếu không tìm thấy checkoutUrl trong success response
+        var errorMessage =
+            desc
+            ?? (json.TryGetProperty("message", out var msgElem2) && msgElem2.ValueKind == JsonValueKind.String ? msgElem2.GetString() : null)
             ?? "Không nhận được checkoutUrl từ PayOS";
-        throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
+        throw new InvalidOperationException($"Tạo link PayOS thất bại: {errorMessage}. Response: {responseText}");
     }
 
     /// <summary>
     /// Lấy payment link hiện có từ PayOS cho Order
     /// HOÀN TOÀN ĐỘC LẬP với Booking payment methods
-    /// - Sử dụng orderId làm PayOS orderCode (khác bookingId)
+    /// - Sử dụng orderId + 1000000 làm PayOS orderCode để tránh conflict với Booking
+    /// - Booking: orderCode = bookingId (1, 2, 3, ...)
+    /// - Order: orderCode = orderId + 1000000 (1000001, 1000002, ...)
     /// - Validation riêng cho Order
     /// </summary>
     public async Task<string?> GetExistingOrderPaymentLinkAsync(int orderId)
@@ -273,15 +322,19 @@ public class PaymentService
         }
 
         // Tất cả validation đã pass, lấy payment link từ PayOS
-        // Order sử dụng orderId làm orderCode cho PayOS
-        return await GetExistingPaymentLinkAsync(orderId);
+        // Sử dụng PayOSOrderCode đã lưu trong Order
+        if (!order.PayOSOrderCode.HasValue)
+        {
+            throw new InvalidOperationException($"Order #{orderId} chưa có PayOSOrderCode. Vui lòng tạo payment link trước.");
+        }
+        return await GetExistingPaymentLinkAsync(order.PayOSOrderCode.Value);
     }
 
     /// <summary>
     /// Helper method: Lấy payment link từ PayOS bằng orderCode
     /// DÙNG CHUNG bởi cả Booking và Order, nhưng orderCode khác nhau nên không conflict
-    /// - Booking: orderCode = bookingId
-    /// - Order: orderCode = orderId
+    /// - Booking: orderCode = bookingId (1, 2, 3, ...)
+    /// - Order: orderCode = orderId + 1000000 (1000001, 1000002, 1000003, ...)
     /// Method này là thread-safe và không có side effects
     /// </summary>
     private async Task<string?> GetExistingPaymentLinkAsync(int orderCode)
@@ -303,13 +356,35 @@ public class PaymentService
             }
 
             var json = JsonDocument.Parse(responseText).RootElement;
-            if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object &&
-                dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
+
+            // Check status của payment
+            string? paymentStatus = null;
+            if (json.TryGetProperty("data", out var dataElem) && dataElem.ValueKind == JsonValueKind.Object)
             {
-                return urlElem.GetString();
+                if (dataElem.TryGetProperty("status", out var statusElem) && statusElem.ValueKind == JsonValueKind.String)
+                {
+                    paymentStatus = statusElem.GetString();
+                }
+
+                // Nếu có checkoutUrl, trả về
+                if (dataElem.TryGetProperty("checkoutUrl", out var urlElem) && urlElem.ValueKind == JsonValueKind.String)
+                {
+                    var checkoutUrl = urlElem.GetString();
+                    if (!string.IsNullOrEmpty(checkoutUrl))
+                    {
+                        return checkoutUrl;
+                    }
+                }
             }
 
-            _logger.LogWarning("Không tìm thấy checkoutUrl trong response cho orderCode {OrderCode}: {ResponseText}", orderCode, responseText);
+            // Nếu không có checkoutUrl, check status
+            if (paymentStatus == "CANCELLED")
+            {
+                _logger.LogInformation("Payment cho orderCode {OrderCode} đã bị CANCELLED, sẽ cancel và tạo lại", orderCode);
+                return null; // Return null để trigger cancel và tạo lại
+            }
+
+            _logger.LogWarning("Không tìm thấy checkoutUrl trong response cho orderCode {OrderCode}, status: {Status}, Response: {ResponseText}", orderCode, paymentStatus, responseText);
             return null;
         }
         catch (Exception ex)
@@ -319,10 +394,48 @@ public class PaymentService
         }
     }
 
+    private async Task<bool> CancelPaymentLinkAsync(int orderCode)
+    {
+        try
+        {
+            var cancelUrl = $"{_options.BaseUrl.TrimEnd('/')}/payment-requests/{orderCode}";
+            using var request = new HttpRequestMessage(HttpMethod.Delete, new Uri(cancelUrl));
+            request.Headers.Add("x-client-id", _options.ClientId);
+            request.Headers.Add("x-api-key", _options.ApiKey);
+
+            var response = await _httpClient.SendAsync(request);
+            var responseText = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Đã cancel payment link cho orderCode {OrderCode}", orderCode);
+                return true;
+            }
+
+            // Nếu PayOS trả về 404, có thể payment đã không còn tồn tại (đã bị xóa hoặc đã CANCELLED)
+            // Trong trường hợp này, coi như đã cancel thành công
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogInformation("Payment cho orderCode {OrderCode} không còn tồn tại trên PayOS (404), coi như đã cancel thành công", orderCode);
+                return true;
+            }
+
+            _logger.LogWarning("Không thể cancel payment link cho orderCode {OrderCode}: {ResponseText}", orderCode, responseText);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi cancel payment link cho orderCode {OrderCode}", orderCode);
+            return false;
+        }
+    }
+
     /// <summary>
     /// Tạo payment link cho Order
     /// HOÀN TOÀN ĐỘC LẬP với CreateBookingPaymentLinkAsync
-    /// - Sử dụng orderId làm PayOS orderCode (khác bookingId)
+    /// - Sử dụng orderId + 1000000 làm PayOS orderCode để tránh conflict với Booking
+    /// - Booking: orderCode = bookingId (1, 2, 3, ...)
+    /// - Order: orderCode = orderId + 1000000 (1000001, 1000002, ...)
     /// - Logic tính toán amount riêng (sum order items)
     /// - Validation chi tiết riêng cho Order
     /// - cancelUrl: URL riêng cho order cancel (nếu null, dùng cancel URL mặc định từ config)
@@ -388,9 +501,22 @@ public class PaymentService
             }
         }
 
-        // Order sử dụng orderId làm orderCode cho PayOS
-        // Lưu ý: Đảm bảo bookingId và orderId không conflict (thường có auto-increment riêng)
-        var orderCode = orderId;
+        // Generate hoặc lấy PayOSOrderCode từ Order
+        // Nếu chưa có, generate unique PayOSOrderCode và lưu vào database
+        int orderCode;
+        if (order.PayOSOrderCode.HasValue)
+        {
+            orderCode = order.PayOSOrderCode.Value;
+            _logger.LogInformation("Sử dụng PayOSOrderCode hiện có cho orderId {OrderId}: {OrderCode}", orderId, orderCode);
+        }
+        else
+        {
+            orderCode = await GenerateUniquePayOSOrderCodeAsync();
+            // Update trực tiếp PayOSOrderCode trong database
+            await _orderRepository.UpdatePayOSOrderCodeAsync(orderId, orderCode);
+            order.PayOSOrderCode = orderCode; // Update local entity để dùng tiếp
+            _logger.LogInformation("Generated và lưu PayOSOrderCode mới cho orderId {OrderId}: {OrderCode}", orderId, orderCode);
+        }
         var rawDesc = $"Order #{order.OrderId}";
         var description = rawDesc.Length > _options.DescriptionMaxLength ? rawDesc.Substring(0, _options.DescriptionMaxLength) : rawDesc;
 
@@ -480,7 +606,60 @@ public class PaymentService
 		throw new InvalidOperationException($"Tạo link PayOS thất bại: {message}. Response: {responseText}");
 	}
 
-	private static string ComputeHmacSha256Hex(string data, string key)
+    /// <summary>
+    /// Generate unique PayOS orderCode
+    /// Sử dụng timestamp + random để đảm bảo unique
+    /// Format: YYYYMMDDHHMMSS + random 4 digits (1000-9999)
+    /// Ví dụ: 20251107120000 + 1234 = 202511071200001234
+    /// </summary>
+    private int GenerateUniquePayOSOrderCode()
+    {
+        var random = new Random();
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        var randomPart = random.Next(1000, 10000); // 4 digits: 1000-9999
+        var orderCodeStr = timestamp + randomPart.ToString();
+
+        // Parse to int, nếu quá lớn thì dùng hash
+        if (int.TryParse(orderCodeStr, out var orderCode) && orderCode > 0)
+        {
+            return orderCode;
+        }
+
+        // Fallback: dùng hash của timestamp + random
+        var hash = Math.Abs((timestamp + randomPart).GetHashCode());
+        // Đảm bảo là số dương và đủ lớn để tránh conflict
+        return Math.Max(100000000, hash);
+    }
+
+    /// <summary>
+    /// Generate và đảm bảo unique PayOSOrderCode
+    /// Check cả Booking và Order để đảm bảo không trùng
+    /// Retry nếu trùng (rất hiếm)
+    /// </summary>
+    private async Task<int> GenerateUniquePayOSOrderCodeAsync(int maxRetries = 10)
+    {
+        for (int i = 0; i < maxRetries; i++)
+        {
+            var orderCode = GenerateUniquePayOSOrderCode();
+
+            // Check xem có Booking hoặc Order nào đã dùng PayOSOrderCode này chưa
+            var bookingExists = await _bookingRepository.PayOSOrderCodeExistsAsync(orderCode);
+            var orderExists = await _orderRepository.PayOSOrderCodeExistsAsync(orderCode);
+
+            if (!bookingExists && !orderExists)
+            {
+                _logger.LogInformation("Generated unique PayOSOrderCode: {OrderCode}", orderCode);
+                return orderCode;
+            }
+
+            _logger.LogWarning("Generated PayOSOrderCode {OrderCode} đã tồn tại, retry {Retry}/{MaxRetries}", orderCode, i + 1, maxRetries);
+            await Task.Delay(10); // Đợi một chút để timestamp thay đổi
+        }
+
+        throw new InvalidOperationException("Không thể generate unique PayOSOrderCode sau nhiều lần thử");
+    }
+
+    private static string ComputeHmacSha256Hex(string data, string key)
 	{
 		if (string.IsNullOrEmpty(key)) return string.Empty;
 		using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key));
@@ -834,7 +1013,47 @@ public class PaymentService
 					invoice.Status = "PAID";
 				}
 
-				var totalAmount = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? 0m;
+				// Tính PartsAmount từ OrderItems
+				var partsAmount = order.OrderItems?.Sum(i => i.UnitPrice * i.Quantity) ?? 0m;
+				_logger.LogInformation("Tính PartsAmount cho order {OrderId}: {PartsAmount:N0} VNĐ", order.OrderId, partsAmount);
+
+				// Xác định fulfillment center (center có đủ stock cho tất cả items)
+				int? fulfillmentCenterId = null;
+				if (order.OrderItems != null && order.OrderItems.Any())
+				{
+					_logger.LogInformation("Đang xác định fulfillment center cho order {OrderId}...", order.OrderId);
+					fulfillmentCenterId = await DetermineFulfillmentCenterAsync(order.OrderItems);
+
+					if (fulfillmentCenterId.HasValue)
+					{
+						_logger.LogInformation("Đã xác định fulfillment center {CenterId} cho order {OrderId}", fulfillmentCenterId.Value, order.OrderId);
+
+						// Lưu fulfillment center vào Order
+						order.FulfillmentCenterId = fulfillmentCenterId.Value;
+						await _orderRepository.UpdateAsync(order);
+						_logger.LogInformation("Đã lưu fulfillment center {CenterId} vào Order {OrderId}", fulfillmentCenterId.Value, order.OrderId);
+
+						// Trừ kho từ fulfillment center
+						_logger.LogInformation("Đang trừ kho từ fulfillment center {CenterId}...", fulfillmentCenterId.Value);
+						await DeductInventoryFromCenterAsync(fulfillmentCenterId.Value, order.OrderItems);
+						_logger.LogInformation("Đã trừ kho thành công từ fulfillment center {CenterId}", fulfillmentCenterId.Value);
+					}
+					else
+					{
+						_logger.LogWarning("Không tìm thấy fulfillment center có đủ stock cho order {OrderId}", order.OrderId);
+						throw new InvalidOperationException($"Không tìm thấy trung tâm có đủ hàng để fulfill order #{orderId}. Vui lòng kiểm tra lại tồn kho.");
+					}
+				}
+				else
+				{
+					_logger.LogWarning("Order {OrderId} không có OrderItems", order.OrderId);
+				}
+
+				// Update Invoice.PartsAmount
+				_logger.LogInformation("Cập nhật PartsAmount vào Invoice {InvoiceId}: {PartsAmount:N0} VNĐ", invoice.InvoiceId, partsAmount);
+				await _invoiceRepository.UpdateAmountsAsync(invoice.InvoiceId, 0m, 0m, partsAmount);
+
+				var totalAmount = partsAmount;
 				var amount = (int)Math.Round(totalAmount);
 
 				_logger.LogInformation("Tạo payment record cho order {OrderId}", order.OrderId);
@@ -869,6 +1088,76 @@ public class PaymentService
             await _notificationService.SendBookingNotificationAsync(uid, $"Đơn hàng #{order.OrderId}", "Thanh toán thành công", "ORDER");
         }
 		return true;
+	}
+
+	/// <summary>
+	/// Xác định fulfillment center có đủ stock cho tất cả OrderItems
+	/// Trả về center đầu tiên có đủ stock, hoặc null nếu không tìm thấy
+	/// </summary>
+	private async Task<int?> DetermineFulfillmentCenterAsync(IEnumerable<Domain.Entities.OrderItem> orderItems)
+	{
+		var centers = await _centerRepository.GetActiveCentersAsync();
+
+		foreach (var center in centers)
+		{
+			var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(center.CenterId);
+			if (inventory == null) continue;
+
+			var inventoryParts = inventory.InventoryParts ?? new List<Domain.Entities.InventoryPart>();
+
+			// Kiểm tra xem center này có đủ stock cho tất cả items không
+			bool hasEnoughStock = orderItems.All(oi =>
+			{
+				var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == oi.PartId);
+				return invPart != null && invPart.CurrentStock >= oi.Quantity;
+			});
+
+			if (hasEnoughStock)
+			{
+				_logger.LogInformation("Tìm thấy fulfillment center {CenterId} có đủ stock", center.CenterId);
+				return center.CenterId;
+			}
+		}
+
+		_logger.LogWarning("Không tìm thấy fulfillment center có đủ stock");
+		return null;
+	}
+
+	/// <summary>
+	/// Trừ kho từ fulfillment center cho tất cả OrderItems
+	/// </summary>
+	private async Task DeductInventoryFromCenterAsync(int centerId, IEnumerable<Domain.Entities.OrderItem> orderItems)
+	{
+		var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+		if (inventory == null)
+		{
+			throw new InvalidOperationException($"Không tìm thấy inventory cho center {centerId}");
+		}
+
+		var inventoryParts = inventory.InventoryParts ?? new List<Domain.Entities.InventoryPart>();
+
+		foreach (var orderItem in orderItems)
+		{
+			var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+			if (invPart == null)
+			{
+				throw new InvalidOperationException($"Không tìm thấy part {orderItem.PartId} trong inventory của center {centerId}");
+			}
+
+			if (invPart.CurrentStock < orderItem.Quantity)
+			{
+				throw new InvalidOperationException($"Không đủ stock cho part {orderItem.PartId} trong center {centerId}. Hiện có: {invPart.CurrentStock}, cần: {orderItem.Quantity}");
+			}
+
+			// Trừ kho
+			invPart.CurrentStock -= orderItem.Quantity;
+			_logger.LogInformation("Đã trừ {Quantity} units của part {PartId} từ center {CenterId}. Stock còn lại: {RemainingStock}",
+				orderItem.Quantity, orderItem.PartId, centerId, invPart.CurrentStock);
+		}
+
+		// Save changes
+		await _inventoryRepository.UpdateInventoryAsync(inventory);
+		_logger.LogInformation("Đã cập nhật inventory cho center {CenterId}", centerId);
 	}
 }
 

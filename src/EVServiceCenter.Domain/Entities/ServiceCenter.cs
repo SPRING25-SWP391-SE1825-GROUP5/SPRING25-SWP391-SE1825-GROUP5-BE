@@ -11,11 +11,16 @@ public partial class ServiceCenter
 
     public string Address { get; set; }
 
-    
+
 
     public string PhoneNumber { get; set; }
 
-    
+
+
+    // Optional geo coordinates for proximity-based fulfillment
+    public decimal? Latitude { get; set; }
+
+    public decimal? Longitude { get; set; }
 
     public bool IsActive { get; set; }
 

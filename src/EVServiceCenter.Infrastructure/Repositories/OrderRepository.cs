@@ -70,9 +70,21 @@ public class OrderRepository : IOrderRepository
 
     public async Task<Order> UpdateAsync(Order order)
     {
-        _context.Orders.Update(order);
-        await _context.SaveChangesAsync();
-        return order;
+        var existing = await _context.Orders.FindAsync(order.OrderId);
+        if (existing != null)
+        {
+            // Update properties
+            _context.Entry(existing).CurrentValues.SetValues(order);
+            await _context.SaveChangesAsync();
+            return existing;
+        }
+        else
+        {
+            // Fallback: nếu không tìm thấy, dùng Update
+            _context.Orders.Update(order);
+            await _context.SaveChangesAsync();
+            return order;
+        }
     }
 
     public async Task DeleteAsync(int orderId)
@@ -106,8 +118,8 @@ public class OrderRepository : IOrderRepository
         return $"ORD-#{nextId + 1}";
     }
 
-    public async Task<List<Order>> GetOrdersByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10, 
-        string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+    public async Task<List<Order>> GetOrdersByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10,
+        string? status = null, DateTime? fromDate = null, DateTime? toDate = null,
         string sortBy = "orderDate", string sortOrder = "desc")
     {
         var query = _context.Orders
@@ -136,17 +148,17 @@ public class OrderRepository : IOrderRepository
         switch (sortBy.ToLower())
         {
             case "orderdate":
-                query = sortOrder.ToLower() == "asc" 
+                query = sortOrder.ToLower() == "asc"
                     ? query.OrderBy(o => o.CreatedAt)
                     : query.OrderByDescending(o => o.CreatedAt);
                 break;
             case "createdat":
-                query = sortOrder.ToLower() == "asc" 
+                query = sortOrder.ToLower() == "asc"
                     ? query.OrderBy(o => o.CreatedAt)
                     : query.OrderByDescending(o => o.CreatedAt);
                 break;
             case "totalamount":
-                query = sortOrder.ToLower() == "asc" 
+                query = sortOrder.ToLower() == "asc"
                     ? query.OrderBy(o => o.OrderItems.Sum(oi => oi.Quantity * oi.UnitPrice))
                     : query.OrderByDescending(o => o.OrderItems.Sum(oi => oi.Quantity * oi.UnitPrice));
                 break;
@@ -162,7 +174,7 @@ public class OrderRepository : IOrderRepository
             .ToListAsync();
     }
 
-    public async Task<int> CountOrdersByCustomerIdAsync(int customerId, string? status = null, 
+    public async Task<int> CountOrdersByCustomerIdAsync(int customerId, string? status = null,
         DateTime? fromDate = null, DateTime? toDate = null)
     {
         var query = _context.Orders.Where(o => o.CustomerId == customerId);
@@ -212,5 +224,45 @@ public class OrderRepository : IOrderRepository
         return await _context.Set<OrderItem>()
             .Include(oi => oi.Part)
             .FirstOrDefaultAsync(oi => oi.OrderId == orderId && oi.PartId == partId);
+    }
+
+    public async Task<OrderItem?> GetOrderItemByIdAsync(int orderItemId)
+    {
+        return await _context.Set<OrderItem>()
+            .Include(oi => oi.Part)
+            .Include(oi => oi.Order)
+            .FirstOrDefaultAsync(oi => oi.OrderItemId == orderItemId);
+    }
+
+    public async Task UpdateOrderItemAsync(OrderItem item)
+    {
+        _context.Update(item);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<Order?> GetOrderByPayOSOrderCodeAsync(int payOSOrderCode)
+    {
+        return await _context.Orders
+            .FirstOrDefaultAsync(o => o.PayOSOrderCode == payOSOrderCode);
+    }
+
+    public async Task<bool> PayOSOrderCodeExistsAsync(int payOSOrderCode)
+    {
+        return await _context.Orders
+            .AnyAsync(o => o.PayOSOrderCode == payOSOrderCode);
+    }
+
+    public async Task UpdatePayOSOrderCodeAsync(int orderId, int payOSOrderCode)
+    {
+        var order = await _context.Orders.FindAsync(orderId);
+        if (order != null)
+        {
+            order.PayOSOrderCode = payOSOrderCode;
+            await _context.SaveChangesAsync();
+        }
+        else
+        {
+            throw new InvalidOperationException($"Order {orderId} không tồn tại");
+        }
     }
 }

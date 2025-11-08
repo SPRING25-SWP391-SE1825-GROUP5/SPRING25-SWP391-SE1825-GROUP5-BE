@@ -50,6 +50,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.Center)
                 .Include(b => b.TechnicianTimeSlot!)
                 .ThenInclude(tts => tts.Slot!)
+                .Include(b => b.TechnicianTimeSlot!)
+                .ThenInclude(tts => tts.Technician!)
+                .ThenInclude(t => t.User)
                 .Include(b => b.Service)
                 .Include(b => b.AppliedCredit!)
                 .ThenInclude(ac => ac.ServicePackage)
@@ -67,8 +70,19 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         public async Task UpdateBookingAsync(Booking booking)
         {
-            _context.Bookings.Update(booking);
-            await _context.SaveChangesAsync();
+            var existing = await _context.Bookings.FindAsync(booking.BookingId);
+            if (existing != null)
+            {
+                // Update properties
+                _context.Entry(existing).CurrentValues.SetValues(booking);
+                await _context.SaveChangesAsync();
+            }
+            else
+            {
+                // Fallback: nếu không tìm thấy, dùng Update
+                _context.Bookings.Update(booking);
+                await _context.SaveChangesAsync();
+            }
         }
 
         public async Task<bool> BookingExistsAsync(int bookingId)
@@ -88,11 +102,11 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(b => b.TechnicianTimeSlot!)
                 .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
-                .Where(b => b.TechnicianTimeSlot != null 
+                .Where(b => b.TechnicianTimeSlot != null
                          && b.TechnicianTimeSlot.TechnicianId == technicianId)
                 .OrderByDescending(b => b.CreatedAt)
                 .ToListAsync();
-                
+
             return bookings;
         }
 
@@ -106,7 +120,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ThenInclude(tts => tts.Slot!)
                 .Include(b => b.Service)
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId);
-                
+
             return booking;
         }
 
@@ -126,8 +140,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
         // BookingServices removed in single-service model
 
-        public async Task<List<Booking>> GetBookingsByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10, 
-            string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+        public async Task<List<Booking>> GetBookingsByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10,
+            string? status = null, DateTime? fromDate = null, DateTime? toDate = null,
             string sortBy = "createdAt", string sortOrder = "desc")
         {
             var query = _context.Bookings
@@ -157,7 +171,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             {
                 case "bookingdate":
                 case "createdat":
-                    query = sortOrder.ToLower() == "asc" 
+                    query = sortOrder.ToLower() == "asc"
                         ? query.OrderBy(b => b.CreatedAt)
                         : query.OrderByDescending(b => b.CreatedAt);
                     break;
@@ -179,7 +193,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<int> CountBookingsByCustomerIdAsync(int customerId, string? status = null, 
+        public async Task<int> CountBookingsByCustomerIdAsync(int customerId, string? status = null,
             DateTime? fromDate = null, DateTime? toDate = null)
         {
             var query = _context.Bookings.Where(b => b.CustomerId == customerId);
@@ -198,8 +212,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await query.CountAsync();
         }
 
-        public async Task<List<Booking>> GetBookingsByCenterIdAsync(int centerId, int page = 1, int pageSize = 10, 
-            string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+        public async Task<List<Booking>> GetBookingsByCenterIdAsync(int centerId, int page = 1, int pageSize = 10,
+            string? status = null, DateTime? fromDate = null, DateTime? toDate = null,
             string sortBy = "createdAt", string sortOrder = "desc")
         {
             var query = _context.Bookings
@@ -231,19 +245,19 @@ namespace EVServiceCenter.Infrastructure.Repositories
             switch (sortBy.ToLower())
             {
                 case "bookingdate":
-                    query = sortOrder.ToLower() == "asc" 
-                        ? query.OrderBy(b => b.CreatedAt) 
+                    query = sortOrder.ToLower() == "asc"
+                        ? query.OrderBy(b => b.CreatedAt)
                         : query.OrderByDescending(b => b.CreatedAt);
                     break;
                 case "status":
-                    query = sortOrder.ToLower() == "asc" 
-                        ? query.OrderBy(b => b.Status) 
+                    query = sortOrder.ToLower() == "asc"
+                        ? query.OrderBy(b => b.Status)
                         : query.OrderByDescending(b => b.Status);
                     break;
                 case "createdat":
                 default:
-                    query = sortOrder.ToLower() == "asc" 
-                        ? query.OrderBy(b => b.CreatedAt) 
+                    query = sortOrder.ToLower() == "asc"
+                        ? query.OrderBy(b => b.CreatedAt)
                         : query.OrderByDescending(b => b.CreatedAt);
                     break;
             }
@@ -255,7 +269,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<int> CountBookingsByCenterIdAsync(int centerId, string? status = null, 
+        public async Task<int> CountBookingsByCenterIdAsync(int centerId, string? status = null,
             DateTime? fromDate = null, DateTime? toDate = null)
         {
             var query = _context.Bookings.Where(b => b.CenterId == centerId);
@@ -306,9 +320,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
             return await _context.Database.BeginTransactionAsync();
         }
 
-        public async Task<List<Booking>> GetBookingsForAdminAsync(int page = 1, int pageSize = 10, 
-            string? status = null, int? centerId = null, int? customerId = null, 
-            DateTime? fromDate = null, DateTime? toDate = null, 
+        public async Task<List<Booking>> GetBookingsForAdminAsync(int page = 1, int pageSize = 10,
+            string? status = null, int? centerId = null, int? customerId = null,
+            DateTime? fromDate = null, DateTime? toDate = null,
             string sortBy = "createdAt", string sortOrder = "desc")
         {
             var query = _context.Bookings
@@ -358,22 +372,22 @@ namespace EVServiceCenter.Infrastructure.Repositories
             {
                 case "bookingdate":
                 case "createdat":
-                    query = sortOrder.ToLower() == "asc" 
+                    query = sortOrder.ToLower() == "asc"
                         ? query.OrderBy(b => b.CreatedAt)
                         : query.OrderByDescending(b => b.CreatedAt);
                     break;
                 case "status":
-                    query = sortOrder.ToLower() == "asc" 
+                    query = sortOrder.ToLower() == "asc"
                         ? query.OrderBy(b => b.Status)
                         : query.OrderByDescending(b => b.Status);
                     break;
                 case "centerid":
-                    query = sortOrder.ToLower() == "asc" 
+                    query = sortOrder.ToLower() == "asc"
                         ? query.OrderBy(b => b.CenterId)
                         : query.OrderByDescending(b => b.CenterId);
                     break;
                 case "customerid":
-                    query = sortOrder.ToLower() == "asc" 
+                    query = sortOrder.ToLower() == "asc"
                         ? query.OrderBy(b => b.CustomerId)
                         : query.OrderByDescending(b => b.CustomerId);
                     break;
@@ -389,7 +403,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<int> CountBookingsForAdminAsync(string? status = null, int? centerId = null, 
+        public async Task<int> CountBookingsForAdminAsync(string? status = null, int? centerId = null,
             int? customerId = null, DateTime? fromDate = null, DateTime? toDate = null)
         {
             var query = _context.Bookings.AsQueryable();
@@ -421,6 +435,32 @@ namespace EVServiceCenter.Infrastructure.Repositories
             }
 
             return await query.CountAsync();
+        }
+
+        public async Task<Booking?> GetBookingByPayOSOrderCodeAsync(int payOSOrderCode)
+        {
+            return await _context.Bookings
+                .FirstOrDefaultAsync(b => b.PayOSOrderCode == payOSOrderCode);
+        }
+
+        public async Task<bool> PayOSOrderCodeExistsAsync(int payOSOrderCode)
+        {
+            return await _context.Bookings
+                .AnyAsync(b => b.PayOSOrderCode == payOSOrderCode);
+        }
+
+        public async Task UpdatePayOSOrderCodeAsync(int bookingId, int payOSOrderCode)
+        {
+            var booking = await _context.Bookings.FindAsync(bookingId);
+            if (booking != null)
+            {
+                booking.PayOSOrderCode = payOSOrderCode;
+                await _context.SaveChangesAsync();
+            }
+            else
+            {
+                throw new InvalidOperationException($"Booking {bookingId} không tồn tại");
+            }
         }
     }
 }

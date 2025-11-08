@@ -80,6 +80,18 @@ namespace EVServiceCenter.Infrastructure.Repositories
             }
         }
 
+        public async Task<bool> DeleteByIdAsync(int workOrderPartId)
+        {
+            var entity = await _db.WorkOrderParts
+                .FirstOrDefaultAsync(x => x.WorkOrderPartId == workOrderPartId);
+            if (entity == null)
+                return false;
+
+            _db.WorkOrderParts.Remove(entity);
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
         public async Task<(bool Success, string? Error, WorkOrderPart? Item)> ApproveAsync(int id, int centerId, int approvedByUserId, DateTime approvedAtUtc)
         {
             using var tx = await _db.Database.BeginTransactionAsync();

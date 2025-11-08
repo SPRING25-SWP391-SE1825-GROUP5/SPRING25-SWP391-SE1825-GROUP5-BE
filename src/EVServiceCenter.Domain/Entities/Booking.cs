@@ -13,21 +13,21 @@ public partial class Booking
 
     public int CenterId { get; set; }
 
-    
+
 
     // Link to TechnicianTimeSlot instead of just SlotId
     public int? TechnicianSlotId { get; set; }
 
     public string? Status { get; set; }
 
-    
+
     public string? SpecialRequests { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
 
-    
+
 
     // One booking = one service (denormalized)
     public int ServiceId { get; set; }
@@ -38,6 +38,9 @@ public partial class Booking
 
     // Reserved package credit applied to this booking (nullable)
     public int? AppliedCreditId { get; set; }
+
+    // PayOS orderCode - unique random number để tránh conflict với Order
+    public int? PayOSOrderCode { get; set; }
 
     public virtual ServiceCenter Center { get; set; }
 

@@ -28,7 +28,7 @@ tests/*/logs/
 *.trx
 *.coverage
 *.coveragexml
-
+docs/ 
 # Allure Test Reports
 allure-report/
 allure-results/

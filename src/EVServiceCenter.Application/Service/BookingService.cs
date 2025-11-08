@@ -644,6 +644,39 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
+                // Lock technician timeslot when booking is confirmed
+                if (string.Equals(request.Status, "CONFIRMED", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (booking.TechnicianSlotId.HasValue)
+                    {
+                        var tts = await _technicianTimeSlotRepository.GetByIdAsync(booking.TechnicianSlotId.Value);
+                        if (tts != null)
+                        {
+                            // Đảm bảo timeslot được lock khi confirm: IsAvailable = false, BookingId = bookingId
+                            var needsUpdate = false;
+                            
+                            if (tts.IsAvailable)
+                            {
+                                tts.IsAvailable = false;
+                                needsUpdate = true;
+                            }
+                            
+                            if (tts.BookingId != bookingId)
+                            {
+                                tts.BookingId = bookingId;
+                                needsUpdate = true;
+                            }
+                            
+                            if (needsUpdate)
+                            {
+                                await _technicianTimeSlotRepository.UpdateAsync(tts);
+                                _logger.LogInformation("Đã lock technician timeslot {TechnicianSlotId} cho technician {TechnicianId} khi confirm booking {BookingId}",
+                                    tts.TechnicianSlotId, tts.TechnicianId, booking.BookingId);
+                            }
+                        }
+                    }
+                }
+
                 // Release reserved technician slot based on status
                 // CANCELLED: Luôn release slot
                 // COMPLETED/PAID: Chỉ release nếu WorkDate >= today (slot còn tương lai)

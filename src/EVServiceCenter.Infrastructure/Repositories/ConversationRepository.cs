@@ -201,7 +201,14 @@ namespace EVServiceCenter.Infrastructure.Repositories
 
             if (conversation != null)
             {
-                // Delete related entities first (if cascade delete is not configured)
+                // Fix circular dependency: Set LastMessageId to null first
+                // because Conversation.LastMessageId -> Message (Restrict)
+                // and Message.ConversationId -> Conversation (Cascade)
+                conversation.LastMessageId = null;
+                conversation.LastMessageAt = null;
+                await _context.SaveChangesAsync();
+
+                // Now delete related entities
                 _context.ConversationMembers.RemoveRange(conversation.ConversationMembers);
                 _context.Messages.RemoveRange(conversation.Messages);
                 _context.Conversations.Remove(conversation);

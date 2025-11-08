@@ -23,26 +23,31 @@
 ### 🛒 **1. CART MANAGEMENT** (`/api/cart`)
 
 #### Thêm item vào cart
+
 - **POST** `/api/cart/customer/{customerId}/items`
 - **Mô tả**: Thêm part vào giỏ hàng
 - **Body**: `{ partId, quantity }`
 - **Response**: Cart với items
 
 #### Lấy cart
+
 - **GET** `/api/cart/customer/{customerId}`
 - **Mô tả**: Lấy giỏ hàng của customer
 - **Response**: Cart với danh sách items
 
 #### Cập nhật quantity
+
 - **PUT** `/api/cart/customer/{customerId}/items/{partId}`
 - **Mô tả**: Cập nhật số lượng part trong cart
 - **Body**: `{ quantity }`
 
 #### Xóa item khỏi cart
+
 - **DELETE** `/api/cart/customer/{customerId}/items/{partId}`
 - **Mô tả**: Xóa part khỏi giỏ hàng
 
 #### Xóa toàn bộ cart
+
 - **DELETE** `/api/cart/customer/{customerId}`
 - **Mô tả**: Xóa toàn bộ giỏ hàng
 
@@ -51,6 +56,7 @@
 ### 📦 **2. ORDER MANAGEMENT** (`/api/order`)
 
 #### Tạo Order từ Cart
+
 - **POST** `/api/order/customer/{customerId}/create`
 - **Mô tả**: Tạo order từ giỏ hàng
 - **Body**: `CreateOrderRequest { Latitude?, Longitude?, Notes? }`
@@ -62,6 +68,7 @@
   - Xóa Cart sau khi tạo Order
 
 #### Tạo Quick Order (Mua ngay)
+
 - **POST** `/api/order/customers/{customerId}/orders/quick`
 - **Mô tả**: Tạo order trực tiếp từ danh sách parts (không qua cart)
 - **Body**: `QuickOrderRequest { Items: [{ partId, quantity }], Latitude?, Longitude? }`
@@ -69,36 +76,43 @@
 - **Logic**: Tương tự CreateOrder nhưng không cần cart
 
 #### Lấy danh sách Orders của Customer
+
 - **GET** `/api/order/customer/{customerId}`
 - **Mô tả**: Lấy tất cả orders của customer
 - **Response**: List<OrderResponse>
 
 #### Lấy chi tiết Order
+
 - **GET** `/api/order/{orderId}`
 - **Mô tả**: Lấy thông tin chi tiết order
 - **Response**: OrderResponse với `FulfillmentCenterId` (nếu đã thanh toán)
 
 #### Lấy OrderItems
+
 - **GET** `/api/order/{orderId}/items`
 - **Mô tả**: Lấy danh sách items trong order
 - **Response**: List<OrderItemResponse>
 
 #### Lấy tất cả Orders (Admin)
+
 - **GET** `/api/order/admin` hoặc `/api/order`
 - **Mô tả**: Lấy tất cả orders (Admin only)
 - **Response**: List<OrderResponse>
 
 #### Export Orders (Admin)
+
 - **GET** `/api/order/export`
 - **Mô tả**: Export orders ra file Excel
 - **Response**: Excel file
 
 #### Cập nhật Order Status
+
 - **PUT** `/api/order/{orderId}/status`
 - **Mô tả**: Cập nhật trạng thái order (Admin/Staff)
 - **Body**: `{ status: "PENDING" | "PAID" | "COMPLETED" | "CANCELLED" }`
 
 #### Xóa Order
+
 - **DELETE** `/api/order/{orderId}`
 - **Mô tả**: Xóa order (chỉ khi status = "PENDING")
 
@@ -107,6 +121,7 @@
 ### 💳 **3. PAYMENT MANAGEMENT** (`/api/payment`)
 
 #### Tạo Payment Link cho Order
+
 - **POST** `/api/order/{orderId}/checkout/online`
 - **Mô tả**: Tạo PayOS payment link cho order
 - **Response**: `{ checkoutUrl, orderId }`
@@ -118,11 +133,13 @@
   - Return checkoutUrl
 
 #### Lấy Payment Link hiện có
+
 - **GET** `/api/order/{orderId}/payment/link`
 - **Mô tả**: Lấy payment link đã tạo trước đó
 - **Response**: `{ checkoutUrl }` hoặc 404 nếu chưa có
 
 #### Payment Result Callback (PayOS)
+
 - **GET** `/api/payment/result?orderCode={payOSOrderCode}&status={status}&code={code}`
 - **Mô tả**: Callback từ PayOS sau khi thanh toán
 - **Logic**:
@@ -142,6 +159,7 @@
   4. Redirect về frontend (success/error/failed)
 
 #### Cancel Payment (Order)
+
 - **GET** `/api/payment/order/{orderId}/cancel`
 - **Mô tả**: Redirect khi customer hủy thanh toán
 - **Logic**: Redirect về frontend với orderId
@@ -202,11 +220,13 @@
 ## 📊 **DATABASE CHANGES**
 
 ### **Order Table**
+
 - ✅ `PayOSOrderCode` (INT NULL) - Unique random number cho PayOS
 - ✅ `FulfillmentCenterId` (INT NULL) - Center nào đã fulfill order
 - ✅ Foreign key: `FK_Orders_FulfillmentCenter` → `ServiceCenters(CenterID)`
 
 ### **Invoice Table**
+
 - ✅ `PartsAmount` (DECIMAL) - Tổng tiền parts (được update khi thanh toán)
 - ❌ `WorkOrderID` - **Đã xóa** (không còn dùng)
 
@@ -215,6 +235,7 @@
 ## 🔍 **CÁCH TRUY VẤN**
 
 ### Query Order với FulfillmentCenter:
+
 ```sql
 SELECT
     o.OrderID,
@@ -231,6 +252,7 @@ WHERE o.OrderID = @OrderId;
 ```
 
 ### Query tất cả orders được fulfill từ một center:
+
 ```sql
 SELECT *
 FROM Orders
@@ -239,6 +261,7 @@ AND Status = 'PAID';
 ```
 
 ### Query inventory đã trừ cho order:
+
 ```sql
 SELECT
     ip.PartID,
@@ -269,14 +292,14 @@ WHERE o.OrderID = @OrderId;
 
 ## 🎯 **TÓM TẮT CÁC API CHÍNH**
 
-| API | Method | Endpoint | Mô tả |
-|-----|--------|----------|-------|
-| Create Order | POST | `/api/order/customer/{customerId}/create` | Tạo order từ cart |
-| Quick Order | POST | `/api/order/customers/{customerId}/orders/quick` | Tạo order trực tiếp |
-| Get Order | GET | `/api/order/{orderId}` | Lấy chi tiết order |
-| Create Payment Link | POST | `/api/order/{orderId}/checkout/online` | Tạo PayOS link |
-| Payment Callback | GET | `/api/payment/result` | PayOS callback |
-| Cancel Payment | GET | `/api/payment/order/{orderId}/cancel` | Hủy thanh toán |
+| API                 | Method | Endpoint                                         | Mô tả               |
+| ------------------- | ------ | ------------------------------------------------ | ------------------- |
+| Create Order        | POST   | `/api/order/customer/{customerId}/create`        | Tạo order từ cart   |
+| Quick Order         | POST   | `/api/order/customers/{customerId}/orders/quick` | Tạo order trực tiếp |
+| Get Order           | GET    | `/api/order/{orderId}`                           | Lấy chi tiết order  |
+| Create Payment Link | POST   | `/api/order/{orderId}/checkout/online`           | Tạo PayOS link      |
+| Payment Callback    | GET    | `/api/payment/result`                            | PayOS callback      |
+| Cancel Payment      | GET    | `/api/payment/order/{orderId}/cancel`            | Hủy thanh toán      |
 
 ---
 
@@ -293,4 +316,3 @@ WHERE o.OrderID = @OrderId;
   - [ ] Payment record được tạo
 - [ ] Query Order với FulfillmentCenter
 - [ ] Test trường hợp không đủ stock → Exception
-

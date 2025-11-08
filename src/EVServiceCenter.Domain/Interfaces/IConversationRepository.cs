@@ -21,5 +21,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<int> CountActiveConversationsByStaffIdAsync(int staffId);
         Task<List<Conversation>> GetConversationsByStaffIdAsync(int staffId, int page = 1, int pageSize = 10);
         Task<List<Conversation>> GetUnassignedConversationsAsync(int page = 1, int pageSize = 10);
+        Task DeleteConversationAsync(long conversationId);
     }
 }

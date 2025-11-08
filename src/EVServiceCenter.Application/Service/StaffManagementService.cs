@@ -153,7 +153,7 @@ namespace EVServiceCenter.Application.Service
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 var searchLower = searchTerm.ToLower();
-                filteredStaff = filteredStaff.Where(s => 
+                filteredStaff = filteredStaff.Where(s =>
                     s.User.FullName.ToLower().Contains(searchLower) ||
                     s.User.Email.ToLower().Contains(searchLower));
             }
@@ -239,6 +239,26 @@ namespace EVServiceCenter.Application.Service
                 var staff = await _staffRepository.GetStaffByIdAsync(staffId);
                 if (staff == null)
                     throw new ArgumentException("Nhân viên không tồn tại.");
+
+                // Validate: Không cho phép xóa khi center chỉ còn 1 staff (đảm bảo luôn có ít nhất 1 MANAGER và 1 STAFF)
+                var centerStaff = await _staffRepository.GetStaffByCenterIdAsync(staff.CenterId);
+                var activeStaff = centerStaff.Where(s => s.IsActive && s.User != null).ToList();
+
+                // Đếm số lượng MANAGER và STAFF active
+                var managerCount = activeStaff.Count(s => s.User.Role == "MANAGER");
+                var staffCount = activeStaff.Count(s => s.User.Role == "STAFF");
+
+                // Nếu đang xóa MANAGER và chỉ còn 1 MANAGER
+                if (staff.User?.Role == "MANAGER" && managerCount == 1)
+                {
+                    throw new ArgumentException("Không thể xóa quản lý (MANAGER) cuối cùng. Mỗi trung tâm phải có ít nhất 1 quản lý.");
+                }
+
+                // Nếu đang xóa STAFF và chỉ còn 1 STAFF
+                if (staff.User?.Role == "STAFF" && staffCount == 1)
+                {
+                    throw new ArgumentException("Không thể xóa nhân viên (STAFF) cuối cùng. Mỗi trung tâm phải có ít nhất 1 nhân viên.");
+                }
 
                 staff.IsActive = false;
                 await _staffRepository.UpdateStaffAsync(staff);
@@ -334,7 +354,7 @@ namespace EVServiceCenter.Application.Service
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
                     var searchLower = searchTerm.ToLower();
-                    filteredTechnicians = filteredTechnicians.Where(t => 
+                    filteredTechnicians = filteredTechnicians.Where(t =>
                         t.User.FullName.ToLower().Contains(searchLower) ||
                         t.User.Email.ToLower().Contains(searchLower) ||
                         t.Position.ToLower().Contains(searchLower));
@@ -370,7 +390,7 @@ namespace EVServiceCenter.Application.Service
                     UserPhoneNumber = t.User?.PhoneNumber ?? "N/A",
                     CenterId = t.CenterId,
                     CenterName = t.Center?.CenterName ?? "N/A",
-                    
+
                     Position = t.Position,
                     IsActive = t.IsActive,
                     CreatedAt = t.CreatedAt
@@ -545,7 +565,17 @@ namespace EVServiceCenter.Application.Service
             // Validate user exists
             var user = await _userRepository.GetUserByIdAsync(request.UserId);
             if (user == null)
+            {
                 errors.Add("Người dùng không tồn tại.");
+            }
+            else
+            {
+                // Validate user role must be MANAGER or STAFF
+                if (user.Role != "MANAGER" && user.Role != "STAFF")
+                {
+                    errors.Add("Người dùng phải có vai trò MANAGER hoặc STAFF để được thêm vào trung tâm.");
+                }
+            }
 
             // Validate center exists
             var center = await _centerRepository.GetCenterByIdAsync(request.CenterId);
@@ -559,6 +589,30 @@ namespace EVServiceCenter.Application.Service
             // Validate user is not already technician
             if (await IsUserAlreadyTechnicianAsync(request.UserId))
                 errors.Add("Người dùng đã là kỹ thuật viên của trung tâm khác.");
+
+            // Validate maximum staff per center: 1 MANAGER and 1 STAFF
+            if (user != null && center != null)
+            {
+                var existingStaff = await _staffRepository.GetStaffByCenterIdAsync(request.CenterId);
+                var activeStaff = existingStaff.Where(s => s.IsActive && s.User != null).ToList();
+
+                if (user.Role == "MANAGER")
+                {
+                    var existingManager = activeStaff.FirstOrDefault(s => s.User.Role == "MANAGER");
+                    if (existingManager != null)
+                    {
+                        errors.Add("Trung tâm đã có một quản lý (MANAGER). Mỗi trung tâm chỉ được phép có tối đa 1 quản lý.");
+                    }
+                }
+                else if (user.Role == "STAFF")
+                {
+                    var existingStaffRole = activeStaff.FirstOrDefault(s => s.User.Role == "STAFF");
+                    if (existingStaffRole != null)
+                    {
+                        errors.Add("Trung tâm đã có một nhân viên (STAFF). Mỗi trung tâm chỉ được phép có tối đa 1 nhân viên.");
+                    }
+                }
+            }
 
             // No StaffCode validation
 
@@ -694,7 +748,7 @@ namespace EVServiceCenter.Application.Service
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
                     var searchLower = searchTerm.ToLower();
-                    filteredEmployees = filteredEmployees.Where(e => 
+                    filteredEmployees = filteredEmployees.Where(e =>
                         e.FullName.ToLower().Contains(searchLower) ||
                         e.Email.ToLower().Contains(searchLower) ||
                         e.PhoneNumber.Contains(searchTerm));
@@ -708,7 +762,7 @@ namespace EVServiceCenter.Application.Service
                 // Apply pagination
                 var totalCount = filteredEmployees.Count();
                 var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
-                
+
                 var pagedEmployees = filteredEmployees
                     .OrderByDescending(e => e.CreatedAt)
                     .Skip((pageNumber - 1) * pageSize)
@@ -743,8 +797,8 @@ namespace EVServiceCenter.Application.Service
                 var existingTechnicianUserIds = (await _technicianRepository.GetAllTechniciansAsync()).Select(t => t.UserId).ToHashSet();
 
                 // Filter users who don't have staff or technician records
-                var availableUsers = staffTechnicianUsers.Where(u => 
-                    !existingStaffUserIds.Contains(u.UserId) && 
+                var availableUsers = staffTechnicianUsers.Where(u =>
+                    !existingStaffUserIds.Contains(u.UserId) &&
                     !existingTechnicianUserIds.Contains(u.UserId)).ToList();
 
                 // Map to EmployeeResponse
@@ -776,7 +830,7 @@ namespace EVServiceCenter.Application.Service
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
                     var searchLower = searchTerm.ToLower();
-                    filteredEmployees = filteredEmployees.Where(e => 
+                    filteredEmployees = filteredEmployees.Where(e =>
                         e.FullName.ToLower().Contains(searchLower) ||
                         e.Email.ToLower().Contains(searchLower) ||
                         e.PhoneNumber.Contains(searchTerm));
@@ -790,7 +844,7 @@ namespace EVServiceCenter.Application.Service
                 // Apply pagination
                 var totalCount = filteredEmployees.Count();
                 var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
-                
+
                 var pagedEmployees = filteredEmployees
                     .OrderByDescending(e => e.CreatedAt)
                     .Skip((pageNumber - 1) * pageSize)
@@ -825,11 +879,11 @@ namespace EVServiceCenter.Application.Service
                 }
 
                 // Get staff and technicians
-                var allStaff = centerId.HasValue 
+                var allStaff = centerId.HasValue
                     ? await _staffRepository.GetStaffByCenterIdAsync(centerId.Value)
                     : await _staffRepository.GetStaffByCenterIdAsync(null); // Get unassigned staff
-                
-                var allTechnicians = centerId.HasValue 
+
+                var allTechnicians = centerId.HasValue
                     ? await _technicianRepository.GetTechniciansByCenterIdAsync(centerId.Value)
                     : await _technicianRepository.GetTechniciansByCenterIdAsync(null); // Get unassigned technicians
 
@@ -940,6 +994,12 @@ namespace EVServiceCenter.Application.Service
             if (center == null)
                 throw new ArgumentException("Trung tâm không tồn tại.");
 
+            // Lấy danh sách staff hiện tại của center để kiểm tra giới hạn
+            var existingStaff = await _staffRepository.GetStaffByCenterIdAsync(centerId);
+            var activeStaff = existingStaff.Where(s => s.IsActive && s.User != null).ToList();
+            var currentManagerCount = activeStaff.Count(s => s.User.Role == "MANAGER");
+            var currentStaffCount = activeStaff.Count(s => s.User.Role == "STAFF");
+
             foreach (var userId in userIds)
             {
                 try
@@ -952,18 +1012,38 @@ namespace EVServiceCenter.Application.Service
                         continue;
                     }
 
-                    // Kiểm tra role phải là STAFF hoặc TECHNICIAN
-                    if (user.Role != "STAFF" && user.Role != "TECHNICIAN")
+                    // Kiểm tra role phải là MANAGER, STAFF hoặc TECHNICIAN
+                    if (user.Role != "MANAGER" && user.Role != "STAFF" && user.Role != "TECHNICIAN")
                     {
-                        errors.Add($"User ID {userId} không phải là STAFF hoặc TECHNICIAN.");
+                        errors.Add($"User ID {userId} không phải là MANAGER, STAFF hoặc TECHNICIAN.");
                         continue;
                     }
 
+                    // Validate giới hạn MANAGER và STAFF
+                    if (user.Role == "MANAGER")
+                    {
+                        // Kiểm tra center đã có MANAGER chưa
+                        if (currentManagerCount >= 1)
+                        {
+                            errors.Add($"Trung tâm đã có một quản lý (MANAGER). Mỗi trung tâm chỉ được phép có tối đa 1 quản lý.");
+                            continue;
+                        }
+                    }
+                    else if (user.Role == "STAFF")
+                    {
+                        // Kiểm tra center đã có STAFF chưa
+                        if (currentStaffCount >= 1)
+                        {
+                            errors.Add($"Trung tâm đã có một nhân viên (STAFF). Mỗi trung tâm chỉ được phép có tối đa 1 nhân viên.");
+                            continue;
+                        }
+                    }
+
                     // Xử lý theo role
-                    if (user.Role == "STAFF")
+                    if (user.Role == "MANAGER" || user.Role == "STAFF")
                     {
                         var staff = await _staffRepository.GetStaffByUserIdAsync(userId);
-                        
+
                         if (staff == null)
                         {
                             // Tạo mới staff
@@ -975,6 +1055,12 @@ namespace EVServiceCenter.Application.Service
                                 CreatedAt = DateTime.UtcNow
                             };
                             await _staffRepository.CreateStaffAsync(staff);
+
+                            // Cập nhật counter sau khi thêm thành công
+                            if (user.Role == "MANAGER")
+                                currentManagerCount++;
+                            else if (user.Role == "STAFF")
+                                currentStaffCount++;
                         }
                         else
                         {
@@ -985,11 +1071,24 @@ namespace EVServiceCenter.Application.Service
                                 continue;
                             }
 
+                            // Lưu trạng thái trước khi update để kiểm tra
+                            var wasActive = staff.IsActive;
+                            var oldCenterId = staff.CenterId;
+
                             // Cập nhật center
                             staff.CenterId = centerId;
                             staff.IsActive = true;
 
                             await _staffRepository.UpdateStaffAsync(staff);
+
+                            // Cập nhật counter sau khi cập nhật thành công (chỉ tăng nếu staff chưa active hoặc chưa ở center này)
+                            if ((!wasActive || oldCenterId != centerId) && staff.IsActive && staff.CenterId == centerId)
+                            {
+                                if (user.Role == "MANAGER")
+                                    currentManagerCount++;
+                                else if (user.Role == "STAFF")
+                                    currentStaffCount++;
+                            }
                         }
 
                         results.Add(await MapToStaffResponseAsync(staff.StaffId));
@@ -997,7 +1096,7 @@ namespace EVServiceCenter.Application.Service
                     else // TECHNICIAN
                     {
                         var technician = await _technicianRepository.GetTechnicianByUserIdAsync(userId);
-                        
+
                         if (technician == null)
                         {
                             // Tạo mới technician

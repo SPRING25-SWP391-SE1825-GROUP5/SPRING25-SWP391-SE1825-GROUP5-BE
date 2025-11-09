@@ -12,6 +12,7 @@ using EVServiceCenter.Domain.IRepositories;
 using BCrypt.Net;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -560,9 +561,9 @@ namespace EVServiceCenter.Application.Service
                             toDate: null);
 
                         var blockedBookings = activeBookings.Where(b =>
-                            b.Status == "PENDING" ||
-                            b.Status == "CONFIRMED" ||
-                            b.Status == "IN_PROGRESS").ToList();
+                            b.Status == BookingStatusConstants.Pending ||
+                            b.Status == BookingStatusConstants.Confirmed ||
+                            b.Status == BookingStatusConstants.InProgress).ToList();
 
                         if (blockedBookings.Any())
                         {
@@ -576,8 +577,8 @@ namespace EVServiceCenter.Application.Service
                         // Check invoices PENDING/UNPAID
                         var invoices = await _invoiceRepository.GetByCustomerIdAsync(customer.CustomerId);
                         var blockedInvoices = invoices.Where(i =>
-                            i.Status == "PENDING" ||
-                            i.Status == "UNPAID").ToList();
+                            i.Status == PaymentConstants.InvoiceStatus.Pending ||
+                            i.Status == "UNPAID").ToList(); // TODO: Create InvoiceStatusConstants for UNPAID
 
                         if (blockedInvoices.Any())
                         {
@@ -591,7 +592,7 @@ namespace EVServiceCenter.Application.Service
                         // Check payments PENDING cho các invoices của customer
                         foreach (var invoice in invoices)
                         {
-                            var payments = await _paymentRepository.GetByInvoiceIdAsync(invoice.InvoiceId, status: "PENDING");
+                            var payments = await _paymentRepository.GetByInvoiceIdAsync(invoice.InvoiceId, status: PaymentConstants.PaymentStatus.Pending);
                             if (payments.Any())
                             {
                                 constraints.Add($"Khách hàng có {payments.Count} giao dịch thanh toán đang chờ xử lý. Vui lòng hoàn tất các giao dịch này trước khi vô hiệu hóa tài khoản.");

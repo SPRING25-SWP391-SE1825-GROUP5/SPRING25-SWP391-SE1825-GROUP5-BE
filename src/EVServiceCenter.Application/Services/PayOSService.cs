@@ -26,7 +26,7 @@ namespace EVServiceCenter.Application.Services
             _configuration = configuration;
             _logger = logger;
             _httpClient = httpClient;
-            
+
             _clientId = _configuration["PayOS:ClientId"] ?? throw new ArgumentNullException("PayOS:ClientId");
             _apiKey = _configuration["PayOS:ApiKey"] ?? throw new ArgumentNullException("PayOS:ApiKey");
             _checksumKey = _configuration["PayOS:ChecksumKey"] ?? throw new ArgumentNullException("PayOS:ChecksumKey");
@@ -61,7 +61,8 @@ namespace EVServiceCenter.Application.Services
 
                 // Tính amount theo VNĐ integer (giống code cũ)
                 var amountVnd = (int)Math.Round(amount);
-                if (amountVnd < 1000) amountVnd = 1000; // Min amount
+                if (amountVnd < EVServiceCenter.Application.Constants.AppConstants.PaymentAmounts.MinAmountVnd)
+                    amountVnd = EVServiceCenter.Application.Constants.AppConstants.PaymentAmounts.MinAmountVnd;
 
                 // Tạo canonical string theo thứ tự cố định (giống code cũ)
                 var canonical = $"amount={amountVnd}&cancelUrl={cancelUrl}&description={description}&orderCode={orderCode}&returnUrl={returnUrl}";
@@ -96,7 +97,7 @@ namespace EVServiceCenter.Application.Services
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/payment-requests");
                 request.Headers.Add("x-client-id", _clientId);
                 request.Headers.Add("x-api-key", _apiKey);
-                
+
                 var json = JsonSerializer.Serialize(paymentData);
                 request.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
@@ -113,9 +114,9 @@ namespace EVServiceCenter.Application.Services
                 // Parse PayOS response
                 using var doc = JsonDocument.Parse(responseContent);
                 var root = doc.RootElement;
-                
+
                 _logger.LogInformation($"PayOS Response: {responseContent}");
-                
+
                 // Check if success
                 if (root.TryGetProperty("code", out var codeElement) && codeElement.GetString() == "00")
                 {
@@ -126,20 +127,20 @@ namespace EVServiceCenter.Application.Services
                         {
                             var checkoutUrl = checkoutUrlElement.GetString();
                             _logger.LogInformation($"PayOS Checkout URL: {checkoutUrl}");
-                            
+
                             if (!string.IsNullOrEmpty(checkoutUrl))
                             {
                                 _logger.LogInformation($"Đã tạo thành công checkout URL cho booking {bookingId}");
                                 return checkoutUrl; // Return web payment link
                             }
                         }
-                        
+
                         // Fallback to qrCode for banking apps (VietQR)
                         if (dataElement.TryGetProperty("qrCode", out var qrCodeElement))
                         {
                             var qrCode = qrCodeElement.GetString();
                             _logger.LogInformation($"PayOS VietQR Code: {qrCode}");
-                            
+
                             if (!string.IsNullOrEmpty(qrCode))
                             {
                                 _logger.LogInformation($"Đã tạo thành công VietQR cho booking {bookingId}");
@@ -148,7 +149,7 @@ namespace EVServiceCenter.Application.Services
                         }
                     }
                 }
-                
+
                 // Error case
                 var errorDesc = root.TryGetProperty("desc", out var descElement) ? descElement.GetString() : "Unknown error";
                 _logger.LogError($"PayOS Error: {errorDesc}. Full response: {responseContent}");
@@ -191,7 +192,7 @@ namespace EVServiceCenter.Application.Services
 
                 var payosResponse = JsonSerializer.Deserialize<PayOSResponse>(responseContent);
                 _logger.LogInformation($"Deserialized response - Code: {payosResponse?.Code}, Message: {payosResponse?.Message}");
-                
+
                 if (payosResponse?.Data != null)
                 {
                     _logger.LogInformation($"Payment Data - Status: {payosResponse.Data.Status}, Amount: {payosResponse.Data.Amount}");
@@ -263,11 +264,11 @@ namespace EVServiceCenter.Application.Services
             {
                 _logger.LogInformation("=== PAYOS CALLBACK HANDLER START ===");
                 _logger.LogInformation($"Xử lý callback thanh toán cho orderCode: {orderCode}");
-                
+
                 // Lấy thông tin thanh toán từ PayOS
                 _logger.LogInformation($"Bắt đầu gọi GetPaymentInfoAsync cho orderCode: {orderCode}");
                 var paymentInfo = await GetPaymentInfoAsync(int.Parse(orderCode));
-                
+
                 if (paymentInfo == null)
                 {
                     _logger.LogWarning($"Không tìm thấy thông tin thanh toán cho orderCode: {orderCode}");

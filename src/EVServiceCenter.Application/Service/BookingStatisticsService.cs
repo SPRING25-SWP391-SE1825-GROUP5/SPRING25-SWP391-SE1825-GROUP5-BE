@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models;
 using EVServiceCenter.Domain.Interfaces;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -26,34 +27,34 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                _logger.LogInformation("Getting booking statistics with filters: StartDate={StartDate}, EndDate={EndDate}, CenterId={CenterId}", 
+                _logger.LogInformation("Getting booking statistics with filters: StartDate={StartDate}, EndDate={EndDate}, CenterId={CenterId}",
                     request.StartDate, request.EndDate, request.CenterId);
 
                 var bookings = await _bookingRepository.GetAllBookingsAsync();
-                
+
                 // Apply filters
                 var filteredBookings = bookings.AsQueryable();
-                
+
                 if (request.StartDate.HasValue)
                 {
                     filteredBookings = filteredBookings.Where(b => b.CreatedAt >= request.StartDate.Value);
                 }
-                
+
                 if (request.EndDate.HasValue)
                 {
                     filteredBookings = filteredBookings.Where(b => b.CreatedAt <= request.EndDate.Value);
                 }
-                
+
                 if (request.CenterId.HasValue)
                 {
                     filteredBookings = filteredBookings.Where(b => b.CenterId == request.CenterId.Value);
                 }
-                
+
                 if (!string.IsNullOrEmpty(request.ServiceType))
                 {
                     filteredBookings = filteredBookings.Where(b => b.Service != null && b.Service.ServiceName == request.ServiceType);
                 }
-                
+
                 if (!string.IsNullOrEmpty(request.Status))
                 {
                     filteredBookings = filteredBookings.Where(b => b.Status == request.Status);
@@ -64,15 +65,15 @@ namespace EVServiceCenter.Application.Service
                 var statistics = new BookingStatisticsData
                 {
                     TotalBookings = bookingList.Count(),
-                    PendingBookings = bookingList.Count(b => b.Status == "PENDING"),
-                    ConfirmedBookings = bookingList.Count(b => b.Status == "CONFIRMED"),
-                    InProgressBookings = bookingList.Count(b => b.Status == "IN_PROGRESS"),
-                    CompletedBookings = bookingList.Count(b => b.Status == "COMPLETED"),
-                    CancelledBookings = bookingList.Count(b => b.Status == "CANCELLED"),
+                    PendingBookings = bookingList.Count(b => b.Status == BookingStatusConstants.Pending),
+                    ConfirmedBookings = bookingList.Count(b => b.Status == BookingStatusConstants.Confirmed),
+                    InProgressBookings = bookingList.Count(b => b.Status == BookingStatusConstants.InProgress),
+                    CompletedBookings = bookingList.Count(b => b.Status == BookingStatusConstants.Completed),
+                    CancelledBookings = bookingList.Count(b => b.Status == BookingStatusConstants.Cancelled),
                     TotalRevenue = bookingList.Where(b => b.Service != null).Sum(b => b.Service.BasePrice),
-                    PendingRevenue = bookingList.Where(b => b.Status == "PENDING" && b.Service != null).Sum(b => b.Service.BasePrice),
-                    CompletedRevenue = bookingList.Where(b => b.Status == "COMPLETED" && b.Service != null).Sum(b => b.Service.BasePrice),
-                    CancelledRevenue = bookingList.Where(b => b.Status == "CANCELLED" && b.Service != null).Sum(b => b.Service.BasePrice)
+                    PendingRevenue = bookingList.Where(b => b.Status == BookingStatusConstants.Pending && b.Service != null).Sum(b => b.Service.BasePrice),
+                    CompletedRevenue = bookingList.Where(b => b.Status == BookingStatusConstants.Completed && b.Service != null).Sum(b => b.Service.BasePrice),
+                    CancelledRevenue = bookingList.Where(b => b.Status == BookingStatusConstants.Cancelled && b.Service != null).Sum(b => b.Service.BasePrice)
                 };
 
                 // Status counts

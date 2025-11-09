@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -51,10 +52,10 @@ namespace EVServiceCenter.Application.Service
                 var summary = new BookingTodaySummary
                 {
                     TotalBookings = bookings.Count,
-                    CompletedBookings = bookings.Count(b => b.Status == "COMPLETED"),
-                    PendingBookings = bookings.Count(b => b.Status == "PENDING"),
-                    CancelledBookings = bookings.Count(b => b.Status == "CANCELLED"),
-                    TotalRevenue = bookings.Where(b => b.Status == "PAID").Sum(b => 0) // TODO: Calculate actual revenue
+                    CompletedBookings = bookings.Count(b => b.Status == BookingStatusConstants.Completed),
+                    PendingBookings = bookings.Count(b => b.Status == BookingStatusConstants.Pending),
+                    CancelledBookings = bookings.Count(b => b.Status == BookingStatusConstants.Cancelled),
+                    TotalRevenue = bookings.Where(b => b.Status == BookingStatusConstants.Paid).Sum(b => 0) // TODO: Calculate actual revenue
                 };
 
                 return new BookingTodayResponse

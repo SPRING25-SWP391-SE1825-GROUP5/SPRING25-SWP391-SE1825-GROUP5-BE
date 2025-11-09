@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -40,7 +41,7 @@ namespace EVServiceCenter.Application.Service
                 var allBookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
                 var upcomingBookings = allBookings.Where(b =>
                     b.CreatedAt.Date >= today &&
-                    (b.Status == "CONFIRMED" || b.Status == "PENDING")
+                    (b.Status == BookingStatusConstants.Confirmed || b.Status == BookingStatusConstants.Pending)
                 ).Take(5).ToList();
 
                 // Lấy lịch hôm nay
@@ -93,7 +94,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 var allBookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
-                var pendingBookings = allBookings.Where(b => b.Status == "PENDING").ToList();
+                var pendingBookings = allBookings.Where(b => b.Status == BookingStatusConstants.Pending).ToList();
 
                 var totalCount = pendingBookings.Count;
                 var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
@@ -120,7 +121,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 var allBookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
-                var inProgressBookings = allBookings.Where(b => b.Status == "IN_PROGRESS").ToList();
+                var inProgressBookings = allBookings.Where(b => b.Status == BookingStatusConstants.InProgress).ToList();
 
                 var totalCount = inProgressBookings.Count;
                 var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
@@ -147,7 +148,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 var allBookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
-                var completedBookings = allBookings.Where(b => b.Status == "COMPLETED" || b.Status == "PAID").ToList();
+                var completedBookings = allBookings.Where(b => b.Status == BookingStatusConstants.Completed || b.Status == BookingStatusConstants.Paid).ToList();
 
                 var totalCount = completedBookings.Count;
                 var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
@@ -181,14 +182,14 @@ namespace EVServiceCenter.Application.Service
                 return new TechnicianStats
                 {
                     BookingsToday = todayBookings.Count,
-                    PendingTasks = todayBookings.Count(b => b.Status == "PENDING"),
-                    CompletedToday = todayBookings.Count(b => b.Status == "COMPLETED" || b.Status == "PAID"),
+                    PendingTasks = todayBookings.Count(b => b.Status == BookingStatusConstants.Pending),
+                    CompletedToday = todayBookings.Count(b => b.Status == BookingStatusConstants.Completed || b.Status == BookingStatusConstants.Paid),
                     AverageRating = 4.5, // TODO: Get from actual rating
-                    MonthlyRevenue = thisMonthBookings.Where(b => b.Status == "PAID").Sum(b => b.Service?.BasePrice ?? 0),
+                    MonthlyRevenue = thisMonthBookings.Where(b => b.Status == BookingStatusConstants.Paid).Sum(b => b.Service?.BasePrice ?? 0),
                     ActiveHours = 8, // TODO: Calculate actual hours
                     TotalBookings = allBookings.Count,
-                    PendingBookings = allBookings.Count(b => b.Status == "PENDING"),
-                    InProgressBookings = allBookings.Count(b => b.Status == "IN_PROGRESS")
+                    PendingBookings = allBookings.Count(b => b.Status == BookingStatusConstants.Pending),
+                    InProgressBookings = allBookings.Count(b => b.Status == BookingStatusConstants.InProgress)
                 };
             }
             catch (Exception ex)
@@ -209,11 +210,11 @@ namespace EVServiceCenter.Application.Service
 
                 var thisWeekBookings = allBookings.Where(b =>
                     b.CreatedAt >= startOfWeek &&
-                    (b.Status == "COMPLETED" || b.Status == "PAID")).ToList();
+                    (b.Status == BookingStatusConstants.Completed || b.Status == BookingStatusConstants.Paid)).ToList();
 
                 var thisMonthBookings = allBookings.Where(b =>
                     b.CreatedAt >= startOfMonth &&
-                    (b.Status == "COMPLETED" || b.Status == "PAID")).ToList();
+                    (b.Status == BookingStatusConstants.Completed || b.Status == BookingStatusConstants.Paid)).ToList();
 
                 return new PerformanceSummary
                 {

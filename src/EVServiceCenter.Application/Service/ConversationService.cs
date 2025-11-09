@@ -173,17 +173,50 @@ namespace EVServiceCenter.Application.Service
 
                 if (!hasStaffMember && customerUserId.HasValue && _chatSettings.Assignment.AutoAssignEnabled)
                 {
-                    // Get customer location (priority: request location, fallback: booking center location)
-                    var (customerLat, customerLng) = await GetCustomerLocationAsync(
-                        customerUserId.Value,
-                        request.CustomerLatitude,
-                        request.CustomerLongitude);
+                    Staff? assignedStaff = null;
 
-                    var assignedStaff = await AssignStaffAsync(
-                        customerUserId.Value,
-                        request.PreferredCenterId,
-                        customerLat,
-                        customerLng);
+                    // Nếu có PreferredStaffId, sử dụng staff đó
+                    if (request.PreferredStaffId.HasValue)
+                    {
+                        assignedStaff = await _staffRepository.GetStaffByIdAsync(request.PreferredStaffId.Value);
+
+                        // Validate staff exists, is active, and is not MANAGER (only STAFF role)
+                        if (assignedStaff != null && assignedStaff.IsActive &&
+                            assignedStaff.User != null && assignedStaff.User.Role == "STAFF")
+                        {
+                            // Staff hợp lệ, sử dụng
+                            _logger.LogInformation(
+                                "Using preferred staff {StaffId} (User {UserId}) for conversation {ConversationId}",
+                                assignedStaff.StaffId, assignedStaff.UserId, createdConversation.ConversationId);
+                        }
+                        else
+                        {
+                            // Staff không hợp lệ (không tồn tại, không active, hoặc là MANAGER), fallback to auto-assign
+                            _logger.LogWarning(
+                                "Preferred staff {StaffId} is not valid (exists: {Exists}, active: {Active}, role: {Role}), falling back to auto-assign",
+                                request.PreferredStaffId.Value,
+                                assignedStaff != null,
+                                assignedStaff?.IsActive ?? false,
+                                assignedStaff?.User?.Role ?? "null");
+                            assignedStaff = null;
+                        }
+                    }
+
+                    // Nếu không có PreferredStaffId hoặc PreferredStaffId không hợp lệ, auto-assign
+                    if (assignedStaff == null)
+                    {
+                        // Get customer location (priority: request location, fallback: booking center location)
+                        var (customerLat, customerLng) = await GetCustomerLocationAsync(
+                            customerUserId.Value,
+                            request.CustomerLatitude,
+                            request.CustomerLongitude);
+
+                        assignedStaff = await AssignStaffAsync(
+                            customerUserId.Value,
+                            request.PreferredCenterId,
+                            customerLat,
+                            customerLng);
+                    }
 
                     if (assignedStaff != null)
                     {
@@ -204,7 +237,7 @@ namespace EVServiceCenter.Application.Service
                         await _chatHubService.NotifyNewConversationAsync(assignedStaff.UserId, createdConversation.ConversationId);
 
                         _logger.LogInformation(
-                            "Auto-assigned staff {StaffId} (User {UserId}) to conversation {ConversationId}",
+                            "Assigned staff {StaffId} (User {UserId}) to conversation {ConversationId}",
                             assignedStaff.StaffId, assignedStaff.UserId, createdConversation.ConversationId);
                     }
                 }
@@ -653,6 +686,41 @@ namespace EVServiceCenter.Application.Service
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting unassigned conversations");
+                throw;
+            }
+        }
+
+        public async Task<List<object>> GetStaffByCenterAsync(int centerId)
+        {
+            try
+            {
+                // Lấy danh sách staff của center
+                var staffList = await _staffRepository.GetStaffByCenterIdAsync(centerId);
+
+                // Chỉ lấy staff có role STAFF (không lấy MANAGER), và phải active
+                var staffOnly = staffList
+                    .Where(s => s.User != null &&
+                               s.User.Role == "STAFF" && // Chỉ lấy STAFF, không lấy MANAGER
+                               s.IsActive)
+                    .Select(s => new
+                    {
+                        staffId = s.StaffId,
+                        userId = s.UserId,
+                        fullName = s.User?.FullName ?? "",
+                        email = s.User?.Email ?? "",
+                        phoneNumber = s.User?.PhoneNumber ?? "",
+                        avatar = s.User?.AvatarUrl,
+                        centerId = s.CenterId,
+                        centerName = s.Center?.CenterName ?? ""
+                    })
+                    .Cast<object>()
+                    .ToList();
+
+                return staffOnly;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting staff by center {CenterId}", centerId);
                 throw;
             }
         }

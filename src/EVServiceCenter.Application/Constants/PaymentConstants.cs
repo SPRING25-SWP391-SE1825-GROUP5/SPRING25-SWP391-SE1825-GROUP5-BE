@@ -26,6 +26,7 @@ public static class PaymentConstants
         public const string Pending = "PENDING";
         public const string Paid = "PAID";
         public const string Completed = "COMPLETED";
+        public const string Cancelled = "CANCELLED";
     }
 
     /// <summary>
@@ -34,6 +35,17 @@ public static class PaymentConstants
     public static class PayOSErrorCodes
     {
         public const string PaymentExists = "231";
+    }
+
+    /// <summary>
+    /// Payment status constants
+    /// </summary>
+    public static class PaymentStatus
+    {
+        public const string Pending = "PENDING";
+        public const string Paid = "PAID";
+        public const string Completed = "COMPLETED";
+        public const string Cancelled = "CANCELLED";
     }
 }
 

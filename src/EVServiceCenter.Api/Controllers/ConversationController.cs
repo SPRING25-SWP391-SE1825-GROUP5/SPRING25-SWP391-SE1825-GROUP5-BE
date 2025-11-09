@@ -260,6 +260,21 @@ namespace EVServiceCenter.Api.Controllers
                 return HandleException(ex, "Lấy danh sách cuộc trò chuyện chưa được assign");
             }
         }
+
+        [HttpGet("staff/by-center/{centerId}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetStaffByCenter(int centerId)
+        {
+            try
+            {
+                var result = await _conversationService.GetStaffByCenterAsync(centerId);
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return HandleException(ex, "Lấy danh sách staff");
+            }
+        }
     }
 
     public class ReassignCenterRequest

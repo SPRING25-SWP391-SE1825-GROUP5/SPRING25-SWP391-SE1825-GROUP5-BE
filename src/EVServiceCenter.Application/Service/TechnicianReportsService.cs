@@ -8,6 +8,7 @@ using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -100,9 +101,9 @@ namespace EVServiceCenter.Application.Service
             var periodBookings = bookings.Where(b => b.UpdatedAt >= startDate && b.UpdatedAt <= endDate).ToList();
 
             var totalBookings = periodBookings.Count;
-            var completedBookings = periodBookings.Count(b => b.Status == "COMPLETED");
-            var pendingBookings = periodBookings.Count(b => b.Status == "PENDING");
-            var totalRevenue = periodBookings.Where(b => b.Status == "PAID").Sum(b => b.Service?.BasePrice ?? 0);
+            var completedBookings = periodBookings.Count(b => b.Status == BookingStatusConstants.Completed);
+            var pendingBookings = periodBookings.Count(b => b.Status == BookingStatusConstants.Pending);
+            var totalRevenue = periodBookings.Where(b => b.Status == BookingStatusConstants.Paid).Sum(b => b.Service?.BasePrice ?? 0);
             var averageRevenuePerBooking = totalBookings > 0 ? totalRevenue / totalBookings : 0;
 
             return new TechnicianPerformanceItem
@@ -126,7 +127,7 @@ namespace EVServiceCenter.Application.Service
         {
             // Lấy time slots của technician cho ngày cụ thể
             var timeSlots = await _technicianTimeSlotRepository.GetByTechnicianAndDateAsync(technician.TechnicianId, date);
-            
+
             var slots = timeSlots.Select(ts => new ScheduleSlot
             {
                 SlotId = ts.SlotId,
@@ -200,17 +201,17 @@ namespace EVServiceCenter.Application.Service
 
                 // Lấy tất cả bookings của center trong khoảng thời gian
                 var bookings = await _bookingRepository.GetBookingsByCenterIdAsync(
-                    centerId, 
-                    page: 1, 
-                    pageSize: int.MaxValue, 
-                    status: null, 
-                    fromDate: start, 
+                    centerId,
+                    page: 1,
+                    pageSize: int.MaxValue,
+                    status: null,
+                    fromDate: start,
                     toDate: end);
 
                 // Lọc chỉ lấy booking có trạng thái PAID và có technician được gán
                 var paidBookings = bookings
-                    .Where(b => 
-                        (b.Status ?? string.Empty).ToUpperInvariant() == "PAID" &&
+                    .Where(b =>
+                        (b.Status ?? string.Empty).ToUpperInvariant() == BookingStatusConstants.Paid &&
                         b.TechnicianTimeSlot != null)
                     .ToList();
 
@@ -227,12 +228,12 @@ namespace EVServiceCenter.Application.Service
                 {
                     // Lấy technicianId từ TechnicianTimeSlot (đã filter ở trên nên không null)
                     var technicianId = booking.TechnicianTimeSlot!.TechnicianId;
-                    
+
                     if (!bookingCountByTechnician.ContainsKey(technicianId))
                     {
                         bookingCountByTechnician[technicianId] = 0;
                     }
-                    
+
                     bookingCountByTechnician[technicianId]++;
                 }
 
@@ -243,8 +244,8 @@ namespace EVServiceCenter.Application.Service
                     {
                         TechnicianId = technician.TechnicianId,
                         TechnicianName = technician.User?.FullName ?? "Unknown",
-                        BookingCount = bookingCountByTechnician.ContainsKey(technician.TechnicianId) 
-                            ? bookingCountByTechnician[technician.TechnicianId] 
+                        BookingCount = bookingCountByTechnician.ContainsKey(technician.TechnicianId)
+                            ? bookingCountByTechnician[technician.TechnicianId]
                             : 0
                     })
                     .OrderByDescending(x => x.BookingCount)
@@ -291,7 +292,7 @@ namespace EVServiceCenter.Application.Service
                 // Tự động chọn granularity dựa trên khoảng thời gian nếu không được chỉ định
                 var periodLength = (end - start).TotalDays;
                 var selectedGranularity = granularity ?? AutoSelectGranularity(periodLength);
-                
+
                 // Validate granularity
                 var validGranularities = new[] { "day", "week", "month", "quarter", "year" };
                 if (!validGranularities.Contains(selectedGranularity.ToLower()))
@@ -303,12 +304,12 @@ namespace EVServiceCenter.Application.Service
                 var slots = await _technicianTimeSlotRepository.GetByCenterAndDateRangeAsync(centerId, start, end);
 
                 // Danh sách status hợp lệ để tính booked slot
-                var validBookingStatuses = new[] { "IN_PROGRESS", "COMPLETED", "PAID" };
+                var validBookingStatuses = new[] { BookingStatusConstants.InProgress, BookingStatusConstants.Completed, BookingStatusConstants.Paid };
 
                 // Tính tổng số slot và số slot đã được book
                 var totalSlots = slots.Count;
-                var bookedSlots = slots.Count(s => 
-                    s.BookingId != null && 
+                var bookedSlots = slots.Count(s =>
+                    s.BookingId != null &&
                     s.Booking != null &&
                     validBookingStatuses.Contains((s.Booking.Status ?? "").ToUpperInvariant()));
 
@@ -324,20 +325,20 @@ namespace EVServiceCenter.Application.Service
                 foreach (var slot in slots)
                 {
                     var periodKey = GetPeriodKeyForGranularity(slot.WorkDate, selectedGranularity);
-                    
+
                     if (!utilizationByPeriod.ContainsKey(periodKey))
                     {
                         utilizationByPeriod[periodKey] = (0, 0);
                     }
 
                     var current = utilizationByPeriod[periodKey];
-                    
+
                     // Tăng totalSlots
                     var newTotalSlots = current.totalSlots + 1;
                     var newBookedSlots = current.bookedSlots;
 
                     // Kiểm tra nếu slot đã được book với status hợp lệ
-                    if (slot.BookingId != null && 
+                    if (slot.BookingId != null &&
                         slot.Booking != null &&
                         validBookingStatuses.Contains((slot.Booking.Status ?? "").ToUpperInvariant()))
                     {
@@ -349,14 +350,14 @@ namespace EVServiceCenter.Application.Service
 
                 // Tạo items với tất cả các period, nếu không có slot thì = 0
                 var items = allPeriods
-                    .Select(period => 
+                    .Select(period =>
                     {
-                        var (periodTotalSlots, periodBookedSlots) = utilizationByPeriod.ContainsKey(period) 
-                            ? utilizationByPeriod[period] 
+                        var (periodTotalSlots, periodBookedSlots) = utilizationByPeriod.ContainsKey(period)
+                            ? utilizationByPeriod[period]
                             : (0, 0);
-                        
-                        var periodUtilizationRate = periodTotalSlots > 0 
-                            ? (decimal)periodBookedSlots / periodTotalSlots 
+
+                        var periodUtilizationRate = periodTotalSlots > 0
+                            ? (decimal)periodBookedSlots / periodTotalSlots
                             : 0m;
 
                         return new UtilizationRateByPeriodItem
@@ -373,8 +374,8 @@ namespace EVServiceCenter.Application.Service
                 // Tính utilization rate trung bình từ các period (weighted average hoặc simple average)
                 // Sử dụng simple average của các period có data
                 var periodsWithData = items.Where(i => i.TotalSlots > 0).ToList();
-                var averageUtilizationRate = periodsWithData.Any() 
-                    ? periodsWithData.Average(i => i.UtilizationRate) 
+                var averageUtilizationRate = periodsWithData.Any()
+                    ? periodsWithData.Average(i => i.UtilizationRate)
                     : overallUtilizationRate;
 
                 return new UtilizationRateResponse
@@ -543,12 +544,12 @@ namespace EVServiceCenter.Application.Service
                 var slots = await _technicianTimeSlotRepository.GetByCenterAndDateRangeAsync(centerId, start, end);
 
                 // Danh sách status hợp lệ để tính booked slot (chỉ tính slot đã được đặt)
-                var validBookingStatuses = new[] { "PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "PAID" };
+                var validBookingStatuses = new[] { BookingStatusConstants.Pending, BookingStatusConstants.Confirmed, BookingStatusConstants.InProgress, BookingStatusConstants.Completed, BookingStatusConstants.Paid };
 
                 // Lọc chỉ lấy slot đã được đặt (có BookingId và booking có status hợp lệ)
                 var bookedSlots = slots
-                    .Where(s => 
-                        s.BookingId != null && 
+                    .Where(s =>
+                        s.BookingId != null &&
                         s.Booking != null &&
                         validBookingStatuses.Contains((s.Booking.Status ?? "").ToUpperInvariant()))
                     .ToList();
@@ -566,8 +567,8 @@ namespace EVServiceCenter.Application.Service
                     .OrderBy(ts => ts.SlotTime)
                     .Select(timeSlot =>
                     {
-                        var bookedCount = bookedSlotsByTimeSlot.ContainsKey(timeSlot.SlotId) 
-                            ? bookedSlotsByTimeSlot[timeSlot.SlotId] 
+                        var bookedCount = bookedSlotsByTimeSlot.ContainsKey(timeSlot.SlotId)
+                            ? bookedSlotsByTimeSlot[timeSlot.SlotId]
                             : 0;
 
                         return new PeakHourStatsItem

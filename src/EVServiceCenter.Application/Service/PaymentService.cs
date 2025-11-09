@@ -80,10 +80,10 @@ public class PaymentService
 	{
 		var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
 		if (booking == null) throw new InvalidOperationException("Booking không tồn tại");
-		if (booking.Status == "CANCELLED" || booking.Status == "CANCELED")
+		if (booking.Status == BookingStatusConstants.Cancelled || booking.Status == BookingStatusConstants.Canceled)
 			throw new InvalidOperationException("Booking đã bị hủy");
-		if (booking.Status != "COMPLETED")
-			throw new InvalidOperationException("Chỉ có thể tạo payment link khi booking đã hoàn thành (COMPLETED). Trạng thái hiện tại: " + (booking.Status ?? "N/A"));
+		if (booking.Status != BookingStatusConstants.Completed)
+			throw new InvalidOperationException($"Chỉ có thể tạo payment link khi booking đã hoàn thành ({BookingStatusConstants.Completed}). Trạng thái hiện tại: " + (booking.Status ?? "N/A"));
 
         // Tính tổng tiền theo logic: (gói hoặc dịch vụ lẻ) + parts - promotion
         var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
@@ -91,7 +91,7 @@ public class PaymentService
         decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
         decimal promotionDiscountAmount = 0m;
         decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
-            .Where(p => p.Status == "CONSUMED")
+            .Where(p => p.Status == "CONSUMED") // TODO: Create WorkOrderPartStatusConstants
             .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
 
         if (booking.AppliedCreditId.HasValue)
@@ -378,7 +378,7 @@ public class PaymentService
             }
 
             // Nếu không có checkoutUrl, check status
-            if (paymentStatus == "CANCELLED")
+            if (paymentStatus == PaymentConstants.PaymentStatus.Cancelled)
             {
                 _logger.LogInformation("Payment cho orderCode {OrderCode} đã bị CANCELLED, sẽ cancel và tạo lại", orderCode);
                 return null; // Return null để trigger cancel và tạo lại
@@ -711,7 +711,7 @@ public class PaymentService
 				{
 					// Cập nhật trạng thái booking
 					_logger.LogInformation("Cập nhật booking {BookingId} từ {OldStatus} thành PAID", booking.BookingId, booking.Status);
-					booking.Status = "PAID";
+					booking.Status = BookingStatusConstants.Paid;
 					booking.UpdatedAt = DateTime.UtcNow;
 					await _bookingRepository.UpdateBookingAsync(booking);
 					_logger.LogInformation("Đã cập nhật booking {BookingId} thành PAID", booking.BookingId);
@@ -728,7 +728,7 @@ public class PaymentService
 							CustomerId = booking.CustomerId,
 							Email = booking.Customer?.User?.Email,
 							Phone = booking.Customer?.User?.PhoneNumber,
-							Status = "PAID",
+							Status = PaymentConstants.PaymentStatus.Paid,
 							PackageDiscountAmount = 0,
 							PromotionDiscountAmount = 0,
 							CreatedAt = DateTime.UtcNow
@@ -739,7 +739,7 @@ public class PaymentService
 					else
 					{
 						_logger.LogInformation("Cập nhật invoice {InvoiceId} cho booking {BookingId}", invoice.InvoiceId, booking.BookingId);
-						invoice.Status = "PAID";
+						invoice.Status = PaymentConstants.InvoiceStatus.Paid;
 						// Note: IInvoiceRepository doesn't have UpdateAsync method
 						// Invoice will be updated when booking is updated
 					}
@@ -794,7 +794,7 @@ public class PaymentService
 						InvoiceId = invoice.InvoiceId,
 						Amount = (int)Math.Round(paymentAmount),
 						PaymentMethod = paymentMethod, // Sử dụng paymentMethod từ parameter (SEPAY hoặc PAYOS)
-						Status = "COMPLETED",
+						Status = BookingStatusConstants.Completed,
 						PaymentCode = bookingId.ToString(),
 						CreatedAt = DateTime.UtcNow,
 						PaidAt = DateTime.UtcNow,
@@ -966,7 +966,7 @@ public class PaymentService
 
 		_logger.LogInformation("Tìm thấy order {OrderId} với status hiện tại: {CurrentStatus}", orderId, order.Status);
 
-		if (order.Status == "PAID" || order.Status == "COMPLETED")
+		if (order.Status == PaymentConstants.OrderStatus.Paid || order.Status == PaymentConstants.OrderStatus.Completed)
 		{
 			_logger.LogInformation("Order {OrderId} đã được thanh toán rồi", orderId);
 			return true;
@@ -983,7 +983,7 @@ public class PaymentService
 			try
 			{
 				_logger.LogInformation("Cập nhật order {OrderId} từ {OldStatus} thành PAID", order.OrderId, order.Status);
-				order.Status = "PAID";
+				order.Status = PaymentConstants.OrderStatus.Paid;
 				order.UpdatedAt = DateTime.UtcNow;
 				await _orderRepository.UpdateAsync(order);
 				_logger.LogInformation("Đã cập nhật order {OrderId} thành PAID", order.OrderId);
@@ -1001,7 +1001,7 @@ public class PaymentService
 						CustomerId = order.CustomerId,
 						Email = order.Customer?.User?.Email,
 						Phone = order.Customer?.User?.PhoneNumber,
-						Status = "PAID",
+						Status = PaymentConstants.InvoiceStatus.Paid,
 						CreatedAt = DateTime.UtcNow
 					};
 					invoice = await _invoiceRepository.CreateMinimalAsync(invoice);
@@ -1010,7 +1010,7 @@ public class PaymentService
 				else
 				{
 					_logger.LogInformation("Invoice {InvoiceId} đã tồn tại cho order {OrderId}", invoice.InvoiceId, order.OrderId);
-					invoice.Status = "PAID";
+					invoice.Status = PaymentConstants.InvoiceStatus.Paid;
 				}
 
 				// Tính PartsAmount từ OrderItems
@@ -1063,7 +1063,7 @@ public class PaymentService
 					InvoiceId = invoice.InvoiceId,
 					PaymentMethod = paymentMethod,
 					Amount = amount,
-					Status = "PAID",
+					Status = PaymentConstants.PaymentStatus.Paid,
 					PaidAt = DateTime.UtcNow,
 					CreatedAt = DateTime.UtcNow,
 					PaidByUserID = order.Customer?.User?.UserId

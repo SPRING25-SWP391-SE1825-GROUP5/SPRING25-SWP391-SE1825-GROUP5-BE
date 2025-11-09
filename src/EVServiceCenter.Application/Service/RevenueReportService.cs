@@ -37,6 +37,7 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
+                // ========== BOOKING REVENUE ==========
                 // Lấy tất cả booking của center
                 var allCenterBookings = await _bookingRepository.GetBookingsByCenterIdAsync(
                     centerId, page: 1, pageSize: int.MaxValue, status: null);
@@ -44,7 +45,7 @@ namespace EVServiceCenter.Application.Service
                 // Map bookingId -> booking để lấy service/technician cho groupBy
                 var bookingById = allCenterBookings.ToDictionary(b => b.BookingId, b => b);
 
-                // Thu thập payments SUCCESS theo PaidAt trong range
+                // Thu thập payments từ bookings theo PaidAt trong range
                 var bookingPaymentAmounts = new List<(DateTime paidAt, int bookingId, decimal amount)>();
                 foreach (var booking in allCenterBookings)
                 {
@@ -60,13 +61,60 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Tính toán doanh thu theo từng khoảng thời gian dựa trên PaidAt
-                var revenueByPeriod = CalculateRevenueByPeriodFromPayments(bookingPaymentAmounts, request.Period);
+                // Lấy payments PAID từ bookings
+                var statuses = new[] { "PAID" };
+                var allPaidPayments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(
+                    statuses, request.StartDate, request.EndDate);
+                var paidBookingPayments = allPaidPayments
+                    .Where(p => p.Invoice != null 
+                             && p.Invoice.BookingId != null 
+                             && p.Invoice.Booking != null 
+                             && p.Invoice.Booking.CenterId == centerId
+                             && p.PaidAt.HasValue)
+                    .ToList();
+                foreach (var p in paidBookingPayments)
+                {
+                    if (p.Invoice.BookingId.HasValue && p.PaidAt.HasValue)
+                    {
+                        bookingPaymentAmounts.Add((p.PaidAt.Value, p.Invoice.BookingId.Value, p.Amount));
+                    }
+                }
+
+                // ========== ORDER REVENUE ==========
+                // Lấy payments COMPLETED hoặc PAID từ orders có FulfillmentCenterId = centerId
+                // Note: GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync đã lấy cả COMPLETED và PAID
+                var orderPayments = await _paymentRepository.GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync(
+                    centerId, request.StartDate, request.EndDate);
+
+                // Thu thập payments từ orders (sử dụng OrderId thay vì BookingId)
+                // Note: Orders không có service/technician, nên không thể group theo service/technician
+                // Chỉ tính vào tổng revenue, không group vào GroupedData
+                var orderPaymentAmounts = new List<(DateTime paidAt, int orderId, decimal amount)>();
+                foreach (var p in orderPayments)
+                {
+                    if (p.PaidAt.HasValue && p.Invoice?.OrderId != null)
+                    {
+                        orderPaymentAmounts.Add((p.PaidAt.Value, p.Invoice.OrderId.Value, p.Amount));
+                    }
+                }
+
+                // Gộp booking và order payments để tính revenue by period
+                // Sử dụng bookingId = -1 cho orders để phân biệt (không group vào service/technician)
+                var allPaymentAmounts = bookingPaymentAmounts
+                    .Select(bp => (bp.paidAt, bp.bookingId, bp.amount))
+                    .Concat(orderPaymentAmounts.Select(op => (op.paidAt, -1, op.amount)))  // -1 để đánh dấu là order
+                    .ToList();
+
+                // Tính toán doanh thu theo từng khoảng thời gian dựa trên PaidAt (bao gồm cả booking và order)
+                var revenueByPeriod = CalculateRevenueByPeriodFromPayments(
+                    allPaymentAmounts, 
+                    request.Period);
 
                 // Tính summary
                 var summary = CalculateSummaryFromPayments(revenueByPeriod);
 
                 // Phân nhóm dữ liệu theo service/technician bằng tổng amount theo booking
+                // Note: Chỉ group bookings, không group orders (orders không có service/technician)
                 var groupedData = CalculateGroupedDataFromPayments(bookingPaymentAmounts, bookingById, request.GroupBy);
 
                 // Tính alerts
@@ -163,7 +211,9 @@ namespace EVServiceCenter.Application.Service
 
         /// <summary>
         /// Lấy tổng doanh thu theo khoảng thời gian với các mode: day/week/month/quarter/year
-        /// Tối ưu query bằng cách join Payment -> Invoice -> Booking trong một query
+        /// Tổng doanh thu = Booking revenue + Order revenue
+        /// - Booking revenue: từ payments của bookings có CenterId = centerId
+        /// - Order revenue: từ payments của orders có FulfillmentCenterId = centerId
         /// </summary>
         public async Task<RevenueByPeriodResponse> GetRevenueByPeriodAsync(int centerId, DateTime? fromDate, DateTime? toDate, string granularity)
         {
@@ -187,9 +237,31 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc", nameof(fromDate));
                 }
 
-                // Lấy payments đã thanh toán (COMPLETED) theo centerId và khoảng thời gian PaidAt
-                // Tối ưu query: join Payment -> Invoice -> Booking trong một query
-                var payments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(centerId, start, end);
+                // ========== BOOKING REVENUE ==========
+                // Lấy payments COMPLETED từ bookings của center này
+                var completedBookingPayments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(centerId, start, end);
+
+                // Lấy payments PAID từ bookings của center này
+                var statuses = new[] { "PAID" };
+                var allPaidPayments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(statuses, start, end);
+                var paidBookingPayments = allPaidPayments
+                    .Where(p => p.Invoice != null 
+                             && p.Invoice.BookingId != null 
+                             && p.Invoice.Booking != null 
+                             && p.Invoice.Booking.CenterId == centerId)
+                    .ToList();
+
+                // ========== ORDER REVENUE ==========
+                // Lấy payments COMPLETED hoặc PAID từ orders có FulfillmentCenterId = centerId
+                // Note: GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync đã lấy cả COMPLETED và PAID
+                var orderPayments = await _paymentRepository.GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync(centerId, start, end);
+
+                // Gộp tất cả payments (booking + order)
+                var payments = completedBookingPayments
+                    .Concat(paidBookingPayments)
+                    .Concat(orderPayments)
+                    .DistinctBy(p => p.PaymentId)  // Tránh duplicate nếu có
+                    .ToList();
 
                 // Tạo danh sách tất cả các period trong khoảng thời gian (bao gồm cả period không có doanh thu)
                 var allPeriods = GenerateAllPeriodsInRange(start, end, normalizedGranularity);

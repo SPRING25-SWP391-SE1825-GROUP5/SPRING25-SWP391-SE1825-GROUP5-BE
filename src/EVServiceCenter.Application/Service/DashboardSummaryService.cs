@@ -138,7 +138,8 @@ namespace EVServiceCenter.Application.Service
         }
 
         /// <summary>
-        /// Đếm tổng số nhân viên (STAFF + TECHNICIAN) của toàn hệ thống
+        /// Đếm tổng số nhân viên (STAFF + TECHNICIAN + MANAGER) của toàn hệ thống
+        /// Chỉ đếm những user đang active (IsActive = true)
         /// </summary>
         private async Task<int> GetTotalEmployeesAsync()
         {
@@ -150,11 +151,15 @@ namespace EVServiceCenter.Application.Service
                 // Lấy tất cả users có role TECHNICIAN
                 var technicianUsers = await _accountRepository.GetAllUsersWithRoleAsync("TECHNICIAN");
 
+                // Lấy tất cả users có role MANAGER
+                var managerUsers = await _accountRepository.GetAllUsersWithRoleAsync("MANAGER");
+
                 // Chỉ đếm những user đang active
                 var activeStaffCount = staffUsers.Count(u => u.IsActive);
                 var activeTechnicianCount = technicianUsers.Count(u => u.IsActive);
+                var activeManagerCount = managerUsers.Count(u => u.IsActive);
 
-                return activeStaffCount + activeTechnicianCount;
+                return activeStaffCount + activeTechnicianCount + activeManagerCount;
             }
             catch (Exception ex)
             {

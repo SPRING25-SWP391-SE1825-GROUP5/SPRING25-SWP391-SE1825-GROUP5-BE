@@ -21,6 +21,10 @@ public class OrderResponse
     // Gợi ý center fulfill gần nhất (không lưu DB, chỉ trả về lúc tạo đơn)
     public int? SuggestedFulfillmentCenterId { get; set; }
     public double? SuggestedFulfillmentDistanceKm { get; set; }
+
+    // Chi nhánh đã fulfill order này (đã lưu trong DB sau khi thanh toán)
+    public int? FulfillmentCenterId { get; set; }
+    public string? FulfillmentCenterName { get; set; }
 }
 
 public class OrderItemResponse

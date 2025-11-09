@@ -102,12 +102,64 @@ namespace EVServiceCenter.Infrastructure.Repositories
             var statusSet = statuses.Select(s => s.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
             return await _db.Payments
                 .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Booking)
+                        .ThenInclude(b => b.Service)
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Order)
                 .Where(p => statusSet.Contains(p.Status)
                          && p.PaidAt != null
                          && p.PaidAt >= fromDate
                          && p.PaidAt <= toDate)
                 .OrderBy(p => p.PaidAt)
                 .ToListAsync();
+        }
+
+        /// <summary>
+        /// Lấy payments COMPLETED hoặc PAID từ orders (e-commerce) theo FulfillmentCenterId và khoảng thời gian PaidAt
+        /// </summary>
+        public async Task<List<Payment>> GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync(int centerId, DateTime fromDate, DateTime toDate)
+        {
+            // Tối ưu query: join Payment -> Invoice -> Order trong một query để tránh N+1
+            // Lọc payments theo status COMPLETED hoặc PAID, PaidAt trong khoảng thời gian, và centerId thông qua Order.FulfillmentCenterId
+            var payments = await _db.Payments
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Order)
+                .Where(p => (p.Status == "COMPLETED" || p.Status == "PAID")
+                         && p.PaidAt != null 
+                         && p.PaidAt >= fromDate 
+                         && p.PaidAt <= toDate
+                         && p.Invoice != null 
+                         && p.Invoice.OrderId != null
+                         && p.Invoice.Order != null 
+                         && p.Invoice.Order.FulfillmentCenterId == centerId)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync();
+
+            return payments;
+        }
+
+        /// <summary>
+        /// Lấy payments PAID từ orders (e-commerce) theo FulfillmentCenterId và khoảng thời gian PaidAt
+        /// </summary>
+        public async Task<List<Payment>> GetPaidPaymentsByFulfillmentCenterAndDateRangeAsync(int centerId, DateTime fromDate, DateTime toDate)
+        {
+            // Tối ưu query: join Payment -> Invoice -> Order trong một query để tránh N+1
+            // Lọc payments theo status PAID, PaidAt trong khoảng thời gian, và centerId thông qua Order.FulfillmentCenterId
+            var payments = await _db.Payments
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Order)
+                .Where(p => p.Status == "PAID" 
+                         && p.PaidAt != null 
+                         && p.PaidAt >= fromDate 
+                         && p.PaidAt <= toDate
+                         && p.Invoice != null 
+                         && p.Invoice.OrderId != null
+                         && p.Invoice.Order != null 
+                         && p.Invoice.Order.FulfillmentCenterId == centerId)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync();
+
+            return payments;
         }
     }
 }

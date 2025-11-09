@@ -85,6 +85,15 @@ public class OrderService : IOrderService
             });
         }
 
+        // Validate và lưu FulfillmentCenterId nếu được cung cấp từ FE
+        int? fulfillmentCenterId = null;
+        if (request.FulfillmentCenterId.HasValue)
+        {
+            // Validate center tồn tại, active và có đủ stock
+            await ValidateCenterStockAsync(request.FulfillmentCenterId.Value, orderItems);
+            fulfillmentCenterId = request.FulfillmentCenterId.Value;
+        }
+
         var order = new Order
         {
             CustomerId = request.CustomerId,
@@ -92,13 +101,17 @@ public class OrderService : IOrderService
             Notes = request.Notes,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
+            FulfillmentCenterId = fulfillmentCenterId, // Lưu center được chọn từ FE
             OrderItems = orderItems
         };
 
         var createdOrder = await _orderRepository.AddAsync(order);
 
-        // Gợi ý center fulfill gần nhất dựa vào toạ độ + items
-        var suggestion = await SuggestCenterAsync(request.Latitude, request.Longitude, orderItems);
+        // Gợi ý center fulfill gần nhất dựa vào toạ độ + items (chỉ khi chưa có FulfillmentCenterId)
+        var suggestion = fulfillmentCenterId == null 
+            ? await SuggestCenterAsync(request.Latitude, request.Longitude, orderItems)
+            : null;
+        
         var resp = MapToResponse(createdOrder);
         if (suggestion != null)
         {
@@ -144,6 +157,15 @@ public class OrderService : IOrderService
             });
         }
 
+        // Validate và lưu FulfillmentCenterId nếu được cung cấp từ FE
+        int? fulfillmentCenterId = null;
+        if (request.FulfillmentCenterId.HasValue)
+        {
+            // Validate center tồn tại, active và có đủ stock
+            await ValidateCenterStockAsync(request.FulfillmentCenterId.Value, orderItems);
+            fulfillmentCenterId = request.FulfillmentCenterId.Value;
+        }
+
         var order = new Order
         {
             CustomerId = request.CustomerId,
@@ -151,12 +173,17 @@ public class OrderService : IOrderService
             Notes = request.Notes,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
+            FulfillmentCenterId = fulfillmentCenterId, // Lưu center được chọn từ FE
             OrderItems = orderItems
         };
 
         var created = await _orderRepository.AddAsync(order);
 
-        var suggestion = await SuggestCenterAsync(request.Latitude, request.Longitude, orderItems);
+        // Gợi ý center fulfill gần nhất dựa vào toạ độ + items (chỉ khi chưa có FulfillmentCenterId)
+        var suggestion = fulfillmentCenterId == null
+            ? await SuggestCenterAsync(request.Latitude, request.Longitude, orderItems)
+            : null;
+        
         var resp = MapToResponse(created);
         if (suggestion != null)
         {
@@ -201,6 +228,30 @@ public class OrderService : IOrderService
         return MapToResponse(updatedOrder);
     }
 
+    public async Task<OrderResponse> UpdateFulfillmentCenterAsync(int orderId, UpdateFulfillmentCenterRequest request)
+    {
+        var order = await _orderRepository.GetByIdAsync(orderId);
+        if (order == null)
+            throw new ArgumentException("Đơn hàng không tồn tại");
+
+        // Validate order status - chỉ cho phép cập nhật khi order chưa thanh toán
+        if (order.Status == "PAID" || order.Status == "COMPLETED")
+            throw new InvalidOperationException("Không thể cập nhật chi nhánh cho đơn hàng đã thanh toán");
+
+        // Validate fulfillmentCenterId nếu có
+        if (request.FulfillmentCenterId.HasValue)
+        {
+            await ValidateCenterStockAsync(request.FulfillmentCenterId.Value, order.OrderItems);
+        }
+
+        order.FulfillmentCenterId = request.FulfillmentCenterId;
+        order.UpdatedAt = DateTime.UtcNow;
+
+        var updatedOrder = await _orderRepository.UpdateAsync(order);
+
+        return MapToResponse(updatedOrder);
+    }
+
     public async Task DeleteOrderAsync(int orderId)
     {
         if (!await _orderRepository.ExistsAsync(orderId))
@@ -228,6 +279,8 @@ public class OrderService : IOrderService
             Notes = order.Notes,
             CreatedAt = order.CreatedAt,
             UpdatedAt = order.UpdatedAt,
+            FulfillmentCenterId = order.FulfillmentCenterId,
+            FulfillmentCenterName = order.FulfillmentCenter?.CenterName,
             OrderItems = (order.OrderItems ?? new List<OrderItem>()).Select(oi => new OrderItemResponse
             {
                 OrderItemId = oi.OrderItemId,
@@ -411,6 +464,45 @@ public class OrderService : IOrderService
             if (best == null || d < best.Value.distanceKm) best = (c.CenterId, d);
         }
         return best;
+    }
+
+    /// <summary>
+    /// Validate center tồn tại, active và có đủ stock cho tất cả order items
+    /// Throw ArgumentException nếu validation fail
+    /// </summary>
+    private async Task ValidateCenterStockAsync(int centerId, IEnumerable<OrderItem> orderItems)
+    {
+        // Validate center tồn tại và active
+        var center = await _centerRepository.GetCenterByIdAsync(centerId);
+        if (center == null)
+            throw new ArgumentException($"Chi nhánh ID {centerId} không tồn tại");
+
+        if (!center.IsActive)
+            throw new ArgumentException($"Chi nhánh ID {centerId} đã ngưng hoạt động");
+
+        // Validate inventory tồn tại
+        var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+        if (inventory == null)
+            throw new ArgumentException($"Không tìm thấy kho của chi nhánh ID {centerId}");
+
+        var inventoryParts = inventory.InventoryParts ?? new List<InventoryPart>();
+
+        // Validate từng item có đủ stock
+        foreach (var orderItem in orderItems)
+        {
+            var inventoryPart = inventoryParts.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+            
+            if (inventoryPart == null)
+                throw new ArgumentException($"Phụ tùng ID {orderItem.PartId} không có trong kho của chi nhánh ID {centerId}");
+
+            if (inventoryPart.CurrentStock < orderItem.Quantity)
+            {
+                var partName = orderItem.Part?.PartName ?? $"Part {orderItem.PartId}";
+                throw new ArgumentException(
+                    $"Không đủ hàng cho phụ tùng '{partName}' tại chi nhánh ID {centerId}. " +
+                    $"Hiện có: {inventoryPart.CurrentStock}, cần: {orderItem.Quantity}");
+            }
+        }
     }
 
     private static double HaversineKm(double lat1, double lng1, double lat2, double lng2)

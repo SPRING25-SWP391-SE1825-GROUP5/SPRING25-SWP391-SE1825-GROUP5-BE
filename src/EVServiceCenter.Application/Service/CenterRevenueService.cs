@@ -6,6 +6,7 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -176,22 +177,22 @@ namespace EVServiceCenter.Application.Service
             // Get all bookings for center in date range
             var allBookings = await _bookingRepository.GetAllBookingsAsync();
             var centerBookings = allBookings
-                .Where(b => b.CenterId == centerId && 
-                           b.CreatedAt >= startDate && 
+                .Where(b => b.CenterId == centerId &&
+                           b.CreatedAt >= startDate &&
                            b.CreatedAt <= endDate)
                 .ToList();
 
             // Calculate basic metrics
             var totalBookings = centerBookings.Count;
-            var completedBookings = centerBookings.Count(b => b.Status == "PAID" || b.Status == "COMPLETED");
-            var cancelledBookings = centerBookings.Count(b => b.Status == "CANCELLED");
+            var completedBookings = centerBookings.Count(b => b.Status == BookingStatusConstants.Paid || b.Status == BookingStatusConstants.Completed);
+            var cancelledBookings = centerBookings.Count(b => b.Status == BookingStatusConstants.Cancelled);
 
             // Calculate revenue from payments
             var totalRevenue = 0m;
             var revenueByService = new Dictionary<int, (string ServiceName, decimal Revenue, int Count)>();
             var revenueByMonth = new Dictionary<string, (decimal Revenue, int Count)>();
 
-            foreach (var booking in centerBookings.Where(b => b.Status == "PAID" || b.Status == "COMPLETED"))
+            foreach (var booking in centerBookings.Where(b => b.Status == BookingStatusConstants.Paid || b.Status == BookingStatusConstants.Completed))
             {
                 // Get payment amount (simplified - using service base price)
                 var servicePrice = booking.Service?.BasePrice ?? 0m;
@@ -202,7 +203,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     var serviceId = booking.Service.ServiceId;
                     var serviceName = booking.Service.ServiceName;
-                    
+
                     if (revenueByService.ContainsKey(serviceId))
                     {
                         var existing = revenueByService[serviceId];
@@ -217,7 +218,7 @@ namespace EVServiceCenter.Application.Service
                 // Revenue by month
                 var monthKey = booking.CreatedAt.ToString("yyyy-MM");
                 var monthName = $"Tháng {booking.CreatedAt.Month}/{booking.CreatedAt.Year}";
-                
+
                 if (revenueByMonth.ContainsKey(monthKey))
                 {
                     var existing = revenueByMonth[monthKey];

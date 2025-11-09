@@ -11,6 +11,7 @@ using EVServiceCenter.Application.Service;
 using EVServiceCenter.Domain.Entities;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Configuration;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -22,7 +23,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         private readonly IBookingService _bookingService;
         private readonly IBookingHistoryService _bookingHistoryService;
         private readonly IGuestBookingService _guestBookingService;
-        private static readonly string[] AllowedBookingStatuses = new[] { "PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "PAID", "CANCELLED" };
+        private static readonly string[] AllowedBookingStatuses = EVServiceCenter.Application.Constants.BookingStatusConstants.AllStatuses;
 
         private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
         private readonly Microsoft.AspNetCore.SignalR.IHubContext<EVServiceCenter.Api.BookingHub> _hub;
@@ -220,7 +221,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (!DateOnly.TryParse(date, out var bookingDate))
                     return BadRequest(new { success = false, message = "Ngày không đúng định dạng YYYY-MM-DD" });
 
-                var customerId = 0;
+                var customerId = EVServiceCenter.Application.Constants.AppConstants.CustomerId.Guest;
                 var ttl = System.TimeSpan.FromMinutes(_ttlMinutes);
                 if (_holdStore == null)
                 {
@@ -267,19 +268,19 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return NotFound(new { success = false, message = "Booking không tồn tại" });
                 }
 
-                if (booking.Status == "CANCELLED")
+                if (booking.Status == BookingStatusConstants.Cancelled)
                 {
                     return BadRequest(new { success = false, message = "Booking đã được hủy rồi" });
                 }
 
-                if (booking.Status == "COMPLETED" || booking.Status == "PAID")
+                if (booking.Status == BookingStatusConstants.Completed || booking.Status == BookingStatusConstants.Paid)
                 {
                     return BadRequest(new { success = false, message = "Không thể hủy booking đã hoàn thành hoặc đã thanh toán" });
                 }
 
                 var updateRequest = new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest
                 {
-                    Status = "CANCELLED"
+                    Status = BookingStatusConstants.Cancelled
                 };
 
                 var result = await _bookingService.UpdateBookingStatusAsync(bookingId, updateRequest);
@@ -327,7 +328,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (!AllowedBookingStatuses.Contains(status))
                 return BadRequest(new { success = false, message = "Trạng thái booking không hợp lệ" });
 
-            if (status == "COMPLETED")
+            if (status == BookingStatusConstants.Completed)
             {
                 var checklist = await _maintenanceChecklistRepository.GetByBookingIdAsync(id);
                 if (checklist != null)
@@ -375,7 +376,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 if (_holdStore != null)
                 {
-                    var customerId = 0;
+                    var customerId = EVServiceCenter.Application.Constants.AppConstants.CustomerId.Guest;
                     var ok = _holdStore.Release(centerId, bookingDate, slotId, technicianId, customerId);
                     if (ok)
                     {
@@ -448,7 +449,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                 var staffAutoConfirm = _configuration.GetValue<bool>("Booking:StaffAutoConfirmEnabled", false);
                 if (staffAutoConfirm && (User.IsInRole("STAFF") || User.IsInRole("ADMIN") || User.IsInRole("MANAGER")))
                 {
-                    await _bookingService.UpdateBookingStatusAsync(booking.BookingId, new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = "CONFIRMED" });
+                    await _bookingService.UpdateBookingStatusAsync(booking.BookingId, new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest { Status = BookingStatusConstants.Confirmed });
                     booking = await _bookingService.GetBookingByIdAsync(booking.BookingId);
                 }
 
@@ -924,11 +925,11 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             return status switch
             {
-                "CONFIRMED" => $"Lịch hẹn #{bookingId} của bạn đã được xác nhận. Vui lòng đến đúng giờ hẹn.",
-                "IN_PROGRESS" => $"Lịch hẹn #{bookingId} của bạn đang được thực hiện.",
-                "COMPLETED" => $"Lịch hẹn #{bookingId} của bạn đã hoàn thành. Vui lòng thanh toán.",
-                "PAID" => $"Lịch hẹn #{bookingId} của bạn đã được thanh toán thành công. Cảm ơn bạn!",
-                "CANCELLED" => $"Lịch hẹn #{bookingId} của bạn đã bị hủy.",
+                BookingStatusConstants.Confirmed => $"Lịch hẹn #{bookingId} của bạn đã được xác nhận. Vui lòng đến đúng giờ hẹn.",
+                BookingStatusConstants.InProgress => $"Lịch hẹn #{bookingId} của bạn đang được thực hiện.",
+                BookingStatusConstants.Completed => $"Lịch hẹn #{bookingId} của bạn đã hoàn thành. Vui lòng thanh toán.",
+                BookingStatusConstants.Paid => $"Lịch hẹn #{bookingId} của bạn đã được thanh toán thành công. Cảm ơn bạn!",
+                BookingStatusConstants.Cancelled => $"Lịch hẹn #{bookingId} của bạn đã bị hủy.",
                 _ => $"Lịch hẹn #{bookingId} của bạn đã được cập nhật trạng thái thành {status}."
             };
         }
@@ -937,11 +938,11 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             return status switch
             {
-                "CONFIRMED" => $"Booking #{bookingId} đã được xác nhận. Vui lòng chuẩn bị làm việc.",
-                "IN_PROGRESS" => $"Booking #{bookingId} đang được thực hiện.",
-                "COMPLETED" => $"Booking #{bookingId} đã hoàn thành. Chờ khách hàng thanh toán.",
-                "PAID" => $"Booking #{bookingId} đã được thanh toán thành công.",
-                "CANCELLED" => $"Booking #{bookingId} đã bị hủy.",
+                BookingStatusConstants.Confirmed => $"Booking #{bookingId} đã được xác nhận. Vui lòng chuẩn bị làm việc.",
+                BookingStatusConstants.InProgress => $"Booking #{bookingId} đang được thực hiện.",
+                BookingStatusConstants.Completed => $"Booking #{bookingId} đã hoàn thành. Chờ khách hàng thanh toán.",
+                BookingStatusConstants.Paid => $"Booking #{bookingId} đã được thanh toán thành công.",
+                BookingStatusConstants.Cancelled => $"Booking #{bookingId} đã bị hủy.",
                 _ => $"Booking #{bookingId} đã được cập nhật trạng thái thành {status}."
             };
         }

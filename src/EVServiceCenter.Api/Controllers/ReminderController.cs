@@ -298,6 +298,118 @@ namespace EVServiceCenter.Api.Controllers
             }
             return Ok(new { success = true, sent });
         }
+
+        // Admin endpoints
+        [HttpGet("admin")]
+        [Authorize(Roles = "ADMIN,STAFF")]
+        public async Task<IActionResult> ListForAdmin(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] int? customerId = null,
+            [FromQuery] int? vehicleId = null,
+            [FromQuery] string? status = null,
+            [FromQuery] string? type = null,
+            [FromQuery] DateTime? from = null,
+            [FromQuery] DateTime? to = null,
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string sortBy = "createdAt",
+            [FromQuery] string sortOrder = "desc")
+        {
+            try
+            {
+                if (page < 1)
+                {
+                    return BadRequest(new { success = false, message = "Page phải lớn hơn 0" });
+                }
+
+                if (pageSize < 1 || pageSize > 100)
+                {
+                    return BadRequest(new { success = false, message = "Page size phải từ 1 đến 100" });
+                }
+
+                var (items, totalCount) = await _repo.QueryForAdminAsync(
+                    page, pageSize, customerId, vehicleId, status, type, from, to, searchTerm, sortBy, sortOrder);
+
+                var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+                var pagination = new
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalItems = totalCount,
+                    TotalPages = totalPages,
+                    HasNextPage = page < totalPages,
+                    HasPreviousPage = page > 1
+                };
+
+                return Ok(new { success = true, data = items, pagination });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi lấy danh sách reminders: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("stats")]
+        [Authorize(Roles = "ADMIN,STAFF")]
+        public async Task<IActionResult> GetStats()
+        {
+            try
+            {
+                // Get all reminders for statistics
+                var allReminders = await _repo.QueryAsync(null, null, null, null, null);
+
+                var stats = new
+                {
+                    Total = allReminders.Count,
+                    Pending = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.PENDING && !r.IsCompleted),
+                    Due = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.DUE),
+                    Overdue = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.OVERDUE),
+                    Completed = allReminders.Count(r => r.IsCompleted || r.Status == Domain.Enums.ReminderStatus.COMPLETED),
+                    ByType = new
+                    {
+                        Maintenance = allReminders.Count(r => r.Type == Domain.Enums.ReminderType.MAINTENANCE),
+                        Package = allReminders.Count(r => r.Type == Domain.Enums.ReminderType.PACKAGE),
+                        Appointment = allReminders.Count(r => r.Type == Domain.Enums.ReminderType.APPOINTMENT)
+                    },
+                    ByStatus = new
+                    {
+                        Pending = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.PENDING),
+                        Due = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.DUE),
+                        Overdue = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.OVERDUE),
+                        Completed = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.COMPLETED),
+                        Expired = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.EXPIRED)
+                    }
+                };
+
+                return Ok(new { success = true, data = stats });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi lấy thống kê: {ex.Message}" });
+            }
+        }
+
+        [HttpDelete("{id:int}")]
+        [Authorize(Roles = "ADMIN,STAFF")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                var reminder = await _repo.GetByIdAsync(id);
+                if (reminder == null)
+                {
+                    return NotFound(new { success = false, message = "Không tìm thấy reminder" });
+                }
+
+                await _repo.DeleteAsync(id);
+                return Ok(new { success = true, message = "Đã xóa reminder thành công" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi xóa reminder: {ex.Message}" });
+            }
+        }
     }
 }
 

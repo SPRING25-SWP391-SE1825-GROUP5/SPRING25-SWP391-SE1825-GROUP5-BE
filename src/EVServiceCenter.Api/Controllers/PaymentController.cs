@@ -11,6 +11,7 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Application.Models.Requests;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Api.Controllers;
 
@@ -69,11 +70,11 @@ public class PaymentController : ControllerBase
 				return NotFound(new { success = false, message = "Không tìm thấy booking" });
 			}
 
-			if (booking.Status != "COMPLETED")
+			if (booking.Status != BookingStatusConstants.Completed)
 			{
 				return BadRequest(new {
 					success = false,
-					message = $"Chỉ có thể tạo payment link khi booking đã hoàn thành (COMPLETED). Trạng thái hiện tại: {booking.Status ?? "N/A"}"
+					message = $"Chỉ có thể tạo payment link khi booking đã hoàn thành ({BookingStatusConstants.Completed}). Trạng thái hiện tại: {booking.Status ?? "N/A"}"
 				});
 			}
 
@@ -172,17 +173,18 @@ public class PaymentController : ControllerBase
             decimal totalAmount = packagePrice + serviceComponent + partsAmount - promotionDiscountAmount;
 
 			var amount = (int)Math.Round(totalAmount);
-			if (amount < 1000) amount = 1000; // Min amount
+			if (amount < EVServiceCenter.Application.Constants.AppConstants.PaymentAmounts.MinAmountVnd)
+				amount = EVServiceCenter.Application.Constants.AppConstants.PaymentAmounts.MinAmountVnd;
 
 			// Tạo transaction content (nội dung chuyển khoản)
 			// Format: Pay{bookingId}ment để SePay có thể parse bookingId từ webhook
-			var transactionContent = $"Pay{bookingId}ment";
+			var transactionContent = string.Format(EVServiceCenter.Application.Constants.AppConstants.TransactionContent.Format, bookingId);
 
 			// Lấy cấu hình SePay từ appsettings
-			var sepayAccount = _configuration["SePay:Account"] ?? "0888294028";
-			var sepayBank = _configuration["SePay:Bank"] ?? "VPBank";
-			var sepayBeneficiary = _configuration["SePay:Beneficiary"] ?? "SEPAY COMPANY";
-			var qrCodeBaseUrl = _configuration["SePay:QrCodeBaseUrl"] ?? "https://qr.sepay.vn/img";
+			var sepayAccount = _configuration["SePay:Account"] ?? SePayConstants.DefaultAccount;
+			var sepayBank = _configuration["SePay:Bank"] ?? SePayConstants.DefaultBank;
+			var sepayBeneficiary = _configuration["SePay:Beneficiary"] ?? SePayConstants.DefaultBeneficiary;
+			var qrCodeBaseUrl = _configuration["SePay:QrCodeBaseUrl"] ?? SePayConstants.DefaultQrCodeBaseUrl;
 
 			// Tạo QR code URL từ SePay
 			// Format: https://qr.sepay.vn/img?acc={account}&bank={bank}&amount={amount}&des={description}
@@ -243,7 +245,7 @@ public class PaymentController : ControllerBase
 	[HttpGet("/api/payment/result")]
 	public async Task<IActionResult> PaymentResult([FromQuery] int? bookingId, [FromQuery] int? orderCode, [FromQuery] string? status = null, [FromQuery] string? code = null, [FromQuery] string? desc = null)
 	{
-		var payOSConfirmed = status == "PAID" && code == "00";
+		var payOSConfirmed = status == PaymentConstants.PaymentStatus.Paid && code == AppConstants.PaymentResponseCodes.Success;
 		var confirmed = false;
 		var frontendUrl = _configuration["App:FrontendUrl"];
 
@@ -406,7 +408,7 @@ public class PaymentController : ControllerBase
                 CustomerId = booking.CustomerId,
                 Email = booking.Customer?.User?.Email,
                 Phone = booking.Customer?.User?.PhoneNumber,
-                Status = "PAID",
+                Status = PaymentConstants.InvoiceStatus.Paid,
                 CreatedAt = DateTime.UtcNow,
             };
             invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
@@ -418,7 +420,7 @@ public class PaymentController : ControllerBase
             InvoiceId = invoice.InvoiceId,
             PaymentMethod = "CASH",
             Amount = req.Amount,
-            Status = "PAID",
+            Status = PaymentConstants.PaymentStatus.Paid,
             PaidAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
             PaidByUserID = req.PaidByUserId,
@@ -558,12 +560,12 @@ public class PaymentController : ControllerBase
         try
         {
             var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
-            if (booking != null && booking.Status == "COMPLETED")
+            if (booking != null && booking.Status == BookingStatusConstants.Completed)
             {
                 var invoice = await _invoiceRepo.GetByBookingIdAsync(booking.BookingId);
-                if (invoice != null && !string.Equals(invoice.Status, "PAID", StringComparison.OrdinalIgnoreCase))
+                if (invoice != null && !string.Equals(invoice.Status, PaymentConstants.InvoiceStatus.Paid, StringComparison.OrdinalIgnoreCase))
                 {
-                    await _invoiceRepo.UpdateStatusAsync(invoice.InvoiceId, "CANCELLED");
+                    await _invoiceRepo.UpdateStatusAsync(invoice.InvoiceId, PaymentConstants.InvoiceStatus.Cancelled);
                 }
             }
         }
@@ -716,7 +718,7 @@ public class PaymentController : ControllerBase
 
 			// Kiểm tra response code
 			var responseCode = vnpayData.ContainsKey("vnp_ResponseCode") ? vnpayData["vnp_ResponseCode"] : "";
-			var isPaymentSuccess = responseCode == "00";
+			var isPaymentSuccess = responseCode == AppConstants.PaymentResponseCodes.Success;
 
 			if (isPaymentSuccess)
 			{
@@ -777,7 +779,7 @@ public class PaymentController : ControllerBase
 			if (!isValid)
 			{
 				_logger.LogWarning("VNPay IPN: Invalid payment signature");
-				return StatusCode(200, new { RspCode = "97", Message = "Invalid signature" });
+				return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.InvalidSignature, Message = "Invalid signature" });
 			}
 
 			// Lấy bookingId từ response
@@ -785,7 +787,7 @@ public class PaymentController : ControllerBase
 			if (!bookingId.HasValue)
 			{
 				_logger.LogWarning("VNPay IPN: Cannot extract bookingId from response");
-				return StatusCode(200, new { RspCode = "99", Message = "Cannot extract bookingId" });
+				return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.CannotExtractBookingId, Message = "Cannot extract bookingId" });
 			}
 
 			// Kiểm tra response code
@@ -793,7 +795,7 @@ public class PaymentController : ControllerBase
 			var transactionStatus = vnpayData.ContainsKey("vnp_TransactionStatus") ? vnpayData["vnp_TransactionStatus"] : "";
 
 			// VNPay: ResponseCode = "00" và TransactionStatus = "00" là thành công
-			var isPaymentSuccess = responseCode == "00" && transactionStatus == "00";
+			var isPaymentSuccess = responseCode == AppConstants.PaymentResponseCodes.Success && transactionStatus == AppConstants.PaymentResponseCodes.Success;
 
 			if (isPaymentSuccess)
 			{
@@ -805,26 +807,26 @@ public class PaymentController : ControllerBase
 				{
 					_logger.LogInformation("VNPay IPN: Payment confirmed successfully for booking {BookingId}", bookingId.Value);
 					// VNPay yêu cầu trả về RspCode = "00" để báo đã xử lý thành công
-					return StatusCode(200, new { RspCode = "00", Message = "Confirm success" });
+					return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.Success, Message = "Confirm success" });
 				}
 				else
 				{
 					_logger.LogWarning("VNPay IPN: Failed to confirm payment for booking {BookingId}", bookingId.Value);
-					return StatusCode(200, new { RspCode = "99", Message = "Confirm failed" });
+					return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.ConfirmFailed, Message = "Confirm failed" });
 				}
 			}
 			else
 			{
 				_logger.LogInformation("VNPay IPN: Payment not successful. ResponseCode: {Code}, TransactionStatus: {Status}", responseCode, transactionStatus);
 				// Vẫn trả về success để VNPay không retry
-				return StatusCode(200, new { RspCode = "00", Message = "Payment not successful" });
+				return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.PaymentNotSuccessful, Message = "Payment not successful" });
 			}
 		}
 		catch (Exception ex)
 		{
 			_logger.LogError(ex, "Error processing VNPay IPN");
 			// Trả về error để VNPay retry
-			return StatusCode(200, new { RspCode = "99", Message = "Internal error" });
+			return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.InternalError, Message = "Internal error" });
 		}
 	}
 

@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service;
 
@@ -68,7 +69,7 @@ public class GuestBookingService : IGuestBookingService
             {
                 UserId = null,
                 IsGuest = true,
-                
+
             };
             customer = await _customerRepository.CreateCustomerAsync(customer);
         }
@@ -122,7 +123,7 @@ public class GuestBookingService : IGuestBookingService
             VehicleId = vehicle.VehicleId,
             CenterId = request.CenterId,
             TechnicianSlotId = null, // Will be set after technician assignment
-            Status = "PENDING",
+            Status = BookingStatusConstants.Pending,
             ServiceId = request.ServiceId,
             SpecialRequests = request.SpecialRequests?.Trim(),
             CreatedAt = DateTime.UtcNow,

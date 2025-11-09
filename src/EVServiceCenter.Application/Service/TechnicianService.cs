@@ -9,6 +9,7 @@ using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -396,14 +397,14 @@ namespace EVServiceCenter.Application.Service
                             CategoryName = resultItem.Category?.CategoryName ?? resultItem.Description ?? "N/A",
                             Description = resultItem.Description ?? "N/A",
                             Result = resultItem.Result,
-                            Status = resultItem.Status ?? "PENDING"
+                            Status = resultItem.Status ?? BookingStatusConstants.Pending
                         });
                     }
 
                     result.Add(new MaintenanceChecklistInfo
                     {
                         ChecklistId = checklist.ChecklistId,
-                        Status = checklist.Status ?? "PENDING",
+                        Status = checklist.Status ?? BookingStatusConstants.Pending,
                         Notes = checklist.Notes ?? "Auto-generated from template",
                         Results = resultInfos
                     });

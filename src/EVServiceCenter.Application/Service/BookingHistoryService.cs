@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -22,8 +23,8 @@ namespace EVServiceCenter.Application.Service
             _customerRepository = customerRepository;
         }
 
-        public async Task<BookingHistoryListResponse> GetBookingHistoryAsync(int customerId, int page = 1, int pageSize = 10, 
-            string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+        public async Task<BookingHistoryListResponse> GetBookingHistoryAsync(int customerId, int page = 1, int pageSize = 10,
+            string? status = null, DateTime? fromDate = null, DateTime? toDate = null,
             string sortBy = "createdAt", string sortOrder = "desc")
         {
             // Validate customer exists
@@ -138,7 +139,7 @@ namespace EVServiceCenter.Application.Service
             // Calculate statistics
             var totalBookings = allBookings.Count;
             var statusBreakdown = CalculateStatusBreakdown(allBookings);
-            var totalSpent = allBookings.Where(b => b.Status == "COMPLETED").Sum(b => b.Service?.BasePrice ?? 0);
+            var totalSpent = allBookings.Where(b => b.Status == BookingStatusConstants.Completed).Sum(b => b.Service?.BasePrice ?? 0);
             var averageCost = totalBookings > 0 ? totalSpent / totalBookings : 0;
 
             var favoriteService = CalculateFavoriteService(allBookings);
@@ -288,47 +289,47 @@ namespace EVServiceCenter.Application.Service
             // Add booking creation
             timeline.Add(new StatusTimelineInfo
             {
-                Status = "PENDING",
+                Status = BookingStatusConstants.Pending,
                 Timestamp = booking.CreatedAt,
                 Note = "Đặt lịch thành công"
             });
 
             // Add status changes based on booking status
-            if (booking.Status == "CONFIRMED" || booking.Status == "IN_PROGRESS" || booking.Status == "COMPLETED")
+            if (booking.Status == BookingStatusConstants.Confirmed || booking.Status == BookingStatusConstants.InProgress || booking.Status == BookingStatusConstants.Completed)
             {
                 timeline.Add(new StatusTimelineInfo
                 {
-                    Status = "CONFIRMED",
+                    Status = BookingStatusConstants.Confirmed,
                     Timestamp = booking.UpdatedAt,
                     Note = "Xác nhận lịch hẹn"
                 });
             }
 
-            if (booking.Status == "IN_PROGRESS" || booking.Status == "COMPLETED")
+            if (booking.Status == BookingStatusConstants.InProgress || booking.Status == BookingStatusConstants.Completed)
             {
                 timeline.Add(new StatusTimelineInfo
                 {
-                    Status = "IN_PROGRESS",
+                    Status = BookingStatusConstants.InProgress,
                     Timestamp = booking.UpdatedAt,
                     Note = "Bắt đầu thực hiện dịch vụ"
                 });
             }
 
-            if (booking.Status == "COMPLETED")
+            if (booking.Status == BookingStatusConstants.Completed)
             {
                 timeline.Add(new StatusTimelineInfo
                 {
-                    Status = "COMPLETED",
+                    Status = BookingStatusConstants.Completed,
                     Timestamp = booking.UpdatedAt,
                     Note = "Hoàn thành dịch vụ"
                 });
             }
 
-            if (booking.Status == "CANCELLED")
+            if (booking.Status == BookingStatusConstants.Cancelled)
             {
                 timeline.Add(new StatusTimelineInfo
                 {
-                    Status = "CANCELLED",
+                    Status = BookingStatusConstants.Cancelled,
                     Timestamp = booking.UpdatedAt,
                     Note = "Hủy lịch hẹn"
                 });
@@ -341,11 +342,11 @@ namespace EVServiceCenter.Application.Service
         {
             return new StatusBreakdown
             {
-                Completed = bookings.Count(b => b.Status == "COMPLETED"),
-                Cancelled = bookings.Count(b => b.Status == "CANCELLED"),
-                Pending = bookings.Count(b => b.Status == "PENDING"),
-                InProgress = bookings.Count(b => b.Status == "IN_PROGRESS"),
-                Confirmed = bookings.Count(b => b.Status == "CONFIRMED")
+                Completed = bookings.Count(b => b.Status == BookingStatusConstants.Completed),
+                Cancelled = bookings.Count(b => b.Status == BookingStatusConstants.Cancelled),
+                Pending = bookings.Count(b => b.Status == BookingStatusConstants.Pending),
+                InProgress = bookings.Count(b => b.Status == BookingStatusConstants.InProgress),
+                Confirmed = bookings.Count(b => b.Status == BookingStatusConstants.Confirmed)
             };
         }
 
@@ -393,7 +394,7 @@ namespace EVServiceCenter.Application.Service
 
         private RecentActivity CalculateRecentActivity(List<Booking> bookings)
         {
-            var completedBookings = bookings.Where(b => b.Status == "COMPLETED").OrderByDescending(b => b.CreatedAt);
+            var completedBookings = bookings.Where(b => b.Status == BookingStatusConstants.Completed).OrderByDescending(b => b.CreatedAt);
             var lastBooking = completedBookings.FirstOrDefault();
 
             return new RecentActivity

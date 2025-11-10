@@ -210,7 +210,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _context.UserPromotions
                 .Include(up => up.Promotion)
-                .Where(up => up.BookingId == bookingId)
+                .Where(up => up.BookingId == bookingId && up.Status == "APPLIED")
                 .OrderByDescending(up => up.UsedAt)
                 .ToListAsync();
         }

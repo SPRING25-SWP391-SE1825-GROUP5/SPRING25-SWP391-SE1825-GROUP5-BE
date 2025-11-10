@@ -114,12 +114,17 @@ public class PaymentService
         }
 
         // Tính promotion discount từ UserPromotions đã áp dụng
+        // GetUserPromotionsByBookingAsync đã filter theo status "APPLIED" ở repository
         var userPromotions = await _promotionRepository.GetUserPromotionsByBookingAsync(booking.BookingId);
         if (userPromotions != null && userPromotions.Any())
         {
-            promotionDiscountAmount = userPromotions
-                .Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
-                .Sum(up => up.DiscountAmount);
+            promotionDiscountAmount = userPromotions.Sum(up => up.DiscountAmount);
+            _logger.LogInformation("Found {Count} applied promotion(s) for booking {BookingId}, total discount: {DiscountAmount:N0} VNĐ", 
+                userPromotions.Count, booking.BookingId, promotionDiscountAmount);
+        }
+        else
+        {
+            _logger.LogInformation("No applied promotions found for booking {BookingId}", booking.BookingId);
         }
 
         // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
@@ -775,12 +780,17 @@ public class PaymentService
 					}
 
 					// Tính promotion discount
+					// GetUserPromotionsByBookingAsync đã filter theo status "APPLIED" ở repository
 					var userPromotions = await _promotionRepository.GetUserPromotionsByBookingAsync(booking.BookingId);
 					if (userPromotions != null && userPromotions.Any())
 					{
-						promotionDiscountAmount = userPromotions
-							.Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
-							.Sum(up => up.DiscountAmount);
+						promotionDiscountAmount = userPromotions.Sum(up => up.DiscountAmount);
+						_logger.LogInformation("ConfirmPayment: Found {Count} applied promotion(s) for booking {BookingId}, total discount: {DiscountAmount:N0} VNĐ", 
+							userPromotions.Count, booking.BookingId, promotionDiscountAmount);
+					}
+					else
+					{
+						_logger.LogInformation("ConfirmPayment: No applied promotions found for booking {BookingId}", booking.BookingId);
 					}
 
                     // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts

@@ -31,7 +31,7 @@ public class OrderController : ControllerBase
     private readonly EVServiceCenter.Domain.Interfaces.IInventoryRepository _inventoryRepository;
     private readonly ILogger<OrderController> _logger;
 
-    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IInventoryRepository inventoryRepository)
+    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IInventoryRepository inventoryRepository, ILogger<OrderController> logger)
     {
         _orderService = orderService;
         _paymentService = paymentService;
@@ -39,7 +39,7 @@ public class OrderController : ControllerBase
         _exportOptions = exportOptions;
         _configuration = configuration;
         _inventoryRepository = inventoryRepository;
-        _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderController>.Instance;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderController>.Instance;
     }
 
     /// <summary>
@@ -55,6 +55,108 @@ public class OrderController : ControllerBase
         }
         catch (Exception ex)
         {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Lấy danh sách đơn hàng đã thanh toán có phụ tùng có thể dùng cho booking tại chi nhánh
+    /// Tối ưu: chỉ trả về những đơn hàng có ít nhất 1 phụ tùng có thể dùng, kèm thông tin phụ tùng
+    /// </summary>
+    [HttpGet("customer/{customerId}/available-for-booking")]
+    public async Task<IActionResult> GetAvailableOrdersForBooking(int customerId, [FromQuery] int? centerId = null)
+    {
+        try
+        {
+            if (!centerId.HasValue)
+                return BadRequest(new { success = false, message = "centerId là bắt buộc" });
+
+            // Lấy tất cả đơn hàng đã thanh toán của customer
+            var allOrders = await _orderService.GetByCustomerIdAsync(customerId);
+            var paidOrders = allOrders.Where(o => o.Status == "PAID").ToList();
+
+            if (paidOrders.Count == 0)
+                return Ok(new { success = true, data = new List<object>() });
+
+            // Lấy inventory của chi nhánh để kiểm tra
+            var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId.Value);
+            if (inventory == null)
+                return BadRequest(new { success = false, message = $"Không tìm thấy kho của chi nhánh {centerId.Value}" });
+
+            var inventoryParts = inventory.InventoryParts ?? new List<InventoryPart>();
+
+            var result = new List<object>();
+
+            foreach (var order in paidOrders)
+            {
+                // Lấy OrderItems của đơn hàng
+                var orderItems = await _orderService.GetItemsAsync(order.OrderId);
+                var availableItems = new List<object>();
+
+                foreach (var oi in orderItems)
+                {
+                    // Chỉ lấy items có AvailableQty > 0
+                    if (oi.AvailableQty <= 0)
+                        continue;
+
+                    // Kiểm tra FulfillmentCenterId phải khớp với centerId
+                    if (order.FulfillmentCenterId != centerId.Value)
+                        continue;
+
+                    // Kiểm tra inventory
+                    var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == oi.PartId);
+                    if (invPart == null)
+                    {
+                        // Không có trong kho, nhưng vẫn thêm với warning
+                        availableItems.Add(new
+                        {
+                            orderItemId = oi.OrderItemId,
+                            partId = oi.PartId,
+                            partName = oi.PartName,
+                            availableQty = oi.AvailableQty,
+                            unitPrice = oi.UnitPrice,
+                            canUse = false,
+                            warning = "Phụ tùng không có trong kho của chi nhánh này"
+                        });
+                        continue;
+                    }
+
+                    // Kiểm tra có thể dùng hay không
+                    var canUse = invPart.ReservedQty >= oi.AvailableQty && invPart.CurrentStock >= oi.AvailableQty;
+
+                    availableItems.Add(new
+                    {
+                        orderItemId = oi.OrderItemId,
+                        partId = oi.PartId,
+                        partName = oi.PartName,
+                        availableQty = oi.AvailableQty,
+                        unitPrice = oi.UnitPrice,
+                        canUse = canUse,
+                        warning = canUse ? null : $"ReservedQty ({invPart.ReservedQty}) hoặc CurrentStock ({invPart.CurrentStock}) không đủ"
+                    });
+                }
+
+                // Chỉ thêm đơn hàng nếu có ít nhất 1 phụ tùng có thể dùng
+                if (availableItems.Count > 0)
+                {
+                    result.Add(new
+                    {
+                        orderId = order.OrderId,
+                        orderNumber = order.OrderNumber,
+                        totalAmount = order.TotalAmount,
+                        createdAt = order.CreatedAt,
+                        fulfillmentCenterId = order.FulfillmentCenterId,
+                        fulfillmentCenterName = order.FulfillmentCenterName,
+                        availableParts = availableItems
+                    });
+                }
+            }
+
+            return Ok(new { success = true, data = result });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GetAvailableOrdersForBooking failed for customerId={CustomerId} with centerId={CenterId}", customerId, centerId);
             return BadRequest(new { success = false, message = ex.Message });
         }
     }
@@ -635,3 +737,4 @@ public class OrderController : ControllerBase
         }
     }
 }
+

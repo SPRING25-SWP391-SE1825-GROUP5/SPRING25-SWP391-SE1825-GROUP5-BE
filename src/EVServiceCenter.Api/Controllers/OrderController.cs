@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using EVServiceCenter.Application.Configurations;
 using System.IO;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using EVServiceCenter.Api.Constants;
 using EVServiceCenter.Domain.Entities;
 
@@ -28,6 +29,7 @@ public class OrderController : ControllerBase
     private readonly IOptions<ExportOptions> _exportOptions;
     private readonly IConfiguration _configuration;
     private readonly EVServiceCenter.Domain.Interfaces.IInventoryRepository _inventoryRepository;
+    private readonly ILogger<OrderController> _logger;
 
     public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IInventoryRepository inventoryRepository)
     {
@@ -37,6 +39,7 @@ public class OrderController : ControllerBase
         _exportOptions = exportOptions;
         _configuration = configuration;
         _inventoryRepository = inventoryRepository;
+        _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderController>.Instance;
     }
 
     /// <summary>
@@ -523,6 +526,7 @@ public class OrderController : ControllerBase
     {
         try
         {
+            _logger.LogInformation("GetAvailableParts called for OrderId={OrderId} with centerId={CenterId}", orderId, centerId);
             var order = await _orderService.GetByIdAsync(orderId);
             if (order == null)
                 return NotFound(new { success = false, message = "Đơn hàng không tồn tại" });
@@ -538,6 +542,7 @@ public class OrderController : ControllerBase
             var targetCenterId = centerId ?? order.FulfillmentCenterId;
             if (!targetCenterId.HasValue)
             {
+                _logger.LogWarning("GetAvailableParts missing fulfillment center. OrderId={OrderId}, Order.FulfillmentCenterId=null, query centerId=null", orderId);
                 return BadRequest(new { success = false, message = "Không xác định được chi nhánh để kiểm tra kho" });
             }
 
@@ -545,6 +550,7 @@ public class OrderController : ControllerBase
             var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(targetCenterId.Value);
             if (inventory == null)
             {
+                _logger.LogWarning("GetAvailableParts: inventory not found for centerId={CenterId}", targetCenterId.Value);
                 return BadRequest(new { success = false, message = $"Không tìm thấy kho của chi nhánh {targetCenterId.Value}" });
             }
 
@@ -619,10 +625,12 @@ public class OrderController : ControllerBase
                 });
             }
 
+            _logger.LogInformation("GetAvailableParts returning {Count} items for OrderId={OrderId}, centerId={CenterId}", availableItems.Count, orderId, targetCenterId.Value);
             return Ok(new { success = true, data = availableItems });
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "GetAvailableParts failed for OrderId={OrderId} with centerId={CenterId}", orderId, centerId);
             return BadRequest(new { success = false, message = ex.Message });
         }
     }

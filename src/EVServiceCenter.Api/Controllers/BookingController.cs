@@ -1437,7 +1437,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                         OrderItemId = usage.OrderItemId,
                         Quantity = usage.Quantity,
                         IsValid = true,
-                        Errors = new List<string>()
+                        Errors = new List<string>(),
+                        ErrorCodes = new List<string>()
                     };
 
                     try
@@ -1448,6 +1449,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         {
                             result.IsValid = false;
                             result.Errors.Add("OrderItem không tồn tại");
+                            result.ErrorCodes.Add("ORDER_ITEM_NOT_FOUND");
                             validationResults.Add(result);
                             continue;
                         }
@@ -1458,6 +1460,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         {
                             result.IsValid = false;
                             result.Errors.Add("Order chưa thanh toán hoặc không tồn tại");
+                            result.ErrorCodes.Add("ORDER_NOT_PAID");
                             validationResults.Add(result);
                             continue;
                         }
@@ -1467,6 +1470,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         {
                             result.IsValid = false;
                             result.Errors.Add($"Phụ tùng đã mua tại chi nhánh {order.FulfillmentCenterId}, không thể sử dụng tại chi nhánh {request.CenterId}");
+                            result.ErrorCodes.Add("CENTER_MISMATCH");
                             validationResults.Add(result);
                             continue;
                         }
@@ -1477,6 +1481,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         {
                             result.IsValid = false;
                             result.Errors.Add($"Không đủ phụ tùng. Còn lại: {availableQty}, cần: {usage.Quantity}");
+                            result.ErrorCodes.Add("INSUFFICIENT_AVAILABLE");
                             validationResults.Add(result);
                             continue;
                         }
@@ -1488,6 +1493,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         {
                             result.IsValid = false;
                             result.Errors.Add($"Không tìm thấy part {orderItem.PartId} trong inventory của chi nhánh {request.CenterId}");
+                            result.ErrorCodes.Add("INVENTORY_PART_NOT_FOUND");
                             validationResults.Add(result);
                             continue;
                         }
@@ -1497,6 +1503,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         {
                             result.IsValid = false;
                             result.Errors.Add($"ReservedQty không đủ. ReservedQty: {invPart.ReservedQty}, cần: {usage.Quantity}");
+                            result.ErrorCodes.Add("INSUFFICIENT_RESERVED");
                             validationResults.Add(result);
                             continue;
                         }
@@ -1506,6 +1513,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         {
                             result.IsValid = false;
                             result.Errors.Add($"CurrentStock không đủ. CurrentStock: {invPart.CurrentStock}, cần: {usage.Quantity}");
+                            result.ErrorCodes.Add("INSUFFICIENT_STOCK");
                             validationResults.Add(result);
                             continue;
                         }
@@ -1517,11 +1525,13 @@ namespace EVServiceCenter.WebAPI.Controllers
                         result.ReservedQty = invPart.ReservedQty;
                         result.CurrentStock = invPart.CurrentStock;
                         result.InventoryAvailableQty = invPart.CurrentStock - invPart.ReservedQty;
+                        result.ErrorCodes.Add("VALID");
                     }
                     catch (Exception ex)
                     {
                         result.IsValid = false;
                         result.Errors.Add($"Lỗi khi validate: {ex.Message}");
+                        result.ErrorCodes.Add("VALIDATION_ERROR");
                     }
 
                     validationResults.Add(result);
@@ -1601,6 +1611,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             public int? InventoryAvailableQty { get; set; } // CurrentStock - ReservedQty
             public bool IsValid { get; set; }
             public List<string> Errors { get; set; } = new List<string>();
+            public List<string> ErrorCodes { get; set; } = new List<string>();
         }
     }
 

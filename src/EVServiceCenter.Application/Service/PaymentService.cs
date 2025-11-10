@@ -90,8 +90,10 @@ public class PaymentService
         decimal packageDiscountAmount = 0m;
         decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
         decimal promotionDiscountAmount = 0m;
+        // Tính partsAmount: CHỈ tính phụ tùng KHÔNG phải khách cung cấp (IsCustomerSupplied = false)
+        // Phụ tùng khách cung cấp (IsCustomerSupplied = true) đã được thanh toán khi mua Order, không tính lại
         decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
-            .Where(p => p.Status == "CONSUMED") // TODO: Create WorkOrderPartStatusConstants
+            .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied) // CHỈ tính phụ tùng không phải khách cung cấp
             .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
 
         if (booking.AppliedCreditId.HasValue)
@@ -749,8 +751,10 @@ public class PaymentService
 					decimal packageDiscountAmount = 0m;
 					decimal packagePrice = 0m; // Giá mua gói (chỉ tính lần đầu)
 					decimal promotionDiscountAmount = 0m;
+					// Tính partsAmount: CHỈ tính phụ tùng KHÔNG phải khách cung cấp (IsCustomerSupplied = false)
+					// Phụ tùng khách cung cấp (IsCustomerSupplied = true) đã được thanh toán khi mua Order, không tính lại
 					decimal partsAmount = (await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId))
-						.Where(p => p.Status == "CONSUMED")
+						.Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied) // CHỈ tính phụ tùng không phải khách cung cấp
 						.Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
 
 					if (booking.AppliedCreditId.HasValue)
@@ -827,6 +831,19 @@ public class PaymentService
 							_logger.LogInformation("Used 1 credit from CustomerServiceCredit {CreditId} for customer {CustomerId}, package {PackageId}. UsedCredits: {UsedCredits}/{TotalCredits}",
 								appliedCredit.CreditId, booking.CustomerId, appliedCredit.PackageId, appliedCredit.UsedCredits, appliedCredit.TotalCredits);
 						}
+					}
+
+					// Cập nhật promotion usageCount và mark UserPromotion as USED
+					try
+					{
+						_logger.LogInformation("Cập nhật promotion usageCount cho booking {BookingId}", booking.BookingId);
+						var updatedCount = await _promotionService.MarkUsedByBookingAsync(booking.BookingId);
+						_logger.LogInformation("Đã cập nhật {Count} promotion(s) usageCount cho booking {BookingId}", updatedCount, booking.BookingId);
+					}
+					catch (Exception ex)
+					{
+						_logger.LogError(ex, "Lỗi khi cập nhật promotion usageCount cho booking {BookingId}", booking.BookingId);
+						// Không throw để không ảnh hưởng đến payment flow
 					}
 
 					// Commit transaction - tất cả thao tác database sẽ được lưu cùng lúc
@@ -1027,45 +1044,14 @@ public class PaymentService
 					if (order.FulfillmentCenterId.HasValue)
 					{
 						fulfillmentCenterId = order.FulfillmentCenterId.Value;
-						_logger.LogInformation("Sử dụng FulfillmentCenterId đã lưu {CenterId} cho order {OrderId} (được chọn từ FE)", 
+						_logger.LogInformation("Sử dụng FulfillmentCenterId đã lưu {CenterId} cho order {OrderId} (được chọn từ FE)",
 							fulfillmentCenterId.Value, order.OrderId);
 
-						// Validate lại stock trước khi trừ (có thể đã hết hàng từ lúc tạo order đến lúc thanh toán)
-						var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(fulfillmentCenterId.Value);
-						if (inventory == null)
-						{
-							_logger.LogWarning("Inventory không tồn tại cho center {CenterId} của order {OrderId}", 
-								fulfillmentCenterId.Value, order.OrderId);
-							throw new InvalidOperationException($"Kho của chi nhánh ID {fulfillmentCenterId.Value} không tồn tại. Vui lòng chọn chi nhánh khác.");
-						}
-
-						var inventoryParts = inventory.InventoryParts ?? new List<Domain.Entities.InventoryPart>();
-						foreach (var orderItem in order.OrderItems)
-						{
-							var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
-							if (invPart == null)
-							{
-								_logger.LogWarning("Part {PartId} không có trong inventory của center {CenterId} cho order {OrderId}", 
-									orderItem.PartId, fulfillmentCenterId.Value, order.OrderId);
-								throw new InvalidOperationException(
-									$"Phụ tùng ID {orderItem.PartId} không có trong kho của chi nhánh ID {fulfillmentCenterId.Value}. " +
-									$"Vui lòng chọn chi nhánh khác.");
-							}
-
-							if (invPart.CurrentStock < orderItem.Quantity)
-							{
-								_logger.LogWarning("Không đủ stock cho part {PartId} trong center {CenterId} cho order {OrderId}. Hiện có: {CurrentStock}, cần: {Quantity}", 
-									orderItem.PartId, fulfillmentCenterId.Value, order.OrderId, invPart.CurrentStock, orderItem.Quantity);
-								throw new InvalidOperationException(
-									$"Không đủ hàng cho phụ tùng ID {orderItem.PartId} tại chi nhánh ID {fulfillmentCenterId.Value}. " +
-									$"Hiện có: {invPart.CurrentStock}, cần: {orderItem.Quantity}. Vui lòng chọn chi nhánh khác.");
-							}
-						}
-
-						// Trừ kho từ fulfillment center đã chọn
-						_logger.LogInformation("Đang trừ kho từ fulfillment center {CenterId} (được chọn từ FE)...", fulfillmentCenterId.Value);
-						await DeductInventoryFromCenterAsync(fulfillmentCenterId.Value, order.OrderItems);
-						_logger.LogInformation("Đã trừ kho thành công từ fulfillment center {CenterId}", fulfillmentCenterId.Value);
+						// Trừ inventory ngay khi Order PAID (vì khách đã trả tiền, hàng đã thuộc về khách)
+						// Trừ CurrentStock và reserve để track
+						_logger.LogInformation("Đang trừ inventory từ fulfillment center {CenterId} (được chọn từ FE)...", fulfillmentCenterId.Value);
+						await ReserveInventoryForOrderAsync(fulfillmentCenterId.Value, order.OrderItems);
+						_logger.LogInformation("Đã trừ inventory thành công từ fulfillment center {CenterId}", fulfillmentCenterId.Value);
 					}
 					else
 					{
@@ -1075,19 +1061,19 @@ public class PaymentService
 
 						if (fulfillmentCenterId.HasValue)
 						{
-							_logger.LogInformation("Đã tự động chọn fulfillment center {CenterId} cho order {OrderId}", 
+							_logger.LogInformation("Đã tự động chọn fulfillment center {CenterId} cho order {OrderId}",
 								fulfillmentCenterId.Value, order.OrderId);
 
 							// Lưu fulfillment center vào Order
 							order.FulfillmentCenterId = fulfillmentCenterId.Value;
 							await _orderRepository.UpdateAsync(order);
-							_logger.LogInformation("Đã lưu fulfillment center {CenterId} vào Order {OrderId}", 
+							_logger.LogInformation("Đã lưu fulfillment center {CenterId} vào Order {OrderId}",
 								fulfillmentCenterId.Value, order.OrderId);
 
-							// Trừ kho từ fulfillment center
-							_logger.LogInformation("Đang trừ kho từ fulfillment center {CenterId}...", fulfillmentCenterId.Value);
-							await DeductInventoryFromCenterAsync(fulfillmentCenterId.Value, order.OrderItems);
-							_logger.LogInformation("Đã trừ kho thành công từ fulfillment center {CenterId}", fulfillmentCenterId.Value);
+							// Trừ inventory ngay khi Order PAID (vì khách đã trả tiền, hàng đã thuộc về khách)
+							_logger.LogInformation("Đang trừ inventory từ fulfillment center {CenterId}...", fulfillmentCenterId.Value);
+							await ReserveInventoryForOrderAsync(fulfillmentCenterId.Value, order.OrderItems);
+							_logger.LogInformation("Đã trừ inventory thành công từ fulfillment center {CenterId} (auto-select)", fulfillmentCenterId.Value);
 						}
 						else
 						{
@@ -1123,6 +1109,19 @@ public class PaymentService
 				payment = await _paymentRepository.CreateAsync(payment);
 				_logger.LogInformation("Đã tạo payment {PaymentId} cho order {OrderId}", payment.PaymentId, order.OrderId);
 
+				// Cập nhật promotion usageCount và mark UserPromotion as USED
+				try
+				{
+					_logger.LogInformation("Cập nhật promotion usageCount cho order {OrderId}", order.OrderId);
+					var updatedCount = await _promotionService.MarkUsedByOrderAsync(order.OrderId);
+					_logger.LogInformation("Đã cập nhật {Count} promotion(s) usageCount cho order {OrderId}", updatedCount, order.OrderId);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Lỗi khi cập nhật promotion usageCount cho order {OrderId}", order.OrderId);
+					// Không throw để không ảnh hưởng đến payment flow
+				}
+
 				scope.Complete();
 				_logger.LogInformation("=== CẬP NHẬT DATABASE THÀNH CÔNG ===");
 			}
@@ -1145,6 +1144,7 @@ public class PaymentService
 	/// <summary>
 	/// Xác định fulfillment center có đủ stock cho tất cả OrderItems
 	/// Trả về center đầu tiên có đủ stock, hoặc null nếu không tìm thấy
+	/// Sử dụng AvailableQty (CurrentStock - ReservedQty) để kiểm tra
 	/// </summary>
 	private async Task<int?> DetermineFulfillmentCenterAsync(IEnumerable<Domain.Entities.OrderItem> orderItems)
 	{
@@ -1158,10 +1158,13 @@ public class PaymentService
 			var inventoryParts = inventory.InventoryParts ?? new List<Domain.Entities.InventoryPart>();
 
 			// Kiểm tra xem center này có đủ stock cho tất cả items không
+			// Sử dụng AvailableQty (CurrentStock - ReservedQty) thay vì CurrentStock
 			bool hasEnoughStock = orderItems.All(oi =>
 			{
 				var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == oi.PartId);
-				return invPart != null && invPart.CurrentStock >= oi.Quantity;
+				if (invPart == null) return false;
+				var availableQty = invPart.CurrentStock - invPart.ReservedQty;
+				return availableQty >= oi.Quantity;
 			});
 
 			if (hasEnoughStock)
@@ -1176,7 +1179,55 @@ public class PaymentService
 	}
 
 	/// <summary>
+	/// Reserve inventory từ fulfillment center cho tất cả OrderItems
+	/// Reserve thay vì trừ ngay (theo workflow đã thảo luận)
+	/// </summary>
+	private async Task ReserveInventoryForOrderAsync(int centerId, IEnumerable<Domain.Entities.OrderItem> orderItems)
+	{
+		var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+		if (inventory == null)
+		{
+			throw new InvalidOperationException($"Không tìm thấy inventory cho center {centerId}");
+		}
+
+		var inventoryParts = inventory.InventoryParts ?? new List<Domain.Entities.InventoryPart>();
+
+		foreach (var orderItem in orderItems)
+		{
+			var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+			if (invPart == null)
+			{
+				throw new InvalidOperationException($"Không tìm thấy part {orderItem.PartId} trong inventory của center {centerId}");
+			}
+
+			// Kiểm tra AvailableQty (CurrentStock - ReservedQty) thay vì CurrentStock
+			var availableQty = invPart.CurrentStock - invPart.ReservedQty;
+			if (availableQty < orderItem.Quantity)
+			{
+				throw new InvalidOperationException(
+					$"Không đủ hàng cho part {orderItem.PartId} trong center {centerId}. " +
+					$"Hiện có: {availableQty} (CurrentStock: {invPart.CurrentStock}, ReservedQty: {invPart.ReservedQty}), cần: {orderItem.Quantity}");
+			}
+
+			// Trừ inventory ngay khi Order PAID (vì khách đã trả tiền, hàng đã thuộc về khách)
+			// Trừ CurrentStock (hàng đã thuộc về khách, không còn trong kho để bán)
+			// Tăng ReservedQty (reserve để track và auto-release sau 30 ngày nếu không dùng)
+			invPart.CurrentStock -= orderItem.Quantity; // Trừ ngay - hàng đã thuộc về khách
+			invPart.ReservedQty += orderItem.Quantity; // Reserve để track và auto-release
+			_logger.LogInformation(
+				"Đã trừ và reserve {Quantity} units của part {PartId} tại center {CenterId}. CurrentStock: {CurrentStock}, ReservedQty: {ReservedQty}, AvailableQty: {AvailableQty}",
+				orderItem.Quantity, orderItem.PartId, centerId, invPart.CurrentStock, invPart.ReservedQty,
+				invPart.CurrentStock - invPart.ReservedQty);
+		}
+
+		// Save changes
+		await _inventoryRepository.UpdateInventoryAsync(inventory);
+		_logger.LogInformation("Đã cập nhật inventory (trừ và reserve) cho center {CenterId}", centerId);
+	}
+
+	/// <summary>
 	/// Trừ kho từ fulfillment center cho tất cả OrderItems
+	/// Dùng khi đặt lịch và chọn sử dụng phụ tùng đã mua
 	/// </summary>
 	private async Task DeductInventoryFromCenterAsync(int centerId, IEnumerable<Domain.Entities.OrderItem> orderItems)
 	{
@@ -1196,20 +1247,27 @@ public class PaymentService
 				throw new InvalidOperationException($"Không tìm thấy part {orderItem.PartId} trong inventory của center {centerId}");
 			}
 
-			if (invPart.CurrentStock < orderItem.Quantity)
+			// Validate ReservedQty có đúng không (để phát hiện lỗi hệ thống)
+			if (invPart.ReservedQty < orderItem.Quantity)
 			{
-				throw new InvalidOperationException($"Không đủ stock cho part {orderItem.PartId} trong center {centerId}. Hiện có: {invPart.CurrentStock}, cần: {orderItem.Quantity}");
+				_logger.LogWarning(
+					"ReservedQty không đúng cho part {PartId} trong center {CenterId}. ReservedQty: {ReservedQty}, cần: {Quantity}",
+					orderItem.PartId, centerId, invPart.ReservedQty, orderItem.Quantity);
+				// Không throw exception, chỉ log warning (có thể là lỗi hệ thống)
 			}
 
-			// Trừ kho
+			// Trừ inventory thực tế (CurrentStock) và release reserve (ReservedQty)
 			invPart.CurrentStock -= orderItem.Quantity;
-			_logger.LogInformation("Đã trừ {Quantity} units của part {PartId} từ center {CenterId}. Stock còn lại: {RemainingStock}",
-				orderItem.Quantity, orderItem.PartId, centerId, invPart.CurrentStock);
+			invPart.ReservedQty -= orderItem.Quantity;
+			_logger.LogInformation(
+				"Đã trừ {Quantity} units của part {PartId} từ center {CenterId}. CurrentStock: {CurrentStock}, ReservedQty: {ReservedQty}, AvailableQty: {AvailableQty}",
+				orderItem.Quantity, orderItem.PartId, centerId, invPart.CurrentStock, invPart.ReservedQty,
+				invPart.CurrentStock - invPart.ReservedQty);
 		}
 
 		// Save changes
 		await _inventoryRepository.UpdateInventoryAsync(inventory);
-		_logger.LogInformation("Đã cập nhật inventory cho center {CenterId}", centerId);
+		_logger.LogInformation("Đã cập nhật inventory (trừ thực tế) cho center {CenterId}", centerId);
 	}
 }
 

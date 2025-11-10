@@ -12,6 +12,7 @@ using EVServiceCenter.Domain.Entities;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Configuration;
 using EVServiceCenter.Application.Constants;
+using System.ComponentModel.DataAnnotations;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -354,6 +355,84 @@ namespace EVServiceCenter.WebAPI.Controllers
             await SendStatusChangeNotifications(updated, status);
 
             return Ok(new { success = true, message = "Cập nhật trạng thái booking thành công", data = new { bookingId = updated.BookingId, status = updated.Status } });
+        }
+
+        /// <summary>
+        /// QR Code Check-in endpoint - Chuyển booking từ CONFIRMED sang CHECKED_IN
+        /// </summary>
+        [HttpPost("{bookingId:int}/check-in")]
+        [Authorize(Roles = "STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> CheckInBooking(int bookingId)
+        {
+            try
+            {
+                // Get booking details
+                var booking = await _bookingRepository.GetBookingWithDetailsByIdAsync(bookingId);
+                if (booking == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy booking" });
+
+                // Validate booking status - chỉ cho phép check-in từ CONFIRMED
+                if (!string.Equals(booking.Status, BookingStatusConstants.Confirmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    var currentStatusLabel = booking.Status switch
+                    {
+                        BookingStatusConstants.CheckedIn => "đã được check-in",
+                        BookingStatusConstants.InProgress => "đang được xử lý",
+                        BookingStatusConstants.Completed => "đã hoàn thành",
+                        BookingStatusConstants.Paid => "đã thanh toán",
+                        BookingStatusConstants.Cancelled => "đã bị hủy",
+                        BookingStatusConstants.Pending => "chưa được xác nhận",
+                        _ => booking.Status
+                    };
+                    return BadRequest(new { success = false, message = $"Không thể check-in. Booking đang ở trạng thái: {currentStatusLabel}" });
+                }
+
+                // Validate booking date - chỉ cho phép check-in trong ngày booking hoặc trước đó
+                if (booking.TechnicianTimeSlot?.WorkDate != null)
+                {
+                    var bookingDate = booking.TechnicianTimeSlot.WorkDate.Date;
+                    var today = DateTime.Today;
+
+                    // Cho phép check-in sớm 1 ngày hoặc trong ngày booking
+                    if (bookingDate < today.AddDays(-1))
+                    {
+                        return BadRequest(new { success = false, message = "Booking đã quá hạn. Không thể check-in." });
+                    }
+                }
+
+                // Update status to CHECKED_IN
+                var updateRequest = new EVServiceCenter.Application.Models.Requests.UpdateBookingStatusRequest
+                {
+                    Status = BookingStatusConstants.CheckedIn
+                };
+
+                var updated = await _bookingService.UpdateBookingStatusAsync(bookingId, updateRequest);
+
+                // Send SignalR notification
+                await _hub.Clients.Group($"booking:{bookingId}").SendCoreAsync("booking.updated",
+                    new object[] { new { bookingId = bookingId, status = BookingStatusConstants.CheckedIn } });
+
+                // Send notifications
+                await SendStatusChangeNotifications(updated, BookingStatusConstants.CheckedIn);
+
+                return Ok(new {
+                    success = true,
+                    message = "Check-in thành công",
+                    data = new {
+                        bookingId = updated.BookingId,
+                        status = updated.Status,
+                        checkedInAt = DateTime.UtcNow
+                    }
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi khi thực hiện check-in", error = ex.Message });
+            }
         }
 
         [HttpPost("release-slot")]
@@ -926,6 +1005,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             return status switch
             {
                 BookingStatusConstants.Confirmed => $"Lịch hẹn #{bookingId} của bạn đã được xác nhận. Vui lòng đến đúng giờ hẹn.",
+                BookingStatusConstants.CheckedIn => $"Lịch hẹn #{bookingId} của bạn đã được check-in. Kỹ thuật viên sẽ sớm tiếp nhận.",
                 BookingStatusConstants.InProgress => $"Lịch hẹn #{bookingId} của bạn đang được thực hiện.",
                 BookingStatusConstants.Completed => $"Lịch hẹn #{bookingId} của bạn đã hoàn thành. Vui lòng thanh toán.",
                 BookingStatusConstants.Paid => $"Lịch hẹn #{bookingId} của bạn đã được thanh toán thành công. Cảm ơn bạn!",
@@ -939,6 +1019,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             return status switch
             {
                 BookingStatusConstants.Confirmed => $"Booking #{bookingId} đã được xác nhận. Vui lòng chuẩn bị làm việc.",
+                BookingStatusConstants.CheckedIn => $"Booking #{bookingId} đã được check-in. Khách hàng đã đến trung tâm.",
                 BookingStatusConstants.InProgress => $"Booking #{bookingId} đang được thực hiện.",
                 BookingStatusConstants.Completed => $"Booking #{bookingId} đã hoàn thành. Chờ khách hàng thanh toán.",
                 BookingStatusConstants.Paid => $"Booking #{bookingId} đã được thanh toán thành công.",
@@ -1160,12 +1241,19 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (oi.Order?.CustomerId != booking.CustomerId)
                 return BadRequest(new { success = false, message = "OrderItem không thuộc khách hàng của booking" });
 
+            // Get the part's first category ID
+            var partCategoryId = await _partRepository.GetFirstCategoryIdForPartAsync(oi.PartId);
+
             // Optional category validation: if this work order part expects a category, ensure the customer's part is in that category
             if (wop.CategoryId.HasValue)
             {
-                var firstCategoryId = await _partRepository.GetFirstCategoryIdForPartAsync(oi.PartId);
-                if (firstCategoryId == null || firstCategoryId.Value != wop.CategoryId.Value)
+                if (partCategoryId == null || partCategoryId.Value != wop.CategoryId.Value)
                     return BadRequest(new { success = false, message = "Phụ tùng không thuộc đúng nhóm hạng mục yêu cầu" });
+            }
+            // Nếu WorkOrderPart chưa có CategoryId, tự động set từ part's first category
+            else if (partCategoryId.HasValue)
+            {
+                wop.CategoryId = partCategoryId.Value;
             }
 
             var available = oi.Quantity - oi.ConsumedQty;
@@ -1183,7 +1271,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             wop.ConsumedAt = DateTime.UtcNow;
             await _workOrderPartRepository.UpdateAsync(wop);
 
-            return Ok(new { success = true, data = new { wop.WorkOrderPartId, wop.PartId, wop.QuantityUsed, wop.IsCustomerSupplied, wop.SourceOrderItemId, availableAfter = oi.Quantity - oi.ConsumedQty } });
+            return Ok(new { success = true, data = new { wop.WorkOrderPartId, wop.PartId, wop.CategoryId, wop.QuantityUsed, wop.IsCustomerSupplied, wop.SourceOrderItemId, availableAfter = oi.Quantity - oi.ConsumedQty } });
         }
 
         public class ReplacePartRequest { public int NewPartId { get; set; } public int? Quantity { get; set; } }
@@ -1324,6 +1412,195 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message = "Lỗi hệ thống: " + ex.Message
                 });
             }
+        }
+
+        /// <summary>
+        /// Validate có thể sử dụng phụ tùng đã mua cho booking
+        /// </summary>
+        [HttpPost("validate-order-parts")]
+        public async Task<IActionResult> ValidateOrderParts([FromBody] ValidateOrderPartsRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid || request == null)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+                }
+
+                var validationResults = new List<OrderPartValidationResult>();
+
+                foreach (var usage in request.OrderItemUsages)
+                {
+                    var result = new OrderPartValidationResult
+                    {
+                        OrderItemId = usage.OrderItemId,
+                        Quantity = usage.Quantity,
+                        IsValid = true,
+                        Errors = new List<string>()
+                    };
+
+                    try
+                    {
+                        // 1. Validate OrderItem
+                        var orderItem = await _orderRepository.GetOrderItemByIdAsync(usage.OrderItemId);
+                        if (orderItem == null)
+                        {
+                            result.IsValid = false;
+                            result.Errors.Add("OrderItem không tồn tại");
+                            validationResults.Add(result);
+                            continue;
+                        }
+
+                        // 2. Validate Order
+                        var order = await _orderRepository.GetByIdAsync(orderItem.OrderId);
+                        if (order == null || order.Status != "PAID")
+                        {
+                            result.IsValid = false;
+                            result.Errors.Add("Order chưa thanh toán hoặc không tồn tại");
+                            validationResults.Add(result);
+                            continue;
+                        }
+
+                        // 3. Validate FulfillmentCenterId == CenterId
+                        if (order.FulfillmentCenterId != request.CenterId)
+                        {
+                            result.IsValid = false;
+                            result.Errors.Add($"Phụ tùng đã mua tại chi nhánh {order.FulfillmentCenterId}, không thể sử dụng tại chi nhánh {request.CenterId}");
+                            validationResults.Add(result);
+                            continue;
+                        }
+
+                        // 4. Validate AvailableQty (Quantity - ConsumedQty)
+                        var availableQty = orderItem.Quantity - orderItem.ConsumedQty;
+                        if (availableQty < usage.Quantity)
+                        {
+                            result.IsValid = false;
+                            result.Errors.Add($"Không đủ phụ tùng. Còn lại: {availableQty}, cần: {usage.Quantity}");
+                            validationResults.Add(result);
+                            continue;
+                        }
+
+                        // 5. Validate Inventory (ReservedQty và CurrentStock)
+                        var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(request.CenterId);
+                        var invPart = inventory?.InventoryParts?.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+                        if (invPart == null)
+                        {
+                            result.IsValid = false;
+                            result.Errors.Add($"Không tìm thấy part {orderItem.PartId} trong inventory của chi nhánh {request.CenterId}");
+                            validationResults.Add(result);
+                            continue;
+                        }
+
+                        // Kiểm tra ReservedQty >= quantity (đảm bảo hàng đã được reserve)
+                        if (invPart.ReservedQty < usage.Quantity)
+                        {
+                            result.IsValid = false;
+                            result.Errors.Add($"ReservedQty không đủ. ReservedQty: {invPart.ReservedQty}, cần: {usage.Quantity}");
+                            validationResults.Add(result);
+                            continue;
+                        }
+
+                        // Kiểm tra CurrentStock >= quantity (đảm bảo có đủ hàng thực tế)
+                        if (invPart.CurrentStock < usage.Quantity)
+                        {
+                            result.IsValid = false;
+                            result.Errors.Add($"CurrentStock không đủ. CurrentStock: {invPart.CurrentStock}, cần: {usage.Quantity}");
+                            validationResults.Add(result);
+                            continue;
+                        }
+
+                        // Tất cả validation đều pass
+                        result.PartId = orderItem.PartId;
+                        result.PartName = orderItem.Part?.PartName ?? $"Part {orderItem.PartId}";
+                        result.AvailableQty = availableQty;
+                        result.ReservedQty = invPart.ReservedQty;
+                        result.CurrentStock = invPart.CurrentStock;
+                        result.InventoryAvailableQty = invPart.CurrentStock - invPart.ReservedQty;
+                    }
+                    catch (Exception ex)
+                    {
+                        result.IsValid = false;
+                        result.Errors.Add($"Lỗi khi validate: {ex.Message}");
+                    }
+
+                    validationResults.Add(result);
+                }
+
+                var allValid = validationResults.All(r => r.IsValid);
+                return Ok(new
+                {
+                    success = allValid,
+                    message = allValid ? "Tất cả phụ tùng đều hợp lệ" : "Một số phụ tùng không hợp lệ",
+                    data = validationResults
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi hệ thống: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// Update phụ tùng khách cung cấp cho booking (chỉ cho phép khi PENDING hoặc CONFIRMED)
+        /// </summary>
+        [HttpPut("{bookingId}/customer-parts")]
+        [Authorize(Roles = "CUSTOMER,STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> UpdateBookingCustomerParts(int bookingId, [FromBody] UpdateBookingCustomerPartsRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid || request == null)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+                }
+
+                var booking = await _bookingService.UpdateBookingCustomerPartsAsync(bookingId, request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Đã cập nhật phụ tùng khách cung cấp thành công",
+                    data = booking
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi hệ thống: {ex.Message}" });
+            }
+        }
+
+        public class ValidateOrderPartsRequest
+        {
+            [Required(ErrorMessage = "CenterId là bắt buộc")]
+            [Range(1, int.MaxValue, ErrorMessage = "CenterId phải là số nguyên dương")]
+            public int CenterId { get; set; }
+
+            [Required(ErrorMessage = "OrderItemUsages là bắt buộc")]
+            public required List<Application.Models.Requests.OrderItemUsageRequest> OrderItemUsages { get; set; }
+        }
+
+        public class OrderPartValidationResult
+        {
+            public int OrderItemId { get; set; }
+            public int? PartId { get; set; }
+            public string? PartName { get; set; }
+            public int Quantity { get; set; }
+            public int? AvailableQty { get; set; } // Từ OrderItem (Quantity - ConsumedQty)
+            public int? ReservedQty { get; set; } // Từ InventoryPart
+            public int? CurrentStock { get; set; } // Từ InventoryPart
+            public int? InventoryAvailableQty { get; set; } // CurrentStock - ReservedQty
+            public bool IsValid { get; set; }
+            public List<string> Errors { get; set; } = new List<string>();
         }
     }
 

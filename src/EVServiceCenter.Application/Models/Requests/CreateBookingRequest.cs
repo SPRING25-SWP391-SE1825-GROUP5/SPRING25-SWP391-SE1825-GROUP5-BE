@@ -40,6 +40,23 @@ namespace EVServiceCenter.Application.Models.Requests
         // Optional: mã gói dịch vụ để áp dụng cho booking
         [StringLength(50, ErrorMessage = "Mã gói dịch vụ không được vượt quá 50 ký tự")]
         public string? PackageCode { get; set; }
+
+        // Optional: Danh sách phụ tùng đã mua muốn sử dụng cho booking này
+        public List<OrderItemUsageRequest>? OrderItemUsages { get; set; }
+    }
+
+    /// <summary>
+    /// Request để chọn sử dụng phụ tùng đã mua từ OrderItem
+    /// </summary>
+    public class OrderItemUsageRequest
+    {
+        [Required(ErrorMessage = "OrderItemId là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "OrderItemId phải là số nguyên dương")]
+        public int OrderItemId { get; set; }
+
+        [Required(ErrorMessage = "Số lượng là bắt buộc")]
+        [Range(1, int.MaxValue, ErrorMessage = "Số lượng phải lớn hơn 0")]
+        public int Quantity { get; set; }
     }
 
 }

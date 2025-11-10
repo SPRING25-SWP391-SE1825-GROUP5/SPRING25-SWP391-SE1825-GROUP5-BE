@@ -51,14 +51,42 @@ public class CartController : ControllerBase
         }
     }
 
-    public class AddCartItemRequest { public int PartId { get; set; } public int Quantity { get; set; } }
+    /// <summary>
+    /// Cập nhật fulfillment center cho giỏ hàng
+    /// </summary>
+    [HttpPut("customer/{customerId:int}/fulfillment-center")]
+    public async Task<IActionResult> UpdateFulfillmentCenter(int customerId, [FromBody] UpdateCartFulfillmentCenterRequest request)
+    {
+        try
+        {
+            var cart = await _cartService.UpdateFulfillmentCenterAsync(customerId, request.FulfillmentCenterId);
+            return Ok(new { success = true, data = cart, message = "Đã cập nhật chi nhánh thành công" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    public class UpdateCartFulfillmentCenterRequest
+    {
+        public int? FulfillmentCenterId { get; set; }
+    }
+
+    public class AddCartItemRequest
+    {
+        public int PartId { get; set; }
+        public int Quantity { get; set; }
+        // Optional: Chi nhánh sẽ fulfill order này (có thể chọn khi thêm item)
+        public int? FulfillmentCenterId { get; set; }
+    }
 
     [HttpPost("customer/{customerId:int}/items")]
     public async Task<IActionResult> AddItem(int customerId, [FromBody] AddCartItemRequest request)
     {
         try
         {
-            var cart = await _cartService.AddItemToCartAsync(customerId, request.PartId, request.Quantity);
+            var cart = await _cartService.AddItemToCartAsync(customerId, request.PartId, request.Quantity, request.FulfillmentCenterId);
             return Ok(new { success = true, data = cart, message = "Đã thêm vào giỏ" });
         }
         catch (Exception ex)

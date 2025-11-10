@@ -7,6 +7,7 @@ public static class BookingStatusConstants
 {
     public const string Pending = "PENDING";
     public const string Confirmed = "CONFIRMED";
+    public const string CheckedIn = "CHECKED_IN";
     public const string InProgress = "IN_PROGRESS";
     public const string Completed = "COMPLETED";
     public const string Paid = "PAID";
@@ -20,6 +21,7 @@ public static class BookingStatusConstants
     {
         Pending,
         Confirmed,
+        CheckedIn,
         InProgress,
         Completed,
         Paid,

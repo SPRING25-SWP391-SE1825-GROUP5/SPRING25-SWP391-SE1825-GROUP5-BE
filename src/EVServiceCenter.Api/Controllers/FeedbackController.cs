@@ -93,7 +93,7 @@ public class FeedbackController : ControllerBase
                 {
                     feedbackId = x.FeedbackId,
                     customerId = x.CustomerId,
-                    bookingId = x.BookingId,
+                    bookingId = (int?)null, // BookingID column does not exist in database
                     orderId = x.OrderId,
                     partId = x.PartId,
                     technicianId = x.TechnicianId,
@@ -161,7 +161,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = orderId,
-            BookingId = null,
+            // BookingId = null, // BookingID column does not exist in database - ignored by EF Core
             PartId = partId,
             TechnicianId = null,
             Rating = (byte)request.Rating,
@@ -216,7 +216,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = null,
-            BookingId = bookingId,
+            // BookingId = bookingId, // BookingID column does not exist in database - ignored by EF Core
             PartId = request.PartId,
             TechnicianId = request.TechnicianId,
             Rating = (byte)request.Rating,
@@ -291,7 +291,7 @@ public class FeedbackController : ControllerBase
     public async Task<IActionResult> GetById(int feedbackId)
     {
         var fb = await _db.Feedbacks.AsNoTracking().Where(x => x.FeedbackId == feedbackId)
-            .Select(x => new { x.FeedbackId, x.CustomerId, x.PartId, x.TechnicianId, x.Rating, x.Comment, x.IsAnonymous, x.CreatedAt, x.OrderId, x.BookingId })
+            .Select(x => new { x.FeedbackId, x.CustomerId, x.PartId, x.TechnicianId, x.Rating, x.Comment, x.IsAnonymous, x.CreatedAt, x.OrderId, BookingId = (int?)null }) // BookingID column does not exist in database
             .FirstOrDefaultAsync();
         if (fb == null) return NotFound(new { success = false, message = "Feedback không tồn tại" });
         return Ok(new { success = true, data = fb });
@@ -353,7 +353,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = null,
-            BookingId = null,
+            // BookingId = null, // BookingID column does not exist in database - ignored by EF Core
             PartId = partId,
             TechnicianId = null,
             Rating = (byte)request.Rating,
@@ -378,7 +378,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = null,
-            BookingId = null,
+            // BookingId = null, // BookingID column does not exist in database - ignored by EF Core
             PartId = null,
             TechnicianId = technicianId,
             Rating = (byte)request.Rating,
@@ -404,13 +404,11 @@ public class FeedbackController : ControllerBase
 
     [HttpGet("bookings/{bookingId:int}")]
     [Authorize(Policy = "AuthenticatedUser")]
-    public async Task<IActionResult> ListByBooking(int bookingId)
+    public Task<IActionResult> ListByBooking(int bookingId)
     {
-        var data = await _db.Feedbacks.AsNoTracking().Where(x => x.BookingId == bookingId)
-            .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new { x.FeedbackId, x.Rating, x.Comment, x.IsAnonymous, x.CreatedAt, x.PartId, x.TechnicianId })
-            .ToListAsync();
-        return Ok(new { success = true, data });
+        // BookingID column does not exist in database - return empty list
+        // This endpoint is kept for API compatibility but will always return empty
+        return Task.FromResult<IActionResult>(Ok(new { success = true, data = new List<object>() }));
     }
 
     /// <summary>
@@ -447,7 +445,7 @@ public class FeedbackController : ControllerBase
                 .Include(f => f.Part)
                 .Include(f => f.Technician)
                     .ThenInclude(t => t!.User)
-                .Include(f => f.Booking)
+                // .Include(f => f.Booking) // BookingID column does not exist in database
                 .Include(f => f.Order)
                 .AsQueryable();
 
@@ -455,8 +453,9 @@ public class FeedbackController : ControllerBase
             if (customerId.HasValue)
                 q = q.Where(f => f.CustomerId == customerId.Value);
 
-            if (bookingId.HasValue)
-                q = q.Where(f => f.BookingId == bookingId.Value);
+            // BookingId filter removed - BookingID column does not exist in database
+            // if (bookingId.HasValue)
+            //     q = q.Where(f => f.BookingId == bookingId.Value);
 
             if (orderId.HasValue)
                 q = q.Where(f => f.OrderId == orderId.Value);
@@ -520,7 +519,7 @@ public class FeedbackController : ControllerBase
                     customerId = f.CustomerId,
                     customerName = f.Customer != null && f.Customer.User != null ? f.Customer.User.FullName : null,
                     customerEmail = f.Customer != null && f.Customer.User != null ? f.Customer.User.Email : null,
-                    bookingId = f.BookingId,
+                    bookingId = (int?)null, // BookingID column does not exist in database
                     orderId = f.OrderId,
                     partId = f.PartId,
                     partName = f.Part != null ? f.Part.PartName : null,
@@ -583,9 +582,9 @@ public class FeedbackController : ControllerBase
 
             var bySource = new
             {
-                booking = allFeedbacks.Count(f => f.BookingId.HasValue),
+                booking = 0, // BookingID column does not exist in database
                 order = allFeedbacks.Count(f => f.OrderId.HasValue),
-                public_ = allFeedbacks.Count(f => !f.BookingId.HasValue && !f.OrderId.HasValue)
+                public_ = allFeedbacks.Count(f => !f.OrderId.HasValue) // Removed BookingId check since column doesn't exist
             };
 
             var recentCount = allFeedbacks.Count(f => f.CreatedAt >= DateTime.UtcNow.AddDays(-7));

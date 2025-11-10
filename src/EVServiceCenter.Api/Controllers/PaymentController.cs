@@ -127,12 +127,13 @@ public class PaymentController : ControllerBase
 			decimal partsAmount = 0m;
 			decimal promotionDiscountAmount = 0m;
 
-			// Tính parts amount
+			// Tính parts amount: CHỈ tính phụ tùng KHÔNG phải khách cung cấp (IsCustomerSupplied = false)
+			// Phụ tùng khách cung cấp (IsCustomerSupplied = true) đã được thanh toán khi mua Order, không tính lại
             var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
             if (workOrderParts != null && workOrderParts.Any())
             {
                 partsAmount = workOrderParts
-                    .Where(p => p.Status == "CONSUMED")
+                    .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied) // CHỈ tính phụ tùng không phải khách cung cấp
                     .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
             }
 
@@ -610,12 +611,13 @@ public class PaymentController : ControllerBase
 			decimal partsAmount = 0m;
 			decimal promotionDiscountAmount = 0m;
 
-			// Tính parts amount
+			// Tính parts amount: CHỈ tính phụ tùng KHÔNG phải khách cung cấp (IsCustomerSupplied = false)
+			// Phụ tùng khách cung cấp (IsCustomerSupplied = true) đã được thanh toán khi mua Order, không tính lại
             var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
             if (workOrderParts != null && workOrderParts.Any())
             {
                 partsAmount = workOrderParts
-                    .Where(p => p.Status == "CONSUMED")
+                    .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied) // CHỈ tính phụ tùng không phải khách cung cấp
                     .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
             }
 
@@ -976,6 +978,307 @@ public class PaymentController : ControllerBase
 		public decimal? Amount { get; set; }
 		public string? Description { get; set; }
 		public DateTime? PaymentDate { get; set; }
+	}
+
+	// ============================================
+	// ADMIN ENDPOINTS
+	// ============================================
+
+	/// <summary>
+	/// Admin: Lấy danh sách payments với pagination, filter, search, sort
+	/// </summary>
+	[HttpGet("admin")]
+	[Authorize(Roles = "ADMIN,STAFF")]
+	public async Task<IActionResult> ListForAdmin(
+		[FromQuery] int page = 1,
+		[FromQuery] int pageSize = 10,
+		[FromQuery] int? customerId = null,
+		[FromQuery] int? invoiceId = null,
+		[FromQuery] int? bookingId = null,
+		[FromQuery] int? orderId = null,
+		[FromQuery] string? status = null,
+		[FromQuery] string? paymentMethod = null,
+		[FromQuery] DateTime? from = null,
+		[FromQuery] DateTime? to = null,
+		[FromQuery] string? searchTerm = null,
+		[FromQuery] string sortBy = "createdAt",
+		[FromQuery] string sortOrder = "desc")
+	{
+		// Check ModelState for binding errors
+		if (!ModelState.IsValid)
+		{
+			var errors = ModelState
+				.Where(x => x.Value?.Errors.Count > 0)
+				.SelectMany(x => x.Value!.Errors.Select(e => $"{x.Key}: {e.ErrorMessage}"))
+				.ToList();
+			return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+		}
+
+		try
+		{
+			if (page < 1) return BadRequest(new { success = false, message = "Page phải lớn hơn 0" });
+			if (pageSize < 1 || pageSize > 100) return BadRequest(new { success = false, message = "Page size phải từ 1 đến 100" });
+
+			var (items, totalCount) = await _paymentRepo.QueryForAdminAsync(
+				page, pageSize, customerId, invoiceId, bookingId, orderId, status, paymentMethod, from, to, searchTerm, sortBy, sortOrder);
+
+			var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+			// Project to DTOs to avoid circular reference issues
+			var data = items.Select(p => new
+			{
+				paymentId = p.PaymentId,
+				paymentCode = p.PaymentCode,
+				invoiceId = p.InvoiceId,
+				amount = p.Amount,
+				status = p.Status,
+				paymentMethod = p.PaymentMethod,
+				paidByUserId = p.PaidByUserID,
+				createdAt = p.CreatedAt,
+				paidAt = p.PaidAt,
+				invoice = p.Invoice != null ? new
+				{
+					invoiceId = p.Invoice.InvoiceId,
+					customerId = p.Invoice.CustomerId,
+					bookingId = p.Invoice.BookingId,
+					orderId = p.Invoice.OrderId,
+					status = p.Invoice.Status,
+					customer = p.Invoice.Customer != null ? new
+					{
+						customerId = p.Invoice.Customer.CustomerId,
+						user = p.Invoice.Customer.User != null ? new
+						{
+							userId = p.Invoice.Customer.User.UserId,
+							fullName = p.Invoice.Customer.User.FullName,
+							email = p.Invoice.Customer.User.Email,
+							phoneNumber = p.Invoice.Customer.User.PhoneNumber
+						} : null
+					} : null,
+					booking = p.Invoice.Booking != null ? new
+					{
+						bookingId = p.Invoice.Booking.BookingId,
+						serviceId = p.Invoice.Booking.ServiceId,
+						centerId = p.Invoice.Booking.CenterId
+					} : null,
+					order = p.Invoice.Order != null ? new
+					{
+						orderId = p.Invoice.Order.OrderId,
+						payOSOrderCode = p.Invoice.Order.PayOSOrderCode
+					} : null
+				} : null
+			}).ToList();
+
+			var pagination = new
+			{
+				CurrentPage = page,
+				PageSize = pageSize,
+				TotalItems = totalCount,
+				TotalPages = totalPages,
+				HasNextPage = page < totalPages,
+				HasPreviousPage = page > 1
+			};
+
+			return Ok(new { success = true, data = data, pagination });
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error listing payments for admin");
+			return StatusCode(500, new { success = false, message = $"Lỗi khi lấy danh sách payments: {ex.Message}" });
+		}
+	}
+
+	/// <summary>
+	/// Admin: Lấy thống kê payments
+	/// </summary>
+	[HttpGet("admin/stats")]
+	[Authorize(Roles = "ADMIN,STAFF")]
+	public async Task<IActionResult> GetStats(
+		[FromQuery] DateTime? from = null,
+		[FromQuery] DateTime? to = null,
+		[FromQuery] int? centerId = null)
+	{
+		try
+		{
+			var fromDate = from ?? DateTime.UtcNow.AddDays(-30);
+			var toDate = to ?? DateTime.UtcNow;
+
+			// Get all payments in date range
+			var allPayments = await _paymentRepo.GetPaymentsByStatusesAndDateRangeAsync(
+				new[] { "PAID", "COMPLETED", "PENDING", "FAILED", "CANCELLED" },
+				fromDate,
+				toDate);
+
+			// Filter by center if specified
+			if (centerId.HasValue)
+			{
+				allPayments = allPayments.Where(p =>
+					(p.Invoice?.Booking?.CenterId == centerId.Value) ||
+					(p.Invoice?.Order?.FulfillmentCenterId == centerId.Value)
+				).ToList();
+			}
+
+			var total = allPayments.Count;
+			var totalAmount = allPayments.Sum(p => (long)p.Amount);
+			var paid = allPayments.Count(p => p.Status == "PAID" || p.Status == "COMPLETED");
+			var paidAmount = allPayments.Where(p => p.Status == "PAID" || p.Status == "COMPLETED").Sum(p => (long)p.Amount);
+			var pending = allPayments.Count(p => p.Status == "PENDING");
+			var failed = allPayments.Count(p => p.Status == "FAILED");
+			var cancelled = allPayments.Count(p => p.Status == "CANCELLED");
+
+			// By method
+			var byMethod = new Dictionary<string, (int count, long amount)>();
+			foreach (var method in new[] { "PAYOS", "VNPAY", "SEPAY", "CASH" })
+			{
+				var methodPayments = allPayments.Where(p => p.PaymentMethod == method).ToList();
+				byMethod[method.ToLowerInvariant()] = (
+					methodPayments.Count,
+					methodPayments.Sum(p => (long)p.Amount)
+				);
+			}
+
+			// By status
+			var byStatus = new Dictionary<string, (int count, long amount)>();
+			foreach (var status in new[] { "PAID", "PENDING", "FAILED", "CANCELLED" })
+			{
+				var statusPayments = allPayments.Where(p => p.Status == status).ToList();
+				byStatus[status.ToLowerInvariant()] = (
+					statusPayments.Count,
+					statusPayments.Sum(p => (long)p.Amount)
+				);
+			}
+
+			// Today, this month, this year
+			var today = DateTime.UtcNow.Date;
+			var todayPayments = allPayments.Where(p => p.PaidAt?.Date == today || p.CreatedAt.Date == today).ToList();
+			var thisMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+			var thisMonthPayments = allPayments.Where(p => (p.PaidAt ?? p.CreatedAt) >= thisMonth).ToList();
+			var thisYear = new DateTime(DateTime.UtcNow.Year, 1, 1);
+			var thisYearPayments = allPayments.Where(p => (p.PaidAt ?? p.CreatedAt) >= thisYear).ToList();
+
+			var stats = new
+			{
+				total,
+				totalAmount,
+				paid,
+				paidAmount,
+				pending,
+				failed,
+				cancelled,
+				byMethod = new
+				{
+					payos = new { count = byMethod.GetValueOrDefault("payos").count, amount = byMethod.GetValueOrDefault("payos").amount },
+					vnpay = new { count = byMethod.GetValueOrDefault("vnpay").count, amount = byMethod.GetValueOrDefault("vnpay").amount },
+					sepay = new { count = byMethod.GetValueOrDefault("sepay").count, amount = byMethod.GetValueOrDefault("sepay").amount },
+					cash = new { count = byMethod.GetValueOrDefault("cash").count, amount = byMethod.GetValueOrDefault("cash").amount }
+				},
+				byStatus = new
+				{
+					paid = new { count = byStatus.GetValueOrDefault("paid").count, amount = byStatus.GetValueOrDefault("paid").amount },
+					pending = new { count = byStatus.GetValueOrDefault("pending").count, amount = byStatus.GetValueOrDefault("pending").amount },
+					failed = new { count = byStatus.GetValueOrDefault("failed").count, amount = byStatus.GetValueOrDefault("failed").amount },
+					cancelled = new { count = byStatus.GetValueOrDefault("cancelled").count, amount = byStatus.GetValueOrDefault("cancelled").amount }
+				},
+				today = new { count = todayPayments.Count, amount = todayPayments.Sum(p => (long)p.Amount) },
+				thisMonth = new { count = thisMonthPayments.Count, amount = thisMonthPayments.Sum(p => (long)p.Amount) },
+				thisYear = new { count = thisYearPayments.Count, amount = thisYearPayments.Sum(p => (long)p.Amount) }
+			};
+
+			return Ok(new { success = true, data = stats });
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error getting payment stats");
+			return StatusCode(500, new { success = false, message = $"Lỗi khi lấy thống kê payments: {ex.Message}" });
+		}
+	}
+
+	/// <summary>
+	/// Admin: Lấy chi tiết payment
+	/// </summary>
+	[HttpGet("{paymentId:int}")]
+	[Authorize(Roles = "ADMIN,STAFF")]
+	public async Task<IActionResult> GetById(int paymentId)
+	{
+		try
+		{
+			var payment = await _paymentRepo.GetByIdWithDetailsAsync(paymentId);
+			if (payment == null)
+			{
+				return NotFound(new { success = false, message = "Không tìm thấy payment" });
+			}
+
+			// Project to DTO to avoid circular reference
+			var data = new
+			{
+				paymentId = payment.PaymentId,
+				paymentCode = payment.PaymentCode,
+				invoiceId = payment.InvoiceId,
+				amount = payment.Amount,
+				status = payment.Status,
+				paymentMethod = payment.PaymentMethod,
+				paidByUserId = payment.PaidByUserID,
+				createdAt = payment.CreatedAt,
+				paidAt = payment.PaidAt,
+				invoice = payment.Invoice != null ? new
+				{
+					invoiceId = payment.Invoice.InvoiceId,
+					customerId = payment.Invoice.CustomerId,
+					bookingId = payment.Invoice.BookingId,
+					orderId = payment.Invoice.OrderId,
+					status = payment.Invoice.Status,
+					email = payment.Invoice.Email,
+					phone = payment.Invoice.Phone,
+					packageDiscountAmount = payment.Invoice.PackageDiscountAmount,
+					promotionDiscountAmount = payment.Invoice.PromotionDiscountAmount,
+					partsAmount = payment.Invoice.PartsAmount,
+					createdAt = payment.Invoice.CreatedAt,
+					customer = payment.Invoice.Customer != null ? new
+					{
+						customerId = payment.Invoice.Customer.CustomerId,
+						user = payment.Invoice.Customer.User != null ? new
+						{
+							userId = payment.Invoice.Customer.User.UserId,
+							fullName = payment.Invoice.Customer.User.FullName,
+							email = payment.Invoice.Customer.User.Email,
+							phoneNumber = payment.Invoice.Customer.User.PhoneNumber
+						} : null
+					} : null,
+					booking = payment.Invoice.Booking != null ? new
+					{
+						bookingId = payment.Invoice.Booking.BookingId,
+						serviceId = payment.Invoice.Booking.ServiceId,
+						centerId = payment.Invoice.Booking.CenterId,
+						service = payment.Invoice.Booking.Service != null ? new
+						{
+							serviceId = payment.Invoice.Booking.Service.ServiceId,
+							serviceName = payment.Invoice.Booking.Service.ServiceName,
+							basePrice = payment.Invoice.Booking.Service.BasePrice
+						} : null
+					} : null,
+					order = payment.Invoice.Order != null ? new
+					{
+						orderId = payment.Invoice.Order.OrderId,
+						payOSOrderCode = payment.Invoice.Order.PayOSOrderCode
+					} : null,
+					payments = payment.Invoice.Payments?.Select(p => new
+					{
+						paymentId = p.PaymentId,
+						paymentCode = p.PaymentCode,
+						amount = p.Amount,
+						status = p.Status,
+						paymentMethod = p.PaymentMethod,
+						paidAt = p.PaidAt
+					}).ToList()
+				} : null
+			};
+
+			return Ok(new { success = true, data });
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, "Error getting payment by id {PaymentId}", paymentId);
+			return StatusCode(500, new { success = false, message = $"Lỗi khi lấy chi tiết payment: {ex.Message}" });
+		}
 	}
 
 }

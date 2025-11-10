@@ -57,13 +57,13 @@ namespace EVServiceCenter.Infrastructure.Repositories
             var payments = await _db.Payments
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i.Booking)
-                .Where(p => p.Status == "COMPLETED" 
-                         && p.PaidAt != null 
-                         && p.PaidAt >= fromDate 
+                .Where(p => p.Status == "COMPLETED"
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
                          && p.PaidAt <= toDate
-                         && p.Invoice != null 
+                         && p.Invoice != null
                          && p.Invoice.BookingId != null
-                         && p.Invoice.Booking != null 
+                         && p.Invoice.Booking != null
                          && p.Invoice.Booking.CenterId == centerId)
                 .OrderBy(p => p.PaidAt)
                 .ToListAsync();
@@ -125,12 +125,12 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i.Order)
                 .Where(p => (p.Status == "COMPLETED" || p.Status == "PAID")
-                         && p.PaidAt != null 
-                         && p.PaidAt >= fromDate 
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
                          && p.PaidAt <= toDate
-                         && p.Invoice != null 
+                         && p.Invoice != null
                          && p.Invoice.OrderId != null
-                         && p.Invoice.Order != null 
+                         && p.Invoice.Order != null
                          && p.Invoice.Order.FulfillmentCenterId == centerId)
                 .OrderBy(p => p.PaidAt)
                 .ToListAsync();
@@ -148,18 +148,140 @@ namespace EVServiceCenter.Infrastructure.Repositories
             var payments = await _db.Payments
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i.Order)
-                .Where(p => p.Status == "PAID" 
-                         && p.PaidAt != null 
-                         && p.PaidAt >= fromDate 
+                .Where(p => p.Status == "PAID"
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
                          && p.PaidAt <= toDate
-                         && p.Invoice != null 
+                         && p.Invoice != null
                          && p.Invoice.OrderId != null
-                         && p.Invoice.Order != null 
+                         && p.Invoice.Order != null
                          && p.Invoice.Order.FulfillmentCenterId == centerId)
                 .OrderBy(p => p.PaidAt)
                 .ToListAsync();
 
             return payments;
+        }
+
+        public async Task<(List<Payment> Items, int TotalCount)> QueryForAdminAsync(
+            int page,
+            int pageSize,
+            int? customerId = null,
+            int? invoiceId = null,
+            int? bookingId = null,
+            int? orderId = null,
+            string? status = null,
+            string? paymentMethod = null,
+            DateTime? from = null,
+            DateTime? to = null,
+            string? searchTerm = null,
+            string sortBy = "createdAt",
+            string sortOrder = "desc")
+        {
+            var q = _db.Payments
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Customer)
+                        .ThenInclude(c => c.User)
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Booking)
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Order)
+                .AsQueryable();
+
+            // Apply filters
+            if (customerId.HasValue)
+                q = q.Where(p => p.Invoice != null && p.Invoice.CustomerId == customerId.Value);
+
+            if (invoiceId.HasValue)
+                q = q.Where(p => p.InvoiceId == invoiceId.Value);
+
+            if (bookingId.HasValue)
+                q = q.Where(p => p.Invoice != null && p.Invoice.BookingId == bookingId.Value);
+
+            if (orderId.HasValue)
+                q = q.Where(p => p.Invoice != null && p.Invoice.OrderId == orderId.Value);
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                var s = status.Trim().ToUpperInvariant();
+                q = q.Where(p => p.Status == s);
+            }
+
+            if (!string.IsNullOrWhiteSpace(paymentMethod))
+            {
+                var method = paymentMethod.Trim().ToUpperInvariant();
+                q = q.Where(p => p.PaymentMethod == method);
+            }
+
+            if (from.HasValue)
+                q = q.Where(p => p.CreatedAt >= from.Value || (p.PaidAt != null && p.PaidAt >= from.Value));
+
+            if (to.HasValue)
+                q = q.Where(p => p.CreatedAt <= to.Value || (p.PaidAt != null && p.PaidAt <= to.Value));
+
+            // Search term - search by PaymentCode, Customer name, InvoiceId
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.Trim().ToLower();
+                q = q.Where(p =>
+                    (p.PaymentCode != null && p.PaymentCode.ToLower().Contains(search)) ||
+                    (p.Invoice != null && p.Invoice.Customer != null && p.Invoice.Customer.User != null &&
+                     p.Invoice.Customer.User.FullName != null && p.Invoice.Customer.User.FullName.ToLower().Contains(search)) ||
+                    (p.Invoice != null && p.InvoiceId.ToString().Contains(search))
+                );
+            }
+
+            // Get total count before pagination
+            var totalCount = await q.CountAsync();
+
+            // Apply sorting
+            var isDescending = sortOrder?.ToLowerInvariant() == "desc";
+            switch (sortBy?.ToLowerInvariant())
+            {
+                case "paidat":
+                    q = isDescending ? q.OrderByDescending(p => p.PaidAt ?? p.CreatedAt) : q.OrderBy(p => p.PaidAt ?? p.CreatedAt);
+                    break;
+                case "amount":
+                    q = isDescending ? q.OrderByDescending(p => p.Amount) : q.OrderBy(p => p.Amount);
+                    break;
+                case "status":
+                    q = isDescending ? q.OrderByDescending(p => p.Status) : q.OrderBy(p => p.Status);
+                    break;
+                case "paymentmethod":
+                    q = isDescending ? q.OrderByDescending(p => p.PaymentMethod) : q.OrderBy(p => p.PaymentMethod);
+                    break;
+                case "createdat":
+                default:
+                    q = isDescending ? q.OrderByDescending(p => p.CreatedAt) : q.OrderBy(p => p.CreatedAt);
+                    break;
+            }
+
+            // Apply pagination
+            var items = await q
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return (items, totalCount);
+        }
+
+        public async Task<Payment?> GetByIdWithDetailsAsync(int paymentId)
+        {
+            return await _db.Payments
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Customer)
+                        .ThenInclude(c => c.User)
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Booking)
+                        .ThenInclude(b => b.Service)
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Booking)
+                        .ThenInclude(b => b.Customer)
+                            .ThenInclude(c => c.User)
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Order)
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Payments)
+                .FirstOrDefaultAsync(p => p.PaymentId == paymentId);
         }
     }
 }

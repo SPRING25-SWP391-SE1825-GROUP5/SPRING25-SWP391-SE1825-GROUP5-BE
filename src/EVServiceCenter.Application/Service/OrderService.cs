@@ -108,10 +108,10 @@ public class OrderService : IOrderService
         var createdOrder = await _orderRepository.AddAsync(order);
 
         // Gợi ý center fulfill gần nhất dựa vào toạ độ + items (chỉ khi chưa có FulfillmentCenterId)
-        var suggestion = fulfillmentCenterId == null 
+        var suggestion = fulfillmentCenterId == null
             ? await SuggestCenterAsync(request.Latitude, request.Longitude, orderItems)
             : null;
-        
+
         var resp = MapToResponse(createdOrder);
         if (suggestion != null)
         {
@@ -183,7 +183,7 @@ public class OrderService : IOrderService
         var suggestion = fulfillmentCenterId == null
             ? await SuggestCenterAsync(request.Latitude, request.Longitude, orderItems)
             : null;
-        
+
         var resp = MapToResponse(created);
         if (suggestion != null)
         {
@@ -205,6 +205,7 @@ public class OrderService : IOrderService
                 PartName = oi.Part?.PartName ?? string.Empty,
                 UnitPrice = oi.UnitPrice,
                 Quantity = oi.Quantity,
+                ConsumedQty = oi.ConsumedQty, // Thêm ConsumedQty
                 Subtotal = oi.Quantity * oi.UnitPrice
             }).ToList();
     }
@@ -428,6 +429,7 @@ public class OrderService : IOrderService
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             Notes = null,
+            FulfillmentCenterId = cart.FulfillmentCenterId, // Lấy fulfillmentCenterId từ Cart
             OrderItems = cart.Items.Select(item => new OrderItem
             {
                 PartId = item.PartId,
@@ -488,19 +490,21 @@ public class OrderService : IOrderService
         var inventoryParts = inventory.InventoryParts ?? new List<InventoryPart>();
 
         // Validate từng item có đủ stock
+        // Sử dụng AvailableQty (CurrentStock - ReservedQty) thay vì CurrentStock
         foreach (var orderItem in orderItems)
         {
             var inventoryPart = inventoryParts.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
-            
+
             if (inventoryPart == null)
                 throw new ArgumentException($"Phụ tùng ID {orderItem.PartId} không có trong kho của chi nhánh ID {centerId}");
 
-            if (inventoryPart.CurrentStock < orderItem.Quantity)
+            var availableQty = inventoryPart.CurrentStock - inventoryPart.ReservedQty;
+            if (availableQty < orderItem.Quantity)
             {
                 var partName = orderItem.Part?.PartName ?? $"Part {orderItem.PartId}";
                 throw new ArgumentException(
                     $"Không đủ hàng cho phụ tùng '{partName}' tại chi nhánh ID {centerId}. " +
-                    $"Hiện có: {inventoryPart.CurrentStock}, cần: {orderItem.Quantity}");
+                    $"Hiện có: {availableQty} (CurrentStock: {inventoryPart.CurrentStock}, ReservedQty: {inventoryPart.ReservedQty}), cần: {orderItem.Quantity}");
             }
         }
     }

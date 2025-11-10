@@ -16,9 +16,15 @@ public sealed class InventoryPartConfiguration : IEntityTypeConfiguration<Invent
         entity.Property(e => e.InventoryPartId).HasColumnName("InventoryPartID");
         entity.Property(e => e.InventoryId).HasColumnName("InventoryID");
         entity.Property(e => e.PartId).HasColumnName("PartID");
+        entity.Property(e => e.ReservedQty)
+            .HasColumnName("ReservedQty")
+            .HasDefaultValue(0);
         entity.Property(e => e.LastUpdated)
             .HasPrecision(0)
             .HasDefaultValueSql("(sysdatetime())");
+
+        // Ignore computed property AvailableQty (không map vào database)
+        entity.Ignore(e => e.AvailableQty);
 
         entity.HasOne(d => d.Inventory)
             .WithMany(p => p.InventoryParts)

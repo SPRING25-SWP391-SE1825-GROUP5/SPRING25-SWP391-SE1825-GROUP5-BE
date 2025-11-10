@@ -18,6 +18,7 @@ namespace EVServiceCenter.Application.Interfaces
         Task<BookingResponse> ApplyPackageToBookingAsync(int bookingId, ApplyPackageRequest request);
         Task<BookingResponse> RemovePackageFromBookingAsync(int bookingId);
         Task<BookingResponse> CreatePackageAfterPaymentAsync(int bookingId, string packageCode);
+        Task<BookingResponse> UpdateBookingCustomerPartsAsync(int bookingId, UpdateBookingCustomerPartsRequest request);
         // AssignBookingServicesAsync removed in single-service model
     }
 }

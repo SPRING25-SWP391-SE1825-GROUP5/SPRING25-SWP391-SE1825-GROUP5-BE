@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Service;
 using EVServiceCenter.Application.Models.Responses;
@@ -12,6 +13,7 @@ using EVServiceCenter.Application.Configurations;
 using System.IO;
 using Microsoft.Extensions.Configuration;
 using EVServiceCenter.Api.Constants;
+using EVServiceCenter.Domain.Entities;
 
 namespace EVServiceCenter.Api.Controllers;
 
@@ -25,14 +27,16 @@ public class OrderController : ControllerBase
     private readonly IOrderHistoryService _orderHistoryService;
     private readonly IOptions<ExportOptions> _exportOptions;
     private readonly IConfiguration _configuration;
+    private readonly EVServiceCenter.Domain.Interfaces.IInventoryRepository _inventoryRepository;
 
-    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration)
+    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IInventoryRepository inventoryRepository)
     {
         _orderService = orderService;
         _paymentService = paymentService;
         _orderHistoryService = orderHistoryService;
         _exportOptions = exportOptions;
         _configuration = configuration;
+        _inventoryRepository = inventoryRepository;
     }
 
     /// <summary>
@@ -509,5 +513,117 @@ public class OrderController : ControllerBase
         var frontendUrl = _configuration["App:FrontendUrl"] ?? "http://localhost:5173";
         var frontendCancelUrl = $"{frontendUrl}/payment-cancel?orderId={orderId}&status={status}&code={code}";
         return Redirect(frontendCancelUrl);
+    }
+
+    /// <summary>
+    /// Lấy danh sách phụ tùng đã mua có thể dùng tại chi nhánh
+    /// </summary>
+    [HttpGet("{orderId}/available-parts")]
+    public async Task<IActionResult> GetAvailableParts(int orderId, [FromQuery] int? centerId = null)
+    {
+        try
+        {
+            var order = await _orderService.GetByIdAsync(orderId);
+            if (order == null)
+                return NotFound(new { success = false, message = "Đơn hàng không tồn tại" });
+
+            // Chỉ trả về nếu Order đã thanh toán
+            if (order.Status != "PAID")
+                return BadRequest(new { success = false, message = "Đơn hàng chưa thanh toán" });
+
+            // Lấy OrderItems từ repository để có ConsumedQty
+            var orderItems = await _orderService.GetItemsAsync(orderId);
+
+            // Xác định centerId để kiểm tra inventory
+            var targetCenterId = centerId ?? order.FulfillmentCenterId;
+            if (!targetCenterId.HasValue)
+            {
+                return BadRequest(new { success = false, message = "Không xác định được chi nhánh để kiểm tra kho" });
+            }
+
+            // Lấy inventory của chi nhánh để kiểm tra ReservedQty
+            var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(targetCenterId.Value);
+            if (inventory == null)
+            {
+                return BadRequest(new { success = false, message = $"Không tìm thấy kho của chi nhánh {targetCenterId.Value}" });
+            }
+
+            var inventoryParts = inventory.InventoryParts ?? new List<InventoryPart>();
+
+            // Filter: Chỉ lấy OrderItems có thể dùng
+            // 1. AvailableQty > 0 (Quantity - ConsumedQty > 0)
+            // 2. ReservedQty >= AvailableQty (đảm bảo hàng đã được reserve trong kho)
+            // 3. FulfillmentCenterId == targetCenterId (nếu có filter)
+            var availableItems = new List<object>();
+
+            foreach (var oi in orderItems)
+            {
+                // Kiểm tra AvailableQty
+                if (oi.AvailableQty <= 0)
+                    continue;
+
+                // Kiểm tra FulfillmentCenterId nếu có filter
+                if (centerId.HasValue && order.FulfillmentCenterId != centerId.Value)
+                    continue;
+
+                // Kiểm tra inventory
+                var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == oi.PartId);
+                if (invPart == null)
+                {
+                    // Không có trong kho, nhưng vẫn trả về với warning
+                    availableItems.Add(new
+                    {
+                        orderItemId = oi.OrderItemId,
+                        partId = oi.PartId,
+                        partName = oi.PartName,
+                        quantity = oi.Quantity,
+                        consumedQty = oi.ConsumedQty,
+                        availableQty = oi.AvailableQty,
+                        unitPrice = oi.UnitPrice,
+                        subtotal = oi.Subtotal,
+                        fulfillmentCenterId = order.FulfillmentCenterId,
+                        fulfillmentCenterName = order.FulfillmentCenterName,
+                        // Thông tin inventory
+                        currentStock = (int?)null,
+                        reservedQty = (int?)null,
+                        inventoryAvailableQty = (int?)null,
+                        canUse = false, // Không thể dùng vì không có trong kho
+                        warning = "Phụ tùng không có trong kho của chi nhánh này"
+                    });
+                    continue;
+                }
+
+                // Kiểm tra ReservedQty >= AvailableQty (đảm bảo hàng đã được reserve)
+                var inventoryAvailableQty = invPart.CurrentStock - invPart.ReservedQty;
+                var reservedQtyForThisItem = invPart.ReservedQty; // Tổng ReservedQty (có thể từ nhiều OrderItems)
+                var canUse = reservedQtyForThisItem >= oi.AvailableQty && invPart.CurrentStock >= oi.AvailableQty;
+
+                availableItems.Add(new
+                {
+                    orderItemId = oi.OrderItemId,
+                    partId = oi.PartId,
+                    partName = oi.PartName,
+                    quantity = oi.Quantity,
+                    consumedQty = oi.ConsumedQty,
+                    availableQty = oi.AvailableQty,
+                    unitPrice = oi.UnitPrice,
+                    subtotal = oi.Subtotal,
+                    fulfillmentCenterId = order.FulfillmentCenterId,
+                    fulfillmentCenterName = order.FulfillmentCenterName,
+                    // Thông tin inventory
+                    currentStock = invPart.CurrentStock,
+                    reservedQty = reservedQtyForThisItem,
+                    inventoryAvailableQty = inventoryAvailableQty,
+                    canUse = canUse, // Có thể dùng hay không (dựa trên inventory)
+                    warning = canUse ? null : $"ReservedQty ({reservedQtyForThisItem}) hoặc CurrentStock ({invPart.CurrentStock}) không đủ cho AvailableQty ({oi.AvailableQty})"
+                });
+            }
+
+            return Ok(new { success = true, data = availableItems });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
     }
 }

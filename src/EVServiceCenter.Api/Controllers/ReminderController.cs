@@ -315,6 +315,16 @@ namespace EVServiceCenter.Api.Controllers
             [FromQuery] string sortBy = "createdAt",
             [FromQuery] string sortOrder = "desc")
         {
+            // Check ModelState for binding errors
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                    .Where(x => x.Value?.Errors.Count > 0)
+                    .SelectMany(x => x.Value!.Errors.Select(e => $"{x.Key}: {e.ErrorMessage}"))
+                    .ToList();
+                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+            }
+
             try
             {
                 if (page < 1)
@@ -332,6 +342,52 @@ namespace EVServiceCenter.Api.Controllers
 
                 var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
+                // Project to DTOs to avoid circular reference issues
+                var data = items.Select(r => new
+                {
+                    reminderId = r.ReminderId,
+                    vehicleId = r.VehicleId,
+                    serviceId = r.ServiceId,
+                    dueDate = r.DueDate,
+                    dueMileage = r.DueMileage,
+                    status = r.Status.ToString(),
+                    type = r.Type.ToString(),
+                    cadenceDays = r.CadenceDays,
+                    isCompleted = r.IsCompleted,
+                    createdAt = r.CreatedAt,
+                    updatedAt = r.UpdatedAt,
+                    completedAt = r.CompletedAt,
+                    lastSentAt = r.LastSentAt,
+                    vehicle = r.Vehicle != null ? new
+                    {
+                        vehicleId = r.Vehicle.VehicleId,
+                        licensePlate = r.Vehicle.LicensePlate,
+                        currentMileage = r.Vehicle.CurrentMileage,
+                        lastServiceDate = r.Vehicle.LastServiceDate,
+                        vehicleModel = r.Vehicle.VehicleModel != null ? new
+                        {
+                            modelId = r.Vehicle.VehicleModel.ModelId,
+                            modelName = r.Vehicle.VehicleModel.ModelName
+                        } : null,
+                        customer = r.Vehicle.Customer != null ? new
+                        {
+                            customerId = r.Vehicle.Customer.CustomerId,
+                            user = r.Vehicle.Customer.User != null ? new
+                            {
+                                userId = r.Vehicle.Customer.User.UserId,
+                                fullName = r.Vehicle.Customer.User.FullName,
+                                email = r.Vehicle.Customer.User.Email,
+                                phoneNumber = r.Vehicle.Customer.User.PhoneNumber
+                            } : null
+                        } : null
+                    } : null,
+                    service = r.Service != null ? new
+                    {
+                        serviceId = r.Service.ServiceId,
+                        serviceName = r.Service.ServiceName
+                    } : null
+                }).ToList();
+
                 var pagination = new
                 {
                     CurrentPage = page,
@@ -342,7 +398,7 @@ namespace EVServiceCenter.Api.Controllers
                     HasPreviousPage = page > 1
                 };
 
-                return Ok(new { success = true, data = items, pagination });
+                return Ok(new { success = true, data = data, pagination });
             }
             catch (Exception ex)
             {

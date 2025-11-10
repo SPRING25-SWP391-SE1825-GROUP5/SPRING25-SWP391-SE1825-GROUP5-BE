@@ -11,6 +11,9 @@ public class Cart
     public DateTime UpdatedAt { get; set; }
     public List<CartItem> Items { get; set; } = new List<CartItem>();
 
+    // Chi nhánh sẽ fulfill order này (được chọn từ FE)
+    public int? FulfillmentCenterId { get; set; }
+
     public decimal TotalAmount => Items.Sum(item => item.Subtotal);
     public int ItemCount => Items.Sum(item => item.Quantity);
     public int UniqueItemCount => Items.Count;

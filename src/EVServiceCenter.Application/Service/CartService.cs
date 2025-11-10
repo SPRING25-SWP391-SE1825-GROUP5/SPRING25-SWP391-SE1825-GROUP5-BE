@@ -102,7 +102,7 @@ public class CartService : ICartService
         return cart?.Items ?? new List<CartItem>();
     }
 
-    public async Task<Cart> AddItemToCartAsync(int customerId, int partId, int quantity)
+    public async Task<Cart> AddItemToCartAsync(int customerId, int partId, int quantity, int? fulfillmentCenterId = null)
     {
         if (quantity <= 0)
             throw new ArgumentException("Số lượng phải lớn hơn 0");
@@ -114,6 +114,12 @@ public class CartService : ICartService
             throw new ArgumentException($"Sản phẩm {part.PartName} đã ngưng hoạt động");
 
         var cart = await GetOrCreateCartAsync(customerId);
+
+        // Cập nhật fulfillmentCenterId nếu có (chỉ set lần đầu hoặc override)
+        if (fulfillmentCenterId.HasValue)
+        {
+            cart.FulfillmentCenterId = fulfillmentCenterId.Value;
+        }
 
         var existingItem = cart.Items.FirstOrDefault(item => item.PartId == partId);
         if (existingItem != null)
@@ -195,6 +201,18 @@ public class CartService : ICartService
     {
         var cart = await GetCartAsync(customerId);
         return cart != null;
+    }
+
+    public async Task<Cart> UpdateFulfillmentCenterAsync(int customerId, int? fulfillmentCenterId)
+    {
+        var cart = await GetCartAsync(customerId);
+        if (cart == null)
+            throw new ArgumentException("Giỏ hàng không tồn tại");
+
+        cart.FulfillmentCenterId = fulfillmentCenterId;
+        cart.UpdatedAt = DateTime.UtcNow;
+        await SaveCartAsync(cart);
+        return cart;
     }
 
     private async Task SaveCartAsync(Cart cart)

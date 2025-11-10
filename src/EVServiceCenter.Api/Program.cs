@@ -87,6 +87,8 @@ builder.Services.Configure<ExportOptions>(builder.Configuration.GetSection("Expo
 builder.Services.Configure<CartOptions>(builder.Configuration.GetSection(CartOptions.SectionName));
 builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
 builder.Services.Configure<ChatSettings>(builder.Configuration.GetSection(ChatSettings.SectionName));
+builder.Services.Configure<EVServiceCenter.Api.Configurations.AiServiceOptions>(builder.Configuration.GetSection(EVServiceCenter.Api.Configurations.AiServiceOptions.SectionName));
+builder.Services.AddHttpClient<EVServiceCenter.Api.Services.IAiServiceClient, EVServiceCenter.Api.Services.AiServiceClient>();
 
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
 var redisOptions = builder.Configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>() ?? new RedisOptions();

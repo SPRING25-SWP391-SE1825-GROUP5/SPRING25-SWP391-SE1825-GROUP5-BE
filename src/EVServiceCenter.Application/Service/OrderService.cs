@@ -38,19 +38,29 @@ public class OrderService : IOrderService
     public async Task<List<OrderResponse>> GetByCustomerIdAsync(int customerId)
     {
         var orders = await _orderRepository.GetByCustomerIdAsync(customerId);
-        return orders.Select(MapToResponse).ToList();
+        var result = new List<OrderResponse>();
+        foreach (var o in orders)
+        {
+            result.Add(await MapToResponseWithCustomerAsync(o));
+        }
+        return result;
     }
 
     public async Task<OrderResponse?> GetByIdAsync(int orderId)
     {
         var order = await _orderRepository.GetByIdAsync(orderId);
-        return order != null ? MapToResponse(order) : null;
+        return order != null ? await MapToResponseWithCustomerAsync(order) : null;
     }
 
     public async Task<List<OrderResponse>> GetAllAsync()
     {
         var orders = await _orderRepository.GetAllAsync();
-        return orders.Select(MapToResponse).ToList();
+        var result = new List<OrderResponse>();
+        foreach (var o in orders)
+        {
+            result.Add(await MapToResponseWithCustomerAsync(o));
+        }
+        return result;
     }
 
     public async Task<OrderResponse> CreateOrderAsync(CreateOrderRequest request)
@@ -203,6 +213,10 @@ public class OrderService : IOrderService
                 OrderItemId = oi.OrderItemId,
                 PartId = oi.PartId,
                 PartName = oi.Part?.PartName ?? string.Empty,
+                PartNumber = oi.Part?.PartNumber,
+                Brand = oi.Part?.Brand,
+                ImageUrl = oi.Part?.ImageUrl,
+                Rating = oi.Part?.Rating,
                 UnitPrice = oi.UnitPrice,
                 Quantity = oi.Quantity,
                 ConsumedQty = oi.ConsumedQty, // Thêm ConsumedQty
@@ -289,11 +303,42 @@ public class OrderService : IOrderService
                 PartName = oi.Part?.PartName ?? "",
                 PartNumber = oi.Part?.PartNumber ?? "",
                 Brand = oi.Part?.Brand ?? "",
+                ImageUrl = oi.Part?.ImageUrl,
+                Rating = oi.Part?.Rating,
                 Quantity = oi.Quantity,
                 UnitPrice = oi.UnitPrice,
                 LineTotal = oi.Quantity * oi.UnitPrice
             }).ToList()
         };
+    }
+
+    private async Task<OrderResponse> MapToResponseWithCustomerAsync(Order order)
+    {
+        var resp = MapToResponse(order);
+        var missingName = string.IsNullOrWhiteSpace(resp.CustomerName) || resp.CustomerName == "Khách hàng";
+        var missingPhone = string.IsNullOrWhiteSpace(resp.CustomerPhone);
+        if (missingName || missingPhone)
+        {
+            var customer = await _customerRepository.GetCustomerByIdAsync(order.CustomerId);
+            if (customer != null)
+            {
+                if (missingName)
+                    resp.CustomerName = customer.User?.FullName ?? resp.CustomerName;
+                if (missingPhone)
+                    resp.CustomerPhone = customer.User?.PhoneNumber ?? resp.CustomerPhone;
+            }
+        }
+
+        // Bổ sung tên chi nhánh nếu đã có FulfillmentCenterId nhưng thiếu tên
+        if (resp.FulfillmentCenterId.HasValue && string.IsNullOrWhiteSpace(resp.FulfillmentCenterName))
+        {
+            var center = await _centerRepository.GetCenterByIdAsync(resp.FulfillmentCenterId.Value);
+            if (center != null)
+            {
+                resp.FulfillmentCenterName = center.CenterName;
+            }
+        }
+        return resp;
     }
 
     public async Task<OrderResponse> GetOrCreateCartAsync(int customerId)

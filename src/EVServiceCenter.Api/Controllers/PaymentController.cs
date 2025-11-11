@@ -165,13 +165,18 @@ public class PaymentController : ControllerBase
 			}
 
             // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
-            var serviceComponent = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
-            if (promotionDiscountAmount > serviceComponent)
+            // Tính giá dịch vụ sau khi trừ package discount
+            var finalServicePrice = booking.AppliedCreditId.HasValue 
+                ? (serviceBasePrice - packageDiscountAmount) // Nếu có package: giá dịch vụ sau khi trừ discount
+                : serviceBasePrice; // Nếu không có package: giá dịch vụ gốc
+            
+            // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
+            if (promotionDiscountAmount > finalServicePrice)
             {
-                promotionDiscountAmount = serviceComponent;
+                promotionDiscountAmount = finalServicePrice;
             }
-            // Total = packagePrice (nếu lần đầu) + serviceComponent + parts - promotionDiscount
-            decimal totalAmount = packagePrice + serviceComponent + partsAmount - promotionDiscountAmount;
+            // Total = packagePrice (nếu lần đầu) + finalServicePrice + parts - promotionDiscount
+            decimal totalAmount = packagePrice + finalServicePrice + partsAmount - promotionDiscountAmount;
 
 			var amount = (int)Math.Round(totalAmount);
 			if (amount < EVServiceCenter.Application.Constants.AppConstants.PaymentAmounts.MinAmountVnd)
@@ -515,14 +520,19 @@ public class PaymentController : ControllerBase
             }
 
             // Không cho khuyến mãi vượt quá phần dịch vụ/gói
-            var serviceComponent = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
-            if (promotionDiscountAmount > serviceComponent)
+            // Tính giá dịch vụ sau khi trừ package discount
+            var finalServicePrice = booking.AppliedCreditId.HasValue 
+                ? (serviceBasePrice - packageDiscountAmount) // Nếu có package: giá dịch vụ sau khi trừ discount
+                : serviceBasePrice; // Nếu không có package: giá dịch vụ gốc
+            
+            // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
+            if (promotionDiscountAmount > finalServicePrice)
             {
-                promotionDiscountAmount = serviceComponent;
+                promotionDiscountAmount = finalServicePrice;
             }
 
             // Tổng cộng
-            var total = packagePrice + serviceComponent - promotionDiscountAmount + partsAmount;
+            var total = packagePrice + finalServicePrice + partsAmount - promotionDiscountAmount;
 
             var response = new
             {
@@ -648,14 +658,18 @@ public class PaymentController : ControllerBase
 					.Sum(up => up.DiscountAmount);
 			}
 
+            // Tính giá dịch vụ sau khi trừ package discount
+            var finalServicePrice2 = booking.AppliedCreditId.HasValue 
+                ? (serviceBasePrice - packageDiscountAmount) // Nếu có package: giá dịch vụ sau khi trừ discount
+                : serviceBasePrice; // Nếu không có package: giá dịch vụ gốc
+            
             // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
-            var serviceComponent2 = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
-            if (promotionDiscountAmount > serviceComponent2)
+            if (promotionDiscountAmount > finalServicePrice2)
             {
-                promotionDiscountAmount = serviceComponent2;
+                promotionDiscountAmount = finalServicePrice2;
             }
-            // Total = packagePrice (nếu lần đầu) + serviceComponent + parts - promotionDiscount
-            decimal totalAmount = packagePrice + serviceComponent2 + partsAmount - promotionDiscountAmount;
+            // Total = packagePrice (nếu lần đầu) + finalServicePrice + parts - promotionDiscount
+            decimal totalAmount = packagePrice + finalServicePrice2 + partsAmount - promotionDiscountAmount;
 
 			var amount = (decimal)Math.Round(totalAmount);
 			var minAmount = _configuration.GetValue<decimal>("VNPay:MinAmount", 1000);

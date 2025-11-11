@@ -307,9 +307,14 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _context.Bookings
                 .Include(b => b.TechnicianTimeSlot!).ThenInclude(tts => tts.Slot!)
+                .Include(b => b.TechnicianTimeSlot!)
+                    .ThenInclude(tts => tts.Technician!)
+                    .ThenInclude(t => t.User)
                 .Include(b => b.Service)
                 .Include(b => b.Center)
                 .Include(b => b.Vehicle)
+                .Include(b => b.AppliedCredit!)
+                    .ThenInclude(ac => ac.ServicePackage)
                 .Where(b => b.CustomerId == customerId)
                 .OrderByDescending(b => b.CreatedAt)
                 .ToListAsync();

@@ -122,14 +122,19 @@ public class PaymentService
                 .Sum(up => up.DiscountAmount);
         }
 
+        // Tính giá dịch vụ sau khi trừ package discount
+        var finalServicePrice = booking.AppliedCreditId.HasValue 
+            ? (serviceBasePrice - packageDiscountAmount) // Nếu có package: giá dịch vụ sau khi trừ discount
+            : serviceBasePrice; // Nếu không có package: giá dịch vụ gốc
+        
         // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
-        var serviceComponent = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
-        if (promotionDiscountAmount > serviceComponent)
+        if (promotionDiscountAmount > finalServicePrice)
         {
-            promotionDiscountAmount = serviceComponent;
+            promotionDiscountAmount = finalServicePrice;
         }
-        // total = packagePrice (nếu lần đầu) + serviceComponent - promotion + parts
-        decimal totalAmount = packagePrice + serviceComponent - promotionDiscountAmount + partsAmount;
+        
+        // Tính tổng: packagePrice (nếu lần đầu mua) + finalServicePrice + partsAmount - promotionDiscountAmount
+        decimal totalAmount = packagePrice + finalServicePrice + partsAmount - promotionDiscountAmount;
 
         var amount = (int)Math.Round(totalAmount); // VNĐ integer
         if (amount < _options.MinAmount) amount = _options.MinAmount;
@@ -783,13 +788,19 @@ public class PaymentService
 							.Sum(up => up.DiscountAmount);
 					}
 
+                    // Tính giá dịch vụ sau khi trừ package discount
+                    var finalServicePrice = booking.AppliedCreditId.HasValue 
+                        ? (serviceBasePrice - packageDiscountAmount) // Nếu có package: giá dịch vụ sau khi trừ discount
+                        : serviceBasePrice; // Nếu không có package: giá dịch vụ gốc
+                    
                     // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
-                    var serviceComponent = booking.AppliedCreditId.HasValue ? packageDiscountAmount : serviceBasePrice;
-                    if (promotionDiscountAmount > serviceComponent)
+                    if (promotionDiscountAmount > finalServicePrice)
                     {
-                        promotionDiscountAmount = serviceComponent;
+                        promotionDiscountAmount = finalServicePrice;
                     }
-                    decimal paymentAmount = packagePrice + serviceComponent - promotionDiscountAmount + partsAmount;
+                    
+                    // Tính tổng: packagePrice (nếu lần đầu mua) + finalServicePrice + partsAmount - promotionDiscountAmount
+                    decimal paymentAmount = packagePrice + finalServicePrice + partsAmount - promotionDiscountAmount;
 
 					// Tạo payment record
 					_logger.LogInformation("Tạo payment record cho booking {BookingId} với amount {Amount}, method {PaymentMethod}", booking.BookingId, paymentAmount, paymentMethod);

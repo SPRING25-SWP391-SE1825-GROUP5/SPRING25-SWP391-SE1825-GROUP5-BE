@@ -20,18 +20,12 @@ namespace EVServiceCenter.WebAPI.Controllers
             _service = service;
         }
 
-        /// <summary>
-        /// Danh sách gói dịch vụ (công khai)
-        /// </summary>
-        /// <param name="serviceId">Lọc theo ServiceId - khi có serviceId thì chỉ trả gói ACTIVE của service đó</param>
-        /// <param name="activeOnly">Chỉ lấy gói đang hiệu lực</param>
         [HttpGet]
         [AllowAnonymous]
         public async Task<IActionResult> GetAll([FromQuery] int? serviceId = null, [FromQuery] bool activeOnly = false)
         {
             try
             {
-                // Yêu cầu: khi có serviceId thì chỉ trả gói đang hiệu lực của service đó (public)
                 if (serviceId.HasValue)
                 {
                     var active = await _service.GetActivePackagesAsync();
@@ -66,9 +60,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Danh sách tất cả gói dịch vụ đang hoạt động (công khai)
-        /// </summary>
         [HttpGet("active")]
         [AllowAnonymous]
         public async Task<IActionResult> GetAllActive()
@@ -88,9 +79,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Chi tiết gói dịch vụ theo ID (công khai)
-        /// </summary>
         [HttpGet("{id:int}")]
         [AllowAnonymous]
         public async Task<IActionResult> GetById(int id)
@@ -108,9 +96,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy gói theo mã (công khai)
-        /// </summary>
         [HttpGet("code/{code}")]
         [AllowAnonymous]
         public async Task<IActionResult> GetByCode(string code)
@@ -128,9 +113,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo gói dịch vụ (STAFF/MANAGER/ADMIN)
-        /// </summary>
         [HttpPost]
         [Authorize(Roles = "STAFF,MANAGER,ADMIN")]
         public async Task<IActionResult> Create([FromBody] CreateServicePackageRequest request)
@@ -155,9 +137,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật gói dịch vụ (STAFF/MANAGER/ADMIN)
-        /// </summary>
         [HttpPut("{id:int}")]
         [Authorize(Roles = "STAFF,MANAGER,ADMIN")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateServicePackageRequest request)
@@ -187,9 +166,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Xoá gói dịch vụ (MANAGER/ADMIN)
-        /// </summary>
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> Delete(int id)

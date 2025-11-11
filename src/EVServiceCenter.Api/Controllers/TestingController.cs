@@ -23,24 +23,17 @@ namespace EVServiceCenter.Api.Controllers
             _db = db;
         }
 
-        /// <summary>
-        /// Tạo và tải hóa đơn PDF
-        /// </summary>
-        /// <param name="bookingId">ID của booking (để tạo invoice)</param>
-        /// <returns>File PDF hóa đơn</returns>
         [HttpGet("invoices/booking/{bookingId:int}/pdf")]
         public async Task<IActionResult> GetInvoicePdf(int bookingId)
         {
             try
             {
-                // Kiểm tra booking có tồn tại không
                 var bookingExists = await _db.Bookings.AnyAsync(b => b.BookingId == bookingId);
                 if (!bookingExists)
                 {
                     return NotFound(new { success = false, message = "Không tìm thấy booking" });
                 }
 
-                // Tạo PDF hóa đơn từ booking
                 var pdfBytes = await _pdfInvoiceService.GenerateInvoicePdfAsync(bookingId);
 
                 return File(pdfBytes, "application/pdf", $"Invoice_Booking_{bookingId}_{DateTime.Now:yyyyMMdd}.pdf");
@@ -51,24 +44,17 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo và tải phiếu kết quả (Work Order Result / Maintenance Report)
-        /// </summary>
-        /// <param name="bookingId">ID của booking</param>
-        /// <returns>File PDF phiếu kết quả</returns>
         [HttpGet("bookings/{bookingId:int}/result-pdf")]
         public async Task<IActionResult> GetBookingResultPdf(int bookingId)
         {
             try
             {
-                // Kiểm tra booking có tồn tại không
                 var bookingExists = await _db.Bookings.AnyAsync(b => b.BookingId == bookingId);
                 if (!bookingExists)
                 {
                     return NotFound(new { success = false, message = "Không tìm thấy booking" });
                 }
 
-                // Tạo PDF phiếu kết quả bảo dưỡng từ booking
                 var pdfBytes = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(bookingId);
 
                 return File(pdfBytes, "application/pdf", $"WorkOrderResult_Booking_{bookingId}_{DateTime.Now:yyyyMMdd}.pdf");
@@ -80,4 +66,3 @@ namespace EVServiceCenter.Api.Controllers
         }
     }
 }
-

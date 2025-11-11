@@ -19,9 +19,6 @@ public class VehicleModelPartController : ControllerBase
         _vehicleModelPartService = vehicleModelPartService;
     }
 
-    /// <summary>
-    /// Get parts by vehicle model ID
-    /// </summary>
     [HttpGet("model/{modelId}")]
     public async Task<ActionResult<IEnumerable<VehicleModelPartResponse>>> GetPartsByModelId(int modelId)
     {
@@ -36,9 +33,6 @@ public class VehicleModelPartController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get models by part ID
-    /// </summary>
     [HttpGet("part/{partId}")]
     public async Task<ActionResult<IEnumerable<VehicleModelPartResponse>>> GetModelsByPartId(int partId)
     {
@@ -53,11 +47,6 @@ public class VehicleModelPartController : ControllerBase
         }
     }
 
-
-
-    /// <summary>
-    /// Create vehicle model part relationship
-    /// </summary>
     [HttpPost]
     public async Task<ActionResult<VehicleModelPartResponse>> Create([FromBody] CreateVehicleModelPartRequest request)
     {
@@ -83,9 +72,6 @@ public class VehicleModelPartController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Update vehicle model part relationship
-    /// </summary>
     [HttpPut("{id}")]
     public async Task<ActionResult<VehicleModelPartResponse>> Update(int id, [FromBody] UpdateVehicleModelPartRequest request)
     {
@@ -107,9 +93,6 @@ public class VehicleModelPartController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Delete vehicle model part relationship
-    /// </summary>
     [HttpDelete("{id}")]
     public async Task<ActionResult> Delete(int id)
     {
@@ -126,5 +109,4 @@ public class VehicleModelPartController : ControllerBase
             return StatusCode(500, new { message = "Internal server error", error = ex.Message });
         }
     }
-
 }

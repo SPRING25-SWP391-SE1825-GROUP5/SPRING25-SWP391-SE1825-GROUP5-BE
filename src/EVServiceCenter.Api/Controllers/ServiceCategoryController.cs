@@ -21,10 +21,6 @@ public class ServiceCategoryController : ControllerBase
         _serviceCategoryService = serviceCategoryService;
     }
 
-    /// <summary>
-    /// Lấy tất cả danh mục dịch vụ (Chỉ Admin và Staff)
-    /// </summary>
-    /// <returns>Danh sách tất cả danh mục dịch vụ</returns>
     [HttpGet]
     [Authorize(Policy = "StaffOrAdmin")]
     public async Task<IActionResult> GetAllCategories()
@@ -48,10 +44,6 @@ public class ServiceCategoryController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lấy danh mục dịch vụ đang hoạt động (Public API - Không cần đăng nhập)
-    /// </summary>
-    /// <returns>Danh sách danh mục dịch vụ đang hoạt động</returns>
     [HttpGet("active")]
     [AllowAnonymous]
     public async Task<IActionResult> GetActiveCategories()
@@ -75,11 +67,6 @@ public class ServiceCategoryController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lấy thông tin danh mục dịch vụ theo ID
-    /// </summary>
-    /// <param name="id">ID danh mục</param>
-    /// <returns>Thông tin danh mục</returns>
     [HttpGet("{id}")]
     [Authorize(Policy = "StaffOrAdmin")]
     public async Task<IActionResult> GetCategoryById(int id)
@@ -109,11 +96,6 @@ public class ServiceCategoryController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Tạo danh mục dịch vụ mới (Chỉ Admin)
-    /// </summary>
-    /// <param name="request">Thông tin danh mục mới</param>
-    /// <returns>Danh mục đã tạo</returns>
     [HttpPost]
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> CreateCategory([FromBody] CreateServiceCategoryRequest request)
@@ -155,12 +137,6 @@ public class ServiceCategoryController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Cập nhật danh mục dịch vụ (Chỉ Admin)
-    /// </summary>
-    /// <param name="id">ID danh mục cần cập nhật</param>
-    /// <param name="request">Thông tin cập nhật</param>
-    /// <returns>Danh mục đã cập nhật</returns>
     [HttpPut("{id}")]
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateCategory(int id, [FromBody] UpdateServiceCategoryRequest request)
@@ -205,12 +181,6 @@ public class ServiceCategoryController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Kích hoạt/Vô hiệu hóa danh mục dịch vụ (Chỉ Admin)
-    /// </summary>
-    /// <param name="id">ID danh mục</param>
-    /// <param name="request">Trạng thái mới</param>
-    /// <returns>Kết quả thay đổi trạng thái</returns>
     [HttpPatch("{id}/toggle-active")]
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> ToggleActiveCategory(int id, [FromBody] ToggleActiveRequest request)
@@ -258,14 +228,8 @@ public class ServiceCategoryController : ControllerBase
     }
 }
 
-/// <summary>
-/// Request model cho việc thay đổi trạng thái hoạt động
-/// </summary>
 public class ToggleActiveRequest
 {
-    /// <summary>
-    /// Trạng thái hoạt động mới
-    /// </summary>
     [Required(ErrorMessage = "Trạng thái hoạt động là bắt buộc")]
     public bool IsActive { get; set; }
 }

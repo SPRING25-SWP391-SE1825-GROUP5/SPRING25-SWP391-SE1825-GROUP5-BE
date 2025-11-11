@@ -17,7 +17,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // Yêu cầu đăng nhập, nhưng không giới hạn role
+    [Authorize]
     public class UserController : ControllerBase
     {
         private readonly IUserService _userService;
@@ -37,14 +37,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             _customerRepository = customerRepository;
         }
 
-        /// <summary>
-        /// Lấy danh sách tất cả người dùng với phân trang và tìm kiếm (chỉ ADMIN)
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
-        /// <param name="role">Lọc theo vai trò</param>
-        /// <returns>Danh sách người dùng</returns>
         [HttpGet]
         public async Task<IActionResult> GetAllUsers(
             [FromQuery] int pageNumber = 1,
@@ -54,7 +46,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -75,9 +66,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Export users as XLSX (ADMIN only)
-        /// </summary>
         [HttpGet("export")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> ExportUsers()
@@ -113,7 +101,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             using var wb = new ClosedXML.Excel.XLWorkbook();
             var ws = wb.AddWorksheet("Users");
 
-            // Header
             var headers = new[] { "UserId", "FullName", "Email", "PhoneNumber", "Role", "IsActive", "EmailVerified", "CreatedAt", "UpdatedAt" };
             for (int i = 0; i < headers.Length; i++)
             {
@@ -122,7 +109,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             ws.SheetView.FreezeRows(1);
 
-            // Rows
             int r = 2;
             foreach (var u in users)
             {
@@ -141,26 +127,21 @@ namespace EVServiceCenter.WebAPI.Controllers
             int lastRow = r - 1;
             int lastCol = headers.Length;
 
-            // Format dates
             ws.Range(2, 8, lastRow, 9).Style.DateFormat.Format = dateFormat;
 
-            // Alignment
             ws.Range(2, 6, lastRow, 7).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
             ws.Range(2, 1, lastRow, lastCol).Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
 
-            // Create table with style and auto filter
             var tableRange = ws.Range(1, 1, lastRow, lastCol);
             var table = tableRange.CreateTable();
             table.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
             table.ShowAutoFilter = true;
 
-            // Borders for readability (over table data)
             ws.Range(1, 1, lastRow, lastCol).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
             ws.Range(1, 1, lastRow, lastCol).Style.Border.InsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
 
             ws.Columns().AdjustToContents();
 
-            // Filters sheet
             var wsFilters = wb.AddWorksheet("Filters");
             wsFilters.Cell(1, 1).Value = "Applied Filters";
             wsFilters.Cell(1, 1).Style.Font.Bold = true;
@@ -195,9 +176,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             wb.SaveAs(ms);
             return ms.ToArray();
         }
-        /// <summary>
-        /// Tìm user theo email hoặc phone (Staff/Admin) - easy name: find-by-email-or-phone
-        /// </summary>
         [HttpGet("find-by-email-or-phone")]
         [Authorize(Roles = "ADMIN,STAFF,MANAGER")]
         public async Task<IActionResult> FindByEmailOrPhone([FromQuery] string? email = null, [FromQuery] string? phone = null)
@@ -231,7 +209,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (user == null)
                     return NotFound(new { success = false, message = "Không tìm thấy người dùng" });
 
-                // Try get customerId by userId (if role is CUSTOMER)
                 int? customerId = null;
                 try
                 {
@@ -260,13 +237,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        // Removed create-account endpoint per request
-
-        /// <summary>
-        /// Lấy thông tin người dùng theo ID (chỉ ADMIN)
-        /// </summary>
-        /// <param name="id">ID người dùng</param>
-        /// <returns>Thông tin người dùng</returns>
         [HttpGet("{id}")]
         public async Task<IActionResult> GetUserById(int id)
         {
@@ -296,11 +266,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo người dùng mới (Admin/Manager/Staff) - cho phép truyền role, cần verify email
-        /// </summary>
-        /// <param name="request">Thông tin người dùng mới (role phải là CUSTOMER, emailVerified phải là false)</param>
-        /// <returns>Thông tin người dùng đã tạo + gửi OTP verification</returns>
         [HttpPost]
         [Authorize(Roles = "ADMIN,MANAGER,STAFF")]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
@@ -338,12 +303,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật trạng thái người dùng (Admin only)
-        /// </summary>
-        /// <param name="id">ID người dùng</param>
-        /// <param name="request">Thông tin cập nhật trạng thái</param>
-        /// <returns>Kết quả cập nhật</returns>
         [HttpPatch("{id}/status")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> UpdateUserStatus(int id, [FromBody] UpdateUserStatusRequest request)
@@ -363,7 +322,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                     });
                 }
 
-                // Không cho phép vô hiệu hóa chính mình
                 if (!request.IsActive && IsCurrentUser(id))
                     return BadRequest(new { success = false, message = "Không thể vô hiệu hóa tài khoản của chính mình" });
 
@@ -399,17 +357,11 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-
-
-        #region Helper Methods
-
         private bool IsCurrentUser(int userId)
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             return userIdClaim != null && int.TryParse(userIdClaim.Value, out int currentUserId) && currentUserId == userId;
         }
-
-        #endregion
     }
 
     public class UpdateUserStatusRequest

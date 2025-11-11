@@ -15,7 +15,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "AuthenticatedUser")] // Tất cả user đã đăng nhập
+    [Authorize(Policy = "AuthenticatedUser")]
     public class PromotionController : ControllerBase
     {
         private readonly IPromotionService _promotionService;
@@ -44,7 +44,6 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         private int? GetCustomerIdFromToken()
         {
-            // Lấy customerId từ JWT token claim
             var customerIdClaim = User.FindFirst("customerId")?.Value;
             if (int.TryParse(customerIdClaim, out int customerId))
             {
@@ -54,15 +53,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
 
-        /// <summary>
-        /// Lấy danh sách tất cả khuyến mãi với phân trang và tìm kiếm
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm (mã, mô tả)</param>
-        /// <param name="status">Lọc theo trạng thái (ACTIVE, CANCELLED, EXPIRED)</param>
-        /// <param name="promotionType">Lọc theo loại khuyến mãi (GENERAL, FIRST_TIME, BIRTHDAY, LOYALTY)</param>
-        /// <returns>Danh sách khuyến mãi</returns>
         [HttpGet]
         public async Task<IActionResult> GetAllPromotions(
             [FromQuery] int pageNumber = 1,
@@ -94,7 +84,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        // ===== APPLY/REMOVE/LIST for BOOKINGS and ORDERS (unified under PromotionController) =====
         public class BookingApplyPromotionRequest { public string? Code { get; set; } }
 
         [HttpPost("bookings/{bookingId:int}/apply")]
@@ -106,7 +95,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
             if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
 
-            // Chỉ cho áp dụng nếu booking chưa thanh toán/chưa hoàn tất
             var disallowedStatuses = new[] { "PAID", "COMPLETED", "DONE", "FINISHED", "CANCELLED" };
             if (!string.IsNullOrWhiteSpace(booking.Status) && disallowedStatuses.Contains(booking.Status.ToUpper()))
             {
@@ -125,14 +113,12 @@ namespace EVServiceCenter.WebAPI.Controllers
             var promoEntity = await _promotionRepo.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
             if (promoEntity == null) return NotFound(new { success = false, message = "Mã khuyến mãi không tồn tại" });
 
-            // Chỉ cho 1 promotion cho mỗi booking (ngăn nhiều code)
             var existingOnBooking = await _promotionRepo.GetUserPromotionsByBookingAsync(booking.BookingId);
             if (existingOnBooking.Any())
             {
                 return BadRequest(new { success = false, message = "Booking chỉ được áp dụng 1 khuyến mãi." });
             }
 
-            // Kiểm tra xem promotion đã được saved chưa (bắt buộc phải save trước khi apply)
             var savedPromotions = await _promotionRepo.GetUserPromotionsByCustomerAsync(booking.CustomerId);
             var savedPromotion = savedPromotions.FirstOrDefault(x =>
                 x.PromotionId == promoEntity.PromotionId &&
@@ -148,7 +134,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
 
-            // Cập nhật UserPromotion từ SAVED thành APPLIED và gán BookingId
             savedPromotion.BookingId = booking.BookingId;
             savedPromotion.UsedAt = DateTime.UtcNow;
             savedPromotion.DiscountAmount = validate.DiscountAmount;
@@ -167,7 +152,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
             if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
 
-            // Tìm UserPromotion đang apply cho booking này
             var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
             var userPromotion = userPromotions.FirstOrDefault(x =>
                 x.Promotion?.Code?.Equals(promotionCode.Trim().ToUpper(), StringComparison.OrdinalIgnoreCase) == true &&
@@ -177,11 +161,10 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (userPromotion == null)
                 return NotFound(new { success = false, message = "Không tìm thấy khuyến mãi trên booking" });
 
-            // Restore về status SAVED thay vì xóa: clear BookingId, reset DiscountAmount, set status = "SAVED"
             userPromotion.BookingId = null;
             userPromotion.DiscountAmount = 0;
             userPromotion.Status = "SAVED";
-            userPromotion.UsedAt = DateTime.UtcNow; // Update lại thời gian
+            userPromotion.UsedAt = DateTime.UtcNow;
             await _promotionRepo.UpdateUserPromotionAsync(userPromotion);
 
             return Ok(new { success = true, message = "Đã gỡ khuyến mãi khỏi booking. Mã khuyến mãi đã được khôi phục vào danh sách đã lưu." });
@@ -216,7 +199,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             var order = await _orderRepo.GetByIdAsync(orderId);
             if (order == null) return NotFound(new { success = false, message = "Order không tồn tại" });
 
-            // Chỉ cho áp dụng nếu order chưa thanh toán/chưa hoàn tất
             var disallowedStatuses = new[] { "PAID", "COMPLETED", "DONE", "FINISHED", "CANCELLED" };
             if (!string.IsNullOrWhiteSpace(order.Status) && disallowedStatuses.Contains(order.Status.ToUpper()))
             {
@@ -235,14 +217,12 @@ namespace EVServiceCenter.WebAPI.Controllers
             var promoEntity = await _promotionRepo.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
             if (promoEntity == null) return NotFound(new { success = false, message = "Mã khuyến mãi không tồn tại" });
 
-            // Chỉ cho 1 promotion cho mỗi order (ngăn nhiều code)
             var existingOnOrder = await _promotionRepo.GetUserPromotionsByOrderAsync(order.OrderId);
             if (existingOnOrder.Any())
             {
                 return BadRequest(new { success = false, message = "Order chỉ được áp dụng 1 khuyến mãi." });
             }
 
-            // Kiểm tra xem promotion đã được saved chưa (bắt buộc phải save trước khi apply)
             var savedPromotions = await _promotionRepo.GetUserPromotionsByCustomerAsync(order.CustomerId);
             var savedPromotion = savedPromotions.FirstOrDefault(x =>
                 x.PromotionId == promoEntity.PromotionId &&
@@ -258,7 +238,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
 
-            // Cập nhật UserPromotion từ SAVED thành APPLIED và gán OrderId
             savedPromotion.OrderId = order.OrderId;
             savedPromotion.UsedAt = DateTime.UtcNow;
             savedPromotion.DiscountAmount = validate.DiscountAmount;
@@ -278,7 +257,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             var order = await _orderRepo.GetByIdAsync(orderId);
             if (order == null) return NotFound(new { success = false, message = "Order không tồn tại" });
 
-            // Tìm UserPromotion đang apply cho order này
             var userPromotions = await _promotionRepo.GetUserPromotionsByOrderAsync(orderId);
             var userPromotion = userPromotions.FirstOrDefault(x =>
                 x.Promotion?.Code?.Equals(promotionCode.Trim().ToUpper(), StringComparison.OrdinalIgnoreCase) == true &&
@@ -288,11 +266,10 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (userPromotion == null)
                 return NotFound(new { success = false, message = "Không tìm thấy khuyến mãi trên đơn hàng" });
 
-            // Restore về status SAVED thay vì xóa: clear OrderId, reset DiscountAmount, set status = "SAVED"
             userPromotion.OrderId = null;
             userPromotion.DiscountAmount = 0;
             userPromotion.Status = "SAVED";
-            userPromotion.UsedAt = DateTime.UtcNow; // Update lại thời gian
+            userPromotion.UsedAt = DateTime.UtcNow;
             await _promotionRepo.UpdateUserPromotionAsync(userPromotion);
 
             return Ok(new { success = true, message = "Đã gỡ khuyến mãi khỏi đơn hàng. Mã khuyến mãi đã được khôi phục vào danh sách đã lưu." });
@@ -315,9 +292,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             });
             return Ok(new { success = true, data = result });
         }
-        /// <summary>
-        /// Export promotions as XLSX (ADMIN only)
-        /// </summary>
         [HttpGet("export")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> ExportPromotions()
@@ -347,11 +321,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thông tin khuyến mãi theo ID
-        /// </summary>
-        /// <param name="id">ID khuyến mãi</param>
-        /// <returns>Thông tin khuyến mãi</returns>
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetPromotionById(int id)
         {
@@ -383,11 +352,6 @@ namespace EVServiceCenter.WebAPI.Controllers
 
 
 
-        /// <summary>
-        /// Tạo khuyến mãi mới (chỉ ADMIN)
-        /// </summary>
-        /// <param name="request">Thông tin khuyến mãi mới</param>
-        /// <returns>Thông tin khuyến mãi đã tạo</returns>
         [HttpPost]
         [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> CreatePromotion([FromBody] CreatePromotionRequest request)
@@ -425,12 +389,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật thông tin khuyến mãi (chỉ ADMIN)
-        /// </summary>
-        /// <param name="id">ID khuyến mãi</param>
-        /// <param name="request">Thông tin cập nhật</param>
-        /// <returns>Kết quả cập nhật</returns>
         [HttpPut("{id}")]
         [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> UpdatePromotion(int id, [FromBody] UpdatePromotionRequest request)
@@ -473,11 +431,9 @@ namespace EVServiceCenter.WebAPI.Controllers
 
 
 
-        // ===== Customer promotions: list & save =====
         [HttpGet("promotions")]
         public async Task<IActionResult> GetCustomerPromotions()
         {
-            // Lấy customerId từ JWT token
             var customerIdNullable = GetCustomerIdFromToken();
             if (!customerIdNullable.HasValue)
             {
@@ -487,13 +443,11 @@ namespace EVServiceCenter.WebAPI.Controllers
             int customerId = customerIdNullable.Value;
             var items = await _promotionRepo.GetUserPromotionsByCustomerAsync(customerId);
 
-            // Map đầy đủ thông tin promotion và user promotion
             var today = DateOnly.FromDateTime(DateTime.Today);
             var result = items.Select(x => {
                 var promo = x.Promotion;
                 if (promo == null) return null;
 
-                // Auto-update expired status nếu cần
                 var isExpired = promo.EndDate.HasValue && promo.EndDate.Value < today;
                 var isUsageLimitReached = promo.UsageLimit.HasValue && promo.UsageCount >= promo.UsageLimit.Value;
                 var isActive = promo.Status == "ACTIVE" && !isExpired && !isUsageLimitReached;
@@ -504,7 +458,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 }
 
                 return new {
-                    // Thông tin từ Promotion
                     promotionId = promo.PromotionId,
                     code = promo.Code,
                     description = promo.Description,
@@ -526,7 +479,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                         ? Math.Max(0, promo.UsageLimit.Value - promo.UsageCount)
                         : (int?)null,
 
-                    // Thông tin từ UserPromotion
                     bookingId = x.BookingId,
                     orderId = x.OrderId,
                     userPromotionStatus = x.Status,
@@ -545,7 +497,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             if (string.IsNullOrWhiteSpace(request?.Code)) return BadRequest(new { success = false, message = "Mã khuyến mãi không được để trống" });
 
-            // Lấy customerId từ JWT token
             var customerIdNullable = GetCustomerIdFromToken();
             if (!customerIdNullable.HasValue)
             {
@@ -554,21 +505,17 @@ namespace EVServiceCenter.WebAPI.Controllers
 
             int customerId = customerIdNullable.Value;
 
-            // Kiểm tra customer có tồn tại không
             var customer = await _customerRepo.GetCustomerByIdAsync(customerId);
             if (customer == null)
             {
                 return NotFound(new { success = false, message = $"Không tìm thấy khách hàng với ID {customerId}" });
             }
 
-            // Tìm promotion theo code (dùng service để có auto-update expired status)
             var promoResponse = await _promotionService.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
 
-            // Reload từ repo để lấy entity mới nhất sau khi auto-update
             var promo = await _promotionRepo.GetPromotionByCodeAsync(request.Code.Trim().ToUpper());
             if (promo == null) return NotFound(new { success = false, message = "Mã khuyến mãi không tồn tại" });
 
-            // Không cho lưu nếu khách đã có bản ghi cho mã này (dù ở bất kỳ trạng thái nào: SAVED, APPLIED, USED)
             var existingForCustomer = await _promotionRepo.GetUserPromotionsByCustomerAsync(customerId);
             var existed = existingForCustomer.FirstOrDefault(x => x.Promotion?.PromotionId == promo.PromotionId);
             if (existed != null)
@@ -577,12 +524,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                 {
                     return BadRequest(new { success = false, message = "Mã này đã được áp dụng/đã sử dụng, không thể lưu lại." });
                 }
-                // Đã có bản ghi SAVED rồi, không cho lưu lại
                 return BadRequest(new { success = false, message = "Bạn đã lưu mã khuyến mãi này rồi." });
             }
 
-            // Không cho lưu nếu promotion không còn hiệu lực: Inactive, chưa hiệu lực, đã hết hạn, hoặc hết lượt
-            // Dùng status từ response (đã được auto-update) để check
             var today = DateOnly.FromDateTime(DateTime.Today);
             var isInactive = !string.Equals(promoResponse.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase);
             var notStarted = promoResponse.StartDate > today;
@@ -593,7 +537,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return BadRequest(new { success = false, message = "Mã khuyến mãi không còn hiệu lực để lưu." });
             }
 
-            // Lưu vào UserPromotions ở trạng thái SAVED (chưa áp dụng booking/order)
             var up = new EVServiceCenter.Domain.Entities.UserPromotion
             {
                 CustomerId = customerId,
@@ -612,9 +555,6 @@ namespace EVServiceCenter.WebAPI.Controllers
 
 
 
-        /// <summary>
-        /// Force update tất cả expired promotions (chỉ ADMIN)
-        /// </summary>
         [HttpPost("admin/update-expired")]
         [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> UpdateExpiredPromotions()
@@ -637,16 +577,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách khuyến mãi đang hoạt động cho user (Public - không cần đăng nhập)
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm (mã, mô tả)</param>
-        /// <param name="promotionType">Lọc theo loại khuyến mãi (GENERAL, FIRST_TIME, BIRTHDAY, LOYALTY)</param>
-        /// <returns>Danh sách khuyến mãi đang hoạt động</returns>
         [HttpGet("active")]
-        [AllowAnonymous] // ✅ Cho phép người chưa đăng nhập xem
+        [AllowAnonymous]
         public async Task<IActionResult> GetActivePromotions(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
@@ -681,7 +613,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             using var wb = new ClosedXML.Excel.XLWorkbook();
             var ws = wb.AddWorksheet("Promotions");
 
-            // Header
             var headers = new[] {
                 "PromotionId",
                 "Code",
@@ -705,7 +636,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
             ws.SheetView.FreezeRows(1);
 
-            // Rows
             int r = 2;
             foreach (var p in promotions)
             {
@@ -729,30 +659,25 @@ namespace EVServiceCenter.WebAPI.Controllers
             int lastRow = r - 1;
             int lastCol = headers.Length;
 
-            // Format dates
             ws.Range(2, 8, lastRow, 9).Style.DateFormat.Format = dateFormat;
             ws.Range(2, 13, lastRow, 14).Style.DateFormat.Format = dateFormat;
 
-            // Alignment
-            ws.Range(2, 4, lastRow, 4).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Right; // DiscountValue
-            ws.Range(2, 6, lastRow, 7).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Right; // MinOrderAmount, MaxDiscount
-            ws.Range(2, 10, lastRow, 10).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center; // Status
-            ws.Range(2, 11, lastRow, 12).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center; // UsageLimit, UsageCount
+            ws.Range(2, 4, lastRow, 4).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Right;
+            ws.Range(2, 6, lastRow, 7).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Right;
+            ws.Range(2, 10, lastRow, 10).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+            ws.Range(2, 11, lastRow, 12).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
             ws.Range(2, 1, lastRow, lastCol).Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
 
-            // Create table with style and auto filter
             var tableRange = ws.Range(1, 1, lastRow, lastCol);
             var table = tableRange.CreateTable();
             table.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
             table.ShowAutoFilter = true;
 
-            // Borders for readability (over table data)
             ws.Range(1, 1, lastRow, lastCol).Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
             ws.Range(1, 1, lastRow, lastCol).Style.Border.InsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
 
             ws.Columns().AdjustToContents();
 
-            // Filters sheet
             var wsFilters = wb.AddWorksheet("Filters");
             wsFilters.Cell(1, 1).Value = "Applied Filters";
             wsFilters.Cell(1, 1).Style.Font.Bold = true;

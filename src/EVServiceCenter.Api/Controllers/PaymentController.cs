@@ -156,12 +156,17 @@ public class PaymentController : ControllerBase
 			}
 
 			// Tính promotion discount
+			// GetUserPromotionsByBookingAsync đã filter theo status "APPLIED" ở repository
 			var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
 			if (userPromotions != null && userPromotions.Any())
 			{
-				promotionDiscountAmount = userPromotions
-					.Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
-					.Sum(up => up.DiscountAmount);
+				promotionDiscountAmount = userPromotions.Sum(up => up.DiscountAmount);
+				_logger.LogInformation("SePay QR: Found {Count} applied promotion(s) for booking {BookingId}, total discount: {DiscountAmount:N0} VNĐ", 
+					userPromotions.Count, bookingId, promotionDiscountAmount);
+			}
+			else
+			{
+				_logger.LogInformation("SePay QR: No applied promotions found for booking {BookingId}", bookingId);
 			}
 
             // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts
@@ -505,13 +510,18 @@ public class PaymentController : ControllerBase
             }).ToList();
 
             // Khuyến mãi (chỉ áp dụng phần dịch vụ/gói)
+            // GetUserPromotionsByBookingAsync đã filter theo status "APPLIED" ở repository
             decimal promotionDiscountAmount = 0m;
             var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
             if (userPromotions != null && userPromotions.Any())
             {
-                promotionDiscountAmount = userPromotions
-                    .Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
-                    .Sum(up => up.DiscountAmount);
+                promotionDiscountAmount = userPromotions.Sum(up => up.DiscountAmount);
+                _logger.LogInformation("Breakdown: Found {Count} applied promotion(s) for booking {BookingId}, total discount: {DiscountAmount:N0} VNĐ", 
+                    userPromotions.Count, bookingId, promotionDiscountAmount);
+            }
+            else
+            {
+                _logger.LogInformation("Breakdown: No applied promotions found for booking {BookingId}", bookingId);
             }
 
             // Không cho khuyến mãi vượt quá phần dịch vụ/gói
@@ -640,12 +650,17 @@ public class PaymentController : ControllerBase
 			}
 
 			// Tính promotion discount
+			// GetUserPromotionsByBookingAsync đã filter theo status "APPLIED" ở repository
 			var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
 			if (userPromotions != null && userPromotions.Any())
 			{
-				promotionDiscountAmount = userPromotions
-					.Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
-					.Sum(up => up.DiscountAmount);
+				promotionDiscountAmount = userPromotions.Sum(up => up.DiscountAmount);
+				_logger.LogInformation("VNPay: Found {Count} applied promotion(s) for booking {BookingId}, total discount: {DiscountAmount:N0} VNĐ", 
+					userPromotions.Count, bookingId, promotionDiscountAmount);
+			}
+			else
+			{
+				_logger.LogInformation("VNPay: No applied promotions found for booking {BookingId}", bookingId);
 			}
 
             // Khuyến mãi chỉ áp dụng cho phần dịch vụ/gói, không áp dụng cho parts

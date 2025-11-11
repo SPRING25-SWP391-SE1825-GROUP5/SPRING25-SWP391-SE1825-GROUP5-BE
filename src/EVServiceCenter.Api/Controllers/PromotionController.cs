@@ -107,10 +107,12 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
 
             // Chỉ cho áp dụng nếu booking chưa thanh toán/chưa hoàn tất
-            var disallowedStatuses = new[] { "PAID", "COMPLETED", "DONE", "FINISHED", "CANCELLED" };
+            // Cho phép apply promotion khi booking status là "COMPLETED" (đã hoàn thành dịch vụ nhưng chưa thanh toán)
+            // Chỉ chặn khi đã thanh toán (PAID) hoặc đã hủy (CANCELLED)
+            var disallowedStatuses = new[] { "PAID", "DONE", "FINISHED", "CANCELLED" };
             if (!string.IsNullOrWhiteSpace(booking.Status) && disallowedStatuses.Contains(booking.Status.ToUpper()))
             {
-                return BadRequest(new { success = false, message = "Booking đã hoàn tất/đã thanh toán/đã hủy, không thể áp dụng khuyến mãi." });
+                return BadRequest(new { success = false, message = "Booking đã thanh toán/đã hủy, không thể áp dụng khuyến mãi." });
             }
 
             var validate = await _promotionService.ValidatePromotionAsync(new ValidatePromotionRequest
@@ -168,10 +170,10 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (booking == null) return NotFound(new { success = false, message = "Booking không tồn tại" });
 
             // Tìm UserPromotion đang apply cho booking này
+            // GetUserPromotionsByBookingAsync đã filter theo status "APPLIED" ở repository
             var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
             var userPromotion = userPromotions.FirstOrDefault(x =>
                 x.Promotion?.Code?.Equals(promotionCode.Trim().ToUpper(), StringComparison.OrdinalIgnoreCase) == true &&
-                x.Status == "APPLIED" &&
                 x.BookingId == bookingId);
 
             if (userPromotion == null)

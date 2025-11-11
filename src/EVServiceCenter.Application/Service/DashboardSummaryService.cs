@@ -7,6 +7,7 @@ using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.IRepositories;
 using Microsoft.Extensions.Logging;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -114,13 +115,13 @@ namespace EVServiceCenter.Application.Service
                 {
                     var completedPayments = await _paymentRepository.GetByInvoiceIdAsync(
                         invoice.InvoiceId,
-                        status: "COMPLETED",
+                        status: BookingStatusConstants.Completed,
                         method: null,
                         from: fromDate,
                         to: toDate);
                     var paidPayments = await _paymentRepository.GetByInvoiceIdAsync(
                         invoice.InvoiceId,
-                        status: "PAID",
+                        status: BookingStatusConstants.Paid,
                         method: null,
                         from: fromDate,
                         to: toDate);
@@ -138,7 +139,8 @@ namespace EVServiceCenter.Application.Service
         }
 
         /// <summary>
-        /// Đếm tổng số nhân viên (STAFF + TECHNICIAN) của toàn hệ thống
+        /// Đếm tổng số nhân viên (STAFF + TECHNICIAN + MANAGER) của toàn hệ thống
+        /// Chỉ đếm những user đang active (IsActive = true)
         /// </summary>
         private async Task<int> GetTotalEmployeesAsync()
         {
@@ -146,15 +148,19 @@ namespace EVServiceCenter.Application.Service
             {
                 // Lấy tất cả users có role STAFF
                 var staffUsers = await _accountRepository.GetAllUsersWithRoleAsync("STAFF");
-                
+
                 // Lấy tất cả users có role TECHNICIAN
                 var technicianUsers = await _accountRepository.GetAllUsersWithRoleAsync("TECHNICIAN");
+
+                // Lấy tất cả users có role MANAGER
+                var managerUsers = await _accountRepository.GetAllUsersWithRoleAsync("MANAGER");
 
                 // Chỉ đếm những user đang active
                 var activeStaffCount = staffUsers.Count(u => u.IsActive);
                 var activeTechnicianCount = technicianUsers.Count(u => u.IsActive);
+                var activeManagerCount = managerUsers.Count(u => u.IsActive);
 
-                return activeStaffCount + activeTechnicianCount;
+                return activeStaffCount + activeTechnicianCount + activeManagerCount;
             }
             catch (Exception ex)
             {
@@ -174,9 +180,9 @@ namespace EVServiceCenter.Application.Service
                 var allBookings = await _bookingRepository.GetAllBookingsAsync();
 
                 // Đếm bookings có status COMPLETED hoặc PAID và CreatedAt trong date range
-                var completedBookings = allBookings.Count(b => 
-                    !string.IsNullOrEmpty(b.Status) && 
-                    (b.Status.ToUpperInvariant() == "COMPLETED" || b.Status.ToUpperInvariant() == "PAID") &&
+                var completedBookings = allBookings.Count(b =>
+                    !string.IsNullOrEmpty(b.Status) &&
+                    (b.Status.ToUpperInvariant() == BookingStatusConstants.Completed || b.Status.ToUpperInvariant() == BookingStatusConstants.Paid) &&
                     b.CreatedAt >= fromDate && b.CreatedAt <= toDate);
 
                 return completedBookings;
@@ -209,13 +215,13 @@ namespace EVServiceCenter.Application.Service
                     // Lấy payments COMPLETED và PAID của invoice trong date range
                     var completedPayments = await _paymentRepository.GetByInvoiceIdAsync(
                         invoice.InvoiceId,
-                        status: "COMPLETED",
+                        status: BookingStatusConstants.Completed,
                         method: null,
                         from: fromDate,
                         to: toDate);
                     var paidPayments = await _paymentRepository.GetByInvoiceIdAsync(
                         invoice.InvoiceId,
-                        status: "PAID",
+                        status: BookingStatusConstants.Paid,
                         method: null,
                         from: fromDate,
                         to: toDate);
@@ -262,13 +268,13 @@ namespace EVServiceCenter.Application.Service
                     // Lấy payments COMPLETED và PAID của invoice trong date range
                     var completedPayments = await _paymentRepository.GetByInvoiceIdAsync(
                         invoice.InvoiceId,
-                        status: "COMPLETED",
+                        status: BookingStatusConstants.Completed,
                         method: null,
                         from: fromDate,
                         to: toDate);
                     var paidPayments = await _paymentRepository.GetByInvoiceIdAsync(
                         invoice.InvoiceId,
-                        status: "PAID",
+                        status: BookingStatusConstants.Paid,
                         method: null,
                         from: fromDate,
                         to: toDate);

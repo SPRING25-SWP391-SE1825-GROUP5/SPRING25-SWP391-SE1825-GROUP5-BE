@@ -5,9 +5,13 @@ using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
+using EVServiceCenter.Application.Configurations;
 using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Domain.Enums;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -27,9 +31,13 @@ namespace EVServiceCenter.Application.Service
         private readonly IMaintenanceChecklistRepository _maintenanceChecklistRepository;
         private readonly IServiceChecklistRepository _serviceChecklistRepository;
         private readonly IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
+        private readonly IMaintenanceReminderRepository _maintenanceReminderRepository;
+        private readonly IOptions<MaintenanceReminderOptions> _maintenanceReminderOptions;
         private readonly ILogger<BookingService> _logger;
         private readonly IWorkOrderPartRepository _workOrderPartRepository;
         private readonly IPartRepository _partRepository;
+        private readonly IOrderRepository _orderRepository;
+        private readonly IInventoryRepository _inventoryRepository;
 
 
         public BookingService(
@@ -46,9 +54,13 @@ namespace EVServiceCenter.Application.Service
             IMaintenanceChecklistRepository maintenanceChecklistRepository,
             IServiceChecklistRepository serviceChecklistRepository,
             IMaintenanceChecklistResultRepository maintenanceChecklistResultRepository,
+            IMaintenanceReminderRepository maintenanceReminderRepository,
+            IOptions<MaintenanceReminderOptions> maintenanceReminderOptions,
             ILogger<BookingService> logger,
             IWorkOrderPartRepository workOrderPartRepository,
-            IPartRepository partRepository)
+            IPartRepository partRepository,
+            IOrderRepository orderRepository,
+            IInventoryRepository inventoryRepository)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -63,9 +75,13 @@ namespace EVServiceCenter.Application.Service
             _maintenanceChecklistRepository = maintenanceChecklistRepository;
             _serviceChecklistRepository = serviceChecklistRepository;
             _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
+            _maintenanceReminderRepository = maintenanceReminderRepository;
+            _maintenanceReminderOptions = maintenanceReminderOptions;
             _logger = logger;
             _workOrderPartRepository = workOrderPartRepository;
             _partRepository = partRepository;
+            _orderRepository = orderRepository;
+            _inventoryRepository = inventoryRepository;
         }
 
         public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int>? serviceIds = null)
@@ -90,7 +106,7 @@ namespace EVServiceCenter.Application.Service
                     .Where(b => b.CenterId == centerId &&
                                b.TechnicianTimeSlot != null &&
                                DateOnly.FromDateTime(b.TechnicianTimeSlot.WorkDate) == date &&
-                               b.Status != "CANCELLED")
+                               b.Status != BookingStatusConstants.Cancelled)
                     .ToList();
 
                 var availabilityResponse = new AvailabilityResponse
@@ -186,7 +202,7 @@ namespace EVServiceCenter.Application.Service
                     .Where(b => b.CenterId == centerId &&
                                b.TechnicianTimeSlot != null &&
                                DateOnly.FromDateTime(b.TechnicianTimeSlot.WorkDate) == date &&
-                               b.Status != "CANCELLED")
+                               b.Status != BookingStatusConstants.Cancelled)
                     .ToList();
 
                 // Get technician time slots for the date
@@ -388,7 +404,7 @@ namespace EVServiceCenter.Application.Service
                     // Tìm credit đã có cho customer và package này
                     var existingCredits = await _customerServiceCreditRepository.GetByCustomerAndPackageAsync(request.CustomerId, selectedPackage.PackageId);
                     var availableCredit = existingCredits?.FirstOrDefault(c =>
-                        c.Status == "ACTIVE" &&
+                        c.Status == CreditStatusConstants.Active &&
                         c.ExpiryDate > DateTime.UtcNow &&
                         c.UsedCredits < c.TotalCredits);
 
@@ -411,7 +427,7 @@ namespace EVServiceCenter.Application.Service
                             UsedCredits = 0,
                             PurchaseDate = DateTime.UtcNow,
                             ExpiryDate = DateTime.UtcNow.AddYears(1), // 1 năm
-                            Status = "ACTIVE", // Credit được tạo và active ngay lập tức
+                            Status = CreditStatusConstants.Active, // Credit được tạo và active ngay lập tức
                             CreatedAt = DateTime.UtcNow,
                             UpdatedAt = DateTime.UtcNow
                         };
@@ -430,7 +446,7 @@ namespace EVServiceCenter.Application.Service
                     VehicleId = request.VehicleId,
                     CenterId = request.CenterId,
                     TechnicianSlotId = request.TechnicianSlotId,
-                    Status = "PENDING",
+                    Status = BookingStatusConstants.Pending,
                     ServiceId = resolvedServiceId,
                     SpecialRequests = request.SpecialRequests?.Trim(),
                     // Fields migrated from WorkOrder
@@ -444,6 +460,12 @@ namespace EVServiceCenter.Application.Service
                 // Determine matched CenterSchedule to persist its ID
                 // CenterScheduleId removed
 
+                // Validate OrderItemUsages TRƯỚC khi tạo booking để tránh tạo booking khi có lỗi
+                if (request.OrderItemUsages != null && request.OrderItemUsages.Any())
+                {
+                    await ValidateOrderItemUsagesAsync(request.CenterId, request.OrderItemUsages);
+                }
+
                 // Reserve the technician time slot BEFORE creating booking to avoid orphaned bookings
                 var reserveOk = await _technicianTimeSlotRepository.ReserveSlotAsync(
                     selectedTechnicianId,
@@ -454,7 +476,7 @@ namespace EVServiceCenter.Application.Service
                 if (!reserveOk)
                     throw new ArgumentException("Slot đã được đặt bởi người khác. Vui lòng chọn khung giờ khác.");
 
-                // Save booking only after successful slot reservation
+                // Save booking only after successful slot reservation and validation
                 var createdBooking = await _bookingRepository.CreateBookingAsync(booking);
 
                 // Update the reserved slot with the actual booking ID
@@ -468,6 +490,13 @@ namespace EVServiceCenter.Application.Service
 
                 // Tự động tạo MaintenanceChecklist từ ServiceChecklistTemplate
                 await CreateMaintenanceChecklistFromTemplateAsync(createdBooking.BookingId, resolvedServiceId);
+
+                // Xử lý phụ tùng đã mua nếu có (theo workflow đã thảo luận)
+                // Đã validate ở trên, giờ chỉ cần process
+                if (request.OrderItemUsages != null && request.OrderItemUsages.Any())
+                {
+                    await ProcessOrderItemUsagesAsync(createdBooking.BookingId, request.CenterId, request.OrderItemUsages);
+                }
 
                 // Không còn thêm vào BookingServices trong mô hình 1 dịch vụ
 
@@ -513,7 +542,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     BookingId = bookingId,
                     TemplateId = template.TemplateID,
-                    Status = "PENDING", // Mặc định là PENDING
+                    Status = BookingStatusConstants.Pending, // Mặc định là PENDING
                     CreatedAt = DateTime.UtcNow,
                     Notes = $"Auto-generated from template: {template.TemplateName}"
                 };
@@ -530,17 +559,24 @@ namespace EVServiceCenter.Application.Service
                     {
                         var seedResults = new List<MaintenanceChecklistResult>();
 
-                        foreach (var templateItem in templateItems.Where(i => i.CategoryId.HasValue))
+                        foreach (var templateItem in templateItems)
                         {
                             // Tạo 1 MaintenanceChecklistResult cho mỗi category (không phải cho từng part)
-                            var categoryId = templateItem.CategoryId!.Value;
+                            // Nếu templateItem không có CategoryId, skip (không tạo result)
+                            if (!templateItem.CategoryId.HasValue)
+                            {
+                                _logger.LogWarning("TemplateItem {ItemId} không có CategoryId, bỏ qua khi seed MaintenanceChecklistResult", templateItem.ItemID);
+                                continue;
+                            }
+
+                            var categoryId = templateItem.CategoryId.Value;
                             seedResults.Add(new MaintenanceChecklistResult
                             {
                                 ChecklistId = checklist.ChecklistId,
-                                CategoryId = categoryId,
+                                CategoryId = categoryId, // Đảm bảo CategoryId luôn có giá trị
                                 Description = templateItem.Category?.CategoryName ?? string.Empty,
                                 Result = null,
-                                Status = "PENDING"
+                                Status = BookingStatusConstants.Pending
                             });
                         }
 
@@ -600,14 +636,17 @@ namespace EVServiceCenter.Application.Service
                 if (booking == null)
                     throw new ArgumentException("Đặt lịch không tồn tại.");
 
+                // Normalize status to match constants (uppercase, handle CHECKED_IN)
+                var normalizedStatus = NormalizeBookingStatus(request.Status);
+
                 // Validate status transition
-                ValidateStatusTransition(booking.Status ?? string.Empty, request.Status);
+                ValidateStatusTransition(booking.Status ?? string.Empty, normalizedStatus);
 
                 // Update booking status
-                booking.Status = request.Status.ToUpper();
+                booking.Status = normalizedStatus;
                 booking.UpdatedAt = DateTime.UtcNow;
 
-                if (string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(request.Status, BookingStatusConstants.Completed, StringComparison.OrdinalIgnoreCase))
                 {
                     var parts = await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId);
                     var hasDraftOrPending = parts.Any(p => p.Status == "DRAFT" || p.Status == "PENDING_CUSTOMER_APPROVAL");
@@ -620,22 +659,46 @@ namespace EVServiceCenter.Application.Service
                     if (checklist != null)
                     {
                         var checklistStatus = (checklist.Status ?? string.Empty).ToUpperInvariant();
-                        if (checklistStatus != "COMPLETED")
+                        if (checklistStatus != BookingStatusConstants.Completed)
                         {
                             throw new ArgumentException("Không thể chuyển booking sang COMPLETED khi checklist chưa được xác nhận hoàn thành. Vui lòng gọi API /api/maintenance-checklist/{bookingId}/confirm để xác nhận checklist trước.");
                         }
+                    }
+
+                    // ============================================
+                    // TỰ ĐỘNG CẬP NHẬT VEHICLE VÀ TẠO REMINDER
+                    // ============================================
+                    // Load đầy đủ thông tin booking (bao gồm Vehicle, Service)
+                    var fullBooking = await _bookingRepository.GetBookingDetailAsync(bookingId);
+                    if (fullBooking != null)
+                    {
+                        // 1. Cập nhật OrderItem.ConsumedQty nếu có sử dụng phụ tùng đã mua
+                        await UpdateOrderItemConsumedQtyAsync(booking.BookingId);
+
+                        // 2. Cập nhật Vehicle (LastServiceDate, CurrentMileage)
+                        await UpdateVehicleAfterCompletionAsync(fullBooking);
+
+                        // 3. Đánh dấu reminder cũ là COMPLETED
+                        await MarkRelatedRemindersAsCompletedAsync(fullBooking);
+
+                        // 4. Tạo reminder mới cho lần bảo dưỡng tiếp theo
+                        await CreateNextMaintenanceReminderAsync(fullBooking);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Không thể load đầy đủ thông tin booking {BookingId} để cập nhật Vehicle và tạo reminder", bookingId);
                     }
                 }
 
                 // Handle package usage based on status change
                 if (booking.AppliedCreditId.HasValue)
                 {
-                    if (string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(normalizedStatus, BookingStatusConstants.Completed, StringComparison.OrdinalIgnoreCase))
                     {
                         // Deduct package usage when booking is completed (không cần chờ PAID)
                         await DeductPackageUsageAsync(booking.AppliedCreditId.Value);
                     }
-                    else if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+                    else if (string.Equals(normalizedStatus, BookingStatusConstants.Cancelled, StringComparison.OrdinalIgnoreCase))
                     {
                         // Refund gói khi hủy booking (chỉ xóa nếu không có booking khác dùng)
                         await RefundPackageCompletelyAsync(booking.AppliedCreditId.Value, booking.BookingId);
@@ -645,7 +708,7 @@ namespace EVServiceCenter.Application.Service
                 }
 
                 // Lock technician timeslot when booking is confirmed
-                if (string.Equals(request.Status, "CONFIRMED", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(normalizedStatus, BookingStatusConstants.Confirmed, StringComparison.OrdinalIgnoreCase))
                 {
                     if (booking.TechnicianSlotId.HasValue)
                     {
@@ -654,19 +717,19 @@ namespace EVServiceCenter.Application.Service
                         {
                             // Đảm bảo timeslot được lock khi confirm: IsAvailable = false, BookingId = bookingId
                             var needsUpdate = false;
-                            
+
                             if (tts.IsAvailable)
                             {
                                 tts.IsAvailable = false;
                                 needsUpdate = true;
                             }
-                            
+
                             if (tts.BookingId != bookingId)
                             {
                                 tts.BookingId = bookingId;
                                 needsUpdate = true;
                             }
-                            
+
                             if (needsUpdate)
                             {
                                 await _technicianTimeSlotRepository.UpdateAsync(tts);
@@ -680,9 +743,9 @@ namespace EVServiceCenter.Application.Service
                 // Release reserved technician slot based on status
                 // CANCELLED: Luôn release slot
                 // COMPLETED/PAID: Chỉ release nếu WorkDate >= today (slot còn tương lai)
-                if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(request.Status, "PAID", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(normalizedStatus, BookingStatusConstants.Cancelled, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(normalizedStatus, BookingStatusConstants.Completed, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(normalizedStatus, BookingStatusConstants.Paid, StringComparison.OrdinalIgnoreCase))
                 {
                     if (booking.TechnicianSlotId.HasValue)
                     {
@@ -693,14 +756,14 @@ namespace EVServiceCenter.Application.Service
                             var shouldRelease = false;
                             var reason = string.Empty;
 
-                            if (string.Equals(request.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+                            if (string.Equals(request.Status, BookingStatusConstants.Cancelled, StringComparison.OrdinalIgnoreCase))
                             {
                                 // CANCELLED: Luôn release slot (thường là trước WorkDate)
                                 shouldRelease = true;
                                 reason = "Booking bị hủy";
                             }
-                            else if (string.Equals(request.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) ||
-                                     string.Equals(request.Status, "PAID", StringComparison.OrdinalIgnoreCase))
+                            else if (string.Equals(request.Status, BookingStatusConstants.Completed, StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(request.Status, BookingStatusConstants.Paid, StringComparison.OrdinalIgnoreCase))
                             {
                                 // COMPLETED/PAID: Chỉ release nếu WorkDate >= today (slot còn tương lai)
                                 if (tts.WorkDate.Date >= today)
@@ -1017,16 +1080,42 @@ namespace EVServiceCenter.Application.Service
                 throw new ArgumentException(string.Join(" ", errors));
         }
 
+        /// <summary>
+        /// Normalize booking status to match database CHECK constraint
+        /// Handles case-insensitive matching and converts to valid constants
+        /// </summary>
+        private string NormalizeBookingStatus(string status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+                throw new ArgumentException("Status không được để trống");
+
+            var statusUpper = status.Trim().ToUpperInvariant();
+
+            // Map to valid constants
+            return statusUpper switch
+            {
+                "PENDING" => BookingStatusConstants.Pending,
+                "CONFIRMED" => BookingStatusConstants.Confirmed,
+                "CHECKED_IN" or "CHECKEDIN" => BookingStatusConstants.CheckedIn, // Handle both formats
+                "IN_PROGRESS" or "INPROGRESS" => BookingStatusConstants.InProgress, // Handle both formats
+                "COMPLETED" => BookingStatusConstants.Completed,
+                "PAID" => BookingStatusConstants.Paid,
+                "CANCELLED" or "CANCELED" => BookingStatusConstants.Cancelled, // Handle both spellings
+                _ => throw new ArgumentException($"Status không hợp lệ: {status}. Các giá trị hợp lệ: {string.Join(", ", BookingStatusConstants.AllStatuses)}")
+            };
+        }
+
         private void ValidateStatusTransition(string currentStatus, string newStatus)
         {
             var validTransitions = new Dictionary<string, List<string>>
             {
-                { "PENDING", new List<string> { "CONFIRMED", "CANCELLED" } },
-                { "CONFIRMED", new List<string> { "IN_PROGRESS" } },
-                { "IN_PROGRESS", new List<string> { "COMPLETED" } },
-                { "COMPLETED", new List<string> { "PAID" } },
-                { "PAID", new List<string>() },
-                { "CANCELLED", new List<string>() }
+                { BookingStatusConstants.Pending, new List<string> { BookingStatusConstants.Confirmed, BookingStatusConstants.Cancelled } },
+                { BookingStatusConstants.Confirmed, new List<string> { BookingStatusConstants.CheckedIn, BookingStatusConstants.Cancelled } },
+                { BookingStatusConstants.CheckedIn, new List<string> { BookingStatusConstants.InProgress, BookingStatusConstants.Cancelled } },
+                { BookingStatusConstants.InProgress, new List<string> { BookingStatusConstants.Completed } },
+                { BookingStatusConstants.Completed, new List<string> { BookingStatusConstants.Paid } },
+                { BookingStatusConstants.Paid, new List<string>() },
+                { BookingStatusConstants.Cancelled, new List<string>() }
             };
 
             if (!validTransitions.ContainsKey(currentStatus.ToUpper()) ||
@@ -1118,7 +1207,7 @@ namespace EVServiceCenter.Application.Service
                 var availableCredit = customerCredits.FirstOrDefault(cc =>
                     cc.PackageId == servicePackage.PackageId &&
                     cc.RemainingCredits > 0 &&
-                    string.Equals(cc.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase));
+                    string.Equals(cc.Status, CreditStatusConstants.Active, StringComparison.OrdinalIgnoreCase));
 
                 if (availableCredit == null)
                     throw new ArgumentException($"Khách hàng không có gói dịch vụ '{packageCode}' khả dụng hoặc đã hết lượt sử dụng.");
@@ -1145,7 +1234,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 var credit = await _customerServiceCreditRepository.GetByIdAsync(creditId);
-                if (credit == null || !string.Equals(credit.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+                if (credit == null || !string.Equals(credit.Status, CreditStatusConstants.Active, StringComparison.OrdinalIgnoreCase))
                     return;
 
                 if (credit.RemainingCredits <= 0)
@@ -1173,7 +1262,7 @@ namespace EVServiceCenter.Application.Service
             try
             {
                 var credit = await _customerServiceCreditRepository.GetByIdAsync(creditId);
-                if (credit == null || !string.Equals(credit.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase))
+                if (credit == null || !string.Equals(credit.Status, CreditStatusConstants.Active, StringComparison.OrdinalIgnoreCase))
                     return;
 
                 if (credit.UsedCredits <= 0)
@@ -1207,8 +1296,8 @@ namespace EVServiceCenter.Application.Service
                 if (booking.AppliedCreditId.HasValue)
                     throw new ArgumentException("Đặt lịch đã áp dụng gói dịch vụ khác.");
 
-                if (string.Equals(booking.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(booking.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(booking.Status, BookingStatusConstants.Cancelled, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(booking.Status, BookingStatusConstants.Completed, StringComparison.OrdinalIgnoreCase))
                     throw new ArgumentException("Không thể áp dụng gói cho đặt lịch đã hủy hoặc hoàn thành.");
 
                 // Validate and reserve package
@@ -1246,8 +1335,8 @@ namespace EVServiceCenter.Application.Service
                 if (!booking.AppliedCreditId.HasValue)
                     throw new ArgumentException("Đặt lịch chưa áp dụng gói dịch vụ nào.");
 
-                if (string.Equals(booking.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(booking.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(booking.Status, BookingStatusConstants.Cancelled, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(booking.Status, BookingStatusConstants.Completed, StringComparison.OrdinalIgnoreCase))
                     throw new ArgumentException("Không thể gỡ gói cho đặt lịch đã hủy hoặc hoàn thành.");
 
                 // Clear applied credit
@@ -1357,7 +1446,7 @@ namespace EVServiceCenter.Application.Service
                     UsedCredits = 0,
                     PurchaseDate = DateTime.UtcNow,
                     ExpiryDate = servicePackage.ValidTo,
-                    Status = "ACTIVE",
+                    Status = CreditStatusConstants.Active,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -1397,7 +1486,7 @@ namespace EVServiceCenter.Application.Service
                 if (checklist != null)
                 {
                     // Cập nhật status của MaintenanceChecklist thành CANCELLED
-                    checklist.Status = "CANCELLED";
+                    checklist.Status = BookingStatusConstants.Cancelled;
                     await _maintenanceChecklistRepository.UpdateAsync(checklist);
 
                     // Lấy tất cả MaintenanceChecklistResult của checklist này
@@ -1406,8 +1495,8 @@ namespace EVServiceCenter.Application.Service
                     // Cập nhật status và result của tất cả MaintenanceChecklistResult thành CANCELLED
                     foreach (var result in results)
                     {
-                        result.Status = "CANCELLED";
-                        result.Result = "CANCELLED";
+                        result.Status = BookingStatusConstants.Cancelled;
+                        result.Result = BookingStatusConstants.Cancelled;
                         await _maintenanceChecklistResultRepository.UpdateAsync(result);
                     }
 
@@ -1420,6 +1509,693 @@ namespace EVServiceCenter.Application.Service
                 _logger.LogError(ex, "Lỗi khi cập nhật MaintenanceChecklist cho booking {BookingId}", bookingId);
                 // Không throw exception để không ảnh hưởng đến việc cancel booking
             }
+        }
+
+        /// <summary>
+        /// Cập nhật Vehicle sau khi booking hoàn thành
+        /// - Cập nhật LastServiceDate = WorkDate của booking
+        /// - Cập nhật CurrentMileage = CurrentMileage từ booking (nếu có và lớn hơn)
+        /// </summary>
+        private async Task UpdateVehicleAfterCompletionAsync(Booking booking)
+        {
+            if (booking.Vehicle == null)
+            {
+                _logger.LogWarning("Booking {BookingId} không có Vehicle, bỏ qua cập nhật", booking.BookingId);
+                return;
+            }
+
+            var vehicle = booking.Vehicle;
+            var needsUpdate = false;
+
+            // 1. Cập nhật LastServiceDate
+            // Lấy ngày từ TechnicianTimeSlot hoặc dùng ngày hiện tại
+            DateOnly serviceDate;
+            if (booking.TechnicianTimeSlot?.WorkDate != null)
+            {
+                serviceDate = DateOnly.FromDateTime(booking.TechnicianTimeSlot.WorkDate);
+            }
+            else
+            {
+                serviceDate = DateOnly.FromDateTime(DateTime.UtcNow);
+            }
+
+            // Chỉ cập nhật nếu ngày mới hơn ngày cũ (hoặc chưa có)
+            if (!vehicle.LastServiceDate.HasValue || vehicle.LastServiceDate.Value < serviceDate)
+            {
+                vehicle.LastServiceDate = serviceDate;
+                needsUpdate = true;
+                _logger.LogInformation("Cập nhật LastServiceDate của Vehicle {VehicleId} thành {ServiceDate}",
+                    vehicle.VehicleId, serviceDate);
+            }
+
+            // 2. Cập nhật CurrentMileage
+            // Chỉ cập nhật nếu booking có mileage và lớn hơn mileage hiện tại
+            if (booking.CurrentMileage.HasValue && booking.CurrentMileage.Value > 0)
+            {
+                if (booking.CurrentMileage.Value > vehicle.CurrentMileage)
+                {
+                    var oldMileage = vehicle.CurrentMileage;
+                    vehicle.CurrentMileage = booking.CurrentMileage.Value;
+                    needsUpdate = true;
+                    _logger.LogInformation("Cập nhật CurrentMileage của Vehicle {VehicleId} từ {OldMileage} thành {NewMileage}",
+                        vehicle.VehicleId, oldMileage, booking.CurrentMileage.Value);
+                }
+                else
+                {
+                    _logger.LogWarning("Booking {BookingId} có CurrentMileage {BookingMileage} nhỏ hơn Vehicle.CurrentMileage {VehicleMileage}, không cập nhật",
+                        booking.BookingId, booking.CurrentMileage.Value, vehicle.CurrentMileage);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Booking {BookingId} không có CurrentMileage, bỏ qua cập nhật mileage", booking.BookingId);
+            }
+
+            // 3. Lưu vào database
+            if (needsUpdate)
+            {
+                await _vehicleRepository.UpdateVehicleAsync(vehicle);
+                _logger.LogInformation("Đã cập nhật Vehicle {VehicleId} sau khi booking {BookingId} completed",
+                    vehicle.VehicleId, booking.BookingId);
+            }
+            else
+            {
+                _logger.LogInformation("Vehicle {VehicleId} không cần cập nhật sau booking {BookingId} completed",
+                    vehicle.VehicleId, booking.BookingId);
+            }
+        }
+
+        /// <summary>
+        /// Đánh dấu reminder cũ là COMPLETED sau khi booking hoàn thành
+        /// </summary>
+        private async Task MarkRelatedRemindersAsCompletedAsync(Booking booking)
+        {
+            if (booking.ServiceId <= 0 || booking.VehicleId <= 0)
+            {
+                _logger.LogWarning("Booking {BookingId} không có ServiceId hoặc VehicleId, bỏ qua đánh dấu reminder", booking.BookingId);
+                return;
+            }
+
+            try
+            {
+                // Lấy tất cả reminder không completed của vehicle này
+                // QueryAsync với status "PENDING" sẽ trả về tất cả reminders chưa completed
+                var allReminders = await _maintenanceReminderRepository.QueryAsync(
+                    customerId: null,
+                    vehicleId: booking.VehicleId,
+                    status: "PENDING", // Query không completed
+                    from: null,
+                    to: null
+                );
+
+                // Lọc các reminder đang active (PENDING, DUE, OVERDUE) và liên quan đến service này
+                var serviceIdValue = booking.ServiceId;
+                var relatedReminders = allReminders
+                    .Where(r => r.ServiceId.HasValue && r.ServiceId.Value == serviceIdValue &&
+                               !r.IsCompleted &&
+                               (r.Status == ReminderStatus.PENDING ||
+                                r.Status == ReminderStatus.DUE ||
+                                r.Status == ReminderStatus.OVERDUE))
+                    .ToList();
+
+                if (!relatedReminders.Any())
+                {
+                    _logger.LogInformation("Không có reminder nào cần đánh dấu completed cho booking {BookingId}",
+                        booking.BookingId);
+                    return;
+                }
+
+                // Đánh dấu từng reminder
+                foreach (var reminder in relatedReminders)
+                {
+                    reminder.IsCompleted = true;
+                    reminder.CompletedAt = DateTime.UtcNow;
+                    reminder.Status = ReminderStatus.COMPLETED;
+                    reminder.UpdatedAt = DateTime.UtcNow;
+
+                    await _maintenanceReminderRepository.UpdateAsync(reminder);
+
+                    _logger.LogInformation("Đã đánh dấu reminder {ReminderId} (ServiceId: {ServiceId}) là COMPLETED sau booking {BookingId}",
+                        reminder.ReminderId, reminder.ServiceId ?? 0, booking.BookingId);
+                }
+
+                _logger.LogInformation("Đã đánh dấu {Count} reminder là COMPLETED cho booking {BookingId}",
+                    relatedReminders.Count, booking.BookingId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi đánh dấu reminder completed cho booking {BookingId}", booking.BookingId);
+                // Không throw exception để không ảnh hưởng đến việc complete booking
+            }
+        }
+
+        /// <summary>
+        /// Tạo reminder tiếp theo từ ServiceChecklistTemplate (Phương án 1)
+        /// </summary>
+        private async Task CreateNextMaintenanceReminderAsync(Booking booking)
+        {
+            // 1. Kiểm tra điều kiện
+            if (booking.ServiceId <= 0)
+            {
+                _logger.LogInformation("Booking {BookingId} không có ServiceId, bỏ qua tạo reminder",
+                    booking.BookingId);
+                return;
+            }
+
+            if (booking.Vehicle == null)
+            {
+                _logger.LogWarning("Booking {BookingId} không có Vehicle, bỏ qua tạo reminder",
+                    booking.BookingId);
+                return;
+            }
+
+            var vehicle = booking.Vehicle;
+            var serviceId = booking.ServiceId;
+
+            try
+            {
+                int? intervalDays = null;
+                int? intervalMileage = null;
+                string source = string.Empty;
+
+                // 2. Thử lấy từ ServiceChecklistTemplate (Phương án 1 - ưu tiên)
+                var templates = await _serviceChecklistRepository.GetActiveAsync(serviceId);
+                var template = templates.FirstOrDefault();
+
+                if (template != null && (template.MaxDate.HasValue || template.MinKm.HasValue))
+                {
+                    // Dùng template
+                    intervalDays = template.MaxDate;      // MaxDate = số ngày
+                    intervalMileage = template.MinKm;     // MinKm = interval km
+                    source = $"ServiceChecklistTemplate {template.TemplateID}";
+
+                    _logger.LogInformation(
+                        "Sử dụng interval từ ServiceChecklistTemplate {TemplateID} cho Service {ServiceId}: Days={Days}, Mileage={Mileage}",
+                        template.TemplateID, serviceId, intervalDays, intervalMileage);
+                }
+                else
+                {
+                    // 3. Fallback về appsettings.json (Phương án 2)
+                    var options = _maintenanceReminderOptions.Value;
+                    intervalDays = options.DefaultIntervalDays;
+                    intervalMileage = options.DefaultIntervalMileage;
+                    source = "appsettings.json (DefaultInterval)";
+
+                    if (template == null)
+                    {
+                        _logger.LogInformation(
+                            "Service {ServiceId} không có ServiceChecklistTemplate active, sử dụng default từ appsettings: Days={Days}, Mileage={Mileage}",
+                            serviceId, intervalDays, intervalMileage);
+                    }
+                    else
+                    {
+                        _logger.LogInformation(
+                            "ServiceChecklistTemplate {TemplateID} không có MinKm hoặc MaxDate, sử dụng default từ appsettings: Days={Days}, Mileage={Mileage}",
+                            template.TemplateID, intervalDays, intervalMileage);
+                    }
+                }
+
+                // 4. Kiểm tra có interval không
+                if (!intervalDays.HasValue && !intervalMileage.HasValue)
+                {
+                    _logger.LogInformation(
+                        "Không có interval config cho Service {ServiceId} (không có template và không có default), bỏ qua tạo reminder",
+                        serviceId);
+                    return;
+                }
+
+                // 5. Tạo MaintenanceReminder mới
+                var nextReminder = new MaintenanceReminder
+                {
+                    VehicleId = booking.VehicleId,
+                    ServiceId = serviceId,
+                    Type = ReminderType.MAINTENANCE,
+                    Status = ReminderStatus.PENDING,
+                    IsCompleted = false,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    CadenceDays = 7 // Mặc định nhắc mỗi 7 ngày khi đến hạn
+                };
+
+                // 6. Tính DueDate từ intervalDays (nếu có)
+                if (intervalDays.HasValue && vehicle.LastServiceDate.HasValue)
+                {
+                    var lastServiceDate = vehicle.LastServiceDate.Value.ToDateTime(TimeOnly.MinValue);
+                    var nextServiceDate = lastServiceDate.AddDays(intervalDays.Value);
+                    nextReminder.DueDate = DateOnly.FromDateTime(nextServiceDate);
+
+                    _logger.LogInformation(
+                        "Tính DueDate từ {Source}: LastServiceDate={LastServiceDate}, IntervalDays={IntervalDays} ngày, DueDate={DueDate}",
+                        source, vehicle.LastServiceDate, intervalDays, nextReminder.DueDate);
+                }
+                else if (intervalDays.HasValue && !vehicle.LastServiceDate.HasValue)
+                {
+                    _logger.LogWarning(
+                        "Có IntervalDays={IntervalDays} nhưng Vehicle {VehicleId} không có LastServiceDate, không thể tính DueDate",
+                        intervalDays, vehicle.VehicleId);
+                }
+
+                // 7. Tính DueMileage từ intervalMileage (nếu có)
+                if (intervalMileage.HasValue)
+                {
+                    nextReminder.DueMileage = vehicle.CurrentMileage + intervalMileage.Value;
+
+                    _logger.LogInformation(
+                        "Tính DueMileage từ {Source}: CurrentMileage={CurrentMileage}, IntervalMileage={IntervalMileage} km, DueMileage={DueMileage}",
+                        source, vehicle.CurrentMileage, intervalMileage, nextReminder.DueMileage);
+                }
+
+                // 8. Kiểm tra có ít nhất một trong hai không
+                if (!nextReminder.DueDate.HasValue && !nextReminder.DueMileage.HasValue)
+                {
+                    _logger.LogWarning(
+                        "Không thể tạo reminder vì không có DueDate hoặc DueMileage cho booking {BookingId}",
+                        booking.BookingId);
+                    return;
+                }
+
+                // 9. Lưu vào database
+                var createdReminder = await _maintenanceReminderRepository.CreateAsync(nextReminder);
+
+                _logger.LogInformation(
+                    "✅ Đã tạo reminder {ReminderId} từ {Source}: " +
+                    "VehicleId={VehicleId}, ServiceId={ServiceId}, DueDate={DueDate}, DueMileage={DueMileage}",
+                    createdReminder.ReminderId,
+                    source,
+                    createdReminder.VehicleId,
+                    createdReminder.ServiceId,
+                    createdReminder.DueDate,
+                    createdReminder.DueMileage);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tạo reminder cho booking {BookingId}", booking.BookingId);
+                // Không throw exception để không ảnh hưởng đến việc complete booking
+            }
+        }
+
+        /// <summary>
+        /// Validate OrderItemUsages TRƯỚC khi tạo booking
+        /// Chỉ validate, không thay đổi database
+        /// </summary>
+        private async Task ValidateOrderItemUsagesAsync(int centerId, List<OrderItemUsageRequest> usages)
+        {
+            _logger.LogInformation("Bắt đầu validate {Count} OrderItemUsages cho center {CenterId}", usages.Count, centerId);
+
+            foreach (var usage in usages)
+            {
+                // 1. Validate OrderItem
+                var orderItem = await _orderRepository.GetOrderItemByIdAsync(usage.OrderItemId);
+                if (orderItem == null)
+                    throw new ArgumentException($"OrderItem {usage.OrderItemId} không tồn tại");
+
+                // 2. Validate Order
+                var order = await _orderRepository.GetByIdAsync(orderItem.OrderId);
+                if (order == null || order.Status != "PAID")
+                    throw new ArgumentException($"Order {orderItem.OrderId} chưa thanh toán hoặc không tồn tại");
+
+                // 3. Validate FulfillmentCenterId == CenterId
+                if (order.FulfillmentCenterId != centerId)
+                    throw new ArgumentException(
+                        $"Phụ tùng đã mua tại chi nhánh {order.FulfillmentCenterId}, không thể sử dụng tại chi nhánh {centerId}");
+
+                // 4. Validate AvailableQty (Quantity - ConsumedQty)
+                var availableQty = orderItem.Quantity - orderItem.ConsumedQty;
+                if (availableQty < usage.Quantity)
+                    throw new ArgumentException(
+                        $"Không đủ phụ tùng. Còn lại: {availableQty}, cần: {usage.Quantity}");
+
+                // 5. Validate Inventory (ReservedQty và CurrentStock)
+                var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+                var invPart = inventory?.InventoryParts?.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+                if (invPart == null)
+                    throw new InvalidOperationException($"Không tìm thấy part {orderItem.PartId} trong inventory");
+
+                if (invPart.ReservedQty < usage.Quantity)
+                    throw new InvalidOperationException(
+                        $"ReservedQty không đủ. ReservedQty: {invPart.ReservedQty}, cần: {usage.Quantity}");
+            }
+
+            _logger.LogInformation("Hoàn thành validate OrderItemUsages cho center {CenterId}", centerId);
+        }
+
+        /// <summary>
+        /// Xử lý phụ tùng đã mua khi đặt lịch (theo workflow đã thảo luận)
+        /// - Đã validate ở ValidateOrderItemUsagesAsync, giờ chỉ cần process
+        /// - Trừ inventory và tạo WorkOrderPart
+        /// </summary>
+        private async Task ProcessOrderItemUsagesAsync(int bookingId, int centerId, List<OrderItemUsageRequest> usages)
+        {
+            try
+            {
+                _logger.LogInformation("Bắt đầu xử lý {Count} OrderItemUsages cho booking {BookingId} (đã validate trước đó)", usages.Count, bookingId);
+
+                foreach (var usage in usages)
+                {
+                    // Lấy OrderItem (đã validate ở ValidateOrderItemUsagesAsync)
+                    var orderItem = await _orderRepository.GetOrderItemByIdAsync(usage.OrderItemId);
+                    if (orderItem == null)
+                    {
+                        // Không nên xảy ra vì đã validate, nhưng check để an toàn
+                        _logger.LogError("OrderItem {OrderItemId} không tồn tại khi process (đã validate trước đó)", usage.OrderItemId);
+                        throw new InvalidOperationException($"OrderItem {usage.OrderItemId} không tồn tại");
+                    }
+
+                    // Lấy inventory (đã validate ở ValidateOrderItemUsagesAsync)
+                    var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+                    var invPart = inventory?.InventoryParts?.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+                    if (invPart == null)
+                    {
+                        _logger.LogError("Part {PartId} không tồn tại trong inventory khi process (đã validate trước đó)", orderItem.PartId);
+                        throw new InvalidOperationException($"Không tìm thấy part {orderItem.PartId} trong inventory");
+                    }
+
+                    // Kiểm tra ReservedQty một lần nữa (có thể thay đổi giữa validate và process)
+                    if (invPart.ReservedQty < usage.Quantity)
+                    {
+                        _logger.LogWarning(
+                            "ReservedQty không đủ cho part {PartId} trong center {CenterId}. ReservedQty: {ReservedQty}, cần: {Quantity}",
+                            orderItem.PartId, centerId, invPart.ReservedQty, usage.Quantity);
+                        throw new InvalidOperationException(
+                            $"ReservedQty không đủ. ReservedQty: {invPart.ReservedQty}, cần: {usage.Quantity}");
+                    }
+
+                    // 6. Release reserve khi tạo booking (hàng đã được sử dụng)
+                    // CurrentStock đã được trừ khi Order PAID, chỉ cần release ReservedQty
+                    // Release ReservedQty (hàng đã được sử dụng cho booking)
+                    invPart.ReservedQty -= usage.Quantity; // Release ReservedQty - hàng đã được sử dụng
+                    if (inventory != null)
+                    {
+                        await _inventoryRepository.UpdateInventoryAsync(inventory);
+                    }
+                    _logger.LogInformation(
+                        "Đã release reserve {Quantity} units của part {PartId} từ center {CenterId}. CurrentStock: {CurrentStock} (đã trừ khi Order PAID), ReservedQty: {ReservedQty}, AvailableQty: {AvailableQty}",
+                        usage.Quantity, orderItem.PartId, centerId, invPart.CurrentStock, invPart.ReservedQty,
+                        invPart.CurrentStock - invPart.ReservedQty);
+
+                    // 7. Tạo WorkOrderPart với IsCustomerSupplied = true
+                    var workOrderPart = new WorkOrderPart
+                    {
+                        BookingId = bookingId,
+                        PartId = orderItem.PartId,
+                        QuantityUsed = usage.Quantity,
+                        Status = "DRAFT",
+                        IsCustomerSupplied = true, // Đánh dấu hàng khách cung cấp
+                        SourceOrderItemId = usage.OrderItemId // Liên kết về OrderItem
+                    };
+                    await _workOrderPartRepository.AddAsync(workOrderPart);
+                    _logger.LogInformation(
+                        "Đã tạo WorkOrderPart {WorkOrderPartId} cho booking {BookingId}, OrderItem {OrderItemId}, Quantity: {Quantity}",
+                        workOrderPart.WorkOrderPartId, bookingId, usage.OrderItemId, usage.Quantity);
+                }
+
+                _logger.LogInformation("Hoàn thành xử lý OrderItemUsages cho booking {BookingId}", bookingId);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi xử lý OrderItemUsages cho booking {BookingId}", bookingId);
+                throw new Exception($"Lỗi khi xử lý phụ tùng đã mua: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Cập nhật OrderItem.ConsumedQty khi booking COMPLETED
+        /// </summary>
+        private async Task UpdateOrderItemConsumedQtyAsync(int bookingId)
+        {
+            try
+            {
+                var workOrderParts = await _workOrderPartRepository.GetByBookingIdAsync(bookingId);
+                var customerSuppliedParts = workOrderParts
+                    .Where(p => p.IsCustomerSupplied && p.SourceOrderItemId.HasValue)
+                    .ToList();
+
+                if (!customerSuppliedParts.Any())
+                {
+                    _logger.LogInformation("Booking {BookingId} không có phụ tùng đã mua, bỏ qua cập nhật ConsumedQty", bookingId);
+                    return;
+                }
+
+                foreach (var part in customerSuppliedParts)
+                {
+                    if (!part.SourceOrderItemId.HasValue) continue;
+                    var orderItem = await _orderRepository.GetOrderItemByIdAsync(part.SourceOrderItemId.Value);
+                    if (orderItem != null)
+                    {
+                        orderItem.ConsumedQty += part.QuantityUsed;
+                        await _orderRepository.UpdateOrderItemAsync(orderItem);
+                        _logger.LogInformation(
+                            "Đã cập nhật ConsumedQty cho OrderItem {OrderItemId}: {ConsumedQty}/{Quantity}",
+                            orderItem.OrderItemId, orderItem.ConsumedQty, orderItem.Quantity);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Không tìm thấy OrderItem {OrderItemId} để cập nhật ConsumedQty", part.SourceOrderItemId.Value);
+                    }
+                }
+
+                _logger.LogInformation("Đã cập nhật ConsumedQty cho {Count} OrderItems của booking {BookingId}",
+                    customerSuppliedParts.Count, bookingId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi cập nhật ConsumedQty cho booking {BookingId}", bookingId);
+                // Không throw exception để không ảnh hưởng đến việc complete booking
+            }
+        }
+
+        /// <summary>
+        /// Update phụ tùng khách cung cấp cho booking (chỉ cho phép khi PENDING hoặc CONFIRMED)
+        /// </summary>
+        public async Task<BookingResponse> UpdateBookingCustomerPartsAsync(int bookingId, UpdateBookingCustomerPartsRequest request)
+        {
+            try
+            {
+                _logger.LogInformation("Bắt đầu update phụ tùng khách cung cấp cho booking {BookingId}", bookingId);
+
+                // 1. Validate booking tồn tại
+                var booking = await _bookingRepository.GetBookingByIdAsync(bookingId);
+                if (booking == null)
+                    throw new ArgumentException($"Booking {bookingId} không tồn tại");
+
+                // 2. Validate booking status (chỉ cho phép PENDING hoặc CONFIRMED)
+                if (booking.Status != BookingStatusConstants.Pending && booking.Status != BookingStatusConstants.Confirmed)
+                {
+                    throw new InvalidOperationException(
+                        $"Không thể update phụ tùng khi booking đang ở trạng thái {booking.Status}. " +
+                        $"Chỉ cho phép khi booking ở trạng thái PENDING hoặc CONFIRMED.");
+                }
+
+                // 3. Lấy danh sách WorkOrderPart hiện tại (IsCustomerSupplied = true)
+                var existingWorkOrderParts = await _workOrderPartRepository.GetByBookingIdAsync(bookingId);
+                var existingCustomerParts = existingWorkOrderParts
+                    .Where(p => p.IsCustomerSupplied && p.SourceOrderItemId.HasValue)
+                    .ToList();
+
+                _logger.LogInformation("Booking {BookingId} hiện có {Count} phụ tùng khách cung cấp", bookingId, existingCustomerParts.Count);
+
+                // 4. Xử lý request mới (có thể null hoặc empty để xóa tất cả)
+                var newUsages = request.OrderItemUsages ?? new List<OrderItemUsageRequest>();
+                var newUsagesDict = newUsages
+                    .GroupBy(u => u.OrderItemId)
+                    .ToDictionary(g => g.Key, g => g.Sum(u => u.Quantity));
+
+                // 5. Xử lý bớt phụ tùng (có trong existing nhưng không có trong new)
+                foreach (var existingPart in existingCustomerParts)
+                {
+                    if (!existingPart.SourceOrderItemId.HasValue) continue;
+
+                    var orderItemId = existingPart.SourceOrderItemId.Value;
+                    var existingQty = existingPart.QuantityUsed;
+                    var newQty = newUsagesDict.GetValueOrDefault(orderItemId, 0);
+
+                    if (newQty < existingQty)
+                    {
+                        // Bớt phụ tùng: trả lại inventory
+                        var qtyToReturn = existingQty - newQty;
+                        await ReturnInventoryForOrderItemAsync(booking.CenterId, orderItemId, qtyToReturn);
+                        _logger.LogInformation(
+                            "Đã trả lại {Qty} units của OrderItem {OrderItemId} vào inventory cho booking {BookingId}",
+                            qtyToReturn, orderItemId, bookingId);
+
+                        if (newQty > 0)
+                        {
+                            // Cập nhật quantity
+                            existingPart.QuantityUsed = newQty;
+                            await _workOrderPartRepository.UpdateAsync(existingPart);
+                            _logger.LogInformation(
+                                "Đã cập nhật WorkOrderPart {WorkOrderPartId}: {NewQty} units",
+                                existingPart.WorkOrderPartId, newQty);
+                        }
+                        else
+                        {
+                            // Xóa WorkOrderPart
+                            await _workOrderPartRepository.DeleteByIdAsync(existingPart.WorkOrderPartId);
+                            _logger.LogInformation("Đã xóa WorkOrderPart {WorkOrderPartId}", existingPart.WorkOrderPartId);
+                        }
+                    }
+                    else if (newQty > existingQty)
+                    {
+                        // Thêm phụ tùng: validate và trừ inventory
+                        var qtyToAdd = newQty - existingQty;
+                        await ProcessOrderItemUsageAsync(bookingId, booking.CenterId, orderItemId, qtyToAdd);
+                        existingPart.QuantityUsed = newQty;
+                        await _workOrderPartRepository.UpdateAsync(existingPart);
+                        _logger.LogInformation(
+                            "Đã thêm {Qty} units vào WorkOrderPart {WorkOrderPartId}, tổng: {NewQty}",
+                            qtyToAdd, existingPart.WorkOrderPartId, newQty);
+                    }
+                    // Nếu newQty == existingQty: không cần làm gì
+                }
+
+                // 6. Xử lý thêm phụ tùng mới (có trong new nhưng không có trong existing)
+                var existingOrderItemIds = existingCustomerParts
+                    .Where(p => p.SourceOrderItemId.HasValue)
+                    .Select(p => p.SourceOrderItemId!.Value)
+                    .ToHashSet();
+
+                foreach (var newUsage in newUsages)
+                {
+                    if (!existingOrderItemIds.Contains(newUsage.OrderItemId))
+                    {
+                        // Phụ tùng mới: validate và trừ inventory, tạo WorkOrderPart
+                        await ProcessOrderItemUsageAsync(bookingId, booking.CenterId, newUsage.OrderItemId, newUsage.Quantity);
+                        _logger.LogInformation(
+                            "Đã thêm phụ tùng mới: OrderItem {OrderItemId}, Quantity: {Quantity}",
+                            newUsage.OrderItemId, newUsage.Quantity);
+                    }
+                }
+
+                _logger.LogInformation("Hoàn thành update phụ tùng khách cung cấp cho booking {BookingId}", bookingId);
+
+                // 7. Return updated booking
+                return await GetBookingByIdAsync(bookingId);
+            }
+            catch (ArgumentException)
+            {
+                throw; // Rethrow validation errors
+            }
+            catch (InvalidOperationException)
+            {
+                throw; // Rethrow business logic errors
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi update phụ tùng khách cung cấp cho booking {BookingId}", bookingId);
+                throw new Exception($"Lỗi khi update phụ tùng khách cung cấp: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Xử lý một OrderItemUsage (validate và trừ inventory, tạo/cập nhật WorkOrderPart)
+        /// </summary>
+        private async Task ProcessOrderItemUsageAsync(int bookingId, int centerId, int orderItemId, int quantity)
+        {
+            // Validate OrderItem
+            var orderItem = await _orderRepository.GetOrderItemByIdAsync(orderItemId);
+            if (orderItem == null)
+                throw new ArgumentException($"OrderItem {orderItemId} không tồn tại");
+
+            // Validate Order
+            var order = await _orderRepository.GetByIdAsync(orderItem.OrderId);
+            if (order == null || order.Status != "PAID")
+                throw new ArgumentException($"Order {orderItem.OrderId} chưa thanh toán hoặc không tồn tại");
+
+            // Validate FulfillmentCenterId == CenterId
+            if (order.FulfillmentCenterId != centerId)
+                throw new ArgumentException(
+                    $"Phụ tùng đã mua tại chi nhánh {order.FulfillmentCenterId}, không thể sử dụng tại chi nhánh {centerId}");
+
+            // Validate AvailableQty
+            var availableQty = orderItem.Quantity - orderItem.ConsumedQty;
+            if (availableQty < quantity)
+                throw new ArgumentException($"Không đủ phụ tùng. Còn lại: {availableQty}, cần: {quantity}");
+
+            // Validate và trừ inventory
+            var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+            var invPart = inventory?.InventoryParts?.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+            if (invPart == null)
+                throw new InvalidOperationException($"Không tìm thấy part {orderItem.PartId} trong inventory");
+
+            if (invPart.ReservedQty < quantity)
+            {
+                _logger.LogWarning(
+                    "ReservedQty không đủ cho part {PartId}. ReservedQty: {ReservedQty}, cần: {Quantity}",
+                    orderItem.PartId, invPart.ReservedQty, quantity);
+            }
+
+            // Kiểm tra ReservedQty để đảm bảo hàng đã được reserve cho order này
+            if (invPart.ReservedQty < quantity)
+                throw new InvalidOperationException(
+                    $"ReservedQty không đủ. ReservedQty: {invPart.ReservedQty}, cần: {quantity}");
+
+            // Release reserve khi tạo booking (hàng đã được sử dụng)
+            // CurrentStock đã được trừ khi Order PAID, chỉ cần release ReservedQty
+            // Release ReservedQty (hàng đã được sử dụng cho booking)
+            invPart.ReservedQty -= quantity; // Release ReservedQty - hàng đã được sử dụng
+            if (inventory != null)
+            {
+                await _inventoryRepository.UpdateInventoryAsync(inventory);
+            }
+            _logger.LogInformation(
+                "Đã release reserve {Quantity} units của part {PartId} từ center {CenterId}. CurrentStock: {CurrentStock} (đã trừ khi Order PAID), ReservedQty: {ReservedQty}, AvailableQty: {AvailableQty}",
+                quantity, orderItem.PartId, centerId, invPart.CurrentStock, invPart.ReservedQty,
+                invPart.CurrentStock - invPart.ReservedQty);
+
+            // Tạo hoặc cập nhật WorkOrderPart
+            var existingWorkOrderPart = (await _workOrderPartRepository.GetByBookingIdAsync(bookingId))
+                .FirstOrDefault(p => p.IsCustomerSupplied && p.SourceOrderItemId == orderItemId);
+
+            if (existingWorkOrderPart != null)
+            {
+                existingWorkOrderPart.QuantityUsed += quantity;
+                await _workOrderPartRepository.UpdateAsync(existingWorkOrderPart);
+            }
+            else
+            {
+                var workOrderPart = new WorkOrderPart
+                {
+                    BookingId = bookingId,
+                    PartId = orderItem.PartId,
+                    QuantityUsed = quantity,
+                    Status = "DRAFT",
+                    IsCustomerSupplied = true,
+                    SourceOrderItemId = orderItemId
+                };
+                await _workOrderPartRepository.AddAsync(workOrderPart);
+            }
+        }
+
+        /// <summary>
+        /// Trả lại inventory cho OrderItem (khi bớt phụ tùng)
+        /// </summary>
+        private async Task ReturnInventoryForOrderItemAsync(int centerId, int orderItemId, int quantity)
+        {
+            var orderItem = await _orderRepository.GetOrderItemByIdAsync(orderItemId);
+            if (orderItem == null)
+                throw new ArgumentException($"OrderItem {orderItemId} không tồn tại");
+
+            var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
+            var invPart = inventory?.InventoryParts?.FirstOrDefault(ip => ip.PartId == orderItem.PartId);
+            if (invPart == null)
+                throw new InvalidOperationException($"Không tìm thấy part {orderItem.PartId} trong inventory");
+
+            // Trả lại inventory khi bớt phụ tùng
+            // Trả lại CurrentStock (hàng về lại kho)
+            // Trả lại ReservedQty (reserve lại cho khách)
+            invPart.CurrentStock += quantity; // Trả lại CurrentStock - hàng về lại kho
+            invPart.ReservedQty += quantity; // Trả lại ReservedQty - reserve lại cho khách
+            if (inventory != null)
+            {
+                await _inventoryRepository.UpdateInventoryAsync(inventory);
+            }
+            _logger.LogInformation(
+                "Đã trả lại {Quantity} units của part {PartId} vào center {CenterId}. CurrentStock: {CurrentStock}, ReservedQty: {ReservedQty}",
+                quantity, orderItem.PartId, centerId, invPart.CurrentStock, invPart.ReservedQty);
         }
     }
 }

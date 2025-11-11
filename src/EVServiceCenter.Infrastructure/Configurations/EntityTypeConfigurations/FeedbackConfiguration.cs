@@ -14,7 +14,9 @@ public sealed class FeedbackConfiguration : IEntityTypeConfiguration<Feedback>
         entity.Property(e => e.FeedbackId).HasColumnName("FeedbackID");
         entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
         entity.Property(e => e.OrderId).HasColumnName("OrderID");
-        entity.Property(e => e.BookingId).HasColumnName("BookingID");
+        // BookingID column does not exist in the database - ignoring this property and navigation
+        entity.Ignore(e => e.BookingId);
+        entity.Ignore(e => e.Booking);
         entity.Property(e => e.PartId).HasColumnName("PartID");
         entity.Property(e => e.TechnicianId).HasColumnName("TechnicianID");
 
@@ -34,11 +36,12 @@ public sealed class FeedbackConfiguration : IEntityTypeConfiguration<Feedback>
             .HasForeignKey(d => d.OrderId)
             .OnDelete(DeleteBehavior.ClientSetNull);
 
-        entity.HasOne(d => d.Booking)
-            .WithMany()
-            .HasForeignKey(d => d.BookingId)
-            .OnDelete(DeleteBehavior.ClientSetNull);
-        
+        // Booking relationship removed - BookingID column does not exist in database
+        // entity.HasOne(d => d.Booking)
+        //     .WithMany()
+        //     .HasForeignKey(d => d.BookingId)
+        //     .OnDelete(DeleteBehavior.ClientSetNull);
+
         entity.HasOne(d => d.Part)
             .WithMany()
             .HasForeignKey(d => d.PartId)

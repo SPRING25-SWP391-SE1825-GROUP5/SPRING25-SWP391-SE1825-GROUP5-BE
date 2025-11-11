@@ -9,7 +9,12 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
     public void Configure(EntityTypeBuilder<Booking> entity)
     {
         entity.HasKey(e => e.BookingId);
-        entity.ToTable("Bookings", "dbo");
+        entity.ToTable("Bookings", "dbo", t =>
+        {
+            // CHECK constraint for Status - must match BookingStatusConstants
+            t.HasCheckConstraint("CK_Bookings_Status",
+                "[Status] IN ('PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS', 'COMPLETED', 'PAID', 'CANCELLED')");
+        });
 
         entity.Property(e => e.BookingId).HasColumnName("BookingID");
         entity.Property(e => e.CenterId).HasColumnName("CenterID");

@@ -21,6 +21,10 @@ public class OrderResponse
     // Gợi ý center fulfill gần nhất (không lưu DB, chỉ trả về lúc tạo đơn)
     public int? SuggestedFulfillmentCenterId { get; set; }
     public double? SuggestedFulfillmentDistanceKm { get; set; }
+
+    // Chi nhánh đã fulfill order này (đã lưu trong DB sau khi thanh toán)
+    public int? FulfillmentCenterId { get; set; }
+    public string? FulfillmentCenterName { get; set; }
 }
 
 public class OrderItemResponse
@@ -30,6 +34,8 @@ public class OrderItemResponse
     public required string PartName { get; set; } = string.Empty;
     public required string PartNumber { get; set; } = string.Empty;
     public required string Brand { get; set; } = string.Empty;
+    public string? ImageUrl { get; set; }
+    public decimal? Rating { get; set; }
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal LineTotal { get; set; }

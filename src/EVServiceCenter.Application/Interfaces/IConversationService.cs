@@ -34,5 +34,6 @@ namespace EVServiceCenter.Application.Interfaces
         Task<ConversationResponse> ReassignCenterAsync(long conversationId, int newCenterId, string? reason = null);
         Task<List<ConversationResponse>> GetConversationsByStaffIdAsync(int staffId, int page = 0, int pageSize = 0);
         Task<List<ConversationResponse>> GetUnassignedConversationsAsync(int page = 0, int pageSize = 0);
+        Task<List<object>> GetStaffByCenterAsync(int centerId);
     }
 }

@@ -42,7 +42,7 @@ public class FeedbackController : ControllerBase
                 .OrderByDescending(x => x.CreatedAt);
 
             var total = await query.CountAsync();
-            
+
             // Lấy danh sách feedback IDs trước (chỉ select FeedbackId để tránh lỗi)
             var feedbackIds = await query
                 .Skip((page - 1) * pageSize)
@@ -52,9 +52,9 @@ public class FeedbackController : ControllerBase
 
             if (feedbackIds.Count == 0)
             {
-                return Ok(new 
-                { 
-                    success = true, 
+                return Ok(new
+                {
+                    success = true,
                     message = "Lấy danh sách đánh giá thành công",
                     total,
                     page,
@@ -69,7 +69,7 @@ public class FeedbackController : ControllerBase
                 .Where(x => feedbackIds.Contains(x.FeedbackId))
                 .Include(x => x.Part)
                 .Include(x => x.Technician)
-                    .ThenInclude(t => t != null ? t.User : null!)
+                    .ThenInclude(t => t!.User)
                 .ToListAsync();
 
             // Map sang DTO (load Part và Technician riêng để tránh lỗi column)
@@ -89,11 +89,11 @@ public class FeedbackController : ControllerBase
 
             // Map sang DTO
             var data = feedbacks.OrderByDescending(x => x.CreatedAt)
-                .Select(x => new 
-                { 
+                .Select(x => new
+                {
                     feedbackId = x.FeedbackId,
                     customerId = x.CustomerId,
-                    bookingId = x.BookingId,
+                    bookingId = (int?)null, // BookingID column does not exist in database
                     orderId = x.OrderId,
                     partId = x.PartId,
                     technicianId = x.TechnicianId,
@@ -102,23 +102,23 @@ public class FeedbackController : ControllerBase
                     isAnonymous = x.IsAnonymous,
                     createdAt = x.CreatedAt,
                     // Lấy thông tin liên quan từ dictionary
-                    partName = x.PartId.HasValue && parts.ContainsKey(x.PartId.Value) 
-                        ? parts[x.PartId.Value].PartName 
+                    partName = x.PartId.HasValue && parts.ContainsKey(x.PartId.Value)
+                        ? parts[x.PartId.Value].PartName
                         : null,
-                    technicianName = x.TechnicianId.HasValue && technicians.ContainsKey(x.TechnicianId.Value) 
-                        ? technicians[x.TechnicianId.Value].User?.FullName 
+                    technicianName = x.TechnicianId.HasValue && technicians.ContainsKey(x.TechnicianId.Value)
+                        ? technicians[x.TechnicianId.Value].User?.FullName
                         : null
                 })
                 .ToList();
 
-            return Ok(new 
-            { 
-                success = true, 
+            return Ok(new
+            {
+                success = true,
                 message = "Lấy danh sách đánh giá thành công",
                 total,
                 page,
                 pageSize,
-                data 
+                data
             });
         }
         catch (Exception ex)
@@ -161,7 +161,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = orderId,
-            BookingId = null,
+            // BookingId = null, // BookingID column does not exist in database - ignored by EF Core
             PartId = partId,
             TechnicianId = null,
             Rating = (byte)request.Rating,
@@ -179,16 +179,16 @@ public class FeedbackController : ControllerBase
     public async Task<IActionResult> CreateForBooking(int bookingId, [FromBody] CreateBookingFeedbackRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors = ModelState });
-        
+
         var booking = await _db.Bookings.AsNoTracking().FirstOrDefaultAsync(b => b.BookingId == bookingId);
         if (booking == null) return BadRequest(new { success = false, message = $"bookingId {bookingId} không tồn tại" });
-        
+
         var completedStatuses = new[] { "COMPLETED", "DONE", "FINISHED" };
         if (string.IsNullOrWhiteSpace(booking.Status) || !completedStatuses.Contains(booking.Status.ToUpper()))
         {
             return BadRequest(new { success = false, message = "Chỉ được đánh giá sau khi booking đã hoàn thành" });
         }
-        
+
         var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
         if (customer == null) return BadRequest(new { success = false, message = $"customerId {request.CustomerId} không tồn tại" });
 
@@ -196,7 +196,7 @@ public class FeedbackController : ControllerBase
         {
             var techExists = await _db.Technicians.AsNoTracking().AnyAsync(t => t.TechnicianId == request.TechnicianId.Value);
             if (!techExists) return BadRequest(new { success = false, message = $"technicianId {request.TechnicianId} không tồn tại" });
-            
+
             if (booking.TechnicianTimeSlot?.TechnicianId != request.TechnicianId.Value)
             {
                 return BadRequest(new { success = false, message = "Kỹ thuật viên không phụ trách booking này" });
@@ -207,7 +207,7 @@ public class FeedbackController : ControllerBase
         {
             var partExists = await _db.Parts.AsNoTracking().AnyAsync(p => p.PartId == request.PartId.Value);
             if (!partExists) return BadRequest(new { success = false, message = $"partId {request.PartId} không tồn tại" });
-            
+
             var partInBooking = await _db.WorkOrderParts.AsNoTracking().AnyAsync(wop => wop.BookingId == bookingId && wop.PartId == request.PartId.Value);
             if (!partInBooking) return BadRequest(new { success = false, message = "Phụ tùng không thuộc booking này" });
         }
@@ -216,7 +216,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = null,
-            BookingId = bookingId,
+            // BookingId = bookingId, // BookingID column does not exist in database - ignored by EF Core
             PartId = request.PartId,
             TechnicianId = request.TechnicianId,
             Rating = (byte)request.Rating,
@@ -224,7 +224,7 @@ public class FeedbackController : ControllerBase
             IsAnonymous = request.IsAnonymous,
             CreatedAt = DateTime.UtcNow
         };
-        
+
         _db.Feedbacks.Add(fb);
         await _db.SaveChangesAsync();
         return Ok(new { success = true, data = new { fb.FeedbackId } });
@@ -291,7 +291,7 @@ public class FeedbackController : ControllerBase
     public async Task<IActionResult> GetById(int feedbackId)
     {
         var fb = await _db.Feedbacks.AsNoTracking().Where(x => x.FeedbackId == feedbackId)
-            .Select(x => new { x.FeedbackId, x.CustomerId, x.PartId, x.TechnicianId, x.Rating, x.Comment, x.IsAnonymous, x.CreatedAt, x.OrderId, x.BookingId })
+            .Select(x => new { x.FeedbackId, x.CustomerId, x.PartId, x.TechnicianId, x.Rating, x.Comment, x.IsAnonymous, x.CreatedAt, x.OrderId, BookingId = (int?)null }) // BookingID column does not exist in database
             .FirstOrDefaultAsync();
         if (fb == null) return NotFound(new { success = false, message = "Feedback không tồn tại" });
         return Ok(new { success = true, data = fb });
@@ -353,7 +353,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = null,
-            BookingId = null,
+            // BookingId = null, // BookingID column does not exist in database - ignored by EF Core
             PartId = partId,
             TechnicianId = null,
             Rating = (byte)request.Rating,
@@ -378,7 +378,7 @@ public class FeedbackController : ControllerBase
         {
             CustomerId = request.CustomerId,
             OrderId = null,
-            BookingId = null,
+            // BookingId = null, // BookingID column does not exist in database - ignored by EF Core
             PartId = null,
             TechnicianId = technicianId,
             Rating = (byte)request.Rating,
@@ -404,12 +404,219 @@ public class FeedbackController : ControllerBase
 
     [HttpGet("bookings/{bookingId:int}")]
     [Authorize(Policy = "AuthenticatedUser")]
-    public async Task<IActionResult> ListByBooking(int bookingId)
+    public Task<IActionResult> ListByBooking(int bookingId)
     {
-        var data = await _db.Feedbacks.AsNoTracking().Where(x => x.BookingId == bookingId)
-            .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new { x.FeedbackId, x.Rating, x.Comment, x.IsAnonymous, x.CreatedAt, x.PartId, x.TechnicianId })
-            .ToListAsync();
-        return Ok(new { success = true, data });
+        // BookingID column does not exist in database - return empty list
+        // This endpoint is kept for API compatibility but will always return empty
+        return Task.FromResult<IActionResult>(Ok(new { success = true, data = new List<object>() }));
+    }
+
+    /// <summary>
+    /// Admin: Lấy danh sách feedback với pagination, filter, search, sort
+    /// </summary>
+    [HttpGet("admin")]
+    [Authorize(Roles = "ADMIN,STAFF")]
+    public async Task<IActionResult> ListForAdmin(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] int? customerId = null,
+        [FromQuery] int? bookingId = null,
+        [FromQuery] int? orderId = null,
+        [FromQuery] int? partId = null,
+        [FromQuery] int? technicianId = null,
+        [FromQuery] int? minRating = null,
+        [FromQuery] int? maxRating = null,
+        [FromQuery] bool? isAnonymous = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] string sortBy = "createdAt",
+        [FromQuery] string sortOrder = "desc")
+    {
+        try
+        {
+            if (page < 1) return BadRequest(new { success = false, message = "Page phải lớn hơn 0" });
+            if (pageSize < 1 || pageSize > 100) return BadRequest(new { success = false, message = "Page size phải từ 1 đến 100" });
+
+            var q = _db.Feedbacks
+                .AsNoTracking()
+                .Include(f => f.Customer)
+                    .ThenInclude(c => c.User)
+                .Include(f => f.Part)
+                .Include(f => f.Technician)
+                    .ThenInclude(t => t!.User)
+                // .Include(f => f.Booking) // BookingID column does not exist in database
+                .Include(f => f.Order)
+                .AsQueryable();
+
+            // Apply filters
+            if (customerId.HasValue)
+                q = q.Where(f => f.CustomerId == customerId.Value);
+
+            // BookingId filter removed - BookingID column does not exist in database
+            // if (bookingId.HasValue)
+            //     q = q.Where(f => f.BookingId == bookingId.Value);
+
+            if (orderId.HasValue)
+                q = q.Where(f => f.OrderId == orderId.Value);
+
+            if (partId.HasValue)
+                q = q.Where(f => f.PartId == partId.Value);
+
+            if (technicianId.HasValue)
+                q = q.Where(f => f.TechnicianId == technicianId.Value);
+
+            if (minRating.HasValue)
+                q = q.Where(f => f.Rating >= minRating.Value);
+
+            if (maxRating.HasValue)
+                q = q.Where(f => f.Rating <= maxRating.Value);
+
+            if (isAnonymous.HasValue)
+                q = q.Where(f => f.IsAnonymous == isAnonymous.Value);
+
+            if (from.HasValue)
+                q = q.Where(f => f.CreatedAt >= from.Value);
+
+            if (to.HasValue)
+                q = q.Where(f => f.CreatedAt <= to.Value);
+
+            // Search term - search by customer name, part name, technician name, comment
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var search = searchTerm.Trim().ToLower();
+                q = q.Where(f =>
+                    (f.Customer != null && f.Customer.User != null && f.Customer.User.FullName != null && f.Customer.User.FullName.ToLower().Contains(search)) ||
+                    (f.Part != null && f.Part.PartName != null && f.Part.PartName.ToLower().Contains(search)) ||
+                    (f.Technician != null && f.Technician.User != null && f.Technician.User.FullName != null && f.Technician.User.FullName.ToLower().Contains(search)) ||
+                    (f.Comment != null && f.Comment.ToLower().Contains(search))
+                );
+            }
+
+            // Get total count before pagination
+            var totalCount = await q.CountAsync();
+
+            // Apply sorting
+            var isDescending = sortOrder?.ToLowerInvariant() == "desc";
+            switch (sortBy?.ToLowerInvariant())
+            {
+                case "rating":
+                    q = isDescending ? q.OrderByDescending(f => f.Rating) : q.OrderBy(f => f.Rating);
+                    break;
+                case "createdat":
+                default:
+                    q = isDescending ? q.OrderByDescending(f => f.CreatedAt) : q.OrderBy(f => f.CreatedAt);
+                    break;
+            }
+
+            // Apply pagination
+            var items = await q
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(f => new
+                {
+                    feedbackId = f.FeedbackId,
+                    customerId = f.CustomerId,
+                    customerName = f.Customer != null && f.Customer.User != null ? f.Customer.User.FullName : null,
+                    customerEmail = f.Customer != null && f.Customer.User != null ? f.Customer.User.Email : null,
+                    bookingId = (int?)null, // BookingID column does not exist in database
+                    orderId = f.OrderId,
+                    partId = f.PartId,
+                    partName = f.Part != null ? f.Part.PartName : null,
+                    technicianId = f.TechnicianId,
+                    technicianName = f.Technician != null && f.Technician.User != null ? f.Technician.User.FullName : null,
+                    rating = f.Rating,
+                    comment = f.Comment,
+                    isAnonymous = f.IsAnonymous,
+                    createdAt = f.CreatedAt
+                })
+                .ToListAsync();
+
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+            var pagination = new
+            {
+                CurrentPage = page,
+                PageSize = pageSize,
+                TotalItems = totalCount,
+                TotalPages = totalPages,
+                HasNextPage = page < totalPages,
+                HasPreviousPage = page > 1
+            };
+
+            return Ok(new { success = true, data = items, pagination });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = $"Lỗi khi lấy danh sách feedback: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Admin: Lấy thống kê feedback
+    /// </summary>
+    [HttpGet("stats")]
+    [Authorize(Roles = "ADMIN,STAFF")]
+    public async Task<IActionResult> GetStats()
+    {
+        try
+        {
+            var allFeedbacks = await _db.Feedbacks.AsNoTracking().ToListAsync();
+
+            var total = allFeedbacks.Count;
+            var avgRating = total > 0 ? Math.Round(allFeedbacks.Average(f => (double)f.Rating), 2) : 0;
+
+            var byRating = allFeedbacks
+                .GroupBy(f => f.Rating)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var anonymousCount = allFeedbacks.Count(f => f.IsAnonymous);
+            var nonAnonymousCount = total - anonymousCount;
+
+            var byType = new
+            {
+                part = allFeedbacks.Count(f => f.PartId.HasValue && !f.TechnicianId.HasValue),
+                technician = allFeedbacks.Count(f => f.TechnicianId.HasValue && !f.PartId.HasValue),
+                both = allFeedbacks.Count(f => f.PartId.HasValue && f.TechnicianId.HasValue),
+                general = allFeedbacks.Count(f => !f.PartId.HasValue && !f.TechnicianId.HasValue)
+            };
+
+            var bySource = new
+            {
+                booking = 0, // BookingID column does not exist in database
+                order = allFeedbacks.Count(f => f.OrderId.HasValue),
+                public_ = allFeedbacks.Count(f => !f.OrderId.HasValue) // Removed BookingId check since column doesn't exist
+            };
+
+            var recentCount = allFeedbacks.Count(f => f.CreatedAt >= DateTime.UtcNow.AddDays(-7));
+            var thisMonthCount = allFeedbacks.Count(f => f.CreatedAt >= new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1));
+
+            return Ok(new
+            {
+                success = true,
+                data = new
+                {
+                    total,
+                    averageRating = avgRating,
+                    byRating = new Dictionary<int, int>
+                    {
+                        { 1, byRating.ContainsKey(1) ? byRating[1] : 0 },
+                        { 2, byRating.ContainsKey(2) ? byRating[2] : 0 },
+                        { 3, byRating.ContainsKey(3) ? byRating[3] : 0 },
+                        { 4, byRating.ContainsKey(4) ? byRating[4] : 0 },
+                        { 5, byRating.ContainsKey(5) ? byRating[5] : 0 }
+                    },
+                    anonymous = anonymousCount,
+                    nonAnonymous = nonAnonymousCount,
+                    byType,
+                    bySource,
+                    recent = recentCount,
+                    thisMonth = thisMonthCount
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = $"Lỗi khi lấy thống kê feedback: {ex.Message}" });
+        }
     }
 }

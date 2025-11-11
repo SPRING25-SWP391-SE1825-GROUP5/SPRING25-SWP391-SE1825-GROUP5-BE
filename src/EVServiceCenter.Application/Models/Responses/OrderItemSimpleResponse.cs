@@ -5,8 +5,14 @@ namespace EVServiceCenter.Application.Models.Responses
 		public int OrderItemId { get; set; }
 		public int PartId { get; set; }
 		public required string PartName { get; set; }
+		public string? PartNumber { get; set; }
+		public string? Brand { get; set; }
+		public string? ImageUrl { get; set; }
+		public decimal? Rating { get; set; }
 		public decimal UnitPrice { get; set; }
 		public int Quantity { get; set; }
+		public int ConsumedQty { get; set; } // Số lượng đã dùng
+		public int AvailableQty => Quantity - ConsumedQty; // Số lượng còn lại có thể dùng
 		public decimal Subtotal { get; set; }
 	}
 }

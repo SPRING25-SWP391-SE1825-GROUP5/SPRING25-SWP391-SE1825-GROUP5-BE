@@ -67,7 +67,7 @@ namespace EVServiceCenter.Application.Services
                     {"vnp_OrderType", "other"},
                     {"vnp_Locale", _locale},
                     {"vnp_ReturnUrl", _returnUrl},
-                    {"vnp_IpAddr", "127.0.0.1"}, // Có thể lấy từ request sau
+                    {"vnp_IpAddr", EVServiceCenter.Application.Constants.AppConstants.DefaultIpAddress.Localhost}, // Có thể lấy từ request sau
                     {"vnp_CreateDate", DateTime.Now.ToString("yyyyMMddHHmmss")}
                 };
 

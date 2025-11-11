@@ -6,6 +6,7 @@ using EVServiceCenter.Application.Models.Responses;
 using System;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
+using EVServiceCenter.Domain.Interfaces;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
@@ -15,12 +16,14 @@ namespace EVServiceCenter.WebAPI.Controllers
     {
         private readonly ICenterService _centerService;
         private readonly IInventoryService _inventoryService;
+        private readonly IInventoryRepository _inventoryRepository;
         private static System.Collections.Generic.List<(int centerId, double lat, double lng)>? _geoCache;
 
-        public CenterController(ICenterService centerService, IInventoryService inventoryService)
+        public CenterController(ICenterService centerService, IInventoryService inventoryService, IInventoryRepository inventoryRepository)
         {
             _centerService = centerService;
             _inventoryService = inventoryService;
+            _inventoryRepository = inventoryRepository;
         }
 
         /// <summary>
@@ -349,6 +352,309 @@ namespace EVServiceCenter.WebAPI.Controllers
                     message = "Lỗi hệ thống: " + ex.Message
                 });
             }
+        }
+
+        /// <summary>
+        /// Lấy danh sách tất cả trung tâm có hàng cho các parts cụ thể
+        /// </summary>
+        /// <param name="partIds">Danh sách PartId (comma-separated hoặc query array)</param>
+        /// <param name="lat">Vĩ độ (optional, để tính distance)</param>
+        /// <param name="lng">Kinh độ (optional, để tính distance)</param>
+        /// <returns>Danh sách trung tâm có đủ hàng</returns>
+        [HttpGet("available-for-parts")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetAvailableCentersForParts(
+            [FromQuery] string? partIds = null,
+            [FromQuery] double? lat = null,
+            [FromQuery] double? lng = null)
+        {
+            try
+            {
+                // Parse partIds
+                var partIdList = new System.Collections.Generic.List<int>();
+                if (!string.IsNullOrWhiteSpace(partIds))
+                {
+                    foreach (var idStr in partIds.Split(',', System.StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        if (int.TryParse(idStr.Trim(), out var partId) && partId > 0)
+                            partIdList.Add(partId);
+                    }
+                }
+
+                if (partIdList.Count == 0)
+                    return BadRequest(new { success = false, message = "Vui lòng cung cấp ít nhất một PartId" });
+
+                // Validate coordinates nếu có
+                if (lat.HasValue && (lat.Value < -90 || lat.Value > 90))
+                    return BadRequest(new { success = false, message = "Vĩ độ không hợp lệ" });
+                if (lng.HasValue && (lng.Value < -180 || lng.Value > 180))
+                    return BadRequest(new { success = false, message = "Kinh độ không hợp lệ" });
+
+                // Load geo cache nếu cần tính distance
+                if (lat.HasValue && lng.HasValue && _geoCache == null)
+                {
+                    try
+                    {
+                        var path = System.IO.Path.Combine(System.AppContext.BaseDirectory, "wwwroot", "center-geo.json");
+                        if (System.IO.File.Exists(path))
+                        {
+                            var json = await System.IO.File.ReadAllTextAsync(path);
+                            var arr = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<GeoItem>>(json) ?? new();
+                            _geoCache = arr.Select(x => (x.centerId, x.lat, x.lng)).ToList();
+                        }
+                        else
+                        {
+                            _geoCache = new();
+                        }
+                    }
+                    catch { _geoCache = new(); }
+                }
+
+                // Lấy tất cả centers active
+                var centersPage = await _centerService.GetActiveCentersAsync(1, int.MaxValue, null, null);
+                var centers = centersPage.Centers;
+
+                var result = new System.Collections.Generic.List<object>();
+
+                foreach (var center in centers)
+                {
+                    var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(center.CenterId);
+                    if (inventory == null) continue;
+
+                    var inventoryParts = inventory.InventoryParts ?? new System.Collections.Generic.List<Domain.Entities.InventoryPart>();
+                    var partsInfo = new System.Collections.Generic.List<object>();
+                    bool allPartsAvailable = true;
+
+                    foreach (var partId in partIdList)
+                    {
+                        var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == partId);
+                        if (invPart == null)
+                        {
+                            allPartsAvailable = false;
+                            partsInfo.Add(new
+                            {
+                                partId = partId,
+                                partName = $"Part {partId}",
+                                currentStock = 0,
+                                reservedQty = 0,
+                                availableQty = 0,
+                                hasEnough = false
+                            });
+                            continue;
+                        }
+
+                        var availableQty = invPart.CurrentStock - invPart.ReservedQty;
+                        var hasEnough = availableQty > 0;
+
+                        partsInfo.Add(new
+                        {
+                            partId = invPart.PartId,
+                            partName = invPart.Part?.PartName ?? $"Part {invPart.PartId}",
+                            currentStock = invPart.CurrentStock,
+                            reservedQty = invPart.ReservedQty,
+                            availableQty = availableQty,
+                            hasEnough = hasEnough
+                        });
+
+                        if (!hasEnough) allPartsAvailable = false;
+                    }
+
+                    // Chỉ thêm center nếu có ít nhất một part có hàng
+                    if (partsInfo.Any(p => ((dynamic)p).hasEnough))
+                    {
+                        // Thêm distance nếu có coordinates
+                        if (lat.HasValue && lng.HasValue)
+                        {
+                            var geo = _geoCache?.FirstOrDefault(g => g.centerId == center.CenterId);
+                            if (geo != null && geo.Value.centerId != 0)
+                            {
+                                var distanceKm = HaversineKm(lat.Value, lng.Value, geo.Value.lat, geo.Value.lng);
+                                result.Add(new
+                                {
+                                    centerId = center.CenterId,
+                                    centerName = center.CenterName,
+                                    address = center.Address,
+                                    distanceKm = System.Math.Round(distanceKm, 2),
+                                    parts = partsInfo,
+                                    allPartsAvailable = allPartsAvailable
+                                });
+                                continue;
+                            }
+                        }
+
+                        result.Add(new
+                        {
+                            centerId = center.CenterId,
+                            centerName = center.CenterName,
+                            address = center.Address,
+                            parts = partsInfo,
+                            allPartsAvailable = allPartsAvailable
+                        });
+                    }
+                }
+
+                // Sort by distance nếu có, hoặc theo centerId
+                if (lat.HasValue && lng.HasValue)
+                {
+                    result = result.OrderBy(x => ((dynamic)x).distanceKm ?? double.MaxValue).ToList();
+                }
+                else
+                {
+                    result = result.OrderBy(x => ((dynamic)x).centerId).ToList();
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    message = $"Tìm thấy {result.Count} trung tâm có hàng",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Validate xem trung tâm có đủ hàng cho các parts cụ thể không
+        /// </summary>
+        /// <param name="request">Request chứa centerId và danh sách items</param>
+        /// <returns>Kết quả validation</returns>
+        [HttpPost("validate-stock")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ValidateStock([FromBody] ValidateStockRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid || request == null)
+                {
+                    var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Dữ liệu không hợp lệ",
+                        errors = errors
+                    });
+                }
+
+                // Validate centerId
+                if (request.CenterId <= 0)
+                    return BadRequest(new { success = false, message = "CenterId không hợp lệ" });
+
+                // Validate items
+                if (request.Items == null || request.Items.Count == 0)
+                    return BadRequest(new { success = false, message = "Danh sách items không được rỗng" });
+
+                // Lấy center info
+                var center = await _centerService.GetCenterByIdAsync(request.CenterId);
+                if (center == null)
+                    return NotFound(new { success = false, message = "Trung tâm không tồn tại" });
+
+                // Lấy inventory
+                var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(request.CenterId);
+                if (inventory == null)
+                    return BadRequest(new { success = false, message = $"Không tìm thấy kho của trung tâm {request.CenterId}" });
+
+                var inventoryParts = inventory.InventoryParts ?? new System.Collections.Generic.List<Domain.Entities.InventoryPart>();
+
+                var itemsResult = new System.Collections.Generic.List<object>();
+                bool allItemsAvailable = true;
+
+                foreach (var item in request.Items)
+                {
+                    if (item.PartId <= 0 || item.Quantity <= 0)
+                    {
+                        itemsResult.Add(new
+                        {
+                            partId = item.PartId,
+                            partName = $"Part {item.PartId}",
+                            requestedQty = item.Quantity,
+                            currentStock = 0,
+                            reservedQty = 0,
+                            availableQty = 0,
+                            hasEnough = false,
+                            error = "PartId hoặc Quantity không hợp lệ"
+                        });
+                        allItemsAvailable = false;
+                        continue;
+                    }
+
+                    var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == item.PartId);
+                    if (invPart == null)
+                    {
+                        itemsResult.Add(new
+                        {
+                            partId = item.PartId,
+                            partName = $"Part {item.PartId}",
+                            requestedQty = item.Quantity,
+                            currentStock = 0,
+                            reservedQty = 0,
+                            availableQty = 0,
+                            hasEnough = false,
+                            error = "Phụ tùng không có trong kho"
+                        });
+                        allItemsAvailable = false;
+                        continue;
+                    }
+
+                    var availableQty = invPart.CurrentStock - invPart.ReservedQty;
+                    var hasEnough = availableQty >= item.Quantity;
+
+                    itemsResult.Add(new
+                    {
+                        partId = invPart.PartId,
+                        partName = invPart.Part?.PartName ?? $"Part {invPart.PartId}",
+                        requestedQty = item.Quantity,
+                        currentStock = invPart.CurrentStock,
+                        reservedQty = invPart.ReservedQty,
+                        availableQty = availableQty,
+                        hasEnough = hasEnough,
+                        error = hasEnough ? null : $"Không đủ hàng. Có: {availableQty}, cần: {item.Quantity}"
+                    });
+
+                    if (!hasEnough) allItemsAvailable = false;
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    data = new
+                    {
+                        centerId = center.CenterId,
+                        centerName = center.CenterName,
+                        address = center.Address,
+                        isValid = allItemsAvailable,
+                        allItemsAvailable = allItemsAvailable,
+                        items = itemsResult
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Lỗi hệ thống: " + ex.Message
+                });
+            }
+        }
+
+        // Request model cho ValidateStock
+        public class ValidateStockRequest
+        {
+            public int CenterId { get; set; }
+            public System.Collections.Generic.List<ValidateStockItem> Items { get; set; } = new();
+        }
+
+        public class ValidateStockItem
+        {
+            public int PartId { get; set; }
+            public int Quantity { get; set; }
         }
 
     }

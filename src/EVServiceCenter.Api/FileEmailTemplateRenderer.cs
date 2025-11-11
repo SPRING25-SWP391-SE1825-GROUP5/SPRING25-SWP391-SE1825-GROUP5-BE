@@ -24,12 +24,28 @@ namespace EVServiceCenter.Api
 
             if (placeholders != null)
             {
-                foreach (var kv in placeholders)
+                // Xử lý conditional rendering TRƯỚC khi replace placeholder
+                // {{#if fieldName}}...{{/if}} - hiển thị nếu fieldName không rỗng
+                var conditionalPattern = @"{{#if\s+(\w+)}}(.*?){{/if}}";
+                html = System.Text.RegularExpressions.Regex.Replace(html, conditionalPattern, (match) =>
                 {
-                    html = html.Replace("{{" + kv.Key + "}}", kv.Value ?? string.Empty);
-                }
-                
-                // Xử lý logic có/không có discount
+                    var fieldName = match.Groups[1].Value;
+                    var content = match.Groups[2].Value;
+
+                    // Kiểm tra xem field có giá trị không rỗng không
+                    if (placeholders.ContainsKey(fieldName) && !string.IsNullOrWhiteSpace(placeholders[fieldName]))
+                    {
+                        // Hiển thị content (sẽ được replace placeholder sau)
+                        return content;
+                    }
+                    else
+                    {
+                        // Ẩn content
+                        return string.Empty;
+                    }
+                }, System.Text.RegularExpressions.RegexOptions.Singleline);
+
+                // Xử lý logic có/không có discount (đặc biệt)
                 if (placeholders.ContainsKey("hasDiscount"))
                 {
                     bool hasDiscount = placeholders["hasDiscount"] == "true";
@@ -44,6 +60,12 @@ namespace EVServiceCenter.Api
                         // Ẩn phần discount
                         html = System.Text.RegularExpressions.Regex.Replace(html, @"{{#if hasDiscount}}.*?{{/if}}", "", System.Text.RegularExpressions.RegexOptions.Singleline);
                     }
+                }
+
+                // Sau đó replace tất cả placeholder
+                foreach (var kv in placeholders)
+                {
+                    html = html.Replace("{{" + kv.Key + "}}", kv.Value ?? string.Empty);
                 }
             }
 

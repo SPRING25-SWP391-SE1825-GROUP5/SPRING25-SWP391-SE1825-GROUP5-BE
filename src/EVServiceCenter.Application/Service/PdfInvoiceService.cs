@@ -213,14 +213,14 @@ namespace EVServiceCenter.Application.Service
                     .SetMarginBottom(8);
 
                 vehicleInfoTable.AddCell(new Cell().Add(new Paragraph("Thông tin xe:").SetFont(boldFont).SetFontSize(9)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
-                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Biển số: {booking.Vehicle?.LicensePlate ?? "N/A"}").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
-                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Loại xe: {booking.Vehicle?.VehicleModel?.ModelName ?? "N/A"}").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
-                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Màu: {booking.Vehicle?.Color ?? "N/A"}").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Biển số: {booking.Vehicle?.LicensePlate ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Loại xe: {booking.Vehicle?.VehicleModel?.ModelName ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Màu: {booking.Vehicle?.Color ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
 
                 vehicleInfoTable.AddCell(new Cell().Add(new Paragraph("Kỹ thuật viên:").SetFont(boldFont).SetFontSize(9)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
                 vehicleInfoTable.AddCell(new Cell().Add(new Paragraph(booking.TechnicianTimeSlot?.Technician?.User?.FullName ?? "Chưa phân công").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
                 vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Ngày thực hiện: {booking.TechnicianTimeSlot?.WorkDate:dd/MM/yyyy}").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
-                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Thời gian: {booking.TechnicianTimeSlot?.Slot?.SlotLabel ?? booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString("HH:mm") ?? "N/A"}").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
+                vehicleInfoTable.AddCell(new Cell().Add(new Paragraph($"Thời gian: {booking.TechnicianTimeSlot?.Slot?.SlotLabel ?? booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString("HH:mm") ?? "Chưa cập nhật"}").SetFont(font).SetFontSize(8)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
 
                 document.Add(vehicleInfoTable);
 
@@ -244,7 +244,11 @@ namespace EVServiceCenter.Application.Service
                 var servicePrice = booking.Service?.BasePrice ?? 0m;
                 var packageDiscountAmount = invoice?.PackageDiscountAmount ?? 0m;
                 var promotionDiscountAmount = invoice?.PromotionDiscountAmount ?? 0m;
-                var partsAmount = invoice?.PartsAmount ?? 0m;
+                
+                // Tính lại partsAmount từ workOrderParts thực tế (chỉ tính phụ tùng không phải khách cung cấp)
+                var partsAmount = workOrderParts
+                    .Where(p => !p.IsCustomerSupplied) // Chỉ tính phụ tùng không phải khách cung cấp
+                    .Sum(p => (p.Part?.Price ?? 0m) * p.QuantityUsed);
 
                 // Kiểm tra xem booking có sử dụng Service Package không
                 var hasServicePackage = booking.AppliedCredit != null &&
@@ -611,14 +615,14 @@ namespace EVServiceCenter.Application.Service
                     .SetMarginBottom(20);
 
                 infoTable.AddCell(new Cell().Add(new Paragraph("Biển số:").SetFont(boldFont).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
-                infoTable.AddCell(new Cell().Add(new Paragraph(booking.Vehicle?.LicensePlate ?? "N/A").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                infoTable.AddCell(new Cell().Add(new Paragraph(booking.Vehicle?.LicensePlate ?? "Chưa cập nhật").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
                 infoTable.AddCell(new Cell().Add(new Paragraph("Ngày kiểm tra:").SetFont(boldFont).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
                 infoTable.AddCell(new Cell().Add(new Paragraph(DateTime.UtcNow.ToString("dd/MM/yyyy")).SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
 
                 infoTable.AddCell(new Cell().Add(new Paragraph("Loại xe:").SetFont(boldFont).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
-                infoTable.AddCell(new Cell().Add(new Paragraph(booking.Vehicle?.VehicleModel?.ModelName ?? "N/A").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                infoTable.AddCell(new Cell().Add(new Paragraph(booking.Vehicle?.VehicleModel?.ModelName ?? "Chưa cập nhật").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
                 infoTable.AddCell(new Cell().Add(new Paragraph("Kỹ thuật viên:").SetFont(boldFont).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
-                infoTable.AddCell(new Cell().Add(new Paragraph(booking.TechnicianTimeSlot?.Technician?.User?.FullName ?? "N/A").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
+                infoTable.AddCell(new Cell().Add(new Paragraph(booking.TechnicianTimeSlot?.Technician?.User?.FullName ?? "Chưa phân công").SetFont(font).SetFontSize(10)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(5));
 
                 document.Add(infoTable);
 
@@ -636,7 +640,7 @@ namespace EVServiceCenter.Application.Service
                     .SetMarginBottom(20);
 
                 // Header của bảng
-                var headers = new[] { "STT", "Hình minh họa", "Nội dung kiểm tra Bảo dưỡng", "Cấp bảo dưỡng", "Kết quả kiểm tra" };
+                var headers = new[] { "STT", "Hình minh họa", "Nội dung kiểm tra Bảo dưỡng", "Ghi chú", "Kết quả kiểm tra" };
                 foreach (var header in headers)
                 {
                     maintenanceTable.AddCell(new Cell()
@@ -668,17 +672,26 @@ namespace EVServiceCenter.Application.Service
                         .Add(new Paragraph(categoryName).SetFont(font).SetFontSize(10))
                         .SetPadding(8));
 
-                    // Cấp bảo dưỡng (để trống vì không có thông tin)
+                    // Ghi chú (hiển thị description nếu có)
+                    var notes = result.Description ?? "-";
                     maintenanceTable.AddCell(new Cell()
-                        .Add(new Paragraph("-").SetFont(font).SetFontSize(10))
+                        .Add(new Paragraph(notes).SetFont(font).SetFontSize(10))
                         .SetPadding(8)
                         .SetTextAlignment(TextAlignment.CENTER));
 
-                    // Kết quả kiểm tra với màu sắc
+                    // Kết quả kiểm tra với màu sắc (đổi sang tiếng Việt)
                     var resultText = result.Result?.ToUpper() ?? "PENDING";
+                    var resultTextVi = resultText switch
+                    {
+                        "PASS" => "Đạt",
+                        "FAIL" => "Không đạt",
+                        "PENDING" => "Chưa kiểm tra",
+                        "NA" => "Không áp dụng",
+                        _ => resultText
+                    };
                     var resultColor = GetResultColor(resultText);
                     maintenanceTable.AddCell(new Cell()
-                        .Add(new Paragraph(resultText).SetFont(boldFont).SetFontSize(10).SetFontColor(resultColor))
+                        .Add(new Paragraph(resultTextVi).SetFont(boldFont).SetFontSize(10).SetFontColor(resultColor))
                         .SetPadding(8)
                         .SetTextAlignment(TextAlignment.CENTER));
 
@@ -700,13 +713,13 @@ namespace EVServiceCenter.Application.Service
                 summaryTable.AddCell(new Cell().Add(new Paragraph("Tổng số hạng mục kiểm tra:").SetFont(boldFont).SetFontSize(12)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(8));
                 summaryTable.AddCell(new Cell().Add(new Paragraph(maintenanceResults.Count().ToString()).SetFont(boldFont).SetFontSize(12)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(8).SetTextAlignment(TextAlignment.RIGHT));
 
-                summaryTable.AddCell(new Cell().Add(new Paragraph("Đạt (PASS):").SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6));
+                summaryTable.AddCell(new Cell().Add(new Paragraph("Đạt:").SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6));
                 summaryTable.AddCell(new Cell().Add(new Paragraph(passCount.ToString()).SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT));
 
-                summaryTable.AddCell(new Cell().Add(new Paragraph("Không đạt (FAIL):").SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6));
+                summaryTable.AddCell(new Cell().Add(new Paragraph("Không đạt:").SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6));
                 summaryTable.AddCell(new Cell().Add(new Paragraph(failCount.ToString()).SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT));
 
-                summaryTable.AddCell(new Cell().Add(new Paragraph("Chưa kiểm tra (PENDING):").SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6));
+                summaryTable.AddCell(new Cell().Add(new Paragraph("Chưa kiểm tra:").SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6));
                 summaryTable.AddCell(new Cell().Add(new Paragraph(pendingCount.ToString()).SetFont(font).SetFontSize(11)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT));
 
                 document.Add(summaryTable);

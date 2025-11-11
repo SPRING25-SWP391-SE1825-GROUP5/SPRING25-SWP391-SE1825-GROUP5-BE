@@ -7,7 +7,7 @@
     <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f8f9fa; margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background-color: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-        .header { background: linear-gradient(135deg, #FF593D, #F4A261); color: white; padding: 30px 20px; text-align: center; }
+        .header { background: #FFD875; color: #333; padding: 30px 20px; text-align: center; }
         .header h1 { margin: 0; font-size: 22px; font-weight: bold; }
         .content { padding: 30px; }
         .card { background: #f3f4f6; border-radius: 12px; padding: 24px; margin: 20px 0; border: 1px solid #e5e7eb; }
@@ -16,7 +16,7 @@
         .label { color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
         .value { font-size: 16px; font-weight: 600; }
         .actions { margin-top: 12px; }
-        .btn { display: inline-block; background: #FF593D; color: #fff; padding: 10px 16px; border-radius: 8px; text-decoration: none; }
+        .btn { display: inline-block; background: #FFD875; color: #333; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; }
         .footer { background-color: #f8f9fa; padding: 18px; text-align: center; font-size: 12px; color: #666; }
     </style>
 </head>
@@ -41,25 +41,33 @@
                     </div>
                 </div>
                 <div class="row" style="margin-top: 8px;">
+                    {{#if dueDate}}
                     <div class="col">
                         <div class="label">Đến hạn ngày</div>
                         <div class="value">{{dueDate}}</div>
                     </div>
+                    {{/if}}
+                    {{#if dueMileage}}
                     <div class="col">
                         <div class="label">Đến hạn số km</div>
-                        <div class="value">{{dueMileage}}</div>
+                        <div class="value">{{dueMileage}} km</div>
                     </div>
+                    {{/if}}
                 </div>
+                {{#if cadenceDays}}
                 <div class="row" style="margin-top: 8px;">
                     <div class="col">
-                        <div class="label">Chu kỳ (ngày)</div>
-                        <div class="value">{{cadenceDays}}</div>
+                        <div class="label">Chu kỳ nhắc nhở</div>
+                        <div class="value">{{cadenceDays}} ngày</div>
                     </div>
+                    {{#if centerName}}
                     <div class="col">
                         <div class="label">Trung tâm khuyến nghị</div>
                         <div class="value">{{centerName}}</div>
                     </div>
+                    {{/if}}
                 </div>
+                {{/if}}
                 <div class="actions">
                     <a class="btn" href="{{bookingUrl}}" target="_blank">Đặt lịch ngay</a>
                 </div>

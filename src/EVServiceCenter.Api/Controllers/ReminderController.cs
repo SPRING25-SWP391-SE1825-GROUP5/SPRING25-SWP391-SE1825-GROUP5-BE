@@ -298,6 +298,174 @@ namespace EVServiceCenter.Api.Controllers
             }
             return Ok(new { success = true, sent });
         }
+
+        // Admin endpoints
+        [HttpGet("admin")]
+        [Authorize(Roles = "ADMIN,STAFF")]
+        public async Task<IActionResult> ListForAdmin(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] int? customerId = null,
+            [FromQuery] int? vehicleId = null,
+            [FromQuery] string? status = null,
+            [FromQuery] string? type = null,
+            [FromQuery] DateTime? from = null,
+            [FromQuery] DateTime? to = null,
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string sortBy = "createdAt",
+            [FromQuery] string sortOrder = "desc")
+        {
+            // Check ModelState for binding errors
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                    .Where(x => x.Value?.Errors.Count > 0)
+                    .SelectMany(x => x.Value!.Errors.Select(e => $"{x.Key}: {e.ErrorMessage}"))
+                    .ToList();
+                return BadRequest(new { success = false, message = "Dữ liệu không hợp lệ", errors });
+            }
+
+            try
+            {
+                if (page < 1)
+                {
+                    return BadRequest(new { success = false, message = "Page phải lớn hơn 0" });
+                }
+
+                if (pageSize < 1 || pageSize > 100)
+                {
+                    return BadRequest(new { success = false, message = "Page size phải từ 1 đến 100" });
+                }
+
+                var (items, totalCount) = await _repo.QueryForAdminAsync(
+                    page, pageSize, customerId, vehicleId, status, type, from, to, searchTerm, sortBy, sortOrder);
+
+                var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+                // Project to DTOs to avoid circular reference issues
+                var data = items.Select(r => new
+                {
+                    reminderId = r.ReminderId,
+                    vehicleId = r.VehicleId,
+                    serviceId = r.ServiceId,
+                    dueDate = r.DueDate,
+                    dueMileage = r.DueMileage,
+                    status = r.Status.ToString(),
+                    type = r.Type.ToString(),
+                    cadenceDays = r.CadenceDays,
+                    isCompleted = r.IsCompleted,
+                    createdAt = r.CreatedAt,
+                    updatedAt = r.UpdatedAt,
+                    completedAt = r.CompletedAt,
+                    lastSentAt = r.LastSentAt,
+                    vehicle = r.Vehicle != null ? new
+                    {
+                        vehicleId = r.Vehicle.VehicleId,
+                        licensePlate = r.Vehicle.LicensePlate,
+                        currentMileage = r.Vehicle.CurrentMileage,
+                        lastServiceDate = r.Vehicle.LastServiceDate,
+                        vehicleModel = r.Vehicle.VehicleModel != null ? new
+                        {
+                            modelId = r.Vehicle.VehicleModel.ModelId,
+                            modelName = r.Vehicle.VehicleModel.ModelName
+                        } : null,
+                        customer = r.Vehicle.Customer != null ? new
+                        {
+                            customerId = r.Vehicle.Customer.CustomerId,
+                            user = r.Vehicle.Customer.User != null ? new
+                            {
+                                userId = r.Vehicle.Customer.User.UserId,
+                                fullName = r.Vehicle.Customer.User.FullName,
+                                email = r.Vehicle.Customer.User.Email,
+                                phoneNumber = r.Vehicle.Customer.User.PhoneNumber
+                            } : null
+                        } : null
+                    } : null,
+                    service = r.Service != null ? new
+                    {
+                        serviceId = r.Service.ServiceId,
+                        serviceName = r.Service.ServiceName
+                    } : null
+                }).ToList();
+
+                var pagination = new
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalItems = totalCount,
+                    TotalPages = totalPages,
+                    HasNextPage = page < totalPages,
+                    HasPreviousPage = page > 1
+                };
+
+                return Ok(new { success = true, data = data, pagination });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi lấy danh sách reminders: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("stats")]
+        [Authorize(Roles = "ADMIN,STAFF")]
+        public async Task<IActionResult> GetStats()
+        {
+            try
+            {
+                // Get all reminders for statistics
+                var allReminders = await _repo.QueryAsync(null, null, null, null, null);
+
+                var stats = new
+                {
+                    Total = allReminders.Count,
+                    Pending = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.PENDING && !r.IsCompleted),
+                    Due = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.DUE),
+                    Overdue = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.OVERDUE),
+                    Completed = allReminders.Count(r => r.IsCompleted || r.Status == Domain.Enums.ReminderStatus.COMPLETED),
+                    ByType = new
+                    {
+                        Maintenance = allReminders.Count(r => r.Type == Domain.Enums.ReminderType.MAINTENANCE),
+                        Package = allReminders.Count(r => r.Type == Domain.Enums.ReminderType.PACKAGE),
+                        Appointment = allReminders.Count(r => r.Type == Domain.Enums.ReminderType.APPOINTMENT)
+                    },
+                    ByStatus = new
+                    {
+                        Pending = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.PENDING),
+                        Due = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.DUE),
+                        Overdue = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.OVERDUE),
+                        Completed = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.COMPLETED),
+                        Expired = allReminders.Count(r => r.Status == Domain.Enums.ReminderStatus.EXPIRED)
+                    }
+                };
+
+                return Ok(new { success = true, data = stats });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi lấy thống kê: {ex.Message}" });
+            }
+        }
+
+        [HttpDelete("{id:int}")]
+        [Authorize(Roles = "ADMIN,STAFF")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                var reminder = await _repo.GetByIdAsync(id);
+                if (reminder == null)
+                {
+                    return NotFound(new { success = false, message = "Không tìm thấy reminder" });
+                }
+
+                await _repo.DeleteAsync(id);
+                return Ok(new { success = true, message = "Đã xóa reminder thành công" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi xóa reminder: {ex.Message}" });
+            }
+        }
     }
 }
 

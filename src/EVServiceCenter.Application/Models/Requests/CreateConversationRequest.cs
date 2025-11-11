@@ -14,6 +14,8 @@ namespace EVServiceCenter.Application.Models.Requests
 
         public int? PreferredCenterId { get; set; }
 
+        public int? PreferredStaffId { get; set; }
+
         public decimal? CustomerLatitude { get; set; }
 
         public decimal? CustomerLongitude { get; set; }

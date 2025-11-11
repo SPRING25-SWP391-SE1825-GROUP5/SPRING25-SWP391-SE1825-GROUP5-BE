@@ -19,13 +19,21 @@ namespace EVServiceCenter.Application.Service
         private readonly IAccountRepository _accountRepository;
         private readonly IEmailService _emailService;
         private readonly IBookingRepository _bookingRepository;
+        private readonly IWorkOrderPartRepository _workOrderPartRepository;
+        private readonly IInvoiceRepository _invoiceRepository;
+        private readonly ICustomerServiceCreditRepository _customerServiceCreditRepository;
+        private readonly IPromotionRepository _promotionRepository;
 
-        public CustomerService(ICustomerRepository customerRepository, IAccountRepository accountRepository, IEmailService emailService, IBookingRepository bookingRepository)
+        public CustomerService(ICustomerRepository customerRepository, IAccountRepository accountRepository, IEmailService emailService, IBookingRepository bookingRepository, IWorkOrderPartRepository workOrderPartRepository, IInvoiceRepository invoiceRepository, ICustomerServiceCreditRepository customerServiceCreditRepository, IPromotionRepository promotionRepository)
         {
             _customerRepository = customerRepository;
             _accountRepository = accountRepository;
             _emailService = emailService;
             _bookingRepository = bookingRepository;
+            _workOrderPartRepository = workOrderPartRepository;
+            _invoiceRepository = invoiceRepository;
+            _customerServiceCreditRepository = customerServiceCreditRepository;
+            _promotionRepository = promotionRepository;
         }
 
         public async Task<List<User>> GetAllUsersWithCustomerRoleAsync()
@@ -307,6 +315,61 @@ namespace EVServiceCenter.Application.Service
 
                 foreach (var booking in bookings)
                 {
+                    // Tính giá dịch vụ
+                    var servicePrice = booking.Service?.BasePrice ?? 0m;
+                    
+                    // Tính giá phụ tùng phát sinh (chỉ tính phụ tùng đã CONSUMED và không phải khách cung cấp)
+                    var workOrderParts = await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId);
+                    var partsAmount = workOrderParts
+                        .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied)
+                        .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0m));
+                    
+                    // Lấy package discount và promotion discount từ Invoice nếu có (chính xác hơn)
+                    // Nếu chưa có invoice, tính từ booking data
+                    decimal packageDiscountAmount = 0m;
+                    decimal promotionDiscountAmount = 0m;
+                    var invoice = await _invoiceRepository.GetByBookingIdAsync(booking.BookingId);
+                    if (invoice != null)
+                    {
+                        // Có invoice: lấy từ invoice (chính xác nhất)
+                        packageDiscountAmount = invoice.PackageDiscountAmount;
+                        promotionDiscountAmount = invoice.PromotionDiscountAmount;
+                    }
+                    else
+                    {
+                        // Chưa có invoice: tính từ booking data
+                        // Tính package discount nếu có AppliedCredit
+                        if (booking.AppliedCreditId.HasValue)
+                        {
+                            var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+                            if (appliedCredit?.ServicePackage != null)
+                            {
+                                packageDiscountAmount = servicePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+                            }
+                        }
+                        
+                        // Tính promotion discount từ UserPromotions
+                        var userPromotions = await _promotionRepository.GetUserPromotionsByBookingAsync(booking.BookingId);
+                        if (userPromotions != null && userPromotions.Any())
+                        {
+                            promotionDiscountAmount = userPromotions
+                                .Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+                                .Sum(up => up.DiscountAmount);
+                        }
+                    }
+                    
+                    // Tính giá dịch vụ sau khi trừ package discount
+                    var finalServicePrice = servicePrice - packageDiscountAmount;
+                    
+                    // Khuyến mãi chỉ áp dụng cho phần dịch vụ, không áp dụng cho parts
+                    if (promotionDiscountAmount > finalServicePrice)
+                    {
+                        promotionDiscountAmount = finalServicePrice;
+                    }
+                    
+                    // Tính tổng: FinalServicePrice + PartsAmount - PromotionDiscountAmount
+                    var totalAmount = finalServicePrice + partsAmount - promotionDiscountAmount;
+                    
                     response.Bookings.Add(new CustomerBookingItem
                     {
                         BookingId = booking.BookingId,
@@ -318,7 +381,11 @@ namespace EVServiceCenter.Application.Service
                         CenterName = booking.Center?.CenterName ?? "N/A",
                         VehiclePlate = booking.Vehicle?.LicensePlate ?? "N/A",
                         SpecialRequests = booking.SpecialRequests ?? "N/A",
-                        CreatedAt = booking.CreatedAt
+                        CreatedAt = booking.CreatedAt,
+                        ActualCost = totalAmount > 0 ? totalAmount : null,
+                        EstimatedCost = servicePrice > 0 ? servicePrice : null,
+                        BookingCode = $"BK{booking.BookingId:D6}", // Generate booking code from BookingId
+                        TechnicianName = booking.TechnicianTimeSlot?.Technician?.User?.FullName
                     });
                 }
                 return response;

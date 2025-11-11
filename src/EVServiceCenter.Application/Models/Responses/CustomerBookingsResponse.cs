@@ -21,6 +21,10 @@ namespace EVServiceCenter.Application.Models.Responses
         public string VehiclePlate { get; set; } = string.Empty;
         public string SpecialRequests { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+        public decimal? ActualCost { get; set; }
+        public decimal? EstimatedCost { get; set; }
+        public string? BookingCode { get; set; }
+        public string? TechnicianName { get; set; }
     }
 }
 

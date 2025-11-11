@@ -293,11 +293,20 @@ public class InvoicePaymentsController : ControllerBase
             var thisYear = new DateTime(DateTime.UtcNow.Year, 1, 1);
             var thisYearInvoices = allInvoices.Where(i => i.CreatedAt >= thisYear).ToList();
 
-            // Calculate total amounts
+            // Calculate total amounts - Đúng: ServicePrice + PartsAmount - PackageDiscountAmount - PromotionDiscountAmount
+            // ServicePrice lấy từ Booking.Service.BasePrice
             var totalAmount = allInvoices.Sum(i =>
-                (i.PackageDiscountAmount + i.PartsAmount - i.PromotionDiscountAmount));
+            {
+                var servicePrice = i.Booking?.Service?.BasePrice ?? 0m;
+                var finalServicePrice = servicePrice - i.PackageDiscountAmount; // Giá dịch vụ sau khi trừ discount gói
+                return finalServicePrice + i.PartsAmount - i.PromotionDiscountAmount;
+            });
             var paidAmount = allInvoices.Where(i => i.Status == "PAID").Sum(i =>
-                (i.PackageDiscountAmount + i.PartsAmount - i.PromotionDiscountAmount));
+            {
+                var servicePrice = i.Booking?.Service?.BasePrice ?? 0m;
+                var finalServicePrice = servicePrice - i.PackageDiscountAmount; // Giá dịch vụ sau khi trừ discount gói
+                return finalServicePrice + i.PartsAmount - i.PromotionDiscountAmount;
+            });
 
             var stats = new
             {
@@ -308,9 +317,21 @@ public class InvoicePaymentsController : ControllerBase
                 pending,
                 cancelled,
                 bySource,
-                today = new { count = todayInvoices.Count, amount = todayInvoices.Sum(i => (i.PackageDiscountAmount + i.PartsAmount - i.PromotionDiscountAmount)) },
-                thisMonth = new { count = thisMonthInvoices.Count, amount = thisMonthInvoices.Sum(i => (i.PackageDiscountAmount + i.PartsAmount - i.PromotionDiscountAmount)) },
-                thisYear = new { count = thisYearInvoices.Count, amount = thisYearInvoices.Sum(i => (i.PackageDiscountAmount + i.PartsAmount - i.PromotionDiscountAmount)) }
+                today = new { count = todayInvoices.Count, amount = todayInvoices.Sum(i => {
+                    var servicePrice = i.Booking?.Service?.BasePrice ?? 0m;
+                    var finalServicePrice = servicePrice - i.PackageDiscountAmount;
+                    return finalServicePrice + i.PartsAmount - i.PromotionDiscountAmount;
+                }) },
+                thisMonth = new { count = thisMonthInvoices.Count, amount = thisMonthInvoices.Sum(i => {
+                    var servicePrice = i.Booking?.Service?.BasePrice ?? 0m;
+                    var finalServicePrice = servicePrice - i.PackageDiscountAmount;
+                    return finalServicePrice + i.PartsAmount - i.PromotionDiscountAmount;
+                }) },
+                thisYear = new { count = thisYearInvoices.Count, amount = thisYearInvoices.Sum(i => {
+                    var servicePrice = i.Booking?.Service?.BasePrice ?? 0m;
+                    var finalServicePrice = servicePrice - i.PackageDiscountAmount;
+                    return finalServicePrice + i.PartsAmount - i.PromotionDiscountAmount;
+                }) }
             };
 
             return Ok(new { success = true, data = stats });

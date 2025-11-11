@@ -245,9 +245,9 @@ namespace EVServiceCenter.Application.Service
                 var packageDiscountAmount = invoice?.PackageDiscountAmount ?? 0m;
                 var promotionDiscountAmount = invoice?.PromotionDiscountAmount ?? 0m;
                 
-                // Tính lại partsAmount từ workOrderParts thực tế (chỉ tính phụ tùng không phải khách cung cấp)
+                // Tính lại partsAmount từ workOrderParts thực tế (chỉ tính phụ tùng đã CONSUMED và không phải khách cung cấp)
                 var partsAmount = workOrderParts
-                    .Where(p => !p.IsCustomerSupplied) // Chỉ tính phụ tùng không phải khách cung cấp
+                    .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied) // Chỉ tính phụ tùng đã được approve và không phải khách cung cấp
                     .Sum(p => (p.Part?.Price ?? 0m) * p.QuantityUsed);
 
                 // Kiểm tra xem booking có sử dụng Service Package không

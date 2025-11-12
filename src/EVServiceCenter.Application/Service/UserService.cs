@@ -51,7 +51,6 @@ namespace EVServiceCenter.Application.Service
             {
                 var users = await _authRepository.GetAllUsersAsync();
 
-                // Apply filters
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
                     users = users.Where(u =>
@@ -66,7 +65,6 @@ namespace EVServiceCenter.Application.Service
                     users = users.Where(u => (u.Role ?? string.Empty).Equals(role, StringComparison.OrdinalIgnoreCase)).ToList();
                 }
 
-                // Calculate pagination
                 var totalCount = users.Count;
                 var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
                 var pagedUsers = users
@@ -103,7 +101,7 @@ namespace EVServiceCenter.Application.Service
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -115,10 +113,8 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate request
                 await ValidateCreateUserRequestAsync(request);
 
-                // Create user entity
                 var user = new User
                 {
                     Email = request.Email.ToLower().Trim(),
@@ -129,16 +125,14 @@ namespace EVServiceCenter.Application.Service
                     DateOfBirth = request.DateOfBirth,
                     Gender = request.Gender,
                     Role = request.Role?.Trim().ToUpper(),
-                    IsActive = true, // Mặc định là active
-                    EmailVerified = false, // Luôn yêu cầu xác minh email
+                    IsActive = true,
+                    EmailVerified = false,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
 
-                // Save user
                 await _authRepository.RegisterAsync(user);
 
-                // Tạo record tương ứng dựa trên role
                 if (user.Role == "CUSTOMER")
                 {
                     var customer = new Customer
@@ -150,31 +144,29 @@ namespace EVServiceCenter.Application.Service
                     await _customerRepository.CreateCustomerAsync(customer);
                 }
 
-                // Gửi email chào mừng kèm mật khẩu tạm (không gửi OTP)
                 await _emailService.SendWelcomeCustomerWithPasswordAsync(user.Email, user.FullName, tempPassword);
 
                 return MapToUserResponse(user);
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
-                // Parse specific database errors
                 var errorMessage = "Lỗi cơ sở dữ liệu";
 
                 if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx)
                 {
                     switch (sqlEx.Number)
                     {
-                        case 2628: // String or binary data would be truncated
+                        case 2628:
                             errorMessage = "Dữ liệu quá dài cho một số trường. Vui lòng kiểm tra lại thông tin.";
                             break;
-                        case 2627: // Violation of UNIQUE KEY constraint
+                        case 2627:
                             errorMessage = "Thông tin này đã tồn tại trong hệ thống.";
                             break;
-                        case 547: // Foreign key constraint violation
+                        case 547:
                             errorMessage = "Dữ liệu tham chiếu không hợp lệ.";
                             break;
                         default:
@@ -195,15 +187,12 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate request
                 await ValidateUpdateUserRequestAsync(userId, request);
 
-                // Get existing user
                 var user = await _authRepository.GetUserByIdAsync(userId);
                 if (user == null)
                     throw new ArgumentException("Người dùng không tồn tại.");
 
-                // Update user properties
                 user.FullName = request.FullName.Trim();
                 user.PhoneNumber = request.PhoneNumber.Trim();
                 user.DateOfBirth = request.DateOfBirth;
@@ -214,14 +203,13 @@ namespace EVServiceCenter.Application.Service
                 user.EmailVerified = request.EmailVerified;
                 user.UpdatedAt = DateTime.UtcNow;
 
-                // Save changes
                 await _authRepository.UpdateUserAsync(user);
 
                 return MapToUserResponse(user);
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -237,7 +225,6 @@ namespace EVServiceCenter.Application.Service
                 if (user == null)
                     throw new ArgumentException("Người dùng không tồn tại.");
 
-                // Soft delete by deactivating
                 user.IsActive = false;
                 user.UpdatedAt = DateTime.UtcNow;
                 await _authRepository.UpdateUserAsync(user);
@@ -246,7 +233,7 @@ namespace EVServiceCenter.Application.Service
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -270,7 +257,7 @@ namespace EVServiceCenter.Application.Service
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -294,7 +281,7 @@ namespace EVServiceCenter.Application.Service
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -306,48 +293,37 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Check email format
             if (string.IsNullOrWhiteSpace(request.Email) || !new EmailAddressAttribute().IsValid(request.Email))
             {
                 errors.Add("Email không đúng định dạng");
             }
 
-            // Password không yêu cầu khi tạo (dùng mật khẩu tạm gửi email)
-
-            // Check phone number format
             if (!IsValidPhoneNumber(request.PhoneNumber))
             {
                 errors.Add("Số điện thoại phải bắt đầu bằng số 0 và có đúng 10 chữ số.");
             }
 
-            // Check age
             if (!IsValidAge(request.DateOfBirth))
             {
                 errors.Add("Phải đủ 16 tuổi trở lên.");
             }
 
-            // Check gender
             if (!IsValidGender(request.Gender))
             {
                 errors.Add("Giới tính phải là MALE hoặc FEMALE.");
             }
 
-            // Validate role cho ADMIN: cho phép ADMIN/STAFF/TECHNICIAN/CUSTOMER
             if (!IsValidRole(request.Role))
             {
                 errors.Add("Vai trò không hợp lệ. Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
             }
 
-            // EmailVerified: cho phép ADMIN đánh dấu đã xác thực để bỏ qua bước OTP
-
-            // Check email uniqueness
             var existingUserByEmail = await _accountRepository.GetAccountByEmailAsync(request.Email);
             if (existingUserByEmail != null)
             {
                 errors.Add("Email này đã được sử dụng. Vui lòng sử dụng email khác.");
             }
 
-            // Check phone uniqueness
             var existingUserByPhone = await _accountRepository.GetAccountByPhoneNumberAsync(request.PhoneNumber);
             if (existingUserByPhone != null)
             {
@@ -364,31 +340,26 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Check phone number format
             if (!IsValidPhoneNumber(request.PhoneNumber))
             {
                 errors.Add("Số điện thoại phải bắt đầu bằng số 0 và có đúng 10 chữ số.");
             }
 
-            // Check age
             if (!IsValidAge(request.DateOfBirth))
             {
                 errors.Add("Phải đủ 16 tuổi trở lên.");
             }
 
-            // Check gender
             if (!IsValidGender(request.Gender))
             {
                 errors.Add("Giới tính phải là MALE hoặc FEMALE.");
             }
 
-            // Check role
             if (!IsValidRole(request.Role))
             {
                 errors.Add("Vai trò phải là ADMIN, MANAGER, STAFF, TECHNICIAN hoặc CUSTOMER.");
             }
 
-            // Check phone uniqueness (excluding current user)
             var existingUserByPhone = await _accountRepository.GetAccountByPhoneNumberAsync(request.PhoneNumber);
             if (existingUserByPhone != null && existingUserByPhone.UserId != userId)
             {
@@ -401,7 +372,6 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        // Cho phép tất cả domain hợp lệ theo chuẩn EmailAddressAttribute
         private bool IsValidEmail(string email) =>
             !string.IsNullOrWhiteSpace(email) && new EmailAddressAttribute().IsValid(email);
 
@@ -513,27 +483,16 @@ namespace EVServiceCenter.Application.Service
 </body></html>";
         }
 
-        // GenerateTechnicianCode removed
-
-        /// <summary>
-        /// Cập nhật trạng thái người dùng (activate/deactivate)
-        /// Option 1: Strict - Không cho phép deactivate nếu có ràng buộc
-        /// </summary>
-        /// <param name="userId">ID người dùng</param>
-        /// <param name="isActive">Trạng thái mới (true = activate, false = deactivate)</param>
-        /// <returns>Kết quả cập nhật</returns>
         public async Task<bool> UpdateUserStatusAsync(int userId, bool isActive)
         {
             try
             {
-                // Lấy thông tin user
                 var user = await _authRepository.GetUserByIdAsync(userId);
                 if (user == null)
                 {
                     throw new ArgumentException("Không tìm thấy người dùng với ID này.");
                 }
 
-                // Nếu đang activate, không cần check ràng buộc
                 if (isActive)
                 {
                     user.IsActive = true;
@@ -542,16 +501,13 @@ namespace EVServiceCenter.Application.Service
                     return true;
                 }
 
-                // Nếu đang deactivate, cần check ràng buộc STRICT (Option 1)
                 var constraints = new List<string>();
 
-                // 1. Check nếu user là CUSTOMER
                 if (user.Role == "CUSTOMER")
                 {
                     var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
                     if (customer != null)
                     {
-                        // Check bookings PENDING/CONFIRMED/IN_PROGRESS
                         var activeBookings = await _bookingRepository.GetBookingsByCustomerIdAsync(
                             customer.CustomerId,
                             page: 1,
@@ -574,11 +530,10 @@ namespace EVServiceCenter.Application.Service
                             constraints.Add($"Khách hàng có {blockedBookings.Count} booking đang chờ xử lý ({string.Join(", ", statusCounts)}). Vui lòng hoàn tất hoặc hủy các booking này trước khi vô hiệu hóa tài khoản.");
                         }
 
-                        // Check invoices PENDING/UNPAID
                         var invoices = await _invoiceRepository.GetByCustomerIdAsync(customer.CustomerId);
                         var blockedInvoices = invoices.Where(i =>
                             i.Status == PaymentConstants.InvoiceStatus.Pending ||
-                            i.Status == "UNPAID").ToList(); // TODO: Create InvoiceStatusConstants for UNPAID
+                            i.Status == "UNPAID").ToList();
 
                         if (blockedInvoices.Any())
                         {
@@ -589,28 +544,23 @@ namespace EVServiceCenter.Application.Service
                             constraints.Add($"Khách hàng có {blockedInvoices.Count} hóa đơn chưa thanh toán ({string.Join(", ", statusCounts)}). Vui lòng thanh toán hoặc hủy các hóa đơn này trước khi vô hiệu hóa tài khoản.");
                         }
 
-                        // Check payments PENDING cho các invoices của customer
                         foreach (var invoice in invoices)
                         {
                             var payments = await _paymentRepository.GetByInvoiceIdAsync(invoice.InvoiceId, status: PaymentConstants.PaymentStatus.Pending);
                             if (payments.Any())
                             {
                                 constraints.Add($"Khách hàng có {payments.Count} giao dịch thanh toán đang chờ xử lý. Vui lòng hoàn tất các giao dịch này trước khi vô hiệu hóa tài khoản.");
-                                break; // Chỉ cần report một lần
+                                break;
                             }
                         }
                     }
                 }
 
-                // 2. Check nếu user là STAFF
                 if (user.Role == "STAFF")
                 {
                     var staff = await _staffRepository.GetStaffByUserIdAsync(userId);
                     if (staff != null)
                     {
-                        // Note: Hiện tại không có direct link từ Booking đến Staff
-                        // Nếu cần check assignments, cần thêm logic hoặc field StaffId vào Booking
-                        // Tạm thời bỏ qua constraint này hoặc check qua CenterId
                         var centerBookings = await _bookingRepository.GetBookingsByCenterIdAsync(
                             staff.CenterId,
                             page: 1,
@@ -631,13 +581,11 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // 3. Check nếu user là TECHNICIAN
                 if (user.Role == "TECHNICIAN")
                 {
                     var technician = await _technicianRepository.GetTechnicianByUserIdAsync(userId);
                     if (technician != null)
                     {
-                        // Check bookings assigned to technician
                         var technicianBookings = await _bookingRepository.GetByTechnicianAsync(technician.TechnicianId);
                         var activeTechnicianBookings = technicianBookings.Where(b =>
                             b.Status == "PENDING" ||
@@ -653,7 +601,6 @@ namespace EVServiceCenter.Application.Service
                             constraints.Add($"Kỹ thuật viên có {activeTechnicianBookings.Count} booking đang được assign ({string.Join(", ", statusCounts)}). Vui lòng reassign các booking này cho kỹ thuật viên khác trước khi vô hiệu hóa tài khoản.");
                         }
 
-                        // Check time slots đã book (có BookingId và WorkDate >= today)
                         var technicianTimeSlots = await _technicianTimeSlotRepository.GetByTechnicianIdAsync(technician.TechnicianId);
                         var today = DateTime.Today;
                         var bookedTimeSlots = technicianTimeSlots.Where(tts =>
@@ -667,13 +614,11 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Nếu có ràng buộc, throw exception
                 if (constraints.Any())
                 {
                     throw new ArgumentException($"Không thể vô hiệu hóa tài khoản vì:\n{string.Join("\n", constraints)}");
                 }
 
-                // Không có ràng buộc, cho phép deactivate
                 user.IsActive = false;
                 user.UpdatedAt = DateTime.UtcNow;
                 await _authRepository.UpdateUserAsync(user);
@@ -682,7 +627,7 @@ namespace EVServiceCenter.Application.Service
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -690,41 +635,31 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
-        /// <summary>
-        /// Gán vai trò cho người dùng (chỉ Admin)
-        /// </summary>
-        /// <param name="userId">ID người dùng</param>
-        /// <param name="role">Vai trò mới</param>
-        /// <returns>Kết quả gán vai trò</returns>
         public async Task<bool> AssignUserRoleAsync(int userId, string role)
         {
             try
             {
-                // Validate role
                 if (!IsValidRole(role))
                 {
                     throw new ArgumentException("Vai trò không hợp lệ. Vai trò phải là ADMIN, STAFF, TECHNICIAN hoặc CUSTOMER.");
                 }
 
-                // Lấy thông tin user
                 var user = await _authRepository.GetUserByIdAsync(userId);
                 if (user == null)
                 {
                     throw new ArgumentException("Không tìm thấy người dùng với ID này.");
                 }
 
-                // Cập nhật role
                 user.Role = role;
                 user.UpdatedAt = DateTime.UtcNow;
 
-                // Lưu thay đổi
                 await _authRepository.UpdateUserAsync(user);
 
                 return true;
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -807,18 +742,14 @@ namespace EVServiceCenter.Application.Service
 
         private string NormalizePhoneNumber(string phoneNumber)
         {
-            // Loại bỏ tất cả ký tự không phải số
             var normalized = Regex.Replace(phoneNumber, @"[^\d]", "");
 
-            // Nếu bắt đầu bằng 0, giữ nguyên
             if (normalized.StartsWith("0"))
                 return normalized;
 
-            // Nếu bắt đầu bằng 84, thay thế bằng 0
             if (normalized.StartsWith("84"))
                 return "0" + normalized.Substring(2);
 
-            // Nếu không có prefix, thêm 0
             return "0" + normalized;
         }
     }

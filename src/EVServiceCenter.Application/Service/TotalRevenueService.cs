@@ -6,7 +6,6 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Interfaces;
-using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -14,16 +13,13 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IInvoiceRepository _invoiceRepository;
         private readonly IPaymentRepository _paymentRepository;
-        private readonly ILogger<TotalRevenueService> _logger;
 
         public TotalRevenueService(
             IInvoiceRepository invoiceRepository,
-            IPaymentRepository paymentRepository,
-            ILogger<TotalRevenueService> logger)
+            IPaymentRepository paymentRepository)
         {
             _invoiceRepository = invoiceRepository;
             _paymentRepository = paymentRepository;
-            _logger = logger;
         }
 
         public async Task<TotalRevenueOverTimeResponse> GetTotalRevenueOverTimeAsync(TotalRevenueOverTimeRequest? request = null)
@@ -40,11 +36,8 @@ namespace EVServiceCenter.Application.Service
                 granularity = "DAY";
             }
 
-            _logger.LogInformation("Tính tổng doanh thu theo {Granularity} từ {From} đến {To}", granularity, fromDate, toDate);
-
             var periods = GeneratePeriods(fromDate, toDate, granularity);
 
-            // Lấy tất cả payments có trạng thái thuộc tập hợp hợp lệ (dịch vụ + đơn bán phụ tùng)
             var includedStatuses = new[] { "COMPLETED", "PAID" };
             var completedPayments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(includedStatuses, fromDate, toDate);
 
@@ -131,7 +124,6 @@ namespace EVServiceCenter.Application.Service
                 }
             }
 
-            // Clamp periods to input range
             foreach (var p in result)
             {
                 if (p.StartDate < from) p.StartDate = from;
@@ -153,5 +145,3 @@ namespace EVServiceCenter.Application.Service
         }
     }
 }
-
-

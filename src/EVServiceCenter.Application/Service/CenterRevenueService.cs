@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models;
 using EVServiceCenter.Domain.Interfaces;
-using Microsoft.Extensions.Logging;
 using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Application.Service
@@ -16,20 +15,17 @@ namespace EVServiceCenter.Application.Service
         private readonly IBookingRepository _bookingRepository;
         private readonly IInvoiceRepository _invoiceRepository;
         private readonly IPaymentRepository _paymentRepository;
-        private readonly ILogger<CenterRevenueService> _logger;
 
         public CenterRevenueService(
             ICenterRepository centerRepository,
             IBookingRepository bookingRepository,
             IInvoiceRepository invoiceRepository,
-            IPaymentRepository paymentRepository,
-            ILogger<CenterRevenueService> logger)
+            IPaymentRepository paymentRepository)
         {
             _centerRepository = centerRepository;
             _bookingRepository = bookingRepository;
             _invoiceRepository = invoiceRepository;
             _paymentRepository = paymentRepository;
-            _logger = logger;
         }
 
         public async Task<CenterRevenueResponse> GetAllCentersRevenueAsync(
@@ -40,10 +36,8 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Calculate date range
                 var dateRange = CalculateDateRange(startDate, endDate);
 
-                // Get all centers
                 var centers = await _centerRepository.GetAllCentersAsync();
                 if (!centers.Any())
                 {
@@ -62,7 +56,6 @@ namespace EVServiceCenter.Application.Service
                     };
                 }
 
-                // Get revenue data for each center
                 var revenueData = new List<CenterRevenueData>();
                 foreach (var center in centers)
                 {
@@ -70,7 +63,6 @@ namespace EVServiceCenter.Application.Service
                     revenueData.Add(centerData);
                 }
 
-                // Apply pagination
                 var totalRecords = revenueData.Count;
                 var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
                 var paginatedData = revenueData
@@ -78,7 +70,6 @@ namespace EVServiceCenter.Application.Service
                     .Take(pageSize)
                     .ToList();
 
-                // Calculate summary
                 var summary = CalculateSummary(revenueData, dateRange);
 
                 return new CenterRevenueResponse
@@ -98,7 +89,6 @@ namespace EVServiceCenter.Application.Service
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lấy doanh thu tất cả center");
                 return new CenterRevenueResponse
                 {
                     Success = false,
@@ -114,7 +104,6 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate center exists
                 var center = await _centerRepository.GetCenterByIdAsync(centerId);
                 if (center == null)
                 {
@@ -125,10 +114,8 @@ namespace EVServiceCenter.Application.Service
                     };
                 }
 
-                // Calculate date range
                 var dateRange = CalculateDateRange(startDate, endDate);
 
-                // Get revenue data for center
                 var centerData = await CalculateCenterRevenue(centerId, dateRange.StartDate, dateRange.EndDate);
 
                 return new CenterRevenueResponse
@@ -152,7 +139,6 @@ namespace EVServiceCenter.Application.Service
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lấy doanh thu center {CenterId}", centerId);
                 return new CenterRevenueResponse
                 {
                     Success = false,
@@ -163,7 +149,7 @@ namespace EVServiceCenter.Application.Service
 
         private (DateTime StartDate, DateTime EndDate) CalculateDateRange(DateTime? startDate, DateTime? endDate)
         {
-            var start = startDate ?? DateTime.Today.AddMonths(-12); // Default 12 months ago
+            var start = startDate ?? DateTime.Today.AddMonths(-12);
             var end = endDate ?? DateTime.Today;
 
             return (start, end);
@@ -171,10 +157,8 @@ namespace EVServiceCenter.Application.Service
 
         private async Task<CenterRevenueData> CalculateCenterRevenue(int centerId, DateTime startDate, DateTime endDate)
         {
-            // Get center info
             var center = await _centerRepository.GetCenterByIdAsync(centerId);
 
-            // Get all bookings for center in date range
             var allBookings = await _bookingRepository.GetAllBookingsAsync();
             var centerBookings = allBookings
                 .Where(b => b.CenterId == centerId &&
@@ -182,23 +166,19 @@ namespace EVServiceCenter.Application.Service
                            b.CreatedAt <= endDate)
                 .ToList();
 
-            // Calculate basic metrics
             var totalBookings = centerBookings.Count;
             var completedBookings = centerBookings.Count(b => b.Status == BookingStatusConstants.Paid || b.Status == BookingStatusConstants.Completed);
             var cancelledBookings = centerBookings.Count(b => b.Status == BookingStatusConstants.Cancelled);
 
-            // Calculate revenue from payments
             var totalRevenue = 0m;
             var revenueByService = new Dictionary<int, (string ServiceName, decimal Revenue, int Count)>();
             var revenueByMonth = new Dictionary<string, (decimal Revenue, int Count)>();
 
             foreach (var booking in centerBookings.Where(b => b.Status == BookingStatusConstants.Paid || b.Status == BookingStatusConstants.Completed))
             {
-                // Get payment amount (simplified - using service base price)
                 var servicePrice = booking.Service?.BasePrice ?? 0m;
                 totalRevenue += servicePrice;
 
-                // Revenue by service
                 if (booking.Service != null)
                 {
                     var serviceId = booking.Service.ServiceId;
@@ -215,7 +195,6 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Revenue by month
                 var monthKey = booking.CreatedAt.ToString("yyyy-MM");
                 var monthName = $"Tháng {booking.CreatedAt.Month}/{booking.CreatedAt.Year}";
 
@@ -230,7 +209,6 @@ namespace EVServiceCenter.Application.Service
                 }
             }
 
-            // Convert to response format
             var revenueByServiceList = revenueByService.Select(kvp => new RevenueByService
             {
                 ServiceId = kvp.Key,

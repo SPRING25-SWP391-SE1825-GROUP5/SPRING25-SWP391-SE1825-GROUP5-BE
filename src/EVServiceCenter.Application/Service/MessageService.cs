@@ -18,7 +18,6 @@ namespace EVServiceCenter.Application.Service
         private readonly IMessageRepository _messageRepository;
         private readonly IConversationRepository _conversationRepository;
         private readonly IAccountRepository _accountRepository;
-        private readonly ILogger<MessageService> _logger;
         private readonly IChatHubService _chatHubService;
 
         public MessageService(
@@ -31,7 +30,7 @@ namespace EVServiceCenter.Application.Service
             _messageRepository = messageRepository;
             _conversationRepository = conversationRepository;
             _accountRepository = accountRepository;
-            _logger = logger;
+            _ = logger;
             _chatHubService = chatHubService;
         }
 
@@ -45,34 +44,26 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException($"Conversation with ID {request.ConversationId} not found");
                 }
 
-                // Validate: At least one of Content or AttachmentUrl must be provided
                 if (string.IsNullOrWhiteSpace(request.Content) && string.IsNullOrWhiteSpace(request.AttachmentUrl))
                 {
                     throw new ArgumentException("Either Content or AttachmentUrl must be provided");
                 }
 
-                // Validate: Constraint CK_Messages_SenderXor requires either SenderUserId OR SenderGuestSessionId, not both
                 if (!request.SenderUserId.HasValue && string.IsNullOrWhiteSpace(request.SenderGuestSessionId))
                 {
                     throw new ArgumentException("Either SenderUserId or SenderGuestSessionId must be provided");
                 }
 
-                // Normalize: If both are provided, prioritize SenderUserId and set SenderGuestSessionId to null
-                // If SenderUserId is provided, ensure SenderGuestSessionId is null
-                // If SenderGuestSessionId is provided, ensure SenderUserId is null
                 int? normalizedSenderUserId = request.SenderUserId;
                 string? normalizedSenderGuestSessionId = request.SenderGuestSessionId;
 
                 if (normalizedSenderUserId.HasValue)
                 {
-                    // If userId is provided, guestSessionId must be null
                     normalizedSenderGuestSessionId = null;
                 }
                 else if (!string.IsNullOrWhiteSpace(normalizedSenderGuestSessionId))
                 {
-                    // If guestSessionId is provided, userId must be null
                     normalizedSenderUserId = null;
-                    // Normalize guestSessionId (trim whitespace)
                     normalizedSenderGuestSessionId = normalizedSenderGuestSessionId.Trim();
                 }
 
@@ -89,7 +80,6 @@ namespace EVServiceCenter.Application.Service
 
                 var createdMessage = await _messageRepository.CreateMessageAsync(message);
 
-                // Reload message với navigation properties trước khi broadcast
                 var reloadedMessage = await _messageRepository.GetMessageByIdAsync(createdMessage.MessageId);
                 if (reloadedMessage != null)
                 {
@@ -101,14 +91,12 @@ namespace EVServiceCenter.Application.Service
                     createdMessage.MessageId,
                     createdMessage.CreatedAt);
 
-                // Broadcast message to all conversation members via SignalR
                 await BroadcastMessageToConversationAsync(createdMessage);
 
                 return await MapToMessageResponseAsync(createdMessage);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error creating message for conversation {ConversationId}", request.ConversationId);
                 throw;
             }
         }
@@ -125,9 +113,8 @@ namespace EVServiceCenter.Application.Service
 
                 return await MapToMessageResponseAsync(message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error getting message {MessageId}", messageId);
                 throw;
             }
         }
@@ -148,9 +135,8 @@ namespace EVServiceCenter.Application.Service
                 await _messageRepository.UpdateMessageAsync(message);
                 return await MapToMessageResponseAsync(message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error updating message {MessageId}", messageId);
                 throw;
             }
         }
@@ -177,9 +163,8 @@ namespace EVServiceCenter.Application.Service
                 await _messageRepository.UpdateMessageAsync(message);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error deleting message {MessageId}", messageId);
                 throw;
             }
         }
@@ -198,9 +183,8 @@ namespace EVServiceCenter.Application.Service
 
                 return responses;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error getting messages for conversation {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -219,9 +203,8 @@ namespace EVServiceCenter.Application.Service
 
                 return responses;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error getting messages for user {UserId}", userId);
                 throw;
             }
         }
@@ -240,9 +223,8 @@ namespace EVServiceCenter.Application.Service
 
                 return responses;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error getting messages for guest session {GuestSessionId}", guestSessionId);
                 throw;
             }
         }
@@ -259,9 +241,8 @@ namespace EVServiceCenter.Application.Service
 
                 return await MapToMessageResponseAsync(message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error getting last message for conversation {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -276,7 +257,6 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException($"Message with ID {messageId} not found");
                 }
 
-                // Normalize: Constraint CK_Messages_SenderXor requires either SenderUserId OR SenderGuestSessionId, not both
                 int? normalizedSenderUserId = request.SenderUserId;
                 string? normalizedSenderGuestSessionId = request.SenderGuestSessionId;
 
@@ -303,7 +283,6 @@ namespace EVServiceCenter.Application.Service
 
                 var createdReply = await _messageRepository.CreateMessageAsync(replyMessage);
 
-                // Reload message với navigation properties trước khi broadcast
                 var reloadedReply = await _messageRepository.GetMessageByIdAsync(createdReply.MessageId);
                 if (reloadedReply != null)
                 {
@@ -315,14 +294,12 @@ namespace EVServiceCenter.Application.Service
                     createdReply.MessageId,
                     createdReply.CreatedAt);
 
-                // Broadcast reply message to all conversation members via SignalR
                 await BroadcastMessageToConversationAsync(createdReply);
 
                 return await MapToMessageResponseAsync(createdReply);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error replying to message {MessageId}", messageId);
                 throw;
             }
         }
@@ -341,9 +318,8 @@ namespace EVServiceCenter.Application.Service
 
                 return responses;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error getting replies for message {MessageId}", messageId);
                 throw;
             }
         }
@@ -371,9 +347,8 @@ namespace EVServiceCenter.Application.Service
                     .Take(request.PageSize)
                     .ToList();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error searching messages with term {SearchTerm}", request.SearchTerm);
                 throw;
             }
         }
@@ -395,9 +370,8 @@ namespace EVServiceCenter.Application.Service
                 await Task.CompletedTask;
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error marking message {MessageId} as read", messageId);
                 throw;
             }
         }
@@ -418,9 +392,8 @@ namespace EVServiceCenter.Application.Service
 
                 return await CreateMessageAsync(createRequest);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error sending message to conversation {ConversationId}", request.ConversationId);
                 throw;
             }
         }
@@ -432,9 +405,8 @@ namespace EVServiceCenter.Application.Service
                 await Task.CompletedTask;
                 return new List<MessageResponse>();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error getting unread messages for user {UserId} or guest {GuestSessionId}", userId, guestSessionId);
                 throw;
             }
         }
@@ -447,24 +419,21 @@ namespace EVServiceCenter.Application.Service
                 ConversationId = message.ConversationId,
                 SenderUserId = message.SenderUserId,
                 SenderGuestSessionId = message.SenderGuestSessionId,
-                Content = message.Content ?? string.Empty, // Ensure Content is never null for response
+                Content = message.Content ?? string.Empty,
                 AttachmentUrl = message.AttachmentUrl,
                 ReplyToMessageId = message.ReplyToMessageId,
                 CreatedAt = message.CreatedAt,
                 IsGuest = !message.SenderUserId.HasValue
             };
 
-            // Build attachments array from AttachmentUrl (same logic as BroadcastMessageToConversationAsync)
             var attachments = new List<AttachmentResponse>();
             if (!string.IsNullOrEmpty(message.AttachmentUrl))
             {
                 try
                 {
-                    // Try to parse as JSON array first
                     var urls = JsonSerializer.Deserialize<List<string>>(message.AttachmentUrl);
                     if (urls != null && urls.Count > 0)
                     {
-                        // Multiple URLs (JSON array)
                         foreach (var url in urls)
                         {
                             if (!string.IsNullOrEmpty(url))
@@ -526,20 +495,14 @@ namespace EVServiceCenter.Application.Service
             try
             {
 
-                // Build attachments array from AttachmentUrl
-                // AttachmentUrl can be:
-                // 1. A single URL string (backward compatibility)
-                // 2. A JSON array of URLs (for multiple attachments)
                 var attachments = new List<object>();
                 if (!string.IsNullOrEmpty(message.AttachmentUrl))
                 {
                     try
                     {
-                        // Try to parse as JSON array first
                         var urls = JsonSerializer.Deserialize<List<string>>(message.AttachmentUrl);
                         if (urls != null && urls.Count > 0)
                         {
-                            // Multiple URLs (JSON array)
                             foreach (var url in urls)
                             {
                                 if (!string.IsNullOrEmpty(url))
@@ -559,7 +522,6 @@ namespace EVServiceCenter.Application.Service
                     }
                     catch
                     {
-                        // Not a JSON array, treat as single URL string
                         attachments.Add(new
                         {
                             id = $"att-{message.MessageId}",
@@ -607,15 +569,9 @@ namespace EVServiceCenter.Application.Service
 
 
                 await _chatHubService.BroadcastMessageToConversationAsync(message.ConversationId, messageData);
-
-                _logger.LogInformation("Broadcasted message {MessageId} to conversation {ConversationId}",
-                    message.MessageId, message.ConversationId);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error broadcasting message {MessageId} to conversation {ConversationId}",
-                    message.MessageId, message.ConversationId);
-
             }
         }
 
@@ -623,22 +579,15 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate conversation exists
                 if (!await _conversationRepository.ConversationExistsAsync(conversationId))
                 {
                     throw new ArgumentException($"Conversation with ID {conversationId} not found");
                 }
 
-                // Broadcast typing indicator via ChatHubService
                 await _chatHubService.NotifyTypingAsync(conversationId, userId, guestSessionId, isTyping);
-
-                _logger.LogInformation("Broadcasted typing indicator for conversation {ConversationId}, UserId: {UserId}, GuestSessionId: {GuestSessionId}, IsTyping: {IsTyping}",
-                    conversationId, userId, guestSessionId, isTyping);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Error broadcasting typing indicator for conversation {ConversationId}",
-                    conversationId);
                 throw;
             }
         }

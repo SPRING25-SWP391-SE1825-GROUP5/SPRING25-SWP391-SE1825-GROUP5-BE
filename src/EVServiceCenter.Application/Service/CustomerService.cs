@@ -50,55 +50,37 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                Console.WriteLine($"GetCurrentCustomerAsync called for userId: {userId}");
-
-                // Kiểm tra user tồn tại và role trước
                 var user = await _accountRepository.GetUserByIdAsync(userId);
                 if (user == null)
                 {
-                    Console.WriteLine($"User not found for userId: {userId}");
                     throw new ArgumentException("Người dùng không tồn tại.");
                 }
 
-                Console.WriteLine($"User found: {user.FullName}, Role: {user.Role}");
-
-                // CHỈ cho phép tạo Customer nếu role = "CUSTOMER"
-                // Nếu role khác (ADMIN/MANAGER/STAFF/TECHNICIAN) thì không được tự động tạo Customer
                 if (user.Role != "CUSTOMER")
                 {
-                    Console.WriteLine($"User with role '{user.Role}' cannot have Customer record. Only CUSTOMER role allowed.");
                     throw new ArgumentException($"Tài khoản với vai trò '{user.Role}' không thể có thông tin khách hàng. Chỉ tài khoản CUSTOMER mới có thể truy cập thông tin này.");
                 }
 
                 var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
                 if (customer == null)
                 {
-                    Console.WriteLine($"Customer not found for userId: {userId}, creating new customer...");
-
-                    // Tạo customer mới (chỉ khi role = "CUSTOMER")
                     var newCustomer = new Customer
                     {
                         UserId = userId,
-                        IsGuest = false // User đã đăng ký nên không phải guest
+                        IsGuest = false
                     };
 
                     customer = await _customerRepository.CreateCustomerAsync(newCustomer);
-                    Console.WriteLine($"Customer created successfully with ID: {customer.CustomerId}");
-                }
-                else
-                {
-                    Console.WriteLine($"Customer found for userId: {userId}, CustomerId: {customer.CustomerId}");
                 }
 
                 return MapToCustomerResponse(customer);
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in GetCurrentCustomerAsync: {ex.Message}");
                 throw new Exception($"Lỗi khi lấy thông tin khách hàng: {ex.Message}");
             }
         }
@@ -390,10 +372,8 @@ namespace EVServiceCenter.Application.Service
                 }
                 return response;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log error if needed
-                Console.WriteLine($"Error getting customer bookings: {ex.Message}");
                 return new CustomerBookingsResponse
                 {
                     CustomerId = customerId,
@@ -409,9 +389,8 @@ namespace EVServiceCenter.Application.Service
                 var customer = await _customerRepository.GetCustomerByIdAsync(customerId);
                 return customer?.UserId;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"Error getting customer user ID: {ex.Message}");
                 return null;
             }
         }

@@ -5,8 +5,8 @@ using System.Threading.Tasks;
 using System.Linq;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using iText.Kernel.Pdf;
 using iText.Layout;
 using iText.Layout.Element;
@@ -25,10 +25,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IInvoiceRepository _invoiceRepository;
         private readonly IMaintenanceChecklistRepository _maintenanceChecklistRepository;
         private readonly IMaintenanceChecklistResultRepository _maintenanceChecklistResultRepository;
-        private readonly ILogger<PdfInvoiceService> _logger;
         private readonly IConfiguration _configuration;
-
-        // Company info từ configuration
         private string CompanyName => _configuration["Company:Name"] ?? "EV Service Center";
         private string CompanyEmail => _configuration["Company:Email"] ?? "support@evservicecenter.com";
         private string CompanyWebsite => _configuration["Company:Website"] ?? "www.evservicecenter.com";
@@ -50,7 +47,7 @@ namespace EVServiceCenter.Application.Service
             _invoiceRepository = invoiceRepository;
             _maintenanceChecklistRepository = maintenanceChecklistRepository;
             _maintenanceChecklistResultRepository = maintenanceChecklistResultRepository;
-            _logger = logger;
+            _ = logger;
             _configuration = configuration;
         }
 
@@ -65,7 +62,6 @@ namespace EVServiceCenter.Application.Service
                 var invoice = await _invoiceRepository.GetByBookingIdAsync(bookingId);
                 var workOrderParts = await _workOrderPartRepository.GetByBookingIdAsync(bookingId);
 
-                // Lấy dữ liệu kết quả kiểm tra bảo dưỡng
                 var maintenanceChecklist = await _maintenanceChecklistRepository.GetByBookingIdAsync(bookingId);
                 var maintenanceResults = maintenanceChecklist != null
                     ? await _maintenanceChecklistResultRepository.GetByChecklistIdAsync(maintenanceChecklist.ChecklistId)
@@ -76,17 +72,14 @@ namespace EVServiceCenter.Application.Service
                 using var pdf = new PdfDocument(writer);
                 using var document = new Document(pdf);
 
-                // Set margins nhỏ hơn để fit trong 1 trang (10mm = ~28.35 points)
                 document.SetMargins(28, 28, 28, 28);
 
-                // Tạo font hỗ trợ tiếng Việt với encoding IDENTITY_H để hiển thị đúng ký tự có dấu
                 PdfFont font;
                 PdfFont boldFont;
                 var fontsFolder = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
 
                 try
                 {
-                    // Ưu tiên 1: Arial (phổ biến và hỗ trợ tốt tiếng Việt)
                     var arialPath = Path.Combine(fontsFolder, "arial.ttf");
                     if (File.Exists(arialPath))
                     {
@@ -96,7 +89,6 @@ namespace EVServiceCenter.Application.Service
                             ? PdfFontFactory.CreateFont(arialBoldPath, PdfEncodings.IDENTITY_H)
                             : PdfFontFactory.CreateFont(arialPath, PdfEncodings.IDENTITY_H);
                     }
-                    // Ưu tiên 2: Times New Roman
                     else
                     {
                         var timesPath = Path.Combine(fontsFolder, "times.ttf");
@@ -108,7 +100,6 @@ namespace EVServiceCenter.Application.Service
                                 ? PdfFontFactory.CreateFont(timesBoldPath, PdfEncodings.IDENTITY_H)
                                 : PdfFontFactory.CreateFont(timesPath, PdfEncodings.IDENTITY_H);
                         }
-                        // Ưu tiên 3: Thử với tên font trực tiếp
                         else
                         {
                             font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
@@ -116,12 +107,10 @@ namespace EVServiceCenter.Application.Service
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _logger.LogWarning(ex, "Không thể tải font từ hệ thống, thử font system font với IDENTITY_H");
                     try
                     {
-                        // Thử với tên font hệ thống
                     font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
                     boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
                 }
@@ -134,14 +123,12 @@ namespace EVServiceCenter.Application.Service
                         }
                         catch
                         {
-                            // Fallback cuối cùng - vẫn dùng IDENTITY_H để hỗ trợ tiếng Việt
                             font = PdfFontFactory.CreateFont(StandardFonts.HELVETICA, PdfEncodings.IDENTITY_H);
                             boldFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD, PdfEncodings.IDENTITY_H);
                         }
                     }
                 }
 
-                // Header - HÓA ĐƠN GIÁ TRỊ GIA TĂNG
                 var headerTable = new Table(1)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginBottom(10);
@@ -163,12 +150,10 @@ namespace EVServiceCenter.Application.Service
                 headerTable.AddCell(headerCell);
                 document.Add(headerTable);
 
-                // Thông tin đơn vị bán hàng và người mua hàng
                 var infoTable = new Table(2)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginBottom(10);
 
-                // Đơn vị bán hàng
                 var sellerCell = new Cell()
                     .SetBorder(iText.Layout.Borders.Border.NO_BORDER)
                     .SetPadding(6)
@@ -180,7 +165,6 @@ namespace EVServiceCenter.Application.Service
                     .Add(new Paragraph($"Email: {CompanyEmail}").SetFont(font).SetFontSize(8).SetMarginTop(1))
                     .Add(new Paragraph($"Website: {CompanyWebsite}").SetFont(font).SetFontSize(8).SetMarginTop(1));
 
-                // Người mua hàng
                 var payment = invoice?.Payments?.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
                 var buyerCell = new Cell()
                     .SetBorder(iText.Layout.Borders.Border.NO_BORDER)
@@ -196,7 +180,6 @@ namespace EVServiceCenter.Application.Service
                 infoTable.AddCell(buyerCell);
                 document.Add(infoTable);
 
-                // Thông tin hóa đơn
                 var invoiceInfoTable = new Table(3)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginBottom(8);
@@ -207,7 +190,6 @@ namespace EVServiceCenter.Application.Service
 
                 document.Add(invoiceInfoTable);
 
-                // Thông tin xe và dịch vụ
                 var vehicleInfoTable = new Table(4)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginBottom(8);
@@ -224,12 +206,10 @@ namespace EVServiceCenter.Application.Service
 
                 document.Add(vehicleInfoTable);
 
-                // Bảng kê chi tiết hàng hóa, dịch vụ
                 var itemsTable = new Table(6)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginBottom(10);
 
-                // Header của bảng
                 var headers = new[] { "STT", "Tên hàng hóa, dịch vụ", "ĐVT", "SL", "Đơn giá", "Thành tiền" };
                 foreach (var header in headers)
                 {
@@ -240,17 +220,14 @@ namespace EVServiceCenter.Application.Service
                         .SetTextAlignment(TextAlignment.CENTER));
                 }
 
-                // Logic: Booking chỉ chọn được 1 trong 2: Service HOẶC Service Package
                 var servicePrice = booking.Service?.BasePrice ?? 0m;
                 var packageDiscountAmount = invoice?.PackageDiscountAmount ?? 0m;
                 var promotionDiscountAmount = invoice?.PromotionDiscountAmount ?? 0m;
                 
-                // Tính lại partsAmount từ workOrderParts thực tế (chỉ tính phụ tùng đã CONSUMED và không phải khách cung cấp)
                 var partsAmount = workOrderParts
-                    .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied) // Chỉ tính phụ tùng đã được approve và không phải khách cung cấp
+                    .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied)
                     .Sum(p => (p.Part?.Price ?? 0m) * p.QuantityUsed);
 
-                // Kiểm tra xem booking có sử dụng Service Package không
                 var hasServicePackage = booking.AppliedCredit != null &&
                                        booking.AppliedCredit.ServicePackage != null;
 
@@ -260,14 +237,11 @@ namespace EVServiceCenter.Application.Service
 
                 int stt = 1;
 
-                // Trường hợp 1: Booking sử dụng Service Package (có AppliedCredit)
                 if (hasServicePackage && packageName != null)
                 {
-                    // Tính giá sau giảm giá của gói
                     var packagePrice = servicePrice - packageDiscountAmount;
                     var packagePriceText = packageDiscountAmount > 0 ? packagePrice : servicePrice;
 
-                    // Hiển thị tên gói dịch vụ
                     var servicePackageDisplay = !string.IsNullOrEmpty(packageCode)
                         ? $"{packageName} ({packageCode})"
                         : packageName;
@@ -283,10 +257,8 @@ namespace EVServiceCenter.Application.Service
                     itemsTable.AddCell(new Cell().Add(new Paragraph("1").SetFont(font).SetFontSize(8)).SetPadding(4).SetTextAlignment(TextAlignment.CENTER));
                     itemsTable.AddCell(new Cell().Add(new Paragraph($"{servicePrice:N0}").SetFont(font).SetFontSize(8)).SetPadding(4).SetTextAlignment(TextAlignment.RIGHT));
 
-                    // Nếu có giảm giá, hiển thị giá sau giảm; nếu không, hiển thị giá gốc
                     itemsTable.AddCell(new Cell().Add(new Paragraph($"{packagePriceText:N0}").SetFont(font).SetFontSize(8)).SetPadding(4).SetTextAlignment(TextAlignment.RIGHT));
 
-                    // Nếu có giảm giá, hiển thị dòng giảm giá riêng
                     if (packageDiscountAmount > 0)
                     {
                         itemsTable.AddCell(new Cell().Add(new Paragraph("").SetFont(font).SetFontSize(8)).SetPadding(4).SetTextAlignment(TextAlignment.CENTER));
@@ -304,10 +276,8 @@ namespace EVServiceCenter.Application.Service
                             .SetFontColor(new DeviceRgb(0, 128, 0)));
                     }
                 }
-                // Trường hợp 2: Booking chỉ sử dụng Service (không có gói dịch vụ)
                 else
                 {
-                    // Chỉ hiển thị dịch vụ với giá gốc
                     itemsTable.AddCell(new Cell().Add(new Paragraph(stt.ToString()).SetFont(font).SetFontSize(8)).SetPadding(4).SetTextAlignment(TextAlignment.CENTER));
                     itemsTable.AddCell(new Cell().Add(new Paragraph(booking.Service?.ServiceName ?? "Dịch vụ").SetFont(font).SetFontSize(8)).SetPadding(4));
                     itemsTable.AddCell(new Cell().Add(new Paragraph("Lần").SetFont(font).SetFontSize(8)).SetPadding(4).SetTextAlignment(TextAlignment.CENTER));
@@ -318,7 +288,6 @@ namespace EVServiceCenter.Application.Service
 
                 var finalServicePrice = hasServicePackage ? (servicePrice - packageDiscountAmount) : servicePrice;
 
-                // Thêm các dòng phụ tùng (nếu có)
                 if (workOrderParts.Any())
                 {
                 foreach (var part in workOrderParts)
@@ -336,7 +305,6 @@ namespace EVServiceCenter.Application.Service
 
                 document.Add(itemsTable);
 
-                // Phần tóm tắt thanh toán
                 var totalAmount = finalServicePrice + partsAmount;
                 var finalTotal = totalAmount - promotionDiscountAmount;
 
@@ -348,7 +316,6 @@ namespace EVServiceCenter.Application.Service
                 summaryTable.AddCell(new Cell().Add(new Paragraph("Cộng tiền hàng:").SetFont(font).SetFontSize(9)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3));
                 summaryTable.AddCell(new Cell().Add(new Paragraph($"{totalAmount:N0}").SetFont(font).SetFontSize(9)).SetBorder(iText.Layout.Borders.Border.NO_BORDER).SetPadding(3).SetTextAlignment(TextAlignment.RIGHT));
 
-                // Hiển thị giảm giá gói dịch vụ trong phần tóm tắt (chỉ khi có Service Package thật sự)
                 if (hasServicePackage && packageDiscountAmount > 0 && packageName != null)
                 {
                     var packageDiscountText = !string.IsNullOrEmpty(packageCode)
@@ -369,7 +336,6 @@ namespace EVServiceCenter.Application.Service
 
                 document.Add(summaryTable);
 
-                // Số tiền bằng chữ
                 var amountInWords = ConvertNumberToWords((int)finalTotal);
                 var amountInWordsParagraph = new Paragraph($"Số tiền bằng chữ: {amountInWords}")
                     .SetFont(font)
@@ -377,7 +343,6 @@ namespace EVServiceCenter.Application.Service
                     .SetMarginTop(5);
                 document.Add(amountInWordsParagraph);
 
-                // Thông tin thanh toán chi tiết (nếu có)
                 if (payment != null)
                 {
                     var paymentInfoTable = new Table(2)
@@ -407,7 +372,6 @@ namespace EVServiceCenter.Application.Service
                     document.Add(paymentInfoTable);
                 }
 
-                // Chữ ký - giảm margin để tiết kiệm không gian
                 var signatureTable = new Table(2)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginTop(10);
@@ -430,8 +394,6 @@ namespace EVServiceCenter.Application.Service
 
                 document.Add(signatureTable);
 
-                // Footer - đẩy xuống cuối trang nhưng vẫn trong 1 trang
-                // Tăng khoảng cách vừa đủ để footer ở cuối trang nhưng không tràn sang trang mới
                 var footerTable = new Table(1)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginTop(20)
@@ -452,13 +414,11 @@ namespace EVServiceCenter.Application.Service
                 document.Close();
 
                 var pdfBytes = memoryStream.ToArray();
-                _logger.LogInformation("Generated PDF invoice for booking {BookingId}, size: {Size} bytes", bookingId, pdfBytes.Length);
 
                 return pdfBytes;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate PDF invoice for booking {BookingId}", bookingId);
                 throw new Exception($"Không thể tạo hóa đơn PDF: {ex.Message}", ex);
             }
         }
@@ -484,7 +444,6 @@ namespace EVServiceCenter.Application.Service
                 return hundreds[number / 100] + " " + tens[(number % 100) / 10] + " " + ones[number % 10] + " đồng";
             }
 
-            // Đơn giản hóa cho số lớn
             if (number >= 1000000)
             {
                 int millions = number / 1000000;
@@ -511,7 +470,6 @@ namespace EVServiceCenter.Application.Service
                 if (booking == null)
                     throw new ArgumentException($"Booking {bookingId} không tồn tại");
 
-                // Lấy dữ liệu kết quả kiểm tra bảo dưỡng
                 var maintenanceChecklist = await _maintenanceChecklistRepository.GetByBookingIdAsync(bookingId);
                 var maintenanceResults = maintenanceChecklist != null
                     ? await _maintenanceChecklistResultRepository.GetByChecklistIdAsync(maintenanceChecklist.ChecklistId)
@@ -525,14 +483,12 @@ namespace EVServiceCenter.Application.Service
                 using var pdf = new PdfDocument(writer);
                 using var document = new Document(pdf);
 
-                // Tạo font hỗ trợ tiếng Việt với encoding IDENTITY_H để hiển thị đúng ký tự có dấu
                 PdfFont font;
                 PdfFont boldFont;
                 var fontsFolder = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
 
                 try
                 {
-                    // Ưu tiên 1: Arial (phổ biến và hỗ trợ tốt tiếng Việt)
                     var arialPath = Path.Combine(fontsFolder, "arial.ttf");
                     if (File.Exists(arialPath))
                     {
@@ -542,7 +498,6 @@ namespace EVServiceCenter.Application.Service
                             ? PdfFontFactory.CreateFont(arialBoldPath, PdfEncodings.IDENTITY_H)
                             : PdfFontFactory.CreateFont(arialPath, PdfEncodings.IDENTITY_H);
                     }
-                    // Ưu tiên 2: Times New Roman
                     else
                     {
                         var timesPath = Path.Combine(fontsFolder, "times.ttf");
@@ -554,7 +509,6 @@ namespace EVServiceCenter.Application.Service
                                 ? PdfFontFactory.CreateFont(timesBoldPath, PdfEncodings.IDENTITY_H)
                                 : PdfFontFactory.CreateFont(timesPath, PdfEncodings.IDENTITY_H);
                         }
-                        // Ưu tiên 3: Thử với tên font trực tiếp
                         else
                         {
                             font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
@@ -562,12 +516,10 @@ namespace EVServiceCenter.Application.Service
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _logger.LogWarning(ex, "Không thể tải font từ hệ thống, thử font system font với IDENTITY_H");
                     try
                     {
-                        // Thử với tên font hệ thống
                     font = PdfFontFactory.CreateFont("Arial", PdfEncodings.IDENTITY_H);
                     boldFont = PdfFontFactory.CreateFont("Arial-Bold", PdfEncodings.IDENTITY_H);
                 }
@@ -580,14 +532,12 @@ namespace EVServiceCenter.Application.Service
                         }
                         catch
                         {
-                            // Fallback cuối cùng - vẫn dùng IDENTITY_H để hỗ trợ tiếng Việt
                             font = PdfFontFactory.CreateFont(StandardFonts.HELVETICA, PdfEncodings.IDENTITY_H);
                             boldFont = PdfFontFactory.CreateFont(StandardFonts.HELVETICA_BOLD, PdfEncodings.IDENTITY_H);
                         }
                     }
                 }
 
-                // Header - PHIẾU KIỂM TRA BẢO DƯỠNG ĐỊNH KỲ
                 var headerTable = new Table(1)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginBottom(20);
@@ -609,7 +559,6 @@ namespace EVServiceCenter.Application.Service
                 headerTable.AddCell(headerCell);
                 document.Add(headerTable);
 
-                // Thông tin booking và xe
                 var infoTable = new Table(4)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginBottom(20);
@@ -626,7 +575,6 @@ namespace EVServiceCenter.Application.Service
 
                 document.Add(infoTable);
 
-                // Ghi chú hướng dẫn
                 var instructionParagraph = new Paragraph("Ghi chú: khoanh tròn các hạng mục đã thực hiện")
                     .SetFont(font)
                     .SetFontSize(10)
@@ -634,12 +582,10 @@ namespace EVServiceCenter.Application.Service
                     .SetMarginBottom(15);
                 document.Add(instructionParagraph);
 
-                // Bảng kết quả kiểm tra bảo dưỡng
                 var maintenanceTable = new Table(5)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginBottom(20);
 
-                // Header của bảng
                 var headers = new[] { "STT", "Hình minh họa", "Nội dung kiểm tra Bảo dưỡng", "Ghi chú", "Kết quả kiểm tra" };
                 foreach (var header in headers)
                 {
@@ -650,36 +596,30 @@ namespace EVServiceCenter.Application.Service
                         .SetTextAlignment(TextAlignment.CENTER));
                 }
 
-                // Thêm dữ liệu kết quả kiểm tra
                 int stt = 1;
                 foreach (var result in maintenanceResults.OrderBy(r => r.CategoryId ?? int.MaxValue))
                 {
-                    // STT
                     maintenanceTable.AddCell(new Cell()
                         .Add(new Paragraph(stt.ToString()).SetFont(font).SetFontSize(10))
                         .SetPadding(8)
                         .SetTextAlignment(TextAlignment.CENTER));
 
-                    // Hình minh họa (để trống vì không có hình)
                     maintenanceTable.AddCell(new Cell()
                         .Add(new Paragraph("-").SetFont(font).SetFontSize(10))
                         .SetPadding(8)
                         .SetTextAlignment(TextAlignment.CENTER));
 
-                    // Nội dung kiểm tra
                     var categoryName = result.Category?.CategoryName ?? result.Description ?? "N/A";
                     maintenanceTable.AddCell(new Cell()
                         .Add(new Paragraph(categoryName).SetFont(font).SetFontSize(10))
                         .SetPadding(8));
 
-                    // Ghi chú (hiển thị description nếu có)
                     var notes = result.Description ?? "-";
                     maintenanceTable.AddCell(new Cell()
                         .Add(new Paragraph(notes).SetFont(font).SetFontSize(10))
                         .SetPadding(8)
                         .SetTextAlignment(TextAlignment.CENTER));
 
-                    // Kết quả kiểm tra với màu sắc (đổi sang tiếng Việt)
                     var resultText = result.Result?.ToUpper() ?? "PENDING";
                     var resultTextVi = resultText switch
                     {
@@ -700,7 +640,6 @@ namespace EVServiceCenter.Application.Service
 
                 document.Add(maintenanceTable);
 
-                // Thống kê kết quả kiểm tra
                 var passCount = maintenanceResults.Count(r => string.Equals(r.Result, "PASS", StringComparison.OrdinalIgnoreCase));
                 var failCount = maintenanceResults.Count(r => string.Equals(r.Result, "FAIL", StringComparison.OrdinalIgnoreCase));
                 var pendingCount = maintenanceResults.Count(r => string.Equals(r.Result, "PENDING", StringComparison.OrdinalIgnoreCase));
@@ -724,7 +663,6 @@ namespace EVServiceCenter.Application.Service
 
                 document.Add(summaryTable);
 
-                // Chữ ký
                 var signatureTable = new Table(3)
                     .SetWidth(UnitValue.CreatePercentValue(100))
                     .SetMarginTop(50);
@@ -755,7 +693,6 @@ namespace EVServiceCenter.Application.Service
 
                 document.Add(signatureTable);
 
-                // Footer
                 var footerParagraph = new Paragraph("(Cần kiểm tra, đối chiếu khi lập, giao, nhận phiếu kiểm tra)")
                     .SetFont(font)
                     .SetFontSize(9)
@@ -766,13 +703,11 @@ namespace EVServiceCenter.Application.Service
                 document.Close();
 
                 var pdfBytes = memoryStream.ToArray();
-                _logger.LogInformation("Generated maintenance report PDF for booking {BookingId}, size: {Size} bytes", bookingId, pdfBytes.Length);
 
                 return pdfBytes;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate maintenance report PDF for booking {BookingId}", bookingId);
                 throw new Exception($"Không thể tạo phiếu kết quả bảo dưỡng PDF: {ex.Message}", ex);
             }
         }
@@ -781,11 +716,11 @@ namespace EVServiceCenter.Application.Service
         {
             return result switch
             {
-                "PASS" => new DeviceRgb(40, 167, 69), // Xanh lá
-                "FAIL" => new DeviceRgb(220, 53, 69), // Đỏ
-                "PENDING" => new DeviceRgb(255, 193, 7), // Vàng
-                "NA" => new DeviceRgb(108, 117, 125), // Xám
-                _ => new DeviceRgb(0, 0, 0) // Đen mặc định
+                "PASS" => new DeviceRgb(40, 167, 69),
+                "FAIL" => new DeviceRgb(220, 53, 69),
+                "PENDING" => new DeviceRgb(255, 193, 7),
+                "NA" => new DeviceRgb(108, 117, 125),
+                _ => new DeviceRgb(0, 0, 0)
             };
         }
 

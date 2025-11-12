@@ -15,12 +15,11 @@ namespace EVServiceCenter.Api.Middleware
     public class GlobalExceptionHandlingMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly ILogger<GlobalExceptionHandlingMiddleware> _logger;
 
         public GlobalExceptionHandlingMiddleware(RequestDelegate next, ILogger<GlobalExceptionHandlingMiddleware> logger)
         {
             _next = next;
-            _logger = logger;
+            _ = logger;
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -31,7 +30,6 @@ namespace EVServiceCenter.Api.Middleware
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An unhandled exception occurred: {Message}", ex.Message);
                 await HandleExceptionAsync(context, ex);
             }
         }
@@ -111,11 +109,9 @@ namespace EVServiceCenter.Api.Middleware
                     response.StatusCode = (int)HttpStatusCode.BadRequest;
                     var dbErrorMessage = "Lỗi cơ sở dữ liệu";
                     
-                    // Xử lý Foreign Key constraint violation
                     if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx && sqlEx.Number == 547)
                     {
                         dbErrorMessage = "Dữ liệu không hợp lệ: Tham chiếu đến bản ghi không tồn tại. ";
-                        // Extract table name from error message
                         var match = Regex.Match(sqlEx.Message, @"table ['""](\w+)['""]");
                         if (match.Success)
                         {

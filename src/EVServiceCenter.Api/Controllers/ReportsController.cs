@@ -51,31 +51,16 @@ namespace EVServiceCenter.Api.Controllers
             _serviceBookingStatsService = serviceBookingStatsService;
 		}
 
-		/// <summary>
-        /// Lấy báo cáo sử dụng phụ tùng của chi nhánh
-		/// </summary>
-        /// <param name="centerId">ID chi nhánh</param>
-        /// <param name="request">Thông tin báo cáo</param>
-        /// <returns>Báo cáo sử dụng phụ tùng</returns>
         [HttpGet("parts-usage/{centerId}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetPartsUsageReport(int centerId, [FromQuery] PartsUsageReportRequest request)
 		{
 			try
 			{
-                // Validate center access for MANAGER
                 if (User.IsInRole("MANAGER"))
                 {
-                    // TODO: Implement GetUserCenterId method or use existing method from BaseController
-                    // For now, we'll allow the request to proceed
-                    // var userCenterId = GetUserCenterId();
-                    // if (userCenterId != centerId)
-                    // {
-                    //     return Forbid("Bạn chỉ có thể xem báo cáo của chi nhánh mình");
-                    // }
                 }
 
-                // Validate request
                 if (request.StartDate >= request.EndDate)
                 {
                     return BadRequest(new { success = false, message = "Ngày bắt đầu phải nhỏ hơn ngày kết thúc" });
@@ -86,7 +71,6 @@ namespace EVServiceCenter.Api.Controllers
                     return BadRequest(new { success = false, message = "Ngày bắt đầu không được lớn hơn ngày hiện tại" });
                 }
 
-                // Validate pagination
                 if (request.PageNumber < 1) request.PageNumber = 1;
                 if (request.PageSize < 1 || request.PageSize > 100) request.PageSize = 20;
 
@@ -113,26 +97,16 @@ namespace EVServiceCenter.Api.Controllers
 			}
 		}
 
-        /// <summary>
-        /// Lấy báo cáo doanh thu của chi nhánh
-        /// </summary>
-        /// <param name="centerId">ID chi nhánh</param>
-        /// <param name="request">Thông tin báo cáo</param>
-        /// <returns>Báo cáo doanh thu</returns>
         [HttpGet("revenue/{centerId}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetRevenueReport(int centerId, [FromQuery] RevenueReportRequest request)
         {
             try
             {
-                // Validate center access for MANAGER
                 if (User.IsInRole("MANAGER"))
                 {
-                    // TODO: Implement GetUserCenterId method or use existing method from BaseController
-                    // For now, we'll allow the request to proceed
                 }
 
-                // Validate request
                 if (request.StartDate >= request.EndDate)
                 {
                     return BadRequest(new { success = false, message = "Ngày bắt đầu phải nhỏ hơn ngày kết thúc" });
@@ -143,14 +117,12 @@ namespace EVServiceCenter.Api.Controllers
                     return BadRequest(new { success = false, message = "Ngày bắt đầu không được lớn hơn ngày hiện tại" });
                 }
 
-                // Validate period
                 var validPeriods = new[] { "daily", "weekly", "monthly", "quarterly" };
                 if (!validPeriods.Contains(request.Period.ToLower()))
                 {
                     return BadRequest(new { success = false, message = "Period phải là: daily, weekly, monthly, hoặc quarterly" });
                 }
 
-                // Validate groupBy
                 var validGroupBy = new[] { "service", "technician", "none" };
                 if (!validGroupBy.Contains(request.GroupBy.ToLower()))
                 {
@@ -180,11 +152,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách booking hôm nay của chi nhánh
-        /// </summary>
-        /// <param name="centerId">ID chi nhánh</param>
-        /// <returns>Danh sách booking hôm nay</returns>
         [HttpGet("bookings/today/{centerId}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetTodayBookings(int centerId)
@@ -210,11 +177,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Thống kê số lượt booking của các dịch vụ và doanh thu dịch vụ (payments PAID/COMPLETED)
-        /// </summary>
-        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
-        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
         [HttpGet("services-booking-stats")]
         [Authorize(Roles = "ADMIN,MANAGER")]
         public async Task<IActionResult> GetServiceBookingStats(
@@ -243,13 +205,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Tổng doanh thu toàn hệ thống theo khoảng thời gian và granularity (DAY|MONTH|QUARTER|YEAR)
-        /// </summary>
-        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
-        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
-        /// <param name="granularity">DAY | MONTH | QUARTER | YEAR (mặc định: DAY)</param>
-        /// <returns>Danh sách các khoảng thời gian với doanh thu và tổng doanh thu</returns>
         [HttpGet("total-revenue")]
         [Authorize(Roles = "ADMIN,MANAGER")]
         public async Task<IActionResult> GetTotalRevenue(
@@ -302,14 +257,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách booking của chi nhánh
-        /// </summary>
-        /// <param name="centerId">ID chi nhánh</param>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="status">Trạng thái booking (PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, PAID, CANCELLED)</param>
-        /// <returns>Danh sách booking</returns>
         [HttpGet("bookings/{centerId}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetBookings(int centerId, 
@@ -319,7 +266,6 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -342,12 +288,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy hiệu suất kỹ thuật viên của chi nhánh
-        /// </summary>
-        /// <param name="centerId">ID chi nhánh</param>
-        /// <param name="period">Khoảng thời gian (week, month, quarter, year)</param>
-        /// <returns>Hiệu suất kỹ thuật viên</returns>
         [HttpGet("technicians/performance/{centerId}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetTechnicianPerformance(int centerId, 
@@ -381,12 +321,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy lịch làm việc kỹ thuật viên của chi nhánh
-        /// </summary>
-        /// <param name="centerId">ID chi nhánh</param>
-        /// <param name="date">Ngày cần xem lịch (yyyy-MM-dd)</param>
-        /// <returns>Lịch làm việc kỹ thuật viên</returns>
         [HttpGet("technicians/schedule/{centerId}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetTechnicianSchedule(int centerId, 
@@ -413,12 +347,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy báo cáo sử dụng kho của chi nhánh
-        /// </summary>
-        /// <param name="centerId">ID chi nhánh</param>
-        /// <param name="period">Khoảng thời gian (week, month, quarter, year)</param>
-        /// <returns>Báo cáo sử dụng kho</returns>
         [HttpGet("inventory/usage/{centerId}")]
         [Authorize(Roles = "MANAGER,ADMIN")]
         public async Task<IActionResult> GetInventoryUsage(int centerId, 
@@ -426,7 +354,6 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
-                // Validate period
                 var validPeriods = new[] { "week", "month", "quarter", "year" };
                 if (!validPeriods.Contains(period.ToLower()))
                 {
@@ -452,12 +379,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy KPI tổng quan của toàn hệ thống (Dashboard Summary)
-        /// </summary>
-        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
-        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
-        /// <returns>Dashboard Summary với các KPI: Tổng doanh thu, Tổng nhân viên, Tổng booking hoàn thành, Doanh thu dịch vụ, Doanh thu phụ tùng</returns>
         [HttpGet("dashboard-summary")]
         [Authorize(Roles = "ADMIN,MANAGER")]
         public async Task<IActionResult> GetDashboardSummary(
@@ -509,12 +430,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy doanh thu theo cửa hàng để so sánh (Revenue by Store)
-        /// </summary>
-        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
-        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
-        /// <returns>Danh sách cửa hàng với doanh thu, phù hợp để vẽ chart so sánh</returns>
         [HttpGet("revenue-by-store")]
         [Authorize(Roles = "ADMIN,MANAGER")]
         public async Task<IActionResult> GetRevenueByStore(
@@ -523,7 +438,6 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
-                // Validate date range nếu cả hai đều được cung cấp
                 if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
                 {
                     return BadRequest(new
@@ -566,12 +480,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thống kê số lượng booking của từng timeslot (Timeslot Popularity)
-        /// </summary>
-        /// <param name="fromDate">Ngày bắt đầu (nullable, mặc định: 30 ngày trước)</param>
-        /// <param name="toDate">Ngày kết thúc (nullable, mặc định: hôm nay)</param>
-        /// <returns>Danh sách timeslot với số lượng booking, phù hợp để đánh giá popularity</returns>
         [HttpGet("timeslot-popularity")]
         [Authorize(Roles = "ADMIN,MANAGER")]
         public async Task<IActionResult> GetTimeslotPopularity(
@@ -580,7 +488,6 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
-                // Validate date range nếu cả hai đều được cung cấp
                 if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
                 {
                     return BadRequest(new

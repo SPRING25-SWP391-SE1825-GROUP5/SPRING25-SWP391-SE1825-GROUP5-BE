@@ -7,7 +7,6 @@ using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
-using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -15,13 +14,11 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IVehicleRepository _vehicleRepository;
         private readonly ICustomerRepository _customerRepository;
-        private readonly ILogger<VehicleService> _logger;
 
-        public VehicleService(IVehicleRepository vehicleRepository, ICustomerRepository customerRepository, ILogger<VehicleService> logger)
+        public VehicleService(IVehicleRepository vehicleRepository, ICustomerRepository customerRepository)
         {
             _vehicleRepository = vehicleRepository;
             _customerRepository = customerRepository;
-            _logger = logger;
         }
 
         public async Task<VehicleListResponse> GetVehiclesAsync(int pageNumber = 1, int pageSize = 10, int? customerId = null, string? searchTerm = null)
@@ -30,7 +27,6 @@ namespace EVServiceCenter.Application.Service
             {
                 var vehicles = await _vehicleRepository.GetAllVehiclesAsync();
 
-                // Filtering
                 if (customerId.HasValue)
                 {
                     vehicles = vehicles.Where(v => v.CustomerId == customerId.Value).ToList();
@@ -45,7 +41,6 @@ namespace EVServiceCenter.Application.Service
                     ).ToList();
                 }
 
-                // Pagination
                 var totalCount = vehicles.Count;
                 var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
                 var paginatedVehicles = vehicles.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
@@ -79,7 +74,7 @@ namespace EVServiceCenter.Application.Service
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -91,10 +86,8 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate request
                 await ValidateCreateVehicleRequestAsync(request);
 
-                // Create vehicle entity
                 var vehicle = new Vehicle
                 {
                     CustomerId = request.CustomerId,
@@ -107,25 +100,23 @@ namespace EVServiceCenter.Application.Service
                     CreatedAt = DateTime.UtcNow
                 };
 
-                // Save vehicle
                 var createdVehicle = await _vehicleRepository.CreateVehicleAsync(vehicle);
 
                 return MapToVehicleResponse(createdVehicle);
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
-                // Parse specific database errors
                 var errorMessage = "Lỗi cơ sở dữ liệu";
                 
                 if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx)
                 {
                     switch (sqlEx.Number)
                     {
-                        case 547: // Foreign key constraint violation
+                        case 547:
                             if (sqlEx.Message.Contains("FK_Vehicles_Models"))
                                 errorMessage = "Model xe không tồn tại. Vui lòng chọn model hợp lệ.";
                             else if (sqlEx.Message.Contains("FK_Vehicles_Customers"))
@@ -133,7 +124,7 @@ namespace EVServiceCenter.Application.Service
                             else
                                 errorMessage = "Dữ liệu tham chiếu không hợp lệ.";
                             break;
-                        case 2627: // Unique constraint violation
+                        case 2627:
                             if (sqlEx.Message.Contains("VIN"))
                                 errorMessage = "VIN này đã tồn tại. Vui lòng chọn VIN khác.";
                             else if (sqlEx.Message.Contains("LicensePlate"))
@@ -159,15 +150,12 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate vehicle exists
                 var vehicle = await _vehicleRepository.GetVehicleByIdAsync(vehicleId);
                 if (vehicle == null)
                     throw new ArgumentException("Xe không tồn tại.");
 
-                // Validate request (các điều kiện khác)
                 await ValidateUpdateVehicleRequestAsync(request, vehicleId);
 
-                // Update vehicle
                 vehicle.Color = request.Color.Trim();
                 vehicle.CurrentMileage = request.CurrentMileage;
                 vehicle.LastServiceDate = request.LastServiceDate;
@@ -178,7 +166,7 @@ namespace EVServiceCenter.Application.Service
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -210,40 +198,26 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Debug logging
-            _logger.LogInformation($"Validating vehicle creation for CustomerId: {request.CustomerId}");
-
-            // Validate customer exists - thử cả 2 cách
             var customer = await _customerRepository.GetCustomerByIdAsync(request.CustomerId);
             var customerDebug = await _customerRepository.GetCustomerByIdDebugAsync(request.CustomerId);
-            
-            _logger.LogInformation($"Customer debug check - ID: {request.CustomerId}, Found: {customerDebug != null}, UserId: {customerDebug?.UserId}, IsGuest: {customerDebug?.IsGuest}");
             
             if (customer == null)
             {
                 if (customerDebug == null)
                 {
-                    _logger.LogWarning($"Customer not found with ID: {request.CustomerId}");
                     errors.Add("Khách hàng không tồn tại.");
                 }
                 else
                 {
-                    _logger.LogWarning($"Customer exists but User is null - CustomerId: {customerDebug.CustomerId}, UserId: {customerDebug.UserId}");
                     errors.Add("Thông tin người dùng của khách hàng không hợp lệ.");
                 }
             }
-            else
-            {
-                _logger.LogInformation($"Customer found: {customer.CustomerId}, UserId: {customer.UserId}, IsGuest: {customer.IsGuest}");
-            }
 
-            // Check for duplicate VIN
             if (!await _vehicleRepository.IsVinUniqueAsync(request.Vin.Trim().ToUpper()))
             {
                 errors.Add("VIN này đã tồn tại. Vui lòng chọn VIN khác.");
             }
 
-            // Check for duplicate license plate
             if (!await _vehicleRepository.IsLicensePlateUniqueAsync(request.LicensePlate.Trim().ToUpper()))
             {
                 errors.Add("Biển số xe này đã tồn tại. Vui lòng chọn biển số khác.");
@@ -256,7 +230,6 @@ namespace EVServiceCenter.Application.Service
         private Task ValidateUpdateVehicleRequestAsync(UpdateVehicleRequest request, int vehicleId)
         {
             var errors = new List<string>();
-            // Không còn kiểm tra biển số khi cập nhật
 
             if (errors.Any())
                 throw new ArgumentException(string.Join(" ", errors));
@@ -264,7 +237,6 @@ namespace EVServiceCenter.Application.Service
             return Task.CompletedTask;
         }
 
-        // New methods implementation
         public async Task<CustomerResponse> GetCustomerByVehicleIdAsync(int vehicleId)
         {
             try
@@ -285,12 +257,12 @@ namespace EVServiceCenter.Application.Service
                     UserFullName = customer.User?.FullName ?? "Khách vãng lai",
                     UserEmail = customer.User?.Email ?? string.Empty,
                     UserPhoneNumber = customer.User?.PhoneNumber ?? string.Empty,
-                    VehicleCount = 1 // We know this customer has at least this vehicle
+                    VehicleCount = 1
                 };
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -320,7 +292,7 @@ namespace EVServiceCenter.Application.Service
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {

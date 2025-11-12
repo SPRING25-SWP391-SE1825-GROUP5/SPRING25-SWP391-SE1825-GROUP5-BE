@@ -64,7 +64,6 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, vehicleId, added = created.Count, data = created.Select(x => new { x.ReminderId, x.ServiceId, x.DueDate, x.DueMileage }) });
         }
 
-        // Get alert reminders (upcoming/past-due) for a specific vehicle
         [HttpGet("vehicles/{vehicleId:int}/alerts")]
         [Authorize]
         public async Task<IActionResult> GetVehicleAlerts(int vehicleId)
@@ -72,7 +71,6 @@ namespace EVServiceCenter.Api.Controllers
             if (vehicleId <= 0) return BadRequest(new { success = false, message = "vehicleId không hợp lệ" });
             var now = DateTime.UtcNow.Date;
             var until = now.AddDays(_options.UpcomingDays);
-            // Lấy tất cả reminders PENDING của vehicle, rồi lọc theo DueDate đến hạn trong cửa sổ cảnh báo
             var pending = await _repo.QueryAsync(null, vehicleId, "PENDING", null, null);
             var alerts = pending
                 .Where(r => r.DueDate.HasValue && r.DueDate.Value.ToDateTime(TimeOnly.MinValue) <= until)
@@ -172,7 +170,6 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, config = new { _options.UpcomingDays }, data = list });
         }
 
-        // Appointment reminders for bookings within configured window
         public class AppointmentDispatchRequest { public int? CenterId { get; set; } public DateTime? Date { get; set; } public int? WindowHours { get; set; } }
         [HttpPost("appointments/dispatch")]
         [Authorize(Roles = "ADMIN,STAFF")]
@@ -252,7 +249,6 @@ namespace EVServiceCenter.Api.Controllers
         }
 
 
-        // Dispatch reminders by list or auto by config UpcomingDays
         public class DispatchRequest { public int[] ReminderIds { get; set; } = Array.Empty<int>(); public bool Auto { get; set; } = false; public int? UpcomingDays { get; set; } }
         [HttpPost("dispatch")]
         [Authorize(Roles = "ADMIN,STAFF")]
@@ -299,7 +295,6 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, sent });
         }
 
-        // Admin endpoints
         [HttpGet("admin")]
         [Authorize(Roles = "ADMIN,STAFF")]
         public async Task<IActionResult> ListForAdmin(
@@ -315,7 +310,6 @@ namespace EVServiceCenter.Api.Controllers
             [FromQuery] string sortBy = "createdAt",
             [FromQuery] string sortOrder = "desc")
         {
-            // Check ModelState for binding errors
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
@@ -342,7 +336,6 @@ namespace EVServiceCenter.Api.Controllers
 
                 var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
-                // Project to DTOs to avoid circular reference issues
                 var data = items.Select(r => new
                 {
                     reminderId = r.ReminderId,
@@ -412,7 +405,6 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
-                // Get all reminders for statistics
                 var allReminders = await _repo.QueryAsync(null, null, null, null, null);
 
                 var stats = new
@@ -468,5 +460,3 @@ namespace EVServiceCenter.Api.Controllers
         }
     }
 }
-
-

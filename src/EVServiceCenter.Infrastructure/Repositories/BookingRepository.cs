@@ -467,5 +467,18 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 throw new InvalidOperationException($"Booking {bookingId} không tồn tại");
             }
         }
+
+        public async Task<List<Booking>> GetBookingsByStatusAsync(string status)
+        {
+            return await _context.Bookings
+                .Include(b => b.Customer)
+                .ThenInclude(c => c.User)
+                .Include(b => b.Vehicle)
+                .Include(b => b.Service)
+                .Include(b => b.Center)
+                .Where(b => b.Status == status)
+                .OrderByDescending(b => b.UpdatedAt)
+                .ToListAsync();
+        }
     }
 }

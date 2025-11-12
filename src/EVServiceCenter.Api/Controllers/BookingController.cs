@@ -435,6 +435,32 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        [HttpGet("checked-in")]
+        [Authorize(Roles = "STAFF,ADMIN,MANAGER")]
+        public async Task<IActionResult> GetCheckedInBookings()
+        {
+            try
+            {
+                var bookings = await _bookingRepository.GetBookingsByStatusAsync(BookingStatusConstants.CheckedIn);
+                
+                var result = bookings.Select(b => new
+                {
+                    bookingId = b.BookingId,
+                    customerName = b.Customer?.User?.FullName ?? "N/A",
+                    vehiclePlate = b.Vehicle?.LicensePlate ?? "N/A",
+                    serviceName = b.Service?.ServiceName ?? "N/A",
+                    checkedInAt = b.UpdatedAt,
+                    status = b.Status
+                }).ToList();
+
+                return Ok(new { success = true, data = result });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi khi lấy danh sách checked-in", error = ex.Message });
+            }
+        }
+
         [HttpPost("release-slot")]
         public async Task<IActionResult> ReleaseTimeSlot(
             [FromQuery] int technicianId,

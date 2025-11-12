@@ -22,9 +22,6 @@ public class VehicleModelController : ControllerBase
         _cloudinaryService = cloudinaryService;
     }
 
-    /// <summary>
-    /// Get all vehicle models
-    /// </summary>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<VehicleModelResponse>>> GetAll()
     {
@@ -39,9 +36,6 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get vehicle model by ID
-    /// </summary>
     [HttpGet("{id}")]
     public async Task<ActionResult<VehicleModelResponse>> GetById(int id)
     {
@@ -60,11 +54,6 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-    // Brand removed - endpoint deleted
-
-    /// <summary>
-    /// Get active vehicle models
-    /// </summary>
     [HttpGet("active")]
     public async Task<ActionResult<IEnumerable<VehicleModelResponse>>> GetActive()
     {
@@ -79,10 +68,6 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-
-    /// <summary>
-    /// Create new vehicle model
-    /// </summary>
     [HttpPost]
     public async Task<ActionResult<VehicleModelResponse>> Create([FromBody] CreateVehicleModelRequest request)
     {
@@ -100,9 +85,6 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Update vehicle model
-    /// </summary>
     [HttpPut("{id}")]
     public async Task<ActionResult<VehicleModelResponse>> Update(int id, [FromBody] UpdateVehicleModelRequest request)
     {
@@ -124,9 +106,6 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Delete vehicle model
-    /// </summary>
     [HttpDelete("{id}")]
     public async Task<ActionResult> Delete(int id)
     {
@@ -144,9 +123,6 @@ public class VehicleModelController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Upload image for vehicle model
-    /// </summary>
     [HttpPost("{id}/upload-image")]
     public async Task<ActionResult<VehicleModelResponse>> UploadImage(int id, IFormFile file)
     {
@@ -202,5 +178,4 @@ public class VehicleModelController : ControllerBase
             return StatusCode(500, new { success = false, message = "Internal server error", error = ex.Message });
         }
     }
-
 }

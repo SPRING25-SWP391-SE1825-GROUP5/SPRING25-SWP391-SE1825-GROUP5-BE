@@ -21,11 +21,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             _timeSlotService = timeSlotService;
         }
 
-        /// <summary>
-        /// Lấy danh sách tất cả time slots
-        /// </summary>
-        /// <param name="active">Lọc theo trạng thái active (true/false/null)</param>
-        /// <returns>Danh sách time slots</returns>
         [HttpGet]
         public async Task<IActionResult> GetTimeSlots([FromQuery] bool? active = null)
         {
@@ -41,7 +36,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                     }
                     else
                     {
-                        // Get all and filter inactive ones
                         var allTimeSlots = await _timeSlotService.GetAllTimeSlotsAsync();
                         timeSlots = allTimeSlots.Where(ts => !ts.IsActive).ToList();
                     }
@@ -67,11 +61,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo time slot mới (chỉ ADMIN)
-        /// </summary>
-        /// <param name="request">Thông tin time slot mới</param>
-        /// <returns>Thông tin time slot đã tạo</returns>
         [HttpPost]
         [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> CreateTimeSlot([FromBody] CreateTimeSlotRequest request)

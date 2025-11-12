@@ -38,5 +38,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<Booking?> GetBookingByPayOSOrderCodeAsync(int payOSOrderCode);
         Task<bool> PayOSOrderCodeExistsAsync(int payOSOrderCode);
         Task UpdatePayOSOrderCodeAsync(int bookingId, int payOSOrderCode);
+        Task<List<Booking>> GetBookingsByStatusAsync(string status);
     }
 }

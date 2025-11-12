@@ -6,13 +6,12 @@ using EVServiceCenter.Application.Models.Responses;
 using System;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "AuthenticatedUser")] // Tất cả user đã đăng nhập đều có thể xem
+    [Authorize(Policy = "AuthenticatedUser")]
     public class TechnicianController : ControllerBase
     {
         private readonly ITechnicianService _technicianService;
@@ -32,14 +31,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             _dashboardService = dashboardService;
         }
 
-        /// <summary>
-        /// Lấy danh sách tất cả kỹ thuật viên với phân trang và tìm kiếm
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
-        /// <param name="centerId">Lọc theo trung tâm</param>
-        /// <returns>Danh sách kỹ thuật viên</returns>
         [HttpGet("by-center/{centerId}")]
         [AllowAnonymous]
         public async Task<IActionResult> GetTechniciansByCenter(int centerId)
@@ -100,9 +91,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
 
-        /// <summary>
-        /// Danh sách booking của kỹ thuật viên
-        /// </summary>
         [HttpGet("{technicianId}/bookings")]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetBookings(int technicianId)
@@ -114,9 +102,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             return Ok(new { success = true, message = "Lấy danh sách booking thành công", data });
         }
 
-        /// <summary>
-        /// Chi tiết booking của kỹ thuật viên
-        /// </summary>
         [HttpGet("{technicianId}/bookings/{bookingId}")]
         [Authorize(Policy = "TechnicianOrAdmin")]
         public async Task<IActionResult> GetBookingDetail(int technicianId, int bookingId)
@@ -131,11 +116,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             return Ok(new { success = true, message = "Lấy thông tin chi tiết booking thành công", data });
         }
 
-        /// <summary>
-        /// Lấy thông tin kỹ thuật viên theo ID
-        /// </summary>
-        /// <param name="id">ID kỹ thuật viên</param>
-        /// <returns>Thông tin kỹ thuật viên</returns>
         [HttpGet("{id}")]
         public async Task<IActionResult> GetTechnicianById(int id)
         {
@@ -166,12 +146,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
 
-        /// <summary>
-        /// Lấy danh sách timeslots của kỹ thuật viên
-        /// </summary>
-        /// <param name="id">ID kỹ thuật viên</param>
-        /// <param name="active">Lọc theo trạng thái active (true/false/null = all)</param>
-        /// <returns>Danh sách timeslots của kỹ thuật viên</returns>
         [HttpGet("{id}/timeslots")]
         public async Task<IActionResult> GetTechnicianTimeSlots(int id, [FromQuery] bool? active = null)
         {
@@ -180,7 +154,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (id <= 0)
                     return BadRequest(new { success = false, message = "ID kỹ thuật viên không hợp lệ" });
 
-                // Verify technician exists
                 var technician = await _technicianService.GetTechnicianByIdAsync(id);
                 if (technician == null)
                     return NotFound(new { success = false, message = "Kỹ thuật viên không tồn tại." });
@@ -215,12 +188,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật lịch làm việc của kỹ thuật viên (chỉ ADMIN)
-        /// </summary>
-        /// <param name="id">ID kỹ thuật viên</param>
-        /// <param name="request">Thông tin cập nhật lịch làm việc</param>
-        /// <returns>Kết quả cập nhật</returns>
         [HttpPut("{id}/availability")]
         [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> UpdateTechnicianAvailability(int id, [FromBody] UpdateTechnicianAvailabilityRequest request)
@@ -270,15 +237,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        // ============================================================================
-        // TECHNICIAN DASHBOARD APIs
-        // ============================================================================
-
-        /// <summary>
-        /// Lấy thông tin dashboard cho kỹ thuật viên
-        /// </summary>
-        /// <param name="technicianId">ID kỹ thuật viên</param>
-        /// <returns>Dashboard overview</returns>
         [HttpGet("{technicianId}/dashboard")]
         [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> GetDashboard(int technicianId)
@@ -300,11 +258,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách booking hôm nay của kỹ thuật viên
-        /// </summary>
-        /// <param name="technicianId">ID kỹ thuật viên</param>
-        /// <returns>Danh sách booking hôm nay</returns>
         [HttpGet("{technicianId}/bookings/today")]
         [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> GetTodayBookings(int technicianId)
@@ -326,13 +279,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách booking đang chờ của kỹ thuật viên
-        /// </summary>
-        /// <param name="technicianId">ID kỹ thuật viên</param>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <returns>Danh sách booking đang chờ</returns>
         [HttpGet("{technicianId}/bookings/pending")]
         [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> GetPendingBookings(int technicianId, 
@@ -359,13 +305,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách booking đang xử lý của kỹ thuật viên
-        /// </summary>
-        /// <param name="technicianId">ID kỹ thuật viên</param>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <returns>Danh sách booking đang xử lý</returns>
         [HttpGet("{technicianId}/bookings/in-progress")]
         [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> GetInProgressBookings(int technicianId, 
@@ -392,13 +331,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách booking đã hoàn thành của kỹ thuật viên
-        /// </summary>
-        /// <param name="technicianId">ID kỹ thuật viên</param>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <returns>Danh sách booking đã hoàn thành</returns>
         [HttpGet("{technicianId}/bookings/completed")]
         [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> GetCompletedBookings(int technicianId, 
@@ -425,11 +357,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thống kê của kỹ thuật viên
-        /// </summary>
-        /// <param name="technicianId">ID kỹ thuật viên</param>
-        /// <returns>Thống kê</returns>
         [HttpGet("{technicianId}/stats")]
         [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> GetStats(int technicianId)
@@ -451,11 +378,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy hiệu suất của kỹ thuật viên
-        /// </summary>
-        /// <param name="technicianId">ID kỹ thuật viên</param>
-        /// <returns>Hiệu suất</returns>
         [HttpGet("{technicianId}/performance")]
         [Authorize(Roles = "TECHNICIAN,MANAGER,ADMIN")]
         public async Task<IActionResult> GetPerformance(int technicianId)
@@ -476,7 +398,5 @@ namespace EVServiceCenter.WebAPI.Controllers
                 return StatusCode(500, new { success = false, message = "Lỗi hệ thống: " + ex.Message });
             }
         }
-
     }
-
 }

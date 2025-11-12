@@ -12,7 +12,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // Cho phép tất cả user đã đăng nhập, các endpoint sẽ tự set authorization
+    [Authorize]
     public class StaffManagementController : ControllerBase
     {
         private readonly IStaffManagementService _staffManagementService;
@@ -24,13 +24,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             _technicianRepository = technicianRepository;
         }
 
-        #region Current User APIs
-
-        /// <summary>
-        /// Lấy thông tin Staff hiện tại từ user đăng nhập (dùng để biết center được gán)
-        /// </summary>
         [HttpGet("staff/current")]
-        [Authorize(Roles = "STAFF,MANAGER,ADMIN")] // Cho phép STAFF và quản trị xem
+        [Authorize(Roles = "STAFF,MANAGER,ADMIN")]
         public async Task<IActionResult> GetCurrentStaff()
         {
             try
@@ -73,18 +68,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        #endregion
-
-        #region Employee Management (Staff + Technician)
-
-        /// <summary>
-        /// Lấy danh sách user có role STAFF/TECHNICIAN nhưng chưa có bản ghi trong bảng Staff/Technician
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm (tên, email, số điện thoại)</param>
-        /// <param name="isActive">Lọc theo trạng thái hoạt động</param>
-        /// <returns>Danh sách user chưa có bản ghi nhân viên</returns>
         [HttpGet("employees/available-users")]
         [Authorize(Roles = "ADMIN,MANAGER")]
         public async Task<IActionResult> GetAvailableUsersForEmployee(
@@ -119,16 +102,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách tất cả nhân viên (Staff + Technician) theo trung tâm hoặc chưa có centerId
-        /// </summary>
-        /// <param name="centerId">ID trung tâm (bắt buộc nếu unassigned=false)</param>
-        /// <param name="unassigned">Lấy nhân viên chưa có centerId (mặc định: false)</param>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm (tên, email, số điện thoại)</param>
-        /// <param name="isActive">Lọc theo trạng thái hoạt động</param>
-        /// <returns>Danh sách nhân viên</returns>
         [HttpGet("employees")]
         [Authorize(Roles = "ADMIN,MANAGER")]
         public async Task<IActionResult> GetCenterEmployees(
@@ -141,7 +114,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Validation
                 if (!unassigned && (!centerId.HasValue || centerId <= 0))
                     return BadRequest(new { success = false, message = "ID trung tâm không hợp lệ hoặc cần thiết khi unassigned=false" });
 
@@ -174,12 +146,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Gán nhân viên vào center (dùng cho cả STAFF và TECHNICIAN)
-        /// Có thể gán nhiều người cùng lúc
-        /// </summary>
-        /// <param name="request">Danh sách userIds và centerId</param>
-        /// <returns>Danh sách nhân viên đã được gán</returns>
         [HttpPost("assign-employees")]
         [Authorize(Roles = "ADMIN,MANAGER")]
         public async Task<IActionResult> AssignEmployeesToCenter([FromBody] AssignEmployeesToCenterRequest request)
@@ -211,22 +177,11 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
-
-        #endregion
-
-        #region Validation APIs
-
-
-        #endregion
     }
-
-    #region Request Models
 
     public class AssignEmployeesToCenterRequest
     {
         public List<int> UserIds { get; set; } = new List<int>();
         public int CenterId { get; set; }
     }
-
-    #endregion
 }

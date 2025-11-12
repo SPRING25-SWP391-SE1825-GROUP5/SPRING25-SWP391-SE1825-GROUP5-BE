@@ -12,7 +12,6 @@ using Microsoft.Extensions.Options;
 using EVServiceCenter.Application.Configurations;
 using System.IO;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using EVServiceCenter.Api.Constants;
 using EVServiceCenter.Domain.Entities;
 
@@ -29,9 +28,8 @@ public class OrderController : ControllerBase
     private readonly IOptions<ExportOptions> _exportOptions;
     private readonly IConfiguration _configuration;
     private readonly EVServiceCenter.Domain.Interfaces.IInventoryRepository _inventoryRepository;
-    private readonly ILogger<OrderController> _logger;
 
-    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IInventoryRepository inventoryRepository, ILogger<OrderController> logger)
+    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IInventoryRepository inventoryRepository)
     {
         _orderService = orderService;
         _paymentService = paymentService;
@@ -39,12 +37,8 @@ public class OrderController : ControllerBase
         _exportOptions = exportOptions;
         _configuration = configuration;
         _inventoryRepository = inventoryRepository;
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<OrderController>.Instance;
     }
 
-    /// <summary>
-    /// Lấy danh sách đơn hàng của khách hàng
-    /// </summary>
     [HttpGet("customer/{customerId}")]
     public async Task<IActionResult> GetByCustomerId(int customerId)
     {
@@ -59,10 +53,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lấy danh sách đơn hàng đã thanh toán có phụ tùng có thể dùng cho booking tại chi nhánh
-    /// Tối ưu: chỉ trả về những đơn hàng có ít nhất 1 phụ tùng có thể dùng, kèm thông tin phụ tùng
-    /// </summary>
     [HttpGet("customer/{customerId}/available-for-booking")]
     public async Task<IActionResult> GetAvailableOrdersForBooking(int customerId, [FromQuery] int? centerId = null)
     {
@@ -71,14 +61,12 @@ public class OrderController : ControllerBase
             if (!centerId.HasValue)
                 return BadRequest(new { success = false, message = "centerId là bắt buộc" });
 
-            // Lấy tất cả đơn hàng đã thanh toán của customer
             var allOrders = await _orderService.GetByCustomerIdAsync(customerId);
             var paidOrders = allOrders.Where(o => o.Status == "PAID").ToList();
 
             if (paidOrders.Count == 0)
                 return Ok(new { success = true, data = new List<object>() });
 
-            // Lấy inventory của chi nhánh để kiểm tra
             var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId.Value);
             if (inventory == null)
                 return BadRequest(new { success = false, message = $"Không tìm thấy kho của chi nhánh {centerId.Value}" });
@@ -89,25 +77,20 @@ public class OrderController : ControllerBase
 
             foreach (var order in paidOrders)
             {
-                // Lấy OrderItems của đơn hàng
                 var orderItems = await _orderService.GetItemsAsync(order.OrderId);
                 var availableItems = new List<object>();
 
                 foreach (var oi in orderItems)
                 {
-                    // Chỉ lấy items có AvailableQty > 0
                     if (oi.AvailableQty <= 0)
                         continue;
 
-                    // Kiểm tra FulfillmentCenterId phải khớp với centerId
                     if (order.FulfillmentCenterId != centerId.Value)
                         continue;
 
-                    // Kiểm tra inventory
                     var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == oi.PartId);
                     if (invPart == null)
                     {
-                        // Không có trong kho, nhưng vẫn thêm với warning
                         availableItems.Add(new
                         {
                             orderItemId = oi.OrderItemId,
@@ -121,7 +104,6 @@ public class OrderController : ControllerBase
                         continue;
                     }
 
-                    // Kiểm tra có thể dùng hay không
                     var canUse = invPart.ReservedQty >= oi.AvailableQty && invPart.CurrentStock >= oi.AvailableQty;
 
                     availableItems.Add(new
@@ -136,7 +118,6 @@ public class OrderController : ControllerBase
                     });
                 }
 
-                // Chỉ thêm đơn hàng nếu có ít nhất 1 phụ tùng có thể dùng
                 if (availableItems.Count > 0)
                 {
                     result.Add(new
@@ -156,16 +137,10 @@ public class OrderController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "GetAvailableOrdersForBooking failed for customerId={CustomerId} with centerId={CenterId}", customerId, centerId);
             return BadRequest(new { success = false, message = ex.Message });
         }
     }
 
-    // Removed order history/customer endpoints (per request)
-
-    /// <summary>
-    /// Danh sách item của đơn hàng
-    /// </summary>
     [HttpGet("{orderId}/items")]
     public async Task<IActionResult> GetItems(int orderId)
     {
@@ -184,17 +159,11 @@ public class OrderController : ControllerBase
         }
     }
 
-    // Removed order status history endpoint
-
-    /// <summary>
-    /// Checkout online cho Order (PayOS) - dùng ReturnUrl callback, không webhook
-    /// </summary>
     [HttpPost("{orderId}/checkout/online")]
     public async Task<IActionResult> CheckoutOnline(int orderId)
     {
         try
         {
-            // Tạo cancel URL riêng cho order để phân biệt với booking
             var frontendUrl = _configuration["App:FrontendUrl"] ?? "http://localhost:5173";
             var orderCancelUrl = $"{frontendUrl}/api/payment/order/{orderId}/cancel";
 
@@ -262,9 +231,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lấy payment link hiện có từ PayOS cho Order (khi đã tồn tại)
-    /// </summary>
     [HttpGet("{orderId}/payment/link")]
     public async Task<IActionResult> GetOrderPaymentLink(int orderId)
     {
@@ -343,9 +309,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lấy chi tiết đơn hàng
-    /// </summary>
     [HttpGet("{orderId}")]
     public async Task<IActionResult> GetById(int orderId)
     {
@@ -363,9 +326,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Cập nhật fulfillment center cho đơn hàng
-    /// </summary>
     [HttpPut("{orderId}/fulfillment-center")]
     public async Task<IActionResult> UpdateFulfillmentCenter(int orderId, [FromBody] UpdateFulfillmentCenterRequest request)
     {
@@ -394,9 +354,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lấy tất cả đơn hàng (Admin)
-    /// </summary>
     [HttpGet("admin")]
     public async Task<IActionResult> GetAll()
     {
@@ -411,9 +368,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lấy tất cả đơn hàng (Admin)
-    /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetAllOrders()
     {
@@ -428,9 +382,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Export orders as XLSX (ADMIN only)
-    /// </summary>
     [HttpGet("export")]
     [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> ExportOrders()
@@ -507,11 +458,6 @@ public class OrderController : ControllerBase
         return ms.ToArray();
     }
 
-    // Removed: POST /api/Order/create (dùng route có customerId)
-
-    /// <summary>
-    /// Tạo đơn hàng từ giỏ hàng theo customerId trên route (không cần truyền ID trong body)
-    /// </summary>
     [HttpPost("customer/{customerId}/create")]
     public async Task<IActionResult> CreateOrderForCustomer(int customerId, [FromBody] CreateOrderRequest request)
     {
@@ -536,9 +482,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Mua ngay: tạo đơn trực tiếp từ danh sách sản phẩm, không dùng giỏ hàng
-    /// </summary>
     [HttpPost("customers/{customerId}/orders/quick")]
     public async Task<IActionResult> CreateQuickOrder(int customerId, [FromBody] QuickOrderRequest request)
     {
@@ -563,9 +506,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Cập nhật trạng thái đơn hàng
-    /// </summary>
     [HttpPut("{orderId}/status")]
     public async Task<IActionResult> UpdateOrderStatus(int orderId, [FromBody] UpdateOrderStatusRequest request)
     {
@@ -584,9 +524,6 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Xóa đơn hàng
-    /// </summary>
     [HttpDelete("{orderId}")]
     public async Task<IActionResult> DeleteOrder(int orderId)
     {
@@ -605,80 +542,56 @@ public class OrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Endpoint xử lý cancel payment cho Order
-    /// HOÀN TOÀN ĐỘC LẬP với PaymentController.Cancel (dành cho Booking)
-    /// Redirect về frontend với orderId để phân biệt với booking
-    /// </summary>
     [HttpGet("/api/payment/order/{orderId}/cancel")]
     [AllowAnonymous]
     public IActionResult CancelOrderPayment([FromRoute] int orderId, [FromQuery] string? status = null, [FromQuery] string? code = null)
     {
-        // Redirect về trang hủy thanh toán trên FE với orderId để phân biệt với booking
         var frontendUrl = _configuration["App:FrontendUrl"] ?? "http://localhost:5173";
         var frontendCancelUrl = $"{frontendUrl}/payment-cancel?orderId={orderId}&status={status}&code={code}";
         return Redirect(frontendCancelUrl);
     }
 
-    /// <summary>
-    /// Lấy danh sách phụ tùng đã mua có thể dùng tại chi nhánh
-    /// </summary>
     [HttpGet("{orderId}/available-parts")]
     public async Task<IActionResult> GetAvailableParts(int orderId, [FromQuery] int? centerId = null)
     {
         try
         {
-            _logger.LogInformation("GetAvailableParts called for OrderId={OrderId} with centerId={CenterId}", orderId, centerId);
             var order = await _orderService.GetByIdAsync(orderId);
             if (order == null)
                 return NotFound(new { success = false, message = "Đơn hàng không tồn tại" });
 
-            // Chỉ trả về nếu Order đã thanh toán
             if (order.Status != "PAID")
                 return BadRequest(new { success = false, message = "Đơn hàng chưa thanh toán" });
 
-            // Lấy OrderItems từ repository để có ConsumedQty
             var orderItems = await _orderService.GetItemsAsync(orderId);
 
-            // Xác định centerId để kiểm tra inventory
             var targetCenterId = centerId ?? order.FulfillmentCenterId;
             if (!targetCenterId.HasValue)
             {
-                _logger.LogWarning("GetAvailableParts missing fulfillment center. OrderId={OrderId}, Order.FulfillmentCenterId=null, query centerId=null", orderId);
                 return BadRequest(new { success = false, message = "Không xác định được chi nhánh để kiểm tra kho" });
             }
 
-            // Lấy inventory của chi nhánh để kiểm tra ReservedQty
             var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(targetCenterId.Value);
             if (inventory == null)
             {
-                _logger.LogWarning("GetAvailableParts: inventory not found for centerId={CenterId}", targetCenterId.Value);
                 return BadRequest(new { success = false, message = $"Không tìm thấy kho của chi nhánh {targetCenterId.Value}" });
             }
 
             var inventoryParts = inventory.InventoryParts ?? new List<InventoryPart>();
 
-            // Filter: Chỉ lấy OrderItems có thể dùng
-            // 1. AvailableQty > 0 (Quantity - ConsumedQty > 0)
-            // 2. ReservedQty >= AvailableQty (đảm bảo hàng đã được reserve trong kho)
-            // 3. FulfillmentCenterId == targetCenterId (nếu có filter)
             var availableItems = new List<object>();
 
             foreach (var oi in orderItems)
             {
-                // Kiểm tra AvailableQty
                 if (oi.AvailableQty <= 0)
                     continue;
 
-                // Kiểm tra FulfillmentCenterId nếu có filter
                 if (centerId.HasValue && order.FulfillmentCenterId != centerId.Value)
                     continue;
 
-                // Kiểm tra inventory
                 var invPart = inventoryParts.FirstOrDefault(ip => ip.PartId == oi.PartId);
                 if (invPart == null)
                 {
-                    // Không có trong kho, nhưng vẫn trả về với warning
                     availableItems.Add(new
                     {
                         orderItemId = oi.OrderItemId,
@@ -691,19 +604,17 @@ public class OrderController : ControllerBase
                         subtotal = oi.Subtotal,
                         fulfillmentCenterId = order.FulfillmentCenterId,
                         fulfillmentCenterName = order.FulfillmentCenterName,
-                        // Thông tin inventory
                         currentStock = (int?)null,
                         reservedQty = (int?)null,
                         inventoryAvailableQty = (int?)null,
-                        canUse = false, // Không thể dùng vì không có trong kho
+                        canUse = false,
                         warning = "Phụ tùng không có trong kho của chi nhánh này"
                     });
                     continue;
                 }
 
-                // Kiểm tra ReservedQty >= AvailableQty (đảm bảo hàng đã được reserve)
                 var inventoryAvailableQty = invPart.CurrentStock - invPart.ReservedQty;
-                var reservedQtyForThisItem = invPart.ReservedQty; // Tổng ReservedQty (có thể từ nhiều OrderItems)
+                var reservedQtyForThisItem = invPart.ReservedQty;
                 var canUse = reservedQtyForThisItem >= oi.AvailableQty && invPart.CurrentStock >= oi.AvailableQty;
 
                 availableItems.Add(new
@@ -714,27 +625,23 @@ public class OrderController : ControllerBase
                     quantity = oi.Quantity,
                     consumedQty = oi.ConsumedQty,
                     availableQty = oi.AvailableQty,
-                    unitPrice = oi.UnitPrice,
-                    subtotal = oi.Subtotal,
-                    fulfillmentCenterId = order.FulfillmentCenterId,
-                    fulfillmentCenterName = order.FulfillmentCenterName,
-                    // Thông tin inventory
-                    currentStock = invPart.CurrentStock,
-                    reservedQty = reservedQtyForThisItem,
-                    inventoryAvailableQty = inventoryAvailableQty,
-                    canUse = canUse, // Có thể dùng hay không (dựa trên inventory)
-                    warning = canUse ? null : $"ReservedQty ({reservedQtyForThisItem}) hoặc CurrentStock ({invPart.CurrentStock}) không đủ cho AvailableQty ({oi.AvailableQty})"
+                        unitPrice = oi.UnitPrice,
+                        subtotal = oi.Subtotal,
+                        fulfillmentCenterId = order.FulfillmentCenterId,
+                        fulfillmentCenterName = order.FulfillmentCenterName,
+                        currentStock = invPart.CurrentStock,
+                        reservedQty = reservedQtyForThisItem,
+                        inventoryAvailableQty = inventoryAvailableQty,
+                        canUse = canUse,
+                        warning = canUse ? null : $"ReservedQty ({reservedQtyForThisItem}) hoặc CurrentStock ({invPart.CurrentStock}) không đủ cho AvailableQty ({oi.AvailableQty})"
                 });
             }
 
-            _logger.LogInformation("GetAvailableParts returning {Count} items for OrderId={OrderId}, centerId={CenterId}", availableItems.Count, orderId, targetCenterId.Value);
             return Ok(new { success = true, data = availableItems });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "GetAvailableParts failed for OrderId={OrderId} with centerId={CenterId}", orderId, centerId);
             return BadRequest(new { success = false, message = ex.Message });
         }
     }
 }
-

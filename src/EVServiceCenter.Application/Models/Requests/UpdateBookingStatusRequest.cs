@@ -8,5 +8,10 @@ namespace EVServiceCenter.Application.Models.Requests
         [RegularExpression("^(PENDING|CONFIRMED|CHECKED_IN|IN_PROGRESS|COMPLETED|PAID|CANCELLED)$",
             ErrorMessage = "Trạng thái phải là PENDING, CONFIRMED, CHECKED_IN, IN_PROGRESS, COMPLETED, PAID hoặc CANCELLED")]
         public required string Status { get; set; }
+
+        /// <summary>
+        /// Bỏ qua validation khi hủy tự động (ví dụ: WorkDate đã qua)
+        /// </summary>
+        public bool ForceCancel { get; set; } = false;
     }
 }

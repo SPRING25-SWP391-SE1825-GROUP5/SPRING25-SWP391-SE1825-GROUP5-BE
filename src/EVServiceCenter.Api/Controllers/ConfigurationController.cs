@@ -8,6 +8,8 @@ using EVServiceCenter.Api.Constants;
 using System.Threading.Tasks;
 using System;
 using System.Linq;
+using Microsoft.Extensions.Options;
+using EVServiceCenter.Application.Configurations;
 
 namespace EVServiceCenter.Api.Controllers
 {
@@ -16,11 +18,13 @@ namespace EVServiceCenter.Api.Controllers
     {
         private readonly ILoginLockoutService _loginLockoutService;
         private readonly EVServiceCenter.Application.Interfaces.ISettingsService _settingsService;
+        private readonly IOptionsSnapshot<FeatureFlagsOptions> _featureFlagsOptions;
 
-        public ConfigurationController(ILoginLockoutService loginLockoutService, EVServiceCenter.Application.Interfaces.ISettingsService settingsService, ILogger<ConfigurationController> logger) : base(logger)
+        public ConfigurationController(ILoginLockoutService loginLockoutService, EVServiceCenter.Application.Interfaces.ISettingsService settingsService, IOptionsSnapshot<FeatureFlagsOptions> featureFlagsOptions, ILogger<ConfigurationController> logger) : base(logger)
         {
             _loginLockoutService = loginLockoutService;
             _settingsService = settingsService;
+            _featureFlagsOptions = featureFlagsOptions;
         }
 
         [HttpGet("login-lockout/config")]
@@ -56,7 +60,7 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        [HttpGet("booking-realtime")] 
+        [HttpGet("booking-realtime")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetBookingRealtime()
         {
@@ -64,7 +68,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, data = config });
         }
 
-        [HttpPut("booking-realtime")] 
+        [HttpPut("booking-realtime")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> UpdateBookingRealtime([FromBody] EVServiceCenter.Application.Interfaces.UpdateBookingRealtimeRequest request)
         {
@@ -73,7 +77,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, message = "Cập nhật BookingRealtime thành công" });
         }
 
-        [HttpGet("payos")] 
+        [HttpGet("payos")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetPayOs()
         {
@@ -81,7 +85,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, data = config });
         }
 
-        [HttpPut("payos")] 
+        [HttpPut("payos")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> UpdatePayOs([FromBody] EVServiceCenter.Application.Interfaces.UpdatePayOsSettingsRequest request)
         {
@@ -90,7 +94,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, message = "Cập nhật PayOS thành công" });
         }
 
-        [HttpGet("guest-session")] 
+        [HttpGet("guest-session")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetGuestSession()
         {
@@ -98,7 +102,7 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, data = config });
         }
 
-        [HttpPut("guest-session")] 
+        [HttpPut("guest-session")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> UpdateGuestSession([FromBody] EVServiceCenter.Application.Interfaces.UpdateGuestSessionSettingsRequest request)
         {
@@ -188,23 +192,25 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
+                var flags = _featureFlagsOptions.Value ?? new FeatureFlagsOptions();
+
                 var features = new
                 {
-                    enableMaintenanceReminder = true,
-                    enableSoftWarning = true,
-                    enableGuestBooking = true,
-                    enableRealTimeBooking = true,
-                    enablePromotions = true,
-                    enableFeedback = true,
-                    enableNotifications = true,
-                    enableFileUpload = true,
-                    enableMultiplePaymentMethods = true,
-                    enableBookingHistory = true,
-                    enableOrderHistory = true,
-                    enableVehicleManagement = true,
-                    enableTechnicianAssignment = true,
-                    enableInventoryManagement = true,
-                    enableReports = true
+                    enableMaintenanceReminder = flags.EnableMaintenanceReminder,
+                    enableSoftWarning = flags.EnableSoftWarning,
+                    enableGuestBooking = flags.EnableGuestBooking,
+                    enableRealTimeBooking = flags.EnableRealTimeBooking,
+                    enablePromotions = flags.EnablePromotions,
+                    enableFeedback = flags.EnableFeedback,
+                    enableNotifications = flags.EnableNotifications,
+                    enableFileUpload = flags.EnableFileUpload,
+                    enableMultiplePaymentMethods = flags.EnableMultiplePaymentMethods,
+                    enableBookingHistory = flags.EnableBookingHistory,
+                    enableOrderHistory = flags.EnableOrderHistory,
+                    enableVehicleManagement = flags.EnableVehicleManagement,
+                    enableTechnicianAssignment = flags.EnableTechnicianAssignment,
+                    enableInventoryManagement = flags.EnableInventoryManagement,
+                    enableReports = flags.EnableReports
                 };
 
                 return Ok(new

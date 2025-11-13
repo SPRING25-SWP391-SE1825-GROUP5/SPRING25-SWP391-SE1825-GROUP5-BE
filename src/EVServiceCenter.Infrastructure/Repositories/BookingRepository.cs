@@ -138,6 +138,29 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<List<Booking>> GetBookingsWithExpiredWorkDateAsync()
+        {
+            var today = DateTime.UtcNow.Date;
+            // Lấy các booking có WorkDate đã qua và status chưa phải CANCELLED, COMPLETED, PAID
+            // Sử dụng DbFunctions để so sánh ngày chính xác trong SQL
+            return await _context.Bookings
+                .Include(b => b.TechnicianTimeSlot)
+                .Where(b => b.TechnicianTimeSlot != null
+                    && b.TechnicianTimeSlot.WorkDate < today
+                    && b.Status != "CANCELLED"
+                    && b.Status != "COMPLETED"
+                    && b.Status != "PAID")
+                .Select(b => new Booking
+                {
+                    BookingId = b.BookingId,
+                    Status = b.Status,
+                    CreatedAt = b.CreatedAt,
+                    UpdatedAt = b.UpdatedAt,
+                    TechnicianSlotId = b.TechnicianSlotId
+                })
+                .ToListAsync();
+        }
+
         // BookingServices removed in single-service model
 
         public async Task<List<Booking>> GetBookingsByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10,

@@ -88,6 +88,7 @@ builder.Services.Configure<CartOptions>(builder.Configuration.GetSection(CartOpt
 builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
 builder.Services.Configure<ChatSettings>(builder.Configuration.GetSection(ChatSettings.SectionName));
 builder.Services.Configure<EVServiceCenter.Api.Configurations.AiServiceOptions>(builder.Configuration.GetSection(EVServiceCenter.Api.Configurations.AiServiceOptions.SectionName));
+builder.Services.Configure<FeatureFlagsOptions>(builder.Configuration.GetSection("FeatureFlags"));
 builder.Services.AddHttpClient<EVServiceCenter.Api.Services.IAiServiceClient, EVServiceCenter.Api.Services.AiServiceClient>();
 
 var redisConnection = builder.Configuration.GetConnectionString("Redis");

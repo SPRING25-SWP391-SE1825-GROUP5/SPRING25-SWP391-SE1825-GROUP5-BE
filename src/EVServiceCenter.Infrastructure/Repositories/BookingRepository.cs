@@ -145,6 +145,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             string sortBy = "createdAt", string sortOrder = "desc")
         {
             var query = _context.Bookings
+                .AsNoTracking() // Optimize: Don't track entities for read-only queries
                 .Include(b => b.Customer)
                 .Include(b => b.Vehicle)
                 .ThenInclude(v => v.VehicleModel)
@@ -196,7 +197,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<int> CountBookingsByCustomerIdAsync(int customerId, string? status = null,
             DateTime? fromDate = null, DateTime? toDate = null)
         {
-            var query = _context.Bookings.Where(b => b.CustomerId == customerId);
+            var query = _context.Bookings
+                .AsNoTracking() // Optimize: Don't track entities for count queries
+                .Where(b => b.CustomerId == customerId);
 
             // Apply filters
             if (!string.IsNullOrEmpty(status))
@@ -306,6 +309,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<List<Booking>> GetByCustomerIdAsync(int customerId)
         {
             return await _context.Bookings
+                .AsNoTracking() // Optimize: Don't track entities for read-only queries
                 .Include(b => b.TechnicianTimeSlot!).ThenInclude(tts => tts.Slot!)
                 .Include(b => b.TechnicianTimeSlot!)
                     .ThenInclude(tts => tts.Technician!)

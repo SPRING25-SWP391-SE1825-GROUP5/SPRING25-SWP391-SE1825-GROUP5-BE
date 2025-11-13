@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using EVServiceCenter.Application.Models;
 
 namespace EVServiceCenter.Application.Models.Responses
 {
@@ -7,6 +8,7 @@ namespace EVServiceCenter.Application.Models.Responses
     {
         public int CustomerId { get; set; }
         public List<CustomerBookingItem> Bookings { get; set; } = new();
+        public PaginationInfo? Pagination { get; set; }
     }
 
     public class CustomerBookingItem

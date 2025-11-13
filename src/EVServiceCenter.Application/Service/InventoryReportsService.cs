@@ -45,7 +45,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     var part = inventoryPart.Part;
                     var usageInPeriod = workOrderParts.Where(wop => wop.PartId == part.PartId).ToList();
-                    
+
                     var usageCount = usageInPeriod.Sum(wop => wop.QuantityUsed);
                     var usageValue = usageInPeriod.Sum(wop => wop.QuantityUsed * wop.Part.Price);
                     var usageRate = inventoryPart.CurrentStock > 0 ? (double)usageCount / inventoryPart.CurrentStock : 0;
@@ -64,7 +64,7 @@ namespace EVServiceCenter.Application.Service
                         PartId = part.PartId,
                         PartNumber = part.PartNumber,
                         PartName = part.PartName,
-                        Brand = part.Brand,
+                        Brand = part.Brand ?? string.Empty,
                         CurrentStock = inventoryPart.CurrentStock,
                         MinimumStock = inventoryPart.MinimumStock,
                         UsageCount = usageCount,

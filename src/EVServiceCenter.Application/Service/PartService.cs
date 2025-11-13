@@ -34,7 +34,7 @@ namespace EVServiceCenter.Application.Service
                     parts = parts.Where(p =>
                         p.PartNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                         p.PartName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        p.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        (p.Brand != null && p.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
                     ).ToList();
                 }
 
@@ -156,11 +156,11 @@ namespace EVServiceCenter.Application.Service
             {
                 // Get all parts
                 var allParts = await _partRepository.GetAllPartsAsync();
-                
+
                 // Get all inventory parts across all inventories
                 var allInventoryParts = await _inventoryRepository.GetAllInventoryPartsAsync();
                 var partIdsInAnyInventory = allInventoryParts.Select(ip => ip.PartId).ToHashSet();
-                
+
                 // Filter out parts that are already in any inventory
                 var partsNotInAnyInventory = allParts.Where(p => !partIdsInAnyInventory.Contains(p.PartId)).ToList();
 
@@ -170,7 +170,7 @@ namespace EVServiceCenter.Application.Service
                     partsNotInAnyInventory = partsNotInAnyInventory.Where(p =>
                         p.PartNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                         p.PartName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                        p.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                        (p.Brand != null && p.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
                     ).ToList();
                 }
 

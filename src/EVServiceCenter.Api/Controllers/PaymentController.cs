@@ -20,7 +20,6 @@ public class PaymentController : ControllerBase
 {
 	private readonly PaymentService _paymentService;
     private readonly IPayOSService _payOSService;
-    private readonly IVNPayService _vnPayService;
     private readonly IBookingRepository _bookingRepo;
     private readonly IOrderRepository _orderRepository;
     private readonly IInvoiceRepository _invoiceRepo;
@@ -31,7 +30,6 @@ public class PaymentController : ControllerBase
     private readonly IConfiguration _configuration;
     public PaymentController(PaymentService paymentService,
         IPayOSService payOSService,
-        IVNPayService vnPayService,
         IBookingRepository bookingRepo,
         IOrderRepository orderRepository,
         IInvoiceRepository invoiceRepo,
@@ -43,7 +41,6 @@ public class PaymentController : ControllerBase
 	{
 		_paymentService = paymentService;
         _payOSService = payOSService;
-        _vnPayService = vnPayService;
         _bookingRepo = bookingRepo;
         _orderRepository = orderRepository;
         _invoiceRepo = invoiceRepo;
@@ -145,10 +142,10 @@ public class PaymentController : ControllerBase
 					.Sum(up => up.DiscountAmount);
 			}
 
-            var finalServicePrice = booking.AppliedCreditId.HasValue 
+            var finalServicePrice = booking.AppliedCreditId.HasValue
                 ? (serviceBasePrice - packageDiscountAmount)
                 : serviceBasePrice;
-            
+
             if (promotionDiscountAmount > finalServicePrice)
             {
                 promotionDiscountAmount = finalServicePrice;
@@ -474,10 +471,10 @@ public class PaymentController : ControllerBase
                     .Sum(up => up.DiscountAmount);
             }
 
-            var finalServicePrice = booking.AppliedCreditId.HasValue 
+            var finalServicePrice = booking.AppliedCreditId.HasValue
                 ? (serviceBasePrice - packageDiscountAmount)
                 : serviceBasePrice;
-            
+
             if (promotionDiscountAmount > finalServicePrice)
             {
                 promotionDiscountAmount = finalServicePrice;
@@ -537,212 +534,7 @@ public class PaymentController : ControllerBase
 		return Redirect(frontendCancelUrl);
 	}
 
-	[HttpPost("booking/{bookingId:int}/vnpay-link")]
-	[Authorize]
-	public async Task<IActionResult> CreateVNPayPaymentLink([FromRoute] int bookingId)
-	{
-		try
-		{
-			var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
-			if (booking == null)
-			{
-				return NotFound(new { success = false, message = "Không tìm thấy booking" });
-			}
-
-			if (booking.Status == "CANCELLED")
-			{
-				return BadRequest(new { success = false, message = "Booking đã bị hủy" });
-			}
-
-			if (booking.Status == "PAID")
-			{
-				return BadRequest(new { success = false, message = "Booking đã được thanh toán" });
-			}
-
-			var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
-			decimal packageDiscountAmount = 0m;
-			decimal packagePrice = 0m;
-			decimal partsAmount = 0m;
-			decimal promotionDiscountAmount = 0m;
-
-            var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
-            if (workOrderParts != null && workOrderParts.Any())
-            {
-                partsAmount = workOrderParts
-                    .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied)
-                    .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
-            }
-
-			if (booking.AppliedCreditId.HasValue)
-			{
-				var appliedCredit = await _customerServiceCreditRepo.GetByIdAsync(booking.AppliedCreditId.Value);
-				if (appliedCredit?.ServicePackage != null)
-				{
-					packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
-
-					if (appliedCredit.UsedCredits == 0)
-					{
-						packagePrice = appliedCredit.ServicePackage.Price;
-					}
-				}
-			}
-
-			var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
-			if (userPromotions != null && userPromotions.Any())
-			{
-				promotionDiscountAmount = userPromotions
-					.Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
-					.Sum(up => up.DiscountAmount);
-			}
-
-            var finalServicePrice2 = booking.AppliedCreditId.HasValue 
-                ? (serviceBasePrice - packageDiscountAmount)
-                : serviceBasePrice;
-            
-            if (promotionDiscountAmount > finalServicePrice2)
-            {
-                promotionDiscountAmount = finalServicePrice2;
-            }
-            decimal totalAmount = packagePrice + finalServicePrice2 + partsAmount - promotionDiscountAmount;
-
-			var amount = (decimal)Math.Round(totalAmount);
-			var minAmount = _configuration.GetValue<decimal>("VNPay:MinAmount", 1000);
-			if (amount < minAmount) amount = minAmount;
-
-			var description = $"Thanh toán vé #{bookingId}";
-			var customerName = booking.Customer?.User?.FullName ?? "Khách hàng";
-
-			var paymentUrl = await _vnPayService.CreatePaymentUrlAsync(bookingId, amount, description, customerName);
-
-			return Ok(new
-			{
-				success = true,
-				message = "Tạo link thanh toán VNPay thành công",
-				data = new { paymentUrl, bookingId, amount }
-			});
-		}
-		catch (Exception ex)
-		{
-			return StatusCode(500, new { success = false, message = $"Lỗi tạo link thanh toán VNPay: {ex.Message}" });
-		}
-	}
-
-	[HttpGet("/api/payment/vnpay-return")]
-	[AllowAnonymous]
-	public async Task<IActionResult> VNPayReturn([FromQuery] Dictionary<string, string> vnpayData)
-	{
-		try
-		{
-			var secureHash = vnpayData.ContainsKey("vnp_SecureHash") ? vnpayData["vnp_SecureHash"] : "";
-			var isValid = _vnPayService.VerifyPaymentResponse(vnpayData, secureHash);
-
-			if (!isValid)
-			{
-				var frontendUrl = _configuration["App:FrontendUrl"];
-				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-				var frontendFailUrl = $"{frontendUrl}{failedPath}?error=invalid_signature";
-				return Redirect(frontendFailUrl);
-			}
-
-			var bookingId = _vnPayService.GetBookingIdFromResponse(vnpayData);
-			if (!bookingId.HasValue)
-			{
-				var frontendUrl = _configuration["App:FrontendUrl"];
-				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-				var frontendFailUrl = $"{frontendUrl}{failedPath}?error=cannot_extract_booking";
-				return Redirect(frontendFailUrl);
-			}
-
-			var responseCode = vnpayData.ContainsKey("vnp_ResponseCode") ? vnpayData["vnp_ResponseCode"] : "";
-			var isPaymentSuccess = responseCode == AppConstants.PaymentResponseCodes.Success;
-
-			if (isPaymentSuccess)
-			{
-				var confirmed = await _paymentService.ConfirmPaymentAsync(bookingId.Value, "VNPAY");
-
-				if (confirmed)
-				{
-					var frontendUrl = _configuration["App:FrontendUrl"];
-					var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
-					var frontendSuccessUrl = $"{frontendUrl}{successPath}?bookingId={bookingId.Value}&status=success";
-					return Redirect(frontendSuccessUrl);
-				}
-				else
-				{
-					var frontendUrl = _configuration["App:FrontendUrl"];
-					var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
-					var frontendErrorUrl = $"{frontendUrl}{errorPath}?bookingId={bookingId.Value}&error=system_error";
-					return Redirect(frontendErrorUrl);
-				}
-			}
-			else
-			{
-				var frontendUrl = _configuration["App:FrontendUrl"];
-				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-				var frontendFailUrl = $"{frontendUrl}{failedPath}?bookingId={bookingId.Value}&status=failed&code={responseCode}";
-				return Redirect(frontendFailUrl);
-			}
-		}
-		catch (Exception)
-		{
-			var frontendUrl = _configuration["App:FrontendUrl"];
-			var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
-			var frontendErrorUrl = $"{frontendUrl}{errorPath}?error=system_error";
-			return Redirect(frontendErrorUrl);
-		}
-	}
-
-	[HttpPost("/api/payment/vnpay-ipn")]
-	[AllowAnonymous]
-	public async Task<IActionResult> VNPayIPN([FromForm] Dictionary<string, string> vnpayData)
-	{
-		try
-		{
-
-			var secureHash = vnpayData.ContainsKey("vnp_SecureHash") ? vnpayData["vnp_SecureHash"] : "";
-			var isValid = _vnPayService.VerifyPaymentResponse(vnpayData, secureHash);
-
-			if (!isValid)
-			{
-				return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.InvalidSignature, Message = "Invalid signature" });
-			}
-
-			var bookingId = _vnPayService.GetBookingIdFromResponse(vnpayData);
-			if (!bookingId.HasValue)
-			{
-				return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.CannotExtractBookingId, Message = "Cannot extract bookingId" });
-			}
-
-			var responseCode = vnpayData.ContainsKey("vnp_ResponseCode") ? vnpayData["vnp_ResponseCode"] : "";
-			var transactionStatus = vnpayData.ContainsKey("vnp_TransactionStatus") ? vnpayData["vnp_TransactionStatus"] : "";
-
-			var isPaymentSuccess = responseCode == AppConstants.PaymentResponseCodes.Success && transactionStatus == AppConstants.PaymentResponseCodes.Success;
-
-			if (isPaymentSuccess)
-			{
-				var confirmed = await _paymentService.ConfirmPaymentAsync(bookingId.Value, "VNPAY");
-
-				if (confirmed)
-				{
-					return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.Success, Message = "Confirm success" });
-				}
-				else
-				{
-					return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.ConfirmFailed, Message = "Confirm failed" });
-				}
-			}
-			else
-			{
-				return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.PaymentNotSuccessful, Message = "Payment not successful" });
-			}
-		}
-		catch (Exception)
-		{
-			return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.InternalError, Message = "Internal error" });
-		}
-	}
-
-	[HttpPost("/api/payment/sepay-webhook")]
+    [HttpPost("/api/payment/sepay-webhook")]
 	[AllowAnonymous]
 	public async Task<IActionResult> SePayWebhook([FromBody] SePayWebhookRequest request)
 	{
@@ -988,7 +780,7 @@ public class PaymentController : ControllerBase
 			var cancelled = allPayments.Count(p => p.Status == "CANCELLED");
 
 			var byMethod = new Dictionary<string, (int count, long amount)>();
-			foreach (var method in new[] { "PAYOS", "VNPAY", "SEPAY", "CASH" })
+			foreach (var method in new[] { "PAYOS", "SEPAY", "CASH" })
 			{
 				var methodPayments = allPayments.Where(p => p.PaymentMethod == method).ToList();
 				byMethod[method.ToLowerInvariant()] = (
@@ -1026,7 +818,6 @@ public class PaymentController : ControllerBase
 				byMethod = new
 				{
 					payos = new { count = byMethod.GetValueOrDefault("payos").count, amount = byMethod.GetValueOrDefault("payos").amount },
-					vnpay = new { count = byMethod.GetValueOrDefault("vnpay").count, amount = byMethod.GetValueOrDefault("vnpay").amount },
 					sepay = new { count = byMethod.GetValueOrDefault("sepay").count, amount = byMethod.GetValueOrDefault("sepay").amount },
 					cash = new { count = byMethod.GetValueOrDefault("cash").count, amount = byMethod.GetValueOrDefault("cash").amount }
 				},

@@ -17,7 +17,11 @@ public sealed class WorkOrderPartConfiguration : IEntityTypeConfiguration<WorkOr
         entity.Property(e => e.PartId).HasColumnName("PartID");
         entity.Property(e => e.CategoryId).HasColumnName("CategoryID");
 
-        entity.Property(e => e.Status).HasColumnType("nvarchar(50)").HasMaxLength(50);
+        entity.Property(e => e.Status)
+            .HasColumnType("nvarchar(50)")
+            .HasMaxLength(50)
+            .IsRequired(false)
+            .HasDefaultValue("DRAFT");
         // No UnitPrice column mapped; pricing resolved from Parts at time of calculation
         // Removed CreatedAt/UpdatedAt/ApprovedAt mappings per requirements
         entity.Property(e => e.ConsumedAt).HasPrecision(0);

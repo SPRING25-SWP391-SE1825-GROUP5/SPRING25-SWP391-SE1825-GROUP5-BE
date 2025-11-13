@@ -335,7 +335,6 @@ builder.Services.AddScoped<IBookingStatisticsService, EVServiceCenter.Applicatio
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
 builder.Services.AddHttpClient<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
-builder.Services.AddScoped<EVServiceCenter.Application.Interfaces.IVNPayService, EVServiceCenter.Application.Services.VNPayService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
 builder.Services.AddScoped<ITechnicianAvailabilityService, EVServiceCenter.Application.Service.TechnicianAvailabilityService>();

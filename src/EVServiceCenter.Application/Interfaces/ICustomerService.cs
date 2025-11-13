@@ -14,7 +14,7 @@ namespace EVServiceCenter.Application.Interfaces
         Task<CustomerResponse> QuickCreateCustomerAsync(QuickCreateCustomerRequest request);
         Task<List<User>> GetAllUsersWithCustomerRoleAsync();
         Task<List<Customer>> GetAllCustomersAsync();
-        Task<CustomerBookingsResponse> GetCustomerBookingsAsync(int customerId);
+        Task<CustomerBookingsResponse> GetCustomerBookingsAsync(int customerId, int pageNumber = 1, int pageSize = 10);
         Task<int?> GetCustomerUserIdAsync(int customerId);
     }
 }

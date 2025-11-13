@@ -9,7 +9,6 @@ using EVServiceCenter.Domain.Enums;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace EVServiceCenter.Api.HostedServices
@@ -99,18 +98,15 @@ namespace EVServiceCenter.Api.HostedServices
 
                         var subject = r.Type == ReminderType.PACKAGE ? "Nhắc sử dụng gói" : "Nhắc bảo dưỡng";
 
-                        // Lấy thông tin đầy đủ cho template
                         var frontendUrl = config["App:FrontendUrl"] ?? "http://localhost:3000";
                         var bookingUrl = $"{frontendUrl}/booking?serviceId={r.ServiceId}&vehicleId={r.VehicleId}";
                         var fullName = r.Vehicle?.Customer?.User?.FullName ?? "Khách hàng";
                         var vehicleName = $"{r.Vehicle?.VehicleModel?.ModelName ?? "Xe"} - {r.Vehicle?.LicensePlate ?? ""}";
                         var serviceName = r.Service?.ServiceName ?? "Bảo dưỡng định kỳ";
 
-                        // Lấy centerName: ưu tiên từ booking gần nhất, sau đó lấy center active đầu tiên
                         var centerName = "Trung tâm gần nhất";
                         try
                         {
-                            // Thử lấy từ booking gần nhất của vehicle này
                             var bookingRepo = scope.ServiceProvider.GetRequiredService<IBookingRepository>();
                             var allBookings = await bookingRepo.GetAllBookingsAsync();
                             var recentBooking = allBookings
@@ -129,7 +125,6 @@ namespace EVServiceCenter.Api.HostedServices
                                 }
                             }
 
-                            // Nếu không có, lấy center active đầu tiên
                             if (centerName == "Trung tâm gần nhất")
                             {
                                 var activeCenters = await centerRepo.GetActiveCentersAsync();
@@ -142,9 +137,7 @@ namespace EVServiceCenter.Api.HostedServices
                         }
                         catch (Exception ex)
                         {
-                            // Log nhưng không throw, dùng giá trị mặc định
-                            var logger = scope.ServiceProvider.GetRequiredService<ILogger<MaintenanceReminderDispatcherService>>();
-                            logger.LogWarning("Không thể lấy centerName cho reminder {ReminderId}, sử dụng giá trị mặc định. Error: {Error}", r.ReminderId, ex.Message ?? ex.ToString());
+                            _ = ex;
                         }
                         var dueDateFormatted = r.DueDate?.ToDateTime(TimeOnly.MinValue).ToString("dd/MM/yyyy") ?? string.Empty;
                         var dueMileageFormatted = r.DueMileage?.ToString("N0") ?? string.Empty;

@@ -11,12 +11,11 @@ namespace EVServiceCenter.Api.Middleware
     public class JsonErrorHandlingMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly ILogger<JsonErrorHandlingMiddleware> _logger;
 
         public JsonErrorHandlingMiddleware(RequestDelegate next, ILogger<JsonErrorHandlingMiddleware> logger)
         {
             _next = next;
-            _logger = logger;
+            _ = logger;
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -27,12 +26,10 @@ namespace EVServiceCenter.Api.Middleware
             }
             catch (JsonException jsonEx)
             {
-                _logger.LogWarning(jsonEx, "JSON deserialization error occurred");
                 await HandleJsonErrorAsync(context, jsonEx);
             }
             catch (Exception ex) when (IsModelBindingError(ex))
             {
-                _logger.LogWarning(ex, "Model binding error occurred");
                 await HandleModelBindingErrorAsync(context, ex);
             }
         }
@@ -95,14 +92,12 @@ namespace EVServiceCenter.Api.Middleware
 
         private string ConvertJsonErrorToFriendlyMessage(string errorMessage)
         {
-            // Pattern để extract field name từ JSON error
             var fieldMatch = Regex.Match(errorMessage, @"Path: \$\.(\w+)");
             if (fieldMatch.Success)
             {
                 var fieldName = fieldMatch.Groups[1].Value;
                 var friendlyFieldName = GetFriendlyFieldName(fieldName);
                 
-                // Kiểm tra các loại lỗi khác nhau
                 if (errorMessage.Contains("invalid end of a number") || 
                     errorMessage.Contains("Expected a delimiter"))
                 {

@@ -7,7 +7,6 @@ using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Infrastructure.Configurations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,19 +15,16 @@ namespace EVServiceCenter.Api.HostedServices
     public class PromotionAppliedCleanupService : BackgroundService
     {
         private readonly IServiceProvider _services;
-        private readonly ILogger<PromotionAppliedCleanupService> _logger;
         private readonly PromotionOptions _options;
 
-        public PromotionAppliedCleanupService(IServiceProvider services, IOptions<PromotionOptions> options, ILogger<PromotionAppliedCleanupService> logger)
+        public PromotionAppliedCleanupService(IServiceProvider services, IOptions<PromotionOptions> options)
         {
             _services = services;
-            _logger = logger;
             _options = options.Value;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("PromotionAppliedCleanupService started with TTL {ttl} minutes", _options.AppliedTtlMinutes);
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
@@ -39,7 +35,6 @@ namespace EVServiceCenter.Api.HostedServices
                     var nowUtc = DateTime.UtcNow;
                     var threshold = nowUtc.AddMinutes(-_options.AppliedTtlMinutes);
 
-                    // Lấy tối đa 1000 bản ghi APPLIED đã quá hạn mỗi vòng
                     var ups = await db.UserPromotions
                         .Where(up => up.Status == "APPLIED" && up.UsedAt != default(DateTime) && up.UsedAt < threshold)
                         .OrderBy(up => up.UsedAt)
@@ -59,9 +54,8 @@ namespace EVServiceCenter.Api.HostedServices
                         await db.SaveChangesAsync(stoppingToken);
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _logger.LogError(ex, "PromotionAppliedCleanupService run failed");
                 }
 
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);

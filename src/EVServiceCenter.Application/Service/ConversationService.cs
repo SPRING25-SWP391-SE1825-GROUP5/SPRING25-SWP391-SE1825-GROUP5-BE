@@ -8,7 +8,6 @@ using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.IRepositories;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using EVServiceCenter.Application.Configurations;
 
@@ -25,7 +24,6 @@ namespace EVServiceCenter.Application.Service
         private readonly ICenterRepository _centerRepository;
         private readonly IChatHubService _chatHubService;
         private readonly ChatSettings _chatSettings;
-        private readonly ILogger<ConversationService> _logger;
 
         public ConversationService(
             IConversationRepository conversationRepository,
@@ -36,8 +34,7 @@ namespace EVServiceCenter.Application.Service
             IStaffRepository staffRepository,
             ICenterRepository centerRepository,
             IChatHubService chatHubService,
-            IOptions<ChatSettings> chatSettings,
-            ILogger<ConversationService> logger)
+            IOptions<ChatSettings> chatSettings)
         {
             _conversationRepository = conversationRepository;
             _messageRepository = messageRepository;
@@ -48,7 +45,6 @@ namespace EVServiceCenter.Application.Service
             _centerRepository = centerRepository;
             _chatHubService = chatHubService;
             _chatSettings = chatSettings.Value;
-            _logger = logger;
         }
 
         public async Task<ConversationResponse> CreateConversationAsync(CreateConversationRequest request)

@@ -22,8 +22,8 @@ namespace EVServiceCenter.Application.Service
             _customerRepository = customerRepository;
         }
 
-        public async Task<OrderHistoryListResponse> GetOrderHistoryAsync(int customerId, int page = 1, int pageSize = 10, 
-            string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+        public async Task<OrderHistoryListResponse> GetOrderHistoryAsync(int customerId, int page = 1, int pageSize = 10,
+            string? status = null, DateTime? fromDate = null, DateTime? toDate = null,
             string sortBy = "orderDate", string sortOrder = "desc")
         {
             // Validate customer exists
@@ -184,12 +184,6 @@ namespace EVServiceCenter.Application.Service
                 Notes = order.Notes,
                 Items = new List<OrderItemInfo>(),
                 Timeline = new List<OrderStatusTimelineInfo>(),
-                ShippingAddress = new ShippingAddressInfo
-                {
-                    FullName = "Customer", // This would need to be extracted from shipping address
-                    PhoneNumber = order.Customer?.User?.PhoneNumber ?? string.Empty,
-                    Address = order.Customer?.User?.Address ?? string.Empty
-                },
                 CreatedAt = order.CreatedAt,
                 UpdatedAt = order.UpdatedAt
             };

@@ -14,6 +14,7 @@ using System.IO;
 using Microsoft.Extensions.Configuration;
 using EVServiceCenter.Api.Constants;
 using EVServiceCenter.Domain.Entities;
+using EVServiceCenter.Application.Constants;
 
 namespace EVServiceCenter.Api.Controllers;
 
@@ -28,8 +29,10 @@ public class OrderController : ControllerBase
     private readonly IOptions<ExportOptions> _exportOptions;
     private readonly IConfiguration _configuration;
     private readonly EVServiceCenter.Domain.Interfaces.IInventoryRepository _inventoryRepository;
+    private readonly EVServiceCenter.Domain.Interfaces.IOrderRepository _orderRepository;
+    private readonly EVServiceCenter.Domain.Interfaces.IInvoiceRepository _invoiceRepository;
 
-    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IInventoryRepository inventoryRepository)
+    public OrderController(IOrderService orderService, PaymentService paymentService, IOrderHistoryService orderHistoryService, IOptions<ExportOptions> exportOptions, IConfiguration configuration, EVServiceCenter.Domain.Interfaces.IInventoryRepository inventoryRepository, EVServiceCenter.Domain.Interfaces.IOrderRepository orderRepository, EVServiceCenter.Domain.Interfaces.IInvoiceRepository invoiceRepository)
     {
         _orderService = orderService;
         _paymentService = paymentService;
@@ -37,6 +40,8 @@ public class OrderController : ControllerBase
         _exportOptions = exportOptions;
         _configuration = configuration;
         _inventoryRepository = inventoryRepository;
+        _orderRepository = orderRepository;
+        _invoiceRepository = invoiceRepository;
     }
 
     [HttpGet("customer/{customerId}")]
@@ -164,8 +169,8 @@ public class OrderController : ControllerBase
     {
         try
         {
-            var frontendUrl = _configuration["App:FrontendUrl"] ?? "http://localhost:5173";
-            var orderCancelUrl = $"{frontendUrl}/api/payment/order/{orderId}/cancel";
+            var backendUrl = _configuration["App:BackendUrl"] ?? _configuration["App:ApiUrl"] ?? Request.Scheme + "://" + Request.Host;
+            var orderCancelUrl = $"{backendUrl}/api/payment/order/{orderId}/cancel";
 
             var url = await _paymentService.CreateOrderPaymentLinkAsync(orderId, orderCancelUrl);
             return Ok(new {
@@ -544,8 +549,28 @@ public class OrderController : ControllerBase
 
     [HttpGet("/api/payment/order/{orderId}/cancel")]
     [AllowAnonymous]
-    public IActionResult CancelOrderPayment([FromRoute] int orderId, [FromQuery] string? status = null, [FromQuery] string? code = null)
+    public async Task<IActionResult> CancelOrderPayment([FromRoute] int orderId, [FromQuery] string? status = null, [FromQuery] string? code = null)
     {
+        try
+        {
+            var order = await _orderRepository.GetByIdAsync(orderId);
+            if (order != null && order.Status == "PENDING")
+            {
+                // Update order status to CANCELLED
+                order.Status = "CANCELLED";
+                order.UpdatedAt = DateTime.UtcNow;
+                await _orderRepository.UpdateAsync(order);
+
+                // Update invoice status to CANCELLED if exists and not paid
+                var invoice = await _invoiceRepository.GetByOrderIdAsync(orderId);
+                if (invoice != null && !string.Equals(invoice.Status, PaymentConstants.InvoiceStatus.Paid, StringComparison.OrdinalIgnoreCase))
+                {
+                    await _invoiceRepository.UpdateStatusAsync(invoice.InvoiceId, PaymentConstants.InvoiceStatus.Cancelled);
+                }
+            }
+        }
+        catch { /* swallow to not block redirect */ }
+
         var frontendUrl = _configuration["App:FrontendUrl"] ?? "http://localhost:5173";
         var frontendCancelUrl = $"{frontendUrl}/payment-cancel?orderId={orderId}&status={status}&code={code}";
         return Redirect(frontendCancelUrl);

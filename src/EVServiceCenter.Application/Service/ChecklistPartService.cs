@@ -52,7 +52,7 @@ namespace EVServiceCenter.Application.Service
                         PartId = part.PartId,
                         PartName = part.PartName,
                         PartNumber = part.PartNumber,
-                        Brand = part.Brand,
+                        Brand = part.Brand ?? string.Empty,
                         Price = part.Price,
                         ImageUrl = part.ImageUrl
                     });

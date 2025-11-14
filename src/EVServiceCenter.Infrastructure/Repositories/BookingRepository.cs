@@ -138,6 +138,29 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<List<Booking>> GetBookingsWithExpiredWorkDateAsync()
+        {
+            var today = DateTime.UtcNow.Date;
+            // Lấy các booking có WorkDate đã qua và status chưa phải CANCELLED, COMPLETED, PAID
+            // Sử dụng DbFunctions để so sánh ngày chính xác trong SQL
+            return await _context.Bookings
+                .Include(b => b.TechnicianTimeSlot)
+                .Where(b => b.TechnicianTimeSlot != null
+                    && b.TechnicianTimeSlot.WorkDate < today
+                    && b.Status != "CANCELLED"
+                    && b.Status != "COMPLETED"
+                    && b.Status != "PAID")
+                .Select(b => new Booking
+                {
+                    BookingId = b.BookingId,
+                    Status = b.Status,
+                    CreatedAt = b.CreatedAt,
+                    UpdatedAt = b.UpdatedAt,
+                    TechnicianSlotId = b.TechnicianSlotId
+                })
+                .ToListAsync();
+        }
+
         // BookingServices removed in single-service model
 
         public async Task<List<Booking>> GetBookingsByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10,
@@ -145,6 +168,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
             string sortBy = "createdAt", string sortOrder = "desc")
         {
             var query = _context.Bookings
+                .AsNoTracking() // Optimize: Don't track entities for read-only queries
                 .Include(b => b.Customer)
                 .Include(b => b.Vehicle)
                 .ThenInclude(v => v.VehicleModel)
@@ -196,7 +220,9 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<int> CountBookingsByCustomerIdAsync(int customerId, string? status = null,
             DateTime? fromDate = null, DateTime? toDate = null)
         {
-            var query = _context.Bookings.Where(b => b.CustomerId == customerId);
+            var query = _context.Bookings
+                .AsNoTracking() // Optimize: Don't track entities for count queries
+                .Where(b => b.CustomerId == customerId);
 
             // Apply filters
             if (!string.IsNullOrEmpty(status))
@@ -306,6 +332,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
         public async Task<List<Booking>> GetByCustomerIdAsync(int customerId)
         {
             return await _context.Bookings
+                .AsNoTracking() // Optimize: Don't track entities for read-only queries
                 .Include(b => b.TechnicianTimeSlot!).ThenInclude(tts => tts.Slot!)
                 .Include(b => b.TechnicianTimeSlot!)
                     .ThenInclude(tts => tts.Technician!)

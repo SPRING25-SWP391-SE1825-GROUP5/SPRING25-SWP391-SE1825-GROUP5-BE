@@ -88,6 +88,7 @@ builder.Services.Configure<CartOptions>(builder.Configuration.GetSection(CartOpt
 builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
 builder.Services.Configure<ChatSettings>(builder.Configuration.GetSection(ChatSettings.SectionName));
 builder.Services.Configure<EVServiceCenter.Api.Configurations.AiServiceOptions>(builder.Configuration.GetSection(EVServiceCenter.Api.Configurations.AiServiceOptions.SectionName));
+builder.Services.Configure<FeatureFlagsOptions>(builder.Configuration.GetSection("FeatureFlags"));
 builder.Services.AddHttpClient<EVServiceCenter.Api.Services.IAiServiceClient, EVServiceCenter.Api.Services.AiServiceClient>();
 
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
@@ -335,7 +336,6 @@ builder.Services.AddScoped<IBookingStatisticsService, EVServiceCenter.Applicatio
 // Payment service removed from DI per requirement
 builder.Services.AddScoped<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
 builder.Services.AddHttpClient<IPayOSService, EVServiceCenter.Application.Services.PayOSService>();
-builder.Services.AddScoped<EVServiceCenter.Application.Interfaces.IVNPayService, EVServiceCenter.Application.Services.VNPayService>();
 builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
 builder.Services.AddScoped<ITechnicianTimeSlotService, TechnicianTimeSlotService>();
 builder.Services.AddScoped<ITechnicianAvailabilityService, EVServiceCenter.Application.Service.TechnicianAvailabilityService>();

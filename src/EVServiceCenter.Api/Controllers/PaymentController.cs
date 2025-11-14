@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Transactions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Configuration;
@@ -20,7 +21,6 @@ public class PaymentController : ControllerBase
 {
 	private readonly PaymentService _paymentService;
     private readonly IPayOSService _payOSService;
-    private readonly IVNPayService _vnPayService;
     private readonly IBookingRepository _bookingRepo;
     private readonly IOrderRepository _orderRepository;
     private readonly IInvoiceRepository _invoiceRepo;
@@ -28,10 +28,13 @@ public class PaymentController : ControllerBase
     private readonly IWorkOrderPartRepository _workOrderPartRepo;
     private readonly ICustomerServiceCreditRepository _customerServiceCreditRepo;
     private readonly IPromotionRepository _promotionRepo;
+    private readonly IPromotionService _promotionService;
+    private readonly IEmailService _emailService;
+    private readonly IPdfInvoiceService _pdfInvoiceService;
+    private readonly INotificationService _notificationService;
     private readonly IConfiguration _configuration;
     public PaymentController(PaymentService paymentService,
         IPayOSService payOSService,
-        IVNPayService vnPayService,
         IBookingRepository bookingRepo,
         IOrderRepository orderRepository,
         IInvoiceRepository invoiceRepo,
@@ -39,11 +42,14 @@ public class PaymentController : ControllerBase
         IWorkOrderPartRepository workOrderPartRepo,
         ICustomerServiceCreditRepository customerServiceCreditRepo,
         IPromotionRepository promotionRepo,
+        IPromotionService promotionService,
+        IEmailService emailService,
+        IPdfInvoiceService pdfInvoiceService,
+        INotificationService notificationService,
         IConfiguration configuration)
 	{
 		_paymentService = paymentService;
         _payOSService = payOSService;
-        _vnPayService = vnPayService;
         _bookingRepo = bookingRepo;
         _orderRepository = orderRepository;
         _invoiceRepo = invoiceRepo;
@@ -51,6 +57,10 @@ public class PaymentController : ControllerBase
         _workOrderPartRepo = workOrderPartRepo;
         _customerServiceCreditRepo = customerServiceCreditRepo;
         _promotionRepo = promotionRepo;
+        _promotionService = promotionService;
+        _emailService = emailService;
+        _pdfInvoiceService = pdfInvoiceService;
+        _notificationService = notificationService;
         _configuration = configuration;
 	}
 
@@ -99,14 +109,12 @@ public class PaymentController : ControllerBase
 				return NotFound(new { success = false, message = "Không tìm thấy booking" });
 			}
 
-			if (booking.Status == "CANCELLED")
+			if (booking.Status != BookingStatusConstants.Completed)
 			{
-				return BadRequest(new { success = false, message = "Booking đã bị hủy" });
-			}
-
-			if (booking.Status == "PAID")
-			{
-				return BadRequest(new { success = false, message = "Booking đã được thanh toán" });
+				return BadRequest(new {
+					success = false,
+					message = $"Chỉ có thể tạo QR code thanh toán khi booking đã hoàn thành ({BookingStatusConstants.Completed}). Trạng thái hiện tại: {booking.Status ?? "N/A"}"
+				});
 			}
 
 			var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
@@ -145,10 +153,10 @@ public class PaymentController : ControllerBase
 					.Sum(up => up.DiscountAmount);
 			}
 
-            var finalServicePrice = booking.AppliedCreditId.HasValue 
+            var finalServicePrice = booking.AppliedCreditId.HasValue
                 ? (serviceBasePrice - packageDiscountAmount)
                 : serviceBasePrice;
-            
+
             if (promotionDiscountAmount > finalServicePrice)
             {
                 promotionDiscountAmount = finalServicePrice;
@@ -349,7 +357,7 @@ public class PaymentController : ControllerBase
     public class PaymentOfflineRequest
     {
         public int Amount { get; set; }
-        public int PaidByUserId { get; set; }
+        public int? PaidByUserId { get; set; } // Optional - nếu không có thì tự động lấy từ booking customer
         public string Note { get; set; } = string.Empty;
     }
 
@@ -357,9 +365,9 @@ public class PaymentController : ControllerBase
     [Authorize]
     public async Task<IActionResult> CreateOfflineForBooking([FromRoute] int bookingId, [FromBody] PaymentOfflineRequest req)
     {
-        if (req == null || req.Amount <= 0 || req.PaidByUserId <= 0)
+        if (req == null || req.Amount <= 0)
         {
-            return BadRequest(new { success = false, message = "amount và paidByUserId là bắt buộc" });
+            return BadRequest(new { success = false, message = "amount là bắt buộc và phải lớn hơn 0" });
         }
 
         var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
@@ -368,35 +376,217 @@ public class PaymentController : ControllerBase
             return NotFound(new { success = false, message = "Không tìm thấy booking" });
         }
 
-        var invoice = await _invoiceRepo.GetByBookingIdAsync(booking.BookingId);
-        if (invoice == null)
+        // Tự động lấy paidByUserId: ưu tiên từ request, nếu không có thì dùng customer ID từ booking (giống PayOS)
+        var paidByUserId = req.PaidByUserId ?? booking.Customer?.User?.UserId ?? 0;
+        if (paidByUserId <= 0)
         {
-            invoice = new Domain.Entities.Invoice
-            {
-                BookingId = booking.BookingId,
-                CustomerId = booking.CustomerId,
-                Email = booking.Customer?.User?.Email,
-                Phone = booking.Customer?.User?.PhoneNumber,
-                Status = PaymentConstants.InvoiceStatus.Paid,
-                CreatedAt = DateTime.UtcNow,
-            };
-            invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
+            return BadRequest(new { success = false, message = "Không thể xác định người thanh toán" });
         }
 
-        var payment = new Domain.Entities.Payment
-        {
-            PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{bookingId}",
-            InvoiceId = invoice.InvoiceId,
-            PaymentMethod = "CASH",
-            Amount = req.Amount,
-            Status = PaymentConstants.PaymentStatus.Paid,
-            PaidAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow,
-            PaidByUserID = req.PaidByUserId,
-        };
+        Domain.Entities.Invoice? invoice = null;
+        Domain.Entities.Payment? payment = null;
 
-        payment = await _paymentRepo.CreateAsync(payment);
-        return Ok(new { paymentId = payment.PaymentId, paymentCode = payment.PaymentCode, status = payment.Status, amount = payment.Amount, paymentMethod = payment.PaymentMethod, paidByUserId = payment.PaidByUserID });
+        using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+        {
+            try
+            {
+                // Cập nhật booking status thành PAID (giống PayOS)
+                booking.Status = BookingStatusConstants.Paid;
+                booking.UpdatedAt = DateTime.UtcNow;
+                await _bookingRepo.UpdateBookingAsync(booking);
+
+                // Tính toán amounts (giống PayOS)
+                var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+                decimal packageDiscountAmount = 0m;
+                decimal packagePrice = 0m;
+                decimal promotionDiscountAmount = 0m;
+                decimal partsAmount = (await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId))
+                    .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied)
+                    .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
+
+                if (booking.AppliedCreditId.HasValue)
+                {
+                    var appliedCredit = await _customerServiceCreditRepo.GetByIdAsync(booking.AppliedCreditId.Value);
+                    if (appliedCredit?.ServicePackage != null)
+                    {
+                        packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+                        if (appliedCredit.UsedCredits == 0)
+                        {
+                            packagePrice = appliedCredit.ServicePackage.Price;
+                        }
+                    }
+                }
+
+                var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(booking.BookingId);
+                if (userPromotions != null && userPromotions.Any())
+                {
+                    promotionDiscountAmount = userPromotions
+                        .Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+                        .Sum(up => up.DiscountAmount);
+                }
+
+                var finalServicePrice = booking.AppliedCreditId.HasValue
+                    ? (serviceBasePrice - packageDiscountAmount)
+                    : serviceBasePrice;
+
+                if (promotionDiscountAmount > finalServicePrice)
+                {
+                    promotionDiscountAmount = finalServicePrice;
+                }
+
+                decimal paymentAmount = packagePrice + finalServicePrice + partsAmount - promotionDiscountAmount;
+
+                // Tạo hoặc cập nhật Invoice (giống PayOS)
+                invoice = await _invoiceRepo.GetByBookingIdAsync(booking.BookingId);
+                if (invoice == null)
+                {
+                    invoice = new Domain.Entities.Invoice
+                    {
+                        BookingId = booking.BookingId,
+                        CustomerId = booking.CustomerId,
+                        Email = booking.Customer?.User?.Email,
+                        Phone = booking.Customer?.User?.PhoneNumber,
+                        Status = PaymentConstants.InvoiceStatus.Paid,
+                        PackageDiscountAmount = 0,
+                        PromotionDiscountAmount = 0,
+                        CreatedAt = DateTime.UtcNow,
+                    };
+                    invoice = await _invoiceRepo.CreateMinimalAsync(invoice);
+                }
+                else
+                {
+                    invoice.Status = PaymentConstants.InvoiceStatus.Paid;
+                }
+
+                // Cập nhật invoice amounts (giống PayOS)
+                await _invoiceRepo.UpdateAmountsAsync(invoice.InvoiceId, packageDiscountAmount, promotionDiscountAmount, partsAmount);
+
+                // Tạo Payment record (giống PayOS)
+                payment = new Domain.Entities.Payment
+                {
+                    PaymentCode = $"PAYCASH{DateTime.UtcNow:yyyyMMddHHmmss}{bookingId}",
+                    InvoiceId = invoice.InvoiceId,
+                    PaymentMethod = "CASH",
+                    Amount = (int)Math.Round(paymentAmount),
+                    Status = PaymentConstants.PaymentStatus.Paid,
+                    PaidAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    PaidByUserID = paidByUserId, // Dùng giá trị đã resolve (từ request hoặc booking customer)
+                };
+
+                payment = await _paymentRepo.CreateAsync(payment);
+
+                // Xử lý applied credit đầy đủ (giống PayOS)
+                if (booking.AppliedCreditId.HasValue)
+                {
+                    var appliedCredit = await _customerServiceCreditRepo.GetByIdAsync(booking.AppliedCreditId.Value);
+                    if (appliedCredit != null)
+                    {
+                        appliedCredit.UsedCredits += 1;
+                        appliedCredit.UpdatedAt = DateTime.UtcNow;
+
+                        if (appliedCredit.UsedCredits >= appliedCredit.TotalCredits)
+                        {
+                            appliedCredit.Status = "USED_UP";
+                        }
+
+                        await _customerServiceCreditRepo.UpdateAsync(appliedCredit);
+                    }
+                }
+
+                // Mark promotion as used (giống PayOS)
+                try
+                {
+                    await _promotionService.MarkUsedByBookingAsync(booking.BookingId);
+                }
+                catch (Exception)
+                {
+                    // Ignore errors
+                }
+
+                scope.Complete();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi xử lý thanh toán offline: {ex.Message}" });
+            }
+        }
+
+        // Gửi email hóa đơn và phiếu bảo dưỡng (giống PayOS)
+        try
+        {
+            var customerEmail = booking.Customer?.User?.Email;
+            if (!string.IsNullOrEmpty(customerEmail))
+            {
+                var subject = $"Hóa đơn thanh toán - Booking #{booking.BookingId}";
+                var body = await _emailService.RenderInvoiceEmailTemplateAsync(
+                    booking.Customer?.User?.FullName ?? "Khách hàng",
+                    $"INV-{booking.BookingId:D6}",
+                    booking.BookingId.ToString(),
+                    DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm"),
+                    customerEmail,
+                    booking.Service?.ServiceName ?? "N/A",
+                    (booking.Service?.BasePrice ?? 0m).ToString("N0"),
+                    payment.Amount.ToString("N0"),
+                    booking.AppliedCreditId.HasValue,
+                    booking.AppliedCreditId.HasValue ? (payment.Amount * 0.1m).ToString("N0") : "0"
+                );
+
+                var invoicePdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
+
+                byte[]? maintenancePdfContent = null;
+                try
+                {
+                    maintenancePdfContent = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(booking.BookingId);
+                }
+                catch (Exception)
+                {
+                    // Ignore errors
+                }
+
+                if (maintenancePdfContent != null)
+                {
+                    var attachments = new List<(string fileName, byte[] content, string mimeType)>
+                    {
+                        ($"Invoice_Booking_{booking.BookingId}.pdf", invoicePdfContent, "application/pdf"),
+                        ($"MaintenanceReport_Booking_{booking.BookingId}.pdf", maintenancePdfContent, "application/pdf")
+                    };
+
+                    await _emailService.SendEmailWithMultipleAttachmentsAsync(customerEmail, subject, body, attachments);
+                }
+                else
+                {
+                    await _emailService.SendEmailWithAttachmentAsync(
+                        customerEmail,
+                        subject,
+                        body,
+                        $"Invoice_Booking_{booking.BookingId}.pdf",
+                        invoicePdfContent,
+                        "application/pdf");
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Ignore email errors
+        }
+
+        // Gửi notification (giống PayOS)
+        if (booking.Customer?.User?.UserId != null)
+        {
+            var uid = booking.Customer.User.UserId;
+            await _notificationService.SendBookingNotificationAsync(uid, $"Đặt lịch #{booking.BookingId}", "Thanh toán thành công", "BOOKING");
+        }
+
+        return Ok(new {
+            success = true,
+            paymentId = payment?.PaymentId,
+            paymentCode = payment?.PaymentCode,
+            status = payment?.Status,
+            amount = payment?.Amount,
+            paymentMethod = payment?.PaymentMethod,
+            paidByUserId = payment?.PaidByUserID
+        });
     }
 
 
@@ -474,10 +664,10 @@ public class PaymentController : ControllerBase
                     .Sum(up => up.DiscountAmount);
             }
 
-            var finalServicePrice = booking.AppliedCreditId.HasValue 
+            var finalServicePrice = booking.AppliedCreditId.HasValue
                 ? (serviceBasePrice - packageDiscountAmount)
                 : serviceBasePrice;
-            
+
             if (promotionDiscountAmount > finalServicePrice)
             {
                 promotionDiscountAmount = finalServicePrice;
@@ -537,212 +727,7 @@ public class PaymentController : ControllerBase
 		return Redirect(frontendCancelUrl);
 	}
 
-	[HttpPost("booking/{bookingId:int}/vnpay-link")]
-	[Authorize]
-	public async Task<IActionResult> CreateVNPayPaymentLink([FromRoute] int bookingId)
-	{
-		try
-		{
-			var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
-			if (booking == null)
-			{
-				return NotFound(new { success = false, message = "Không tìm thấy booking" });
-			}
-
-			if (booking.Status == "CANCELLED")
-			{
-				return BadRequest(new { success = false, message = "Booking đã bị hủy" });
-			}
-
-			if (booking.Status == "PAID")
-			{
-				return BadRequest(new { success = false, message = "Booking đã được thanh toán" });
-			}
-
-			var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
-			decimal packageDiscountAmount = 0m;
-			decimal packagePrice = 0m;
-			decimal partsAmount = 0m;
-			decimal promotionDiscountAmount = 0m;
-
-            var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(booking.BookingId);
-            if (workOrderParts != null && workOrderParts.Any())
-            {
-                partsAmount = workOrderParts
-                    .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied)
-                    .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0));
-            }
-
-			if (booking.AppliedCreditId.HasValue)
-			{
-				var appliedCredit = await _customerServiceCreditRepo.GetByIdAsync(booking.AppliedCreditId.Value);
-				if (appliedCredit?.ServicePackage != null)
-				{
-					packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
-
-					if (appliedCredit.UsedCredits == 0)
-					{
-						packagePrice = appliedCredit.ServicePackage.Price;
-					}
-				}
-			}
-
-			var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
-			if (userPromotions != null && userPromotions.Any())
-			{
-				promotionDiscountAmount = userPromotions
-					.Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
-					.Sum(up => up.DiscountAmount);
-			}
-
-            var finalServicePrice2 = booking.AppliedCreditId.HasValue 
-                ? (serviceBasePrice - packageDiscountAmount)
-                : serviceBasePrice;
-            
-            if (promotionDiscountAmount > finalServicePrice2)
-            {
-                promotionDiscountAmount = finalServicePrice2;
-            }
-            decimal totalAmount = packagePrice + finalServicePrice2 + partsAmount - promotionDiscountAmount;
-
-			var amount = (decimal)Math.Round(totalAmount);
-			var minAmount = _configuration.GetValue<decimal>("VNPay:MinAmount", 1000);
-			if (amount < minAmount) amount = minAmount;
-
-			var description = $"Thanh toán vé #{bookingId}";
-			var customerName = booking.Customer?.User?.FullName ?? "Khách hàng";
-
-			var paymentUrl = await _vnPayService.CreatePaymentUrlAsync(bookingId, amount, description, customerName);
-
-			return Ok(new
-			{
-				success = true,
-				message = "Tạo link thanh toán VNPay thành công",
-				data = new { paymentUrl, bookingId, amount }
-			});
-		}
-		catch (Exception ex)
-		{
-			return StatusCode(500, new { success = false, message = $"Lỗi tạo link thanh toán VNPay: {ex.Message}" });
-		}
-	}
-
-	[HttpGet("/api/payment/vnpay-return")]
-	[AllowAnonymous]
-	public async Task<IActionResult> VNPayReturn([FromQuery] Dictionary<string, string> vnpayData)
-	{
-		try
-		{
-			var secureHash = vnpayData.ContainsKey("vnp_SecureHash") ? vnpayData["vnp_SecureHash"] : "";
-			var isValid = _vnPayService.VerifyPaymentResponse(vnpayData, secureHash);
-
-			if (!isValid)
-			{
-				var frontendUrl = _configuration["App:FrontendUrl"];
-				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-				var frontendFailUrl = $"{frontendUrl}{failedPath}?error=invalid_signature";
-				return Redirect(frontendFailUrl);
-			}
-
-			var bookingId = _vnPayService.GetBookingIdFromResponse(vnpayData);
-			if (!bookingId.HasValue)
-			{
-				var frontendUrl = _configuration["App:FrontendUrl"];
-				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-				var frontendFailUrl = $"{frontendUrl}{failedPath}?error=cannot_extract_booking";
-				return Redirect(frontendFailUrl);
-			}
-
-			var responseCode = vnpayData.ContainsKey("vnp_ResponseCode") ? vnpayData["vnp_ResponseCode"] : "";
-			var isPaymentSuccess = responseCode == AppConstants.PaymentResponseCodes.Success;
-
-			if (isPaymentSuccess)
-			{
-				var confirmed = await _paymentService.ConfirmPaymentAsync(bookingId.Value, "VNPAY");
-
-				if (confirmed)
-				{
-					var frontendUrl = _configuration["App:FrontendUrl"];
-					var successPath = _configuration["App:PaymentRedirects:SuccessPath"];
-					var frontendSuccessUrl = $"{frontendUrl}{successPath}?bookingId={bookingId.Value}&status=success";
-					return Redirect(frontendSuccessUrl);
-				}
-				else
-				{
-					var frontendUrl = _configuration["App:FrontendUrl"];
-					var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
-					var frontendErrorUrl = $"{frontendUrl}{errorPath}?bookingId={bookingId.Value}&error=system_error";
-					return Redirect(frontendErrorUrl);
-				}
-			}
-			else
-			{
-				var frontendUrl = _configuration["App:FrontendUrl"];
-				var failedPath = _configuration["App:PaymentRedirects:FailedPath"];
-				var frontendFailUrl = $"{frontendUrl}{failedPath}?bookingId={bookingId.Value}&status=failed&code={responseCode}";
-				return Redirect(frontendFailUrl);
-			}
-		}
-		catch (Exception)
-		{
-			var frontendUrl = _configuration["App:FrontendUrl"];
-			var errorPath = _configuration["App:PaymentRedirects:ErrorPath"];
-			var frontendErrorUrl = $"{frontendUrl}{errorPath}?error=system_error";
-			return Redirect(frontendErrorUrl);
-		}
-	}
-
-	[HttpPost("/api/payment/vnpay-ipn")]
-	[AllowAnonymous]
-	public async Task<IActionResult> VNPayIPN([FromForm] Dictionary<string, string> vnpayData)
-	{
-		try
-		{
-
-			var secureHash = vnpayData.ContainsKey("vnp_SecureHash") ? vnpayData["vnp_SecureHash"] : "";
-			var isValid = _vnPayService.VerifyPaymentResponse(vnpayData, secureHash);
-
-			if (!isValid)
-			{
-				return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.InvalidSignature, Message = "Invalid signature" });
-			}
-
-			var bookingId = _vnPayService.GetBookingIdFromResponse(vnpayData);
-			if (!bookingId.HasValue)
-			{
-				return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.CannotExtractBookingId, Message = "Cannot extract bookingId" });
-			}
-
-			var responseCode = vnpayData.ContainsKey("vnp_ResponseCode") ? vnpayData["vnp_ResponseCode"] : "";
-			var transactionStatus = vnpayData.ContainsKey("vnp_TransactionStatus") ? vnpayData["vnp_TransactionStatus"] : "";
-
-			var isPaymentSuccess = responseCode == AppConstants.PaymentResponseCodes.Success && transactionStatus == AppConstants.PaymentResponseCodes.Success;
-
-			if (isPaymentSuccess)
-			{
-				var confirmed = await _paymentService.ConfirmPaymentAsync(bookingId.Value, "VNPAY");
-
-				if (confirmed)
-				{
-					return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.Success, Message = "Confirm success" });
-				}
-				else
-				{
-					return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.ConfirmFailed, Message = "Confirm failed" });
-				}
-			}
-			else
-			{
-				return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.PaymentNotSuccessful, Message = "Payment not successful" });
-			}
-		}
-		catch (Exception)
-		{
-			return StatusCode(200, new { RspCode = AppConstants.PaymentResponseCodes.InternalError, Message = "Internal error" });
-		}
-	}
-
-	[HttpPost("/api/payment/sepay-webhook")]
+    [HttpPost("/api/payment/sepay-webhook")]
 	[AllowAnonymous]
 	public async Task<IActionResult> SePayWebhook([FromBody] SePayWebhookRequest request)
 	{
@@ -988,7 +973,7 @@ public class PaymentController : ControllerBase
 			var cancelled = allPayments.Count(p => p.Status == "CANCELLED");
 
 			var byMethod = new Dictionary<string, (int count, long amount)>();
-			foreach (var method in new[] { "PAYOS", "VNPAY", "SEPAY", "CASH" })
+			foreach (var method in new[] { "PAYOS", "SEPAY", "CASH" })
 			{
 				var methodPayments = allPayments.Where(p => p.PaymentMethod == method).ToList();
 				byMethod[method.ToLowerInvariant()] = (
@@ -1026,7 +1011,6 @@ public class PaymentController : ControllerBase
 				byMethod = new
 				{
 					payos = new { count = byMethod.GetValueOrDefault("payos").count, amount = byMethod.GetValueOrDefault("payos").amount },
-					vnpay = new { count = byMethod.GetValueOrDefault("vnpay").count, amount = byMethod.GetValueOrDefault("vnpay").amount },
 					sepay = new { count = byMethod.GetValueOrDefault("sepay").count, amount = byMethod.GetValueOrDefault("sepay").amount },
 					cash = new { count = byMethod.GetValueOrDefault("cash").count, amount = byMethod.GetValueOrDefault("cash").amount }
 				},

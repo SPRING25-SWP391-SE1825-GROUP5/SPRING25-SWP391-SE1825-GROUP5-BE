@@ -639,8 +639,20 @@ namespace EVServiceCenter.Application.Service
                 // Normalize status to match constants (uppercase, handle CHECKED_IN)
                 var normalizedStatus = NormalizeBookingStatus(request.Status);
 
-                // Validate status transition
-                ValidateStatusTransition(booking.Status ?? string.Empty, normalizedStatus);
+                // Validate status transition (bỏ qua nếu ForceCancel = true và đang hủy)
+                // Nhưng vẫn kiểm tra không cho hủy booking đã COMPLETED hoặc PAID
+                if (request.ForceCancel && string.Equals(normalizedStatus, BookingStatusConstants.Cancelled, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Khi ForceCancel = true, vẫn phải kiểm tra không cho hủy booking đã hoàn thành hoặc đã thanh toán
+                    if (booking.Status == BookingStatusConstants.Completed || booking.Status == BookingStatusConstants.Paid)
+                    {
+                        throw new ArgumentException($"Không thể hủy booking đã hoàn thành hoặc đã thanh toán (Status: {booking.Status})");
+                    }
+                }
+                else
+                {
+                    ValidateStatusTransition(booking.Status ?? string.Empty, normalizedStatus);
+                }
 
                 // Update booking status
                 booking.Status = normalizedStatus;

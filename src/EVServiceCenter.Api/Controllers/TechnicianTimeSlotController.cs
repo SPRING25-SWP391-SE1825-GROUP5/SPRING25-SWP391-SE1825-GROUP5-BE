@@ -77,8 +77,10 @@ namespace EVServiceCenter.Api.Controllers
                 message = result.Message,
                 totalDays = result.TotalDays,
                 totalSlotsCreated = result.TotalSlotsCreated,
+                totalSlotsSkipped = result.TotalSlotsSkipped,
                 weekendDaysSkipped = result.WeekendDaysSkipped,
-                weekendDatesSkipped = result.WeekendDatesSkipped
+                weekendDatesSkipped = result.WeekendDatesSkipped,
+                duplicateSlotsInfo = result.DuplicateSlotsInfo
             });
         }
 

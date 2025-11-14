@@ -11,7 +11,7 @@ public partial class Part
 
     public string PartName { get; set; }
 
-    public string Brand { get; set; }
+    public string? Brand { get; set; }
 
     public decimal Price { get; set; }
 
@@ -25,20 +25,20 @@ public partial class Part
 
     public virtual ICollection<InventoryPart> InventoryParts { get; set; } = new List<InventoryPart>();
 
-    
 
-    
+
+
 
     public virtual ICollection<WorkOrderPart> WorkOrderParts { get; set; } = new List<WorkOrderPart>();
 
     // E-commerce navigation properties
-    
+
 
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 
-    
 
-    
+
+
 
     public virtual ICollection<VehicleModelPart> VehicleModelParts { get; set; } = new List<VehicleModelPart>();
 }

@@ -14,6 +14,7 @@ namespace EVServiceCenter.Application.Interfaces
         Task<TechnicianAvailabilityResponse> GetTechnicianAvailabilityAsync(int technicianId, DateOnly date);
         Task<bool> UpdateTechnicianAvailabilityAsync(int technicianId, UpdateTechnicianAvailabilityRequest request);
         Task<TechnicianBookingsResponse> GetAllBookingsAsync(int technicianId);
+        Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly? date);
         Task<TechnicianBookingDetailResponse> GetBookingDetailAsync(int technicianId, int bookingId);
         Task<int?> GetTechnicianUserIdAsync(int technicianId);
     }

@@ -148,6 +148,20 @@ namespace EVServiceCenter.Application.Service
 
                     try
                     {
+                        // Check if slot already exists before creating
+                        var exists = await _technicianTimeSlotRepository.TechnicianTimeSlotExistsAsync(
+                            request.TechnicianId, currentDate, request.SlotId);
+
+                        if (exists)
+                        {
+                            // Skip if already exists
+                            var dateStr = currentDate.ToString("dd/MM/yyyy");
+                            skippedDates.Add(dateStr);
+                            response.Errors.Add($"Bỏ qua ngày {dateStr}: Lịch đã tồn tại cho kỹ thuật viên này");
+                            currentDate = currentDate.AddDays(1);
+                            continue;
+                        }
+
                         var technicianTimeSlot = new TechnicianTimeSlot
                         {
                             TechnicianId = request.TechnicianId,
@@ -160,6 +174,23 @@ namespace EVServiceCenter.Application.Service
 
                         var createdTimeSlot = await _technicianTimeSlotRepository.CreateAsync(technicianTimeSlot);
                         createdTimeSlots.Add(MapToTechnicianTimeSlotResponse(createdTimeSlot));
+                    }
+                    catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+                    {
+                        // Handle duplicate key exception
+                        var dateStr = currentDate.ToString("dd/MM/yyyy");
+                        skippedDates.Add(dateStr);
+
+                        if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx &&
+                            (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+                        {
+                            // Duplicate key
+                            response.Errors.Add($"Bỏ qua ngày {dateStr}: Lịch đã tồn tại cho kỹ thuật viên này");
+                        }
+                        else
+                        {
+                            response.Errors.Add($"Bỏ qua ngày {dateStr}: Lỗi cơ sở dữ liệu - {dbEx.Message}");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -204,7 +235,7 @@ namespace EVServiceCenter.Application.Service
                     response.Success = false;
                     // Phân biệt giữa các trường hợp: chỉ cuối tuần, chỉ đã có lịch, hoặc cả hai
                     var totalDaysInRange = (int)(request.EndDate.Date - request.StartDate.Date).TotalDays + 1;
-                    
+
                     if (weekendDaysSkipped == totalDaysInRange)
                     {
                         // Tất cả ngày trong khoảng đều là cuối tuần
@@ -676,8 +707,10 @@ namespace EVServiceCenter.Application.Service
                 var timeSlots = await _timeSlotRepository.GetAllTimeSlotsAsync();
 
                 var totalCreated = 0;
+                var totalSkipped = 0;
                 var weekendDaysSkipped = 0;
                 var weekendDatesSkipped = new List<string>();
+                var duplicateSlotsInfo = new List<string>();
                 var currentDate = request.StartDate.Date;
 
                 while (currentDate <= request.EndDate.Date)
@@ -695,6 +728,20 @@ namespace EVServiceCenter.Application.Service
                     {
                         try
                         {
+                            // Check if slot already exists before creating
+                            var exists = await _technicianTimeSlotRepository.TechnicianTimeSlotExistsAsync(
+                                request.TechnicianId, currentDate, slot.SlotId);
+
+                            if (exists)
+                            {
+                                // Track duplicate slot
+                                totalSkipped++;
+                                var dateStr = currentDate.ToString("dd/MM/yyyy");
+                                var slotTime = slot.SlotTime.ToString("HH:mm");
+                                duplicateSlotsInfo.Add($"{dateStr} - {slotTime}");
+                                continue;
+                            }
+
                             var entity = new TechnicianTimeSlot
                             {
                                 TechnicianId = request.TechnicianId,
@@ -707,9 +754,26 @@ namespace EVServiceCenter.Application.Service
                             await _technicianTimeSlotRepository.CreateAsync(entity);
                             totalCreated++;
                         }
+                        catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+                        {
+                            // Handle duplicate key exception
+                            if (dbEx.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx &&
+                                (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+                            {
+                                // Track duplicate slot
+                                totalSkipped++;
+                                var dateStr = currentDate.ToString("dd/MM/yyyy");
+                                var slotTime = slot.SlotTime.ToString("HH:mm");
+                                duplicateSlotsInfo.Add($"{dateStr} - {slotTime}");
+                                continue;
+                            }
+                            // Re-throw if it's a different database error
+                            throw;
+                        }
                         catch
                         {
-                            // ignore duplicates
+                            // Ignore other exceptions (shouldn't happen, but just in case)
+                            continue;
                         }
                     }
                     currentDate = currentDate.AddDays(1);
@@ -720,10 +784,16 @@ namespace EVServiceCenter.Application.Service
                 var workingDays = totalDaysInRange - weekendDaysSkipped;
                 response.TotalDays = workingDays;
                 response.TotalSlotsCreated = totalCreated;
+                response.TotalSlotsSkipped = totalSkipped;
                 response.WeekendDaysSkipped = weekendDaysSkipped;
                 response.WeekendDatesSkipped = weekendDatesSkipped;
+                response.DuplicateSlotsInfo = duplicateSlotsInfo;
 
-                var message = $"Đã tạo lịch full tuần với toàn bộ slot cho {workingDays} ngày làm việc";
+                var message = $"Đã tạo {totalCreated} lịch trình cho {workingDays} ngày làm việc";
+                if (totalSkipped > 0)
+                {
+                    message += $". Đã bỏ qua {totalSkipped} lịch trình đã tồn tại";
+                }
                 if (weekendDaysSkipped > 0)
                 {
                     message += $". Đã tự động bỏ qua {weekendDaysSkipped} ngày cuối tuần (Thứ 7 và Chủ nhật): {string.Join(", ", weekendDatesSkipped)}";

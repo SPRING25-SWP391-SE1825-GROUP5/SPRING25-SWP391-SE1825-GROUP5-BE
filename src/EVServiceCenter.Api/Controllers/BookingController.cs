@@ -442,7 +442,7 @@ namespace EVServiceCenter.WebAPI.Controllers
             try
             {
                 var bookings = await _bookingRepository.GetBookingsByStatusAsync(BookingStatusConstants.CheckedIn);
-                
+
                 var result = bookings.Select(b => new
                 {
                     bookingId = b.BookingId,
@@ -574,6 +574,12 @@ namespace EVServiceCenter.WebAPI.Controllers
                         ? workDate.Value.ToString("yyyy-MM-dd")
                         : booking.BookingDate.ToString("yyyy-MM-dd");
 
+                    // Tạo QR code cho check-in (chứa bookingId)
+                    // QR code sẽ chứa bookingId để staff scan và check-in
+                    var qrCodeData = booking.BookingId.ToString();
+                    // Sử dụng QR code API online để tạo QR code image
+                    var qrCodeImageUrl = $"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={Uri.EscapeDataString(qrCodeData)}";
+
                     var html = await _templateRenderer.RenderAsync("BookingCreated", new System.Collections.Generic.Dictionary<string, string>
                     {
                         ["bookingId"] = booking.BookingId.ToString(),
@@ -583,6 +589,7 @@ namespace EVServiceCenter.WebAPI.Controllers
                         ["time"] = slotTime,
                         ["fullName"] = fullName,
                         ["bookingUrl"] = bookingUrl,
+                        ["qrCodeImageUrl"] = qrCodeImageUrl,
                         ["year"] = DateTime.UtcNow.Year.ToString(),
                         ["supportPhone"] = _configuration["AppSettings:SupportPhone"] ?? "1900-xxxx"
                     });

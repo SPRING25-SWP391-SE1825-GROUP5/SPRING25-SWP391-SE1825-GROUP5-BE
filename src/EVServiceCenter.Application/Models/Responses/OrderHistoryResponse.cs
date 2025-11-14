@@ -11,22 +11,14 @@ namespace EVServiceCenter.Application.Models.Responses
         public required string Status { get; set; } = null!;
         public decimal TotalAmount { get; set; }
         public string? Notes { get; set; }
-        
-        public ShippingAddressInfo ShippingAddress { get; set; } = null!;
+
         public required List<OrderItemInfo> Items { get; set; } = new List<OrderItemInfo>();
         public OrderPaymentInfo? PaymentInfo { get; set; }
         public ShippingInfo? ShippingInfo { get; set; }
         public required List<OrderStatusTimelineInfo> Timeline { get; set; } = new List<OrderStatusTimelineInfo>();
-        
+
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-    }
-
-    public class ShippingAddressInfo
-    {
-        public required string FullName { get; set; } = null!;
-        public required string PhoneNumber { get; set; } = null!;
-        public required string Address { get; set; } = null!;
     }
 
     public class OrderItemInfo

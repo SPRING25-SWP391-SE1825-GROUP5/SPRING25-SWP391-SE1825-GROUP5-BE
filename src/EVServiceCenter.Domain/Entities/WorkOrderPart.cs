@@ -15,7 +15,7 @@ public partial class WorkOrderPart
 
     public int QuantityUsed { get; set; }
 
-    public string Status { get; set; } = "DRAFT";
+    public string? Status { get; set; } = "DRAFT";
 
     // Removed: CreatedAt, UpdatedAt, ApprovedAt per requirements
 

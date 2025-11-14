@@ -6,7 +6,6 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
-using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -14,16 +13,13 @@ namespace EVServiceCenter.Application.Service
     {
         private readonly IInventoryRepository _inventoryRepository;
         private readonly IWorkOrderPartRepository _workOrderPartRepository;
-        private readonly ILogger<InventoryReportsService> _logger;
 
         public InventoryReportsService(
             IInventoryRepository inventoryRepository,
-            IWorkOrderPartRepository workOrderPartRepository,
-            ILogger<InventoryReportsService> logger)
+            IWorkOrderPartRepository workOrderPartRepository)
         {
             _inventoryRepository = inventoryRepository;
             _workOrderPartRepository = workOrderPartRepository;
-            _logger = logger;
         }
 
         public async Task<InventoryUsageResponse> GetInventoryUsageAsync(int centerId, string period = "month")
@@ -33,17 +29,14 @@ namespace EVServiceCenter.Application.Service
                 var startDate = GetPeriodStartDate(period);
                 var endDate = DateTime.Now;
 
-                // Lấy inventory của center
                 var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(centerId);
                 if (inventory == null)
                 {
                     return new InventoryUsageResponse();
                 }
 
-                // Lấy inventory parts
                 var inventoryParts = await _inventoryRepository.GetInventoryPartsByInventoryIdAsync(inventory.InventoryId);
 
-                // Lấy work order parts trong khoảng thời gian
                 var workOrderParts = await _workOrderPartRepository.GetByCenterAndDateRangeAsync(centerId, startDate, endDate);
 
                 var partUsageItems = new List<PartUsageItem>();
@@ -52,7 +45,7 @@ namespace EVServiceCenter.Application.Service
                 {
                     var part = inventoryPart.Part;
                     var usageInPeriod = workOrderParts.Where(wop => wop.PartId == part.PartId).ToList();
-                    
+
                     var usageCount = usageInPeriod.Sum(wop => wop.QuantityUsed);
                     var usageValue = usageInPeriod.Sum(wop => wop.QuantityUsed * wop.Part.Price);
                     var usageRate = inventoryPart.CurrentStock > 0 ? (double)usageCount / inventoryPart.CurrentStock : 0;
@@ -71,7 +64,7 @@ namespace EVServiceCenter.Application.Service
                         PartId = part.PartId,
                         PartNumber = part.PartNumber,
                         PartName = part.PartName,
-                        Brand = part.Brand,
+                        Brand = part.Brand ?? string.Empty,
                         CurrentStock = inventoryPart.CurrentStock,
                         MinimumStock = inventoryPart.MinimumStock,
                         UsageCount = usageCount,
@@ -84,17 +77,16 @@ namespace EVServiceCenter.Application.Service
                     });
                 }
 
-                // Phân loại parts
                 var hotParts = partUsageItems
                     .Where(p => p.UsageCount > 0)
                     .OrderByDescending(p => p.UsageCount)
-                    .Take((int)(partUsageItems.Count * 0.2)) // Top 20%
+                    .Take((int)(partUsageItems.Count * 0.2))
                     .ToList();
 
                 var notHotParts = partUsageItems
                     .Where(p => p.UsageCount > 0)
                     .OrderBy(p => p.UsageCount)
-                    .Take((int)(partUsageItems.Count * 0.3)) // Bottom 30%
+                    .Take((int)(partUsageItems.Count * 0.3))
                     .ToList();
 
                 var unusedParts = partUsageItems
@@ -122,9 +114,8 @@ namespace EVServiceCenter.Application.Service
                     Summary = summary
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Lỗi khi lấy báo cáo sử dụng kho cho center {CenterId}", centerId);
                 throw;
             }
         }

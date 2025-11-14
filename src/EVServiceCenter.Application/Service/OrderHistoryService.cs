@@ -22,8 +22,8 @@ namespace EVServiceCenter.Application.Service
             _customerRepository = customerRepository;
         }
 
-        public async Task<OrderHistoryListResponse> GetOrderHistoryAsync(int customerId, int page = 1, int pageSize = 10, 
-            string? status = null, DateTime? fromDate = null, DateTime? toDate = null, 
+        public async Task<OrderHistoryListResponse> GetOrderHistoryAsync(int customerId, int page = 1, int pageSize = 10,
+            string? status = null, DateTime? fromDate = null, DateTime? toDate = null,
             string sortBy = "orderDate", string sortOrder = "desc")
         {
             // Validate customer exists
@@ -140,7 +140,7 @@ namespace EVServiceCenter.Application.Service
             // Calculate statistics
             var totalOrders = allOrders.Count;
             var statusBreakdown = CalculateStatusBreakdown(allOrders);
-            var totalSpent = allOrders.Where(o => o.Status == "DELIVERED").Sum(o => o.OrderItems?.Sum(oi => oi.Quantity * oi.UnitPrice) ?? 0m);
+            var totalSpent = allOrders.Where(o => o.Status == "CONFIRMED").Sum(o => o.OrderItems?.Sum(oi => oi.Quantity * oi.UnitPrice) ?? 0m);
             var averageOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0;
 
             var favoriteProduct = CalculateFavoriteProduct(allOrders);
@@ -184,12 +184,6 @@ namespace EVServiceCenter.Application.Service
                 Notes = order.Notes,
                 Items = new List<OrderItemInfo>(),
                 Timeline = new List<OrderStatusTimelineInfo>(),
-                ShippingAddress = new ShippingAddressInfo
-                {
-                    FullName = "Customer", // This would need to be extracted from shipping address
-                    PhoneNumber = order.Customer?.User?.PhoneNumber ?? string.Empty,
-                    Address = order.Customer?.User?.Address ?? string.Empty
-                },
                 CreatedAt = order.CreatedAt,
                 UpdatedAt = order.UpdatedAt
             };
@@ -242,33 +236,13 @@ namespace EVServiceCenter.Application.Service
             });
 
             // Add status changes based on order status
-            if (order.Status == "CONFIRMED" || order.Status == "SHIPPED" || order.Status == "DELIVERED")
+            if (order.Status == "CONFIRMED")
             {
                 timeline.Add(new OrderStatusTimelineInfo
                 {
                     Status = "CONFIRMED",
                     Timestamp = order.UpdatedAt,
                     Note = "Xác nhận đơn hàng"
-                });
-            }
-
-            if (order.Status == "SHIPPED" || order.Status == "DELIVERED")
-            {
-                timeline.Add(new OrderStatusTimelineInfo
-                {
-                    Status = "SHIPPED",
-                    Timestamp = order.UpdatedAt,
-                    Note = "Đã giao cho đơn vị vận chuyển"
-                });
-            }
-
-            if (order.Status == "DELIVERED")
-            {
-                timeline.Add(new OrderStatusTimelineInfo
-                {
-                    Status = "DELIVERED",
-                    Timestamp = order.UpdatedAt,
-                    Note = "Giao hàng thành công"
                 });
             }
 
@@ -282,16 +256,6 @@ namespace EVServiceCenter.Application.Service
                 });
             }
 
-            if (order.Status == "RETURNED")
-            {
-                timeline.Add(new OrderStatusTimelineInfo
-                {
-                    Status = "RETURNED",
-                    Timestamp = order.UpdatedAt,
-                    Note = "Trả hàng"
-                });
-            }
-
             return timeline.OrderBy(t => t.Timestamp).ToList();
         }
 
@@ -299,12 +263,9 @@ namespace EVServiceCenter.Application.Service
         {
             return new OrderStatusBreakdown
             {
-                Delivered = orders.Count(o => o.Status == "DELIVERED"),
                 Cancelled = orders.Count(o => o.Status == "CANCELLED"),
                 Pending = orders.Count(o => o.Status == "PENDING"),
-                Shipped = orders.Count(o => o.Status == "SHIPPED"),
-                Confirmed = orders.Count(o => o.Status == "CONFIRMED"),
-                Returned = orders.Count(o => o.Status == "RETURNED")
+                Confirmed = orders.Count(o => o.Status == "CONFIRMED")
             };
         }
 
@@ -332,8 +293,8 @@ namespace EVServiceCenter.Application.Service
 
         private OrderRecentActivity CalculateRecentActivity(List<Order> orders)
         {
-            var deliveredOrders = orders.Where(o => o.Status == "DELIVERED").OrderByDescending(o => o.CreatedAt);
-            var lastOrder = deliveredOrders.FirstOrDefault();
+            var confirmedOrders = orders.Where(o => o.Status == "CONFIRMED").OrderByDescending(o => o.CreatedAt);
+            var lastOrder = confirmedOrders.FirstOrDefault();
 
             var lastProduct = lastOrder?.OrderItems?.FirstOrDefault()?.Part?.PartName;
 

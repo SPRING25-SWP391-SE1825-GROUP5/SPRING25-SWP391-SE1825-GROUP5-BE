@@ -15,12 +15,9 @@ namespace EVServiceCenter.Application.Models.Responses
 
     public class OrderStatusBreakdown
     {
-        public int Delivered { get; set; }
         public int Cancelled { get; set; }
         public int Pending { get; set; }
-        public int Shipped { get; set; }
         public int Confirmed { get; set; }
-        public int Returned { get; set; }
     }
 
     public class FavoriteProduct

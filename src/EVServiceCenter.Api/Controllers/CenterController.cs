@@ -26,14 +26,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             _inventoryRepository = inventoryRepository;
         }
 
-        /// <summary>
-        /// Lấy danh sách tất cả trung tâm với phân trang và tìm kiếm
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
-        /// <param name="city">Lọc theo thành phố</param>
-        /// <returns>Danh sách trung tâm</returns>
         [HttpGet]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> GetAllCenters(
@@ -65,7 +57,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        // ========== Nearby Centers ==========
         public class NearbyQuery { public double lat { get; set; } public double lng { get; set; } public double radiusKm { get; set; } = 10; public int limit { get; set; } = 10; public int? serviceId { get; set; } = null; }
 
         [HttpGet("nearby")]
@@ -77,7 +68,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (q.lat < -90 || q.lat > 90 || q.lng < -180 || q.lng > 180)
                 return BadRequest(new { success = false, message = "Toạ độ không hợp lệ" });
 
-            // Load geo cache from file once
             if (_geoCache == null)
             {
                 try
@@ -93,8 +83,6 @@ namespace EVServiceCenter.WebAPI.Controllers
 
             var centers = await _centerService.GetActiveCentersAsync(1, int.MaxValue, null, null);
             var centerList = centers.Centers.Select(c => new { c.CenterId, c.CenterName, c.Address }).ToList();
-
-            // Optional filter by serviceId could be added here using service layer if cần
 
             var deltaLat = q.radiusKm / 111d;
             var deltaLng = q.radiusKm / (111d * System.Math.Cos(q.lat * System.Math.PI / 180d));
@@ -123,7 +111,6 @@ namespace EVServiceCenter.WebAPI.Controllers
 
         private class GeoItem { public int centerId { get; set; } public double lat { get; set; } public double lng { get; set; } }
 
-        // ========== Nearest fulfillment (distance + stock) ==========
         public class NearestFulfillmentQuery { public double lat { get; set; } public double lng { get; set; } public string items { get; set; } = string.Empty; }
 
         [HttpGet("nearest-fulfillment")]
@@ -133,7 +120,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (q.lat < -90 || q.lat > 90 || q.lng < -180 || q.lng > 180)
                 return BadRequest(new { success = false, message = "Toạ độ không hợp lệ" });
 
-            // Parse items: format "partId:qty,partId:qty"
             var parsed = new System.Collections.Generic.List<(int partId, int qty)>();
             foreach (var token in (q.items ?? string.Empty).Split(',', System.StringSplitOptions.RemoveEmptyEntries))
             {
@@ -144,11 +130,9 @@ namespace EVServiceCenter.WebAPI.Controllers
             if (parsed.Count == 0)
                 return BadRequest(new { success = false, message = "items rỗng hoặc không đúng định dạng partId:qty" });
 
-            // Load active centers
             var centersPage = await _centerService.GetActiveCentersAsync(1, int.MaxValue, null, null);
             var centers = centersPage.Centers.Select(c => new { c.CenterId, c.CenterName }).ToList();
 
-            // We need lat/lng from DB; fall back to geo file cache if service responses don't include it
             if (_geoCache == null)
             {
                 try
@@ -168,12 +152,11 @@ namespace EVServiceCenter.WebAPI.Controllers
                 catch { _geoCache = new(); }
             }
 
-            // For each center: check stock via inventory service, then compute distance using geo cache
             var feasible = new System.Collections.Generic.List<(int centerId, string name, double distanceKm)>();
             foreach (var c in centers)
             {
                 var geo = _geoCache.FirstOrDefault(g => g.centerId == c.CenterId);
-                if (geo.centerId == 0) continue; // skip if no geo
+                if (geo.centerId == 0) continue;
 
                 var inv = await _inventoryService.GetInventoryByCenterIdAsync(c.CenterId);
                 var parts = inv.InventoryParts ?? new System.Collections.Generic.List<InventoryPartResponse>();
@@ -192,14 +175,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             return Ok(new { success = true, data = new { centerId = result.centerId, name = result.name, distanceKm = System.Math.Round(result.distanceKm, 2) } });
         }
 
-        /// <summary>
-        /// Lấy danh sách trung tâm đang hoạt động với phân trang và tìm kiếm
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
-        /// <param name="city">Lọc theo thành phố</param>
-        /// <returns>Danh sách trung tâm đang hoạt động</returns>
         [HttpGet("active")]
         [AllowAnonymous]
         public async Task<IActionResult> GetActiveCenters(
@@ -210,7 +185,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -231,11 +205,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thông tin trung tâm theo ID
-        /// </summary>
-        /// <param name="id">ID trung tâm</param>
-        /// <returns>Thông tin trung tâm</returns>
         [HttpGet("{id}")]
         [AllowAnonymous]
         public async Task<IActionResult> GetCenterById(int id)
@@ -266,11 +235,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo trung tâm mới
-        /// </summary>
-        /// <param name="request">Thông tin trung tâm mới</param>
-        /// <returns>Thông tin trung tâm đã tạo</returns>
         [HttpPost]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> CreateCenter([FromBody] CreateCenterRequest request)
@@ -308,12 +272,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật thông tin trung tâm
-        /// </summary>
-        /// <param name="id">ID trung tâm</param>
-        /// <param name="request">Thông tin cập nhật</param>
-        /// <returns>Thông tin trung tâm đã cập nhật</returns>
         [HttpPut("{id}")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> UpdateCenter(int id, [FromBody] UpdateCenterRequest request)
@@ -354,13 +312,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách tất cả trung tâm có hàng cho các parts cụ thể
-        /// </summary>
-        /// <param name="partIds">Danh sách PartId (comma-separated hoặc query array)</param>
-        /// <param name="lat">Vĩ độ (optional, để tính distance)</param>
-        /// <param name="lng">Kinh độ (optional, để tính distance)</param>
-        /// <returns>Danh sách trung tâm có đủ hàng</returns>
         [HttpGet("available-for-parts")]
         [AllowAnonymous]
         public async Task<IActionResult> GetAvailableCentersForParts(
@@ -370,7 +321,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Parse partIds
                 var partIdList = new System.Collections.Generic.List<int>();
                 if (!string.IsNullOrWhiteSpace(partIds))
                 {
@@ -384,13 +334,11 @@ namespace EVServiceCenter.WebAPI.Controllers
                 if (partIdList.Count == 0)
                     return BadRequest(new { success = false, message = "Vui lòng cung cấp ít nhất một PartId" });
 
-                // Validate coordinates nếu có
                 if (lat.HasValue && (lat.Value < -90 || lat.Value > 90))
                     return BadRequest(new { success = false, message = "Vĩ độ không hợp lệ" });
                 if (lng.HasValue && (lng.Value < -180 || lng.Value > 180))
                     return BadRequest(new { success = false, message = "Kinh độ không hợp lệ" });
 
-                // Load geo cache nếu cần tính distance
                 if (lat.HasValue && lng.HasValue && _geoCache == null)
                 {
                     try
@@ -410,7 +358,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                     catch { _geoCache = new(); }
                 }
 
-                // Lấy tất cả centers active
                 var centersPage = await _centerService.GetActiveCentersAsync(1, int.MaxValue, null, null);
                 var centers = centersPage.Centers;
 
@@ -459,10 +406,8 @@ namespace EVServiceCenter.WebAPI.Controllers
                         if (!hasEnough) allPartsAvailable = false;
                     }
 
-                    // Chỉ thêm center nếu có ít nhất một part có hàng
                     if (partsInfo.Any(p => ((dynamic)p).hasEnough))
                     {
-                        // Thêm distance nếu có coordinates
                         if (lat.HasValue && lng.HasValue)
                         {
                             var geo = _geoCache?.FirstOrDefault(g => g.centerId == center.CenterId);
@@ -493,7 +438,6 @@ namespace EVServiceCenter.WebAPI.Controllers
                     }
                 }
 
-                // Sort by distance nếu có, hoặc theo centerId
                 if (lat.HasValue && lng.HasValue)
                 {
                     result = result.OrderBy(x => ((dynamic)x).distanceKm ?? double.MaxValue).ToList();
@@ -520,11 +464,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Validate xem trung tâm có đủ hàng cho các parts cụ thể không
-        /// </summary>
-        /// <param name="request">Request chứa centerId và danh sách items</param>
-        /// <returns>Kết quả validation</returns>
         [HttpPost("validate-stock")]
         [AllowAnonymous]
         public async Task<IActionResult> ValidateStock([FromBody] ValidateStockRequest request)
@@ -542,20 +481,16 @@ namespace EVServiceCenter.WebAPI.Controllers
                     });
                 }
 
-                // Validate centerId
                 if (request.CenterId <= 0)
                     return BadRequest(new { success = false, message = "CenterId không hợp lệ" });
 
-                // Validate items
                 if (request.Items == null || request.Items.Count == 0)
                     return BadRequest(new { success = false, message = "Danh sách items không được rỗng" });
 
-                // Lấy center info
                 var center = await _centerService.GetCenterByIdAsync(request.CenterId);
                 if (center == null)
                     return NotFound(new { success = false, message = "Trung tâm không tồn tại" });
 
-                // Lấy inventory
                 var inventory = await _inventoryRepository.GetInventoryByCenterIdAsync(request.CenterId);
                 if (inventory == null)
                     return BadRequest(new { success = false, message = $"Không tìm thấy kho của trung tâm {request.CenterId}" });
@@ -644,7 +579,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        // Request model cho ValidateStock
         public class ValidateStockRequest
         {
             public int CenterId { get; set; }

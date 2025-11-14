@@ -82,17 +82,14 @@ public class VehicleModelPartService : IVehicleModelPartService
 
     public async Task<VehicleModelPartResponse> CreateAsync(CreateVehicleModelPartRequest request)
     {
-        // Check if model exists
         var model = await _vehicleModelRepository.GetByIdAsync(request.ModelId);
         if (model == null)
             throw new KeyNotFoundException($"Vehicle model with ID {request.ModelId} not found.");
 
-        // Check if part exists
-            var part = await _partRepository.GetPartByIdAsync(request.PartId);
+        var part = await _partRepository.GetPartByIdAsync(request.PartId);
         if (part == null)
             throw new KeyNotFoundException($"Part with ID {request.PartId} not found.");
 
-        // Check if relationship already exists
         var existingRelation = await _vehicleModelPartRepository.GetByModelAndPartIdAsync(request.ModelId, request.PartId);
         if (existingRelation != null)
             throw new InvalidOperationException("Relationship between this model and part already exists.");
@@ -125,8 +122,6 @@ public class VehicleModelPartService : IVehicleModelPartService
         var modelPart = await _vehicleModelPartRepository.GetByIdAsync(id);
         if (modelPart == null)
             throw new KeyNotFoundException($"Vehicle model part relationship with ID {id} not found.");
-
-        // IsCompatible removed
 
         var updatedModelPart = await _vehicleModelPartRepository.UpdateAsync(modelPart);
 
@@ -162,7 +157,6 @@ public class VehicleModelPartService : IVehicleModelPartService
         if (modelPart == null)
             return false;
 
-        // ToggleCompatibility not applicable without IsCompatible
         await _vehicleModelPartRepository.UpdateAsync(modelPart);
         return true;
     }

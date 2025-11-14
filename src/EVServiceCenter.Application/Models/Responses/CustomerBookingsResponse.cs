@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using EVServiceCenter.Application.Models;
 
 namespace EVServiceCenter.Application.Models.Responses
 {
@@ -7,6 +8,7 @@ namespace EVServiceCenter.Application.Models.Responses
     {
         public int CustomerId { get; set; }
         public List<CustomerBookingItem> Bookings { get; set; } = new();
+        public PaginationInfo? Pagination { get; set; }
     }
 
     public class CustomerBookingItem
@@ -21,6 +23,10 @@ namespace EVServiceCenter.Application.Models.Responses
         public string VehiclePlate { get; set; } = string.Empty;
         public string SpecialRequests { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+        public decimal? ActualCost { get; set; }
+        public decimal? EstimatedCost { get; set; }
+        public string? BookingCode { get; set; }
+        public string? TechnicianName { get; set; }
     }
 }
 

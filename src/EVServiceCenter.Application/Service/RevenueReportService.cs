@@ -7,7 +7,6 @@ using EVServiceCenter.Application.Models.Requests;
 using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
-using Microsoft.Extensions.Logging;
 
 namespace EVServiceCenter.Application.Service
 {
@@ -17,35 +16,28 @@ namespace EVServiceCenter.Application.Service
         private readonly IInvoiceRepository _invoiceRepository;
         private readonly IPaymentRepository _paymentRepository;
         private readonly IServiceRepository _serviceRepository;
-        private readonly ILogger<RevenueReportService> _logger;
 
         public RevenueReportService(
             IBookingRepository bookingRepository,
             IInvoiceRepository invoiceRepository,
             IPaymentRepository paymentRepository,
-            IServiceRepository serviceRepository,
-            ILogger<RevenueReportService> logger)
+            IServiceRepository serviceRepository)
         {
             _bookingRepository = bookingRepository;
             _invoiceRepository = invoiceRepository;
             _paymentRepository = paymentRepository;
             _serviceRepository = serviceRepository;
-            _logger = logger;
         }
 
         public async Task<RevenueReportResponse> GetRevenueReportAsync(int centerId, RevenueReportRequest request)
         {
             try
             {
-                // ========== BOOKING REVENUE ==========
-                // Lấy tất cả booking của center
                 var allCenterBookings = await _bookingRepository.GetBookingsByCenterIdAsync(
                     centerId, page: 1, pageSize: int.MaxValue, status: null);
 
-                // Map bookingId -> booking để lấy service/technician cho groupBy
                 var bookingById = allCenterBookings.ToDictionary(b => b.BookingId, b => b);
 
-                // Thu thập payments từ bookings theo PaidAt trong range
                 var bookingPaymentAmounts = new List<(DateTime paidAt, int bookingId, decimal amount)>();
                 foreach (var booking in allCenterBookings)
                 {
@@ -61,7 +53,6 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Lấy payments PAID từ bookings
                 var statuses = new[] { "PAID" };
                 var allPaidPayments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(
                     statuses, request.StartDate, request.EndDate);
@@ -80,15 +71,9 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // ========== ORDER REVENUE ==========
-                // Lấy payments COMPLETED hoặc PAID từ orders có FulfillmentCenterId = centerId
-                // Note: GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync đã lấy cả COMPLETED và PAID
                 var orderPayments = await _paymentRepository.GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync(
                     centerId, request.StartDate, request.EndDate);
 
-                // Thu thập payments từ orders (sử dụng OrderId thay vì BookingId)
-                // Note: Orders không có service/technician, nên không thể group theo service/technician
-                // Chỉ tính vào tổng revenue, không group vào GroupedData
                 var orderPaymentAmounts = new List<(DateTime paidAt, int orderId, decimal amount)>();
                 foreach (var p in orderPayments)
                 {
@@ -98,32 +83,23 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Gộp booking và order payments để tính revenue by period
-                // Sử dụng bookingId = -1 cho orders để phân biệt (không group vào service/technician)
                 var allPaymentAmounts = bookingPaymentAmounts
                     .Select(bp => (bp.paidAt, bp.bookingId, bp.amount))
-                    .Concat(orderPaymentAmounts.Select(op => (op.paidAt, -1, op.amount)))  // -1 để đánh dấu là order
+                    .Concat(orderPaymentAmounts.Select(op => (op.paidAt, -1, op.amount)))
                     .ToList();
 
-                // Tính toán doanh thu theo từng khoảng thời gian dựa trên PaidAt (bao gồm cả booking và order)
                 var revenueByPeriod = CalculateRevenueByPeriodFromPayments(
                     allPaymentAmounts, 
                     request.Period);
 
-                // Tính summary
                 var summary = CalculateSummaryFromPayments(revenueByPeriod);
 
-                // Phân nhóm dữ liệu theo service/technician bằng tổng amount theo booking
-                // Note: Chỉ group bookings, không group orders (orders không có service/technician)
                 var groupedData = CalculateGroupedDataFromPayments(bookingPaymentAmounts, bookingById, request.GroupBy);
 
-                // Tính alerts
                 var alerts = await CalculateAlertsAsync(centerId, revenueByPeriod, request.StartDate, request.EndDate);
 
-                // Tính trends
                 var trends = CalculateTrends(revenueByPeriod);
 
-                // So sánh với kỳ trước nếu được yêu cầu
                 RevenueComparison? comparison = null;
                 if (request.CompareWithPrevious)
                 {
@@ -140,14 +116,12 @@ namespace EVServiceCenter.Application.Service
                     Comparison = comparison
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Lỗi khi tạo báo cáo doanh thu cho center {CenterId}", centerId);
                 throw;
             }
         }
 
-        // New calculations based on PaidAt payments
         private List<RevenueByPeriod> CalculateRevenueByPeriodFromPayments(List<(DateTime paidAt, int bookingId, decimal amount)> bookingPayments, string period)
         {
             var result = bookingPayments
@@ -209,17 +183,10 @@ namespace EVServiceCenter.Application.Service
             return date.ToString("yyyy");
         }
 
-        /// <summary>
-        /// Lấy tổng doanh thu theo khoảng thời gian với các mode: day/week/month/quarter/year
-        /// Tổng doanh thu = Booking revenue + Order revenue
-        /// - Booking revenue: từ payments của bookings có CenterId = centerId
-        /// - Order revenue: từ payments của orders có FulfillmentCenterId = centerId
-        /// </summary>
         public async Task<RevenueByPeriodResponse> GetRevenueByPeriodAsync(int centerId, DateTime? fromDate, DateTime? toDate, string granularity)
         {
             try
             {
-                // Validate granularity
                 var validGranularities = new[] { "day", "week", "month", "quarter", "year" };
                 var normalizedGranularity = granularity?.ToLower() ?? "day";
                 if (!validGranularities.Contains(normalizedGranularity))
@@ -227,21 +194,16 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException($"Granularity không hợp lệ. Chỉ chấp nhận: {string.Join(", ", validGranularities)}", nameof(granularity));
                 }
 
-                // Tính toán khoảng thời gian (mặc định 30 ngày gần nhất)
                 var start = (fromDate ?? DateTime.Today.AddDays(-30)).Date;
                 var end = (toDate ?? DateTime.Today).Date.AddDays(1).AddTicks(-1);
 
-                // Validate date range
                 if (start > end)
                 {
                     throw new ArgumentException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc", nameof(fromDate));
                 }
 
-                // ========== BOOKING REVENUE ==========
-                // Lấy payments COMPLETED từ bookings của center này
                 var completedBookingPayments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(centerId, start, end);
 
-                // Lấy payments PAID từ bookings của center này
                 var statuses = new[] { "PAID" };
                 var allPaidPayments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(statuses, start, end);
                 var paidBookingPayments = allPaidPayments
@@ -251,28 +213,21 @@ namespace EVServiceCenter.Application.Service
                              && p.Invoice.Booking.CenterId == centerId)
                     .ToList();
 
-                // ========== ORDER REVENUE ==========
-                // Lấy payments COMPLETED hoặc PAID từ orders có FulfillmentCenterId = centerId
-                // Note: GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync đã lấy cả COMPLETED và PAID
                 var orderPayments = await _paymentRepository.GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync(centerId, start, end);
 
-                // Gộp tất cả payments (booking + order)
                 var payments = completedBookingPayments
                     .Concat(paidBookingPayments)
                     .Concat(orderPayments)
-                    .DistinctBy(p => p.PaymentId)  // Tránh duplicate nếu có
+                    .DistinctBy(p => p.PaymentId)
                     .ToList();
 
-                // Tạo danh sách tất cả các period trong khoảng thời gian (bao gồm cả period không có doanh thu)
                 var allPeriods = GenerateAllPeriodsInRange(start, end, normalizedGranularity);
                 
-                // Tạo dictionary mapping từ period key đến date range (để match payment với period)
                 var periodDateRanges = new Dictionary<string, (DateTime startDate, DateTime endDate)>();
                 foreach (var period in allPeriods)
                 {
                     if (normalizedGranularity == "week" && period.Contains("_to_"))
                     {
-                        // Parse "yyyy-MM-dd_to_yyyy-MM-dd"
                         var parts = period.Split("_to_");
                         if (parts.Length == 2 && DateTime.TryParse(parts[0], out var weekStart) && DateTime.TryParse(parts[1], out var weekEnd))
                         {
@@ -281,7 +236,6 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Nhóm payments theo period dựa trên PaidAt
                 var revenueByKey = new Dictionary<string, decimal>();
                 decimal total = 0m;
 
@@ -293,14 +247,12 @@ namespace EVServiceCenter.Application.Service
                     
                     if (normalizedGranularity == "week")
                     {
-                        // Tìm period chứa payment.PaidAt
                         periodKey = periodDateRanges
                             .FirstOrDefault(kv => payment.PaidAt.Value.Date >= kv.Value.startDate && payment.PaidAt.Value.Date <= kv.Value.endDate)
                             .Key;
                         
                         if (string.IsNullOrEmpty(periodKey))
                         {
-                            // Fallback: tạo period key theo cách cũ nếu không tìm thấy
                             periodKey = GetPeriodKeyForGranularity(payment.PaidAt.Value, normalizedGranularity);
                         }
                     }
@@ -318,7 +270,6 @@ namespace EVServiceCenter.Application.Service
                     total += payment.Amount;
                 }
                 
-                // Tạo items với tất cả các period, nếu không có doanh thu thì = 0
                 var items = allPeriods
                     .Select(period => new RevenueByPeriodItem
                     {
@@ -336,21 +287,16 @@ namespace EVServiceCenter.Application.Service
                     Items = items
                 };
             }
-            catch (ArgumentException ex)
+            catch (ArgumentException)
             {
-                _logger.LogWarning(ex, "Lỗi validation khi lấy doanh thu theo period cho center {CenterId}", centerId);
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Lỗi khi lấy doanh thu theo period cho center {CenterId}", centerId);
                 throw;
             }
         }
 
-        /// <summary>
-        /// Lấy period key theo granularity (day/week/month/quarter/year)
-        /// </summary>
         private string GetPeriodKeyForGranularity(DateTime date, string granularity)
         {
             return granularity switch
@@ -360,13 +306,10 @@ namespace EVServiceCenter.Application.Service
                 "month" => date.ToString("yyyy-MM"),
                 "quarter" => GetQuarterKey(date),
                 "year" => GetYearKey(date),
-                _ => date.ToString("yyyy-MM-dd") // Default to day
+                _ => date.ToString("yyyy-MM-dd")
             };
         }
 
-        /// <summary>
-        /// Tạo danh sách tất cả các period trong khoảng thời gian (bao gồm cả period không có doanh thu)
-        /// </summary>
         private List<string> GenerateAllPeriodsInRange(DateTime startDate, DateTime endDate, string granularity)
         {
             var periods = new List<string>();
@@ -385,28 +328,21 @@ namespace EVServiceCenter.Application.Service
                         break;
 
                     case "week":
-                        // Tuần đầu tiên: bắt đầu từ ngày startDate
                         if (currentDate == startDate.Date)
                         {
-                            // Tính cuối tuần (Chủ nhật = 0, nên cộng 6 để có ngày cuối tuần)
                             var dayOfWeek = (int)currentDate.DayOfWeek;
                             var endOfWeek = currentDate.AddDays(6 - dayOfWeek);
                             
-                            // Nếu endDate trong cùng tuần, thì tuần kết thúc ở endDate
                             var weekEnd = endOfWeek < endDate.Date ? endOfWeek : endDate.Date;
                             
-                            // Format: "2024-01-03_to_2024-01-07" để thể hiện tuần từ ngày bắt đầu đến ngày kết thúc
                             periodKey = $"{currentDate:yyyy-MM-dd}_to_{weekEnd:yyyy-MM-dd}";
                             nextDate = weekEnd.AddDays(1);
                         }
-                        // Các tuần tiếp theo: đầy đủ 7 ngày
                         else
                         {
-                            // Tính cuối tuần hiện tại
                             var dayOfWeek = (int)currentDate.DayOfWeek;
                             var endOfWeek = currentDate.AddDays(6 - dayOfWeek);
                             
-                            // Nếu endDate trong cùng tuần, thì tuần kết thúc ở endDate
                             var weekEnd = endOfWeek < endDate.Date ? endOfWeek : endDate.Date;
                             
                             periodKey = $"{currentDate:yyyy-MM-dd}_to_{weekEnd:yyyy-MM-dd}";
@@ -417,14 +353,12 @@ namespace EVServiceCenter.Application.Service
                     case "month":
                         periodKey = currentDate.ToString("yyyy-MM");
                         nextDate = currentDate.AddMonths(1);
-                        // Set về ngày đầu tháng
                         nextDate = new DateTime(nextDate.Year, nextDate.Month, 1);
                         break;
 
                     case "quarter":
                         var quarter = (currentDate.Month - 1) / 3 + 1;
                         periodKey = $"{currentDate.Year}-Q{quarter}";
-                        // Tìm tháng đầu của quý tiếp theo
                         var nextQuarter = quarter + 1;
                         if (nextQuarter > 4)
                         {
@@ -452,7 +386,6 @@ namespace EVServiceCenter.Application.Service
                     periods.Add(periodKey);
                 }
 
-                // Nếu đã đến cuối khoảng thời gian, dừng lại
                 if (nextDate > endDate.Date)
                 {
                     break;
@@ -464,31 +397,22 @@ namespace EVServiceCenter.Application.Service
             return periods;
         }
 
-        /// <summary>
-        /// Lấy danh sách doanh thu theo service cho một center, bao gồm cả service không có doanh thu (revenue = 0)
-        /// Tính doanh thu từ payments (COMPLETED) trong khoảng thời gian
-        /// </summary>
         public async Task<RevenueByServiceResponse> GetRevenueByServiceAsync(int centerId, DateTime? fromDate, DateTime? toDate)
         {
             try
             {
-                // Tính toán khoảng thời gian (mặc định 30 ngày gần nhất)
                 var start = (fromDate ?? DateTime.Today.AddDays(-30)).Date;
                 var end = (toDate ?? DateTime.Today).Date.AddDays(1).AddTicks(-1);
 
-                // Validate date range
                 if (start > end)
                 {
                     throw new ArgumentException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc", nameof(fromDate));
                 }
 
-                // Lấy tất cả services
                 var allServices = await _serviceRepository.GetAllServicesAsync();
 
-                // Lấy payments đã thanh toán (COMPLETED) theo centerId và khoảng thời gian PaidAt
                 var payments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(centerId, start, end);
 
-                // Nhóm payments theo service thông qua Booking
                 var revenueByService = new Dictionary<int, (decimal revenue, HashSet<int> bookingIds)>();
 
                 foreach (var payment in payments)
@@ -508,12 +432,9 @@ namespace EVServiceCenter.Application.Service
                         current.revenue + payment.Amount,
                         current.bookingIds
                     );
-                    // Thêm bookingId vào HashSet để đếm unique bookings
                     current.bookingIds.Add(booking.BookingId);
                 }
 
-                // Tạo danh sách tất cả services, nếu không có doanh thu thì = 0
-                // Sắp xếp theo serviceId tăng dần
                 var items = allServices
                     .Select(service => new RevenueByServiceItem
                     {
@@ -538,14 +459,12 @@ namespace EVServiceCenter.Application.Service
                     Items = items
                 };
             }
-            catch (ArgumentException ex)
+            catch (ArgumentException)
             {
-                _logger.LogWarning(ex, "Lỗi validation khi lấy doanh thu theo service cho center {CenterId}", centerId);
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "Lỗi khi lấy doanh thu theo service cho center {CenterId}", centerId);
                 throw;
             }
         }
@@ -561,7 +480,7 @@ namespace EVServiceCenter.Application.Service
                 TotalRevenue = totalRevenue,
                 TotalBookings = totalBookings,
                 AverageRevenuePerBooking = averageRevenuePerBooking,
-                GrowthRate = "+15%", // TODO: Calculate actual growth rate
+                GrowthRate = "+15%",
                 AlertLevel = "normal"
             };
         }
@@ -616,9 +535,6 @@ namespace EVServiceCenter.Application.Service
         {
             var alerts = new List<RevenueAlert>();
 
-            // TODO: Implement alert logic
-            // Check for revenue drops, no bookings, etc.
-
             return Task.FromResult(alerts);
         }
 
@@ -664,7 +580,6 @@ namespace EVServiceCenter.Application.Service
             var previousStartDate = startDate - periodLength;
             var previousEndDate = startDate;
 
-            // TODO: Get previous period data and calculate comparison
             return Task.FromResult(new RevenueComparison
             {
                 PreviousPeriod = $"{previousStartDate:yyyy-MM-dd} to {previousEndDate:yyyy-MM-dd}",

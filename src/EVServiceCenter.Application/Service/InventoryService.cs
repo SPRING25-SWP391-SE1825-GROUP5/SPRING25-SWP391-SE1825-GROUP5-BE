@@ -39,7 +39,7 @@ namespace EVServiceCenter.Application.Service
                         i.InventoryParts.Any(ip =>
                             ip.Part.PartNumber.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                             ip.Part.PartName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                            ip.Part.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+                            (ip.Part.Brand != null && ip.Part.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
                         )
                     ).ToList();
                 }

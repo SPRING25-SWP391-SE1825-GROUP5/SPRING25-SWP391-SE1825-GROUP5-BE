@@ -49,10 +49,8 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Validate request
                 await ValidateCreateTimeSlotRequestAsync(request);
 
-                // Create time slot entity
                 var timeSlot = new TimeSlot
                 {
                     SlotTime = request.SlotTime,
@@ -60,14 +58,13 @@ namespace EVServiceCenter.Application.Service
                     IsActive = request.IsActive
                 };
 
-                // Save time slot
                 var createdTimeSlot = await _timeSlotRepository.CreateTimeSlotAsync(timeSlot);
 
                 return MapToTimeSlotResponse(createdTimeSlot);
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
@@ -87,7 +84,6 @@ namespace EVServiceCenter.Application.Service
             var ts = await _timeSlotRepository.GetByIdAsync(slotId);
             if (ts == null) throw new ArgumentException("Time slot không tồn tại");
 
-            // Validate duplicate against others
             var all = await _timeSlotRepository.GetAllTimeSlotsAsync();
             if (all.Any(x => x.SlotId != slotId && x.SlotTime == request.SlotTime))
                 throw new ArgumentException("Thời gian slot này đã tồn tại");
@@ -98,7 +94,6 @@ namespace EVServiceCenter.Application.Service
             ts.SlotLabel = request.SlotLabel.Trim();
             ts.IsActive = request.IsActive;
 
-            // repository chưa có Update -> dùng context tracking qua GetByIdAsync: đảm bảo SaveChanges ở repo; tạm thời thêm Update
             return MapToTimeSlotResponse(await _timeSlotRepository.UpdateAsync(ts));
         }
 
@@ -122,14 +117,12 @@ namespace EVServiceCenter.Application.Service
         {
             var errors = new List<string>();
 
-            // Check for duplicate slot time
             var existingTimeSlots = await _timeSlotRepository.GetAllTimeSlotsAsync();
             if (existingTimeSlots.Any(ts => ts.SlotTime == request.SlotTime))
             {
                 errors.Add("Thời gian slot này đã tồn tại. Vui lòng chọn thời gian khác.");
             }
 
-            // Check for duplicate slot label
             if (existingTimeSlots.Any(ts => ts.SlotLabel.Equals(request.SlotLabel.Trim(), StringComparison.OrdinalIgnoreCase)))
             {
                 errors.Add("Nhãn slot này đã tồn tại. Vui lòng chọn nhãn khác.");

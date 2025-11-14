@@ -37,11 +37,11 @@ namespace EVServiceCenter.Application.Service
 
                 // Tính toán các chỉ số
                 var partUsageStats = CalculatePartUsageStats(workOrderParts, request.StartDate, request.EndDate);
-                
+
                 // Phân loại parts
                 var hotParts = partUsageStats.Where(p => IsHotPart(p)).ToList();
                 var notHotParts = partUsageStats.Where(p => IsNotHotPart(p)).ToList();
-                
+
                 // Lấy parts chưa sử dụng
                 var unusedParts = await GetUnusedPartsAsync(centerId, partUsageStats.Select(p => p.PartId).ToList());
 
@@ -95,7 +95,7 @@ namespace EVServiceCenter.Application.Service
                     PartId = part.PartId,
                     PartNumber = part.PartNumber,
                     PartName = part.PartName,
-                    Brand = part.Brand,
+                    Brand = part.Brand ?? string.Empty,
                     UsageCount = totalQuantity,
                     Revenue = totalRevenue,
                     Frequency = Math.Round(frequency, 1),
@@ -113,17 +113,17 @@ namespace EVServiceCenter.Application.Service
 
         private bool IsHotPart(PartUsageDetail part)
         {
-            return part.UsageCount >= 5 && 
-                   part.Revenue >= 10000000 && 
-                   part.Frequency >= 3 && 
+            return part.UsageCount >= 5 &&
+                   part.Revenue >= 10000000 &&
+                   part.Frequency >= 3 &&
                    part.UsageRate >= 50;
         }
 
         private bool IsNotHotPart(PartUsageDetail part)
         {
-            return part.UsageCount <= 2 && 
-                   part.Revenue <= 2000000 && 
-                   part.Frequency <= 1 && 
+            return part.UsageCount <= 2 &&
+                   part.Revenue <= 2000000 &&
+                   part.Frequency <= 1 &&
                    part.UsageRate <= 20;
         }
 

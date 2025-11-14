@@ -74,8 +74,6 @@ public class VehicleModelService : IVehicleModelService
         return responses;
     }
 
-    // Brand removed - GetByBrandAsync deleted
-
     public async Task<IEnumerable<VehicleModelResponse>> GetActiveModelsAsync()
     {
         var models = await _vehicleModelRepository.GetActiveModelsAsync();
@@ -140,9 +138,6 @@ public class VehicleModelService : IVehicleModelService
             model.ImageUrl = request.ImageUrl;
         if (request.IsActive.HasValue)
             model.IsActive = request.IsActive.Value;
-        // Version hiện chưa cập nhật qua request
-
-        // UpdatedAt removed - not in database
 
         var updatedModel = await _vehicleModelRepository.UpdateAsync(model);
         var vehicleCount = await _vehicleRepository.CountByModelIdAsync(id);
@@ -177,7 +172,6 @@ public class VehicleModelService : IVehicleModelService
             return false;
 
         model.IsActive = !model.IsActive;
-        // UpdatedAt removed - not in database
 
         await _vehicleModelRepository.UpdateAsync(model);
         return true;

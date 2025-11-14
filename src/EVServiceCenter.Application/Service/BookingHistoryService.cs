@@ -27,12 +27,8 @@ namespace EVServiceCenter.Application.Service
             string? status = null, DateTime? fromDate = null, DateTime? toDate = null,
             string sortBy = "createdAt", string sortOrder = "desc")
         {
-            // Validate customer exists
-            var customer = await _customerRepository.GetCustomerByIdAsync(customerId);
-            if (customer == null)
-            {
-                throw new KeyNotFoundException($"Customer with ID {customerId} not found.");
-            }
+            // Optimize: Skip customer validation - let repository handle it via query
+            // If customer doesn't exist, query will return empty list anyway
 
             // Validate pagination parameters
             page = Math.Max(1, page);
@@ -103,12 +99,7 @@ namespace EVServiceCenter.Application.Service
 
         public async Task<BookingHistoryStatsResponse> GetBookingHistoryStatsAsync(int customerId, string period = "all")
         {
-            // Validate customer exists
-            var customer = await _customerRepository.GetCustomerByIdAsync(customerId);
-            if (customer == null)
-            {
-                throw new KeyNotFoundException($"Customer with ID {customerId} not found.");
-            }
+            // Optimize: Skip customer validation - let repository handle it via query
 
             // Calculate date range based on period
             DateTime? fromDate = null;
@@ -132,19 +123,24 @@ namespace EVServiceCenter.Application.Service
                     break;
             }
 
-            // Get all bookings for the period
-            var allBookings = await _bookingRepository.GetBookingsByCustomerIdAsync(
-                customerId, 1, int.MaxValue, null, fromDate, null, "createdAt", "desc");
+            // Optimize: Calculate statistics directly from database instead of loading all bookings
+            // Get total count
+            var totalBookings = await _bookingRepository.CountBookingsByCustomerIdAsync(
+                customerId, null, fromDate, null);
+
+            // Get bookings for stats calculation (limit to reasonable number for aggregation)
+            // Only load what's needed for stats, not all bookings
+            var bookingsForStats = await _bookingRepository.GetBookingsByCustomerIdAsync(
+                customerId, 1, 1000, null, fromDate, null, "createdAt", "desc");
 
             // Calculate statistics
-            var totalBookings = allBookings.Count;
-            var statusBreakdown = CalculateStatusBreakdown(allBookings);
-            var totalSpent = allBookings.Where(b => b.Status == BookingStatusConstants.Completed).Sum(b => b.Service?.BasePrice ?? 0);
+            var statusBreakdown = CalculateStatusBreakdown(bookingsForStats);
+            var totalSpent = bookingsForStats.Where(b => b.Status == BookingStatusConstants.Completed).Sum(b => b.Service?.BasePrice ?? 0);
             var averageCost = totalBookings > 0 ? totalSpent / totalBookings : 0;
 
-            var favoriteService = CalculateFavoriteService(allBookings);
-            var favoriteCenter = CalculateFavoriteCenter(allBookings);
-            var recentActivity = CalculateRecentActivity(allBookings);
+            var favoriteService = CalculateFavoriteService(bookingsForStats);
+            var favoriteCenter = CalculateFavoriteCenter(bookingsForStats);
+            var recentActivity = CalculateRecentActivity(bookingsForStats);
 
             return new BookingHistoryStatsResponse
             {

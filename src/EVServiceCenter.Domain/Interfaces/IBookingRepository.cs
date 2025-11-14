@@ -16,6 +16,7 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<Booking?> GetBookingDetailAsync(int bookingId);
         // BookingServices removed in single-service model
         Task<List<Booking>> GetAllForAutoCancelAsync();
+        Task<List<Booking>> GetBookingsWithExpiredWorkDateAsync();
         Task<List<Booking>> GetBookingsByCustomerIdAsync(int customerId, int page = 1, int pageSize = 10,
             string? status = null, DateTime? fromDate = null, DateTime? toDate = null,
             string sortBy = "createdAt", string sortOrder = "desc");
@@ -38,5 +39,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<Booking?> GetBookingByPayOSOrderCodeAsync(int payOSOrderCode);
         Task<bool> PayOSOrderCodeExistsAsync(int payOSOrderCode);
         Task UpdatePayOSOrderCodeAsync(int bookingId, int payOSOrderCode);
+        Task<List<Booking>> GetBookingsByStatusAsync(string status);
     }
 }

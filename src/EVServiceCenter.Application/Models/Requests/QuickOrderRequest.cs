@@ -15,8 +15,6 @@ public class QuickOrderRequest
 
 	public string? Notes { get; set; }
 
-	public string? ShippingAddress { get; set; }
-
 	// Toạ độ để chọn center gần nhất có hàng (geocode/geoIP) - optional
 	public double? Latitude { get; set; }
 	public double? Longitude { get; set; }

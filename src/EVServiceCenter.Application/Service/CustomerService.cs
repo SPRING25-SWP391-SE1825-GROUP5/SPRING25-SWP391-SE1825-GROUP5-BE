@@ -19,13 +19,21 @@ namespace EVServiceCenter.Application.Service
         private readonly IAccountRepository _accountRepository;
         private readonly IEmailService _emailService;
         private readonly IBookingRepository _bookingRepository;
+        private readonly IWorkOrderPartRepository _workOrderPartRepository;
+        private readonly IInvoiceRepository _invoiceRepository;
+        private readonly ICustomerServiceCreditRepository _customerServiceCreditRepository;
+        private readonly IPromotionRepository _promotionRepository;
 
-        public CustomerService(ICustomerRepository customerRepository, IAccountRepository accountRepository, IEmailService emailService, IBookingRepository bookingRepository)
+        public CustomerService(ICustomerRepository customerRepository, IAccountRepository accountRepository, IEmailService emailService, IBookingRepository bookingRepository, IWorkOrderPartRepository workOrderPartRepository, IInvoiceRepository invoiceRepository, ICustomerServiceCreditRepository customerServiceCreditRepository, IPromotionRepository promotionRepository)
         {
             _customerRepository = customerRepository;
             _accountRepository = accountRepository;
             _emailService = emailService;
             _bookingRepository = bookingRepository;
+            _workOrderPartRepository = workOrderPartRepository;
+            _invoiceRepository = invoiceRepository;
+            _customerServiceCreditRepository = customerServiceCreditRepository;
+            _promotionRepository = promotionRepository;
         }
 
         public async Task<List<User>> GetAllUsersWithCustomerRoleAsync()
@@ -42,55 +50,37 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                Console.WriteLine($"GetCurrentCustomerAsync called for userId: {userId}");
-
-                // Kiểm tra user tồn tại và role trước
                 var user = await _accountRepository.GetUserByIdAsync(userId);
                 if (user == null)
                 {
-                    Console.WriteLine($"User not found for userId: {userId}");
                     throw new ArgumentException("Người dùng không tồn tại.");
                 }
 
-                Console.WriteLine($"User found: {user.FullName}, Role: {user.Role}");
-
-                // CHỈ cho phép tạo Customer nếu role = "CUSTOMER"
-                // Nếu role khác (ADMIN/MANAGER/STAFF/TECHNICIAN) thì không được tự động tạo Customer
                 if (user.Role != "CUSTOMER")
                 {
-                    Console.WriteLine($"User with role '{user.Role}' cannot have Customer record. Only CUSTOMER role allowed.");
                     throw new ArgumentException($"Tài khoản với vai trò '{user.Role}' không thể có thông tin khách hàng. Chỉ tài khoản CUSTOMER mới có thể truy cập thông tin này.");
                 }
 
                 var customer = await _customerRepository.GetCustomerByUserIdAsync(userId);
                 if (customer == null)
                 {
-                    Console.WriteLine($"Customer not found for userId: {userId}, creating new customer...");
-
-                    // Tạo customer mới (chỉ khi role = "CUSTOMER")
                     var newCustomer = new Customer
                     {
                         UserId = userId,
-                        IsGuest = false // User đã đăng ký nên không phải guest
+                        IsGuest = false
                     };
 
                     customer = await _customerRepository.CreateCustomerAsync(newCustomer);
-                    Console.WriteLine($"Customer created successfully with ID: {customer.CustomerId}");
-                }
-                else
-                {
-                    Console.WriteLine($"Customer found for userId: {userId}, CustomerId: {customer.CustomerId}");
                 }
 
                 return MapToCustomerResponse(customer);
             }
             catch (ArgumentException)
             {
-                throw; // Rethrow validation errors
+                throw;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in GetCurrentCustomerAsync: {ex.Message}");
                 throw new Exception($"Lỗi khi lấy thông tin khách hàng: {ex.Message}");
             }
         }
@@ -293,7 +283,7 @@ namespace EVServiceCenter.Application.Service
             return digits.StartsWith("0") ? digits : "0" + digits;
         }
 
-        public async Task<CustomerBookingsResponse> GetCustomerBookingsAsync(int customerId)
+        public async Task<CustomerBookingsResponse> GetCustomerBookingsAsync(int customerId, int pageNumber = 1, int pageSize = 10)
         {
             var response = new CustomerBookingsResponse
             {
@@ -303,10 +293,116 @@ namespace EVServiceCenter.Application.Service
 
             try
             {
-                var bookings = await _bookingRepository.GetByCustomerIdAsync(customerId);
+                // Optimize: Use paginated query instead of loading all bookings
+                var bookings = await _bookingRepository.GetBookingsByCustomerIdAsync(
+                    customerId, pageNumber, pageSize, null, null, null, "createdAt", "desc");
 
+                // Get total count for pagination
+                var totalItems = await _bookingRepository.CountBookingsByCustomerIdAsync(customerId, null, null, null);
+                var totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
+
+                // Optimize: Batch load all workOrderParts, invoices, and promotions in parallel
+                var bookingIds = bookings.Select(b => b.BookingId).ToList();
+
+                // Batch load workOrderParts for all bookings
+                var allWorkOrderParts = new List<Domain.Entities.WorkOrderPart>();
+                foreach (var bookingId in bookingIds)
+                {
+                    var parts = await _workOrderPartRepository.GetByBookingIdAsync(bookingId);
+                    allWorkOrderParts.AddRange(parts);
+                }
+                var workOrderPartsByBooking = allWorkOrderParts.GroupBy(p => p.BookingId).ToDictionary(g => g.Key, g => g.ToList());
+
+                // Batch load invoices for all bookings
+                var invoicesByBooking = new Dictionary<int, Domain.Entities.Invoice>();
+                foreach (var bookingId in bookingIds)
+                {
+                    var invoice = await _invoiceRepository.GetByBookingIdAsync(bookingId);
+                    if (invoice != null)
+                    {
+                        invoicesByBooking[bookingId] = invoice;
+                    }
+                }
+
+                // Batch load appliedCredits for bookings that need them
+                var appliedCreditIds = bookings.Where(b => b.AppliedCreditId.HasValue).Select(b => b.AppliedCreditId!.Value).Distinct().ToList();
+                var appliedCreditsById = new Dictionary<int, Domain.Entities.CustomerServiceCredit>();
+                foreach (var creditId in appliedCreditIds)
+                {
+                    var credit = await _customerServiceCreditRepository.GetByIdAsync(creditId);
+                    if (credit != null)
+                    {
+                        appliedCreditsById[creditId] = credit;
+                    }
+                }
+
+                // Batch load promotions for all bookings
+                var promotionsByBooking = new Dictionary<int, List<Domain.Entities.UserPromotion>>();
+                foreach (var bookingId in bookingIds)
+                {
+                    var promotions = await _promotionRepository.GetUserPromotionsByBookingAsync(bookingId);
+                    if (promotions != null && promotions.Any())
+                    {
+                        promotionsByBooking[bookingId] = promotions;
+                    }
+                }
+
+                // Process each booking using pre-loaded data
                 foreach (var booking in bookings)
                 {
+                    // Tính giá dịch vụ
+                    var servicePrice = booking.Service?.BasePrice ?? 0m;
+
+                    // Tính giá phụ tùng phát sinh (chỉ tính phụ tùng đã CONSUMED và không phải khách cung cấp)
+                    var workOrderParts = workOrderPartsByBooking.GetValueOrDefault(booking.BookingId, new List<Domain.Entities.WorkOrderPart>());
+                    var partsAmount = workOrderParts
+                        .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied)
+                        .Sum(p => p.QuantityUsed * (p.Part?.Price ?? 0m));
+
+                    // Lấy package discount và promotion discount từ Invoice nếu có (chính xác hơn)
+                    // Nếu chưa có invoice, tính từ booking data
+                    decimal packageDiscountAmount = 0m;
+                    decimal promotionDiscountAmount = 0m;
+
+                    if (invoicesByBooking.TryGetValue(booking.BookingId, out var invoice))
+                    {
+                        // Có invoice: lấy từ invoice (chính xác nhất)
+                        packageDiscountAmount = invoice.PackageDiscountAmount;
+                        promotionDiscountAmount = invoice.PromotionDiscountAmount;
+                    }
+                    else
+                    {
+                        // Chưa có invoice: tính từ booking data
+                        // Tính package discount nếu có AppliedCredit
+                        if (booking.AppliedCreditId.HasValue && appliedCreditsById.TryGetValue(booking.AppliedCreditId.Value, out var appliedCredit))
+                        {
+                            if (appliedCredit?.ServicePackage != null)
+                            {
+                                packageDiscountAmount = servicePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+                            }
+                        }
+
+                        // Tính promotion discount từ UserPromotions
+                        if (promotionsByBooking.TryGetValue(booking.BookingId, out var userPromotions))
+                        {
+                            promotionDiscountAmount = userPromotions
+                                .Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+                                .Sum(up => up.DiscountAmount);
+                        }
+                    }
+
+                    // Tính giá dịch vụ sau khi trừ package discount
+                    var finalServicePrice = servicePrice - packageDiscountAmount;
+
+                    // Khuyến mãi chỉ áp dụng cho phần dịch vụ, không áp dụng cho parts
+                    if (promotionDiscountAmount > finalServicePrice)
+                    {
+                        promotionDiscountAmount = finalServicePrice;
+                    }
+
+                    // Tính tổng: FinalServicePrice + PartsAmount - PromotionDiscountAmount
+                    var totalAmount = finalServicePrice + partsAmount - promotionDiscountAmount;
+
                     response.Bookings.Add(new CustomerBookingItem
                     {
                         BookingId = booking.BookingId,
@@ -318,15 +414,27 @@ namespace EVServiceCenter.Application.Service
                         CenterName = booking.Center?.CenterName ?? "N/A",
                         VehiclePlate = booking.Vehicle?.LicensePlate ?? "N/A",
                         SpecialRequests = booking.SpecialRequests ?? "N/A",
-                        CreatedAt = booking.CreatedAt
+                        CreatedAt = booking.CreatedAt,
+                        ActualCost = totalAmount > 0 ? totalAmount : null,
+                        EstimatedCost = servicePrice > 0 ? servicePrice : null,
+                        BookingCode = $"BK{booking.BookingId:D6}", // Generate booking code from BookingId
+                        TechnicianName = booking.TechnicianTimeSlot?.Technician?.User?.FullName
                     });
                 }
+
+                // Add pagination info
+                response.Pagination = new EVServiceCenter.Application.Models.PaginationInfo
+                {
+                    Page = pageNumber,
+                    PageSize = pageSize,
+                    TotalRecords = totalItems,
+                    TotalPages = totalPages
+                };
+
                 return response;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log error if needed
-                Console.WriteLine($"Error getting customer bookings: {ex.Message}");
                 return new CustomerBookingsResponse
                 {
                     CustomerId = customerId,
@@ -342,9 +450,8 @@ namespace EVServiceCenter.Application.Service
                 var customer = await _customerRepository.GetCustomerByIdAsync(customerId);
                 return customer?.UserId;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"Error getting customer user ID: {ex.Message}");
                 return null;
             }
         }

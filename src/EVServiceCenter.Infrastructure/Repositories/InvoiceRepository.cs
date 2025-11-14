@@ -18,6 +18,8 @@ namespace EVServiceCenter.Infrastructure.Repositories
         {
             return await _db.Invoices
                 .Include(i => i.Payments)
+                .Include(i => i.Booking)
+                    .ThenInclude(b => b.Service)
                 .FirstOrDefaultAsync(i => i.BookingId == bookingId);
         }
 
@@ -54,6 +56,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(i => i.Customer)
                 // WorkOrder removed - functionality merged into Booking
                 .Include(i => i.Booking)
+                    .ThenInclude(b => b.Service)
                 .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId);
         }
 
@@ -63,6 +66,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(i => i.Customer)
                 // WorkOrder removed - functionality merged into Booking
                 .Include(i => i.Booking)
+                    .ThenInclude(b => b.Service)
                 .ToListAsync();
         }
 
@@ -72,6 +76,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(i => i.Customer)
                 // WorkOrder removed - functionality merged into Booking
                 .Include(i => i.Booking)
+                    .ThenInclude(b => b.Service)
                 .Where(i => i.CustomerId == customerId)
                 .ToListAsync();
         }
@@ -102,6 +107,7 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .Include(i => i.Customer)
                     .ThenInclude(c => c.User)
                 .Include(i => i.Booking)
+                    .ThenInclude(b => b.Service)
                 .Include(i => i.Order)
                 .Include(i => i.Payments)
                 .AsQueryable();

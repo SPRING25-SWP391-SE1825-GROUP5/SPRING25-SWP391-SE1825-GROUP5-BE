@@ -287,6 +287,67 @@ namespace EVServiceCenter.Application.Service
             }
         }
 
+        public async Task<TechnicianBookingsResponse> GetBookingsByDateAsync(int technicianId, DateOnly? date)
+        {
+            var result = new TechnicianBookingsResponse
+            {
+                TechnicianId = technicianId,
+                Date = date ?? DateOnly.MinValue,
+                Bookings = new List<TechnicianBookingItem>()
+            };
+
+            try
+            {
+                // Lấy tất cả bookings của technician
+                var bookings = await _bookingRepository.GetByTechnicianAsync(technicianId);
+
+                // Filter theo date nếu có
+                if (date.HasValue)
+                {
+                    var targetDate = date.Value;
+                    bookings = bookings.Where(b => b.TechnicianTimeSlot != null &&
+                                                   DateOnly.FromDateTime(b.TechnicianTimeSlot.WorkDate) == targetDate).ToList();
+                }
+
+                foreach (var booking in bookings)
+                {
+                    var bookingItem = new TechnicianBookingItem
+                    {
+                        BookingId = booking.BookingId,
+                        Status = booking.Status ?? "N/A",
+                        Date = booking.TechnicianTimeSlot?.WorkDate.ToString("yyyy-MM-dd") ?? "N/A",
+                        ServiceId = booking.ServiceId,
+                        ServiceName = booking.Service?.ServiceName ?? "N/A",
+                        CenterId = booking.CenterId,
+                        CenterName = booking.Center?.CenterName ?? "N/A",
+                        SlotId = booking.TechnicianTimeSlot?.SlotId ?? 0,
+                        TechnicianSlotId = booking.TechnicianTimeSlot?.TechnicianSlotId ?? 0,
+                        SlotTime = booking.TechnicianTimeSlot?.Slot?.SlotTime.ToString() ?? "N/A",
+                        SlotLabel = booking.TechnicianTimeSlot?.Slot?.SlotLabel != "SA" && booking.TechnicianTimeSlot?.Slot?.SlotLabel != "CH" ? booking.TechnicianTimeSlot?.Slot?.SlotLabel : null,
+                        CustomerName = booking.Customer?.User?.FullName ?? "N/A",
+                        CustomerPhone = booking.Customer?.User?.PhoneNumber ?? "N/A",
+                        VehiclePlate = booking.Vehicle?.LicensePlate ?? "N/A",
+                        WorkStartTime = null,
+                        WorkEndTime = null
+                    };
+
+                    result.Bookings.Add(bookingItem);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy bookings theo ngày cho technician {TechnicianId}, date: {Date}", technicianId, date);
+                return new TechnicianBookingsResponse
+                {
+                    TechnicianId = technicianId,
+                    Date = date ?? DateOnly.MinValue,
+                    Bookings = new List<TechnicianBookingItem>()
+                };
+            }
+        }
+
         public async Task<TechnicianBookingDetailResponse> GetBookingDetailAsync(int technicianId, int bookingId)
         {
             try

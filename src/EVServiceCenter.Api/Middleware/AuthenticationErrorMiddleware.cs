@@ -13,35 +13,16 @@ namespace EVServiceCenter.Api.Middleware
     public class AuthenticationErrorMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly ILogger<AuthenticationErrorMiddleware> _logger;
 
         public AuthenticationErrorMiddleware(RequestDelegate next, ILogger<AuthenticationErrorMiddleware> logger)
         {
             _next = next;
-            _logger = logger;
+            _ = logger;
         }
 
         public async Task InvokeAsync(HttpContext context)
         {
-            try
-            {
-                await _next(context);
-            }
-            catch (SecurityTokenExpiredException)
-            {
-                _logger.LogWarning("JWT token expired for request: {Path}", context.Request.Path);
-                await HandleTokenExpiredAsync(context);
-            }
-            catch (SecurityTokenException ex)
-            {
-                _logger.LogWarning("JWT token validation failed: {Error}", ex.Message);
-                await HandleInvalidTokenAsync(context);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                _logger.LogWarning("Unauthorized access attempt to: {Path}", context.Request.Path);
-                await HandleUnauthorizedAsync(context);
-            }
+            await _next(context);
         }
 
         private async Task HandleTokenExpiredAsync(HttpContext context)

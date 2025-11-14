@@ -18,12 +18,11 @@ namespace EVServiceCenter.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "AuthenticatedUser")] // Tất cả user đã đăng nhập đều có thể xem
+    [Authorize(Policy = "AuthenticatedUser")]
     public class ServiceController : ControllerBase
     {
         private readonly IServiceService _serviceService;
         private readonly IOptions<ExportOptions> _exportOptions;
-        // Removed: IServicePartRepository _servicePartRepo;
 
         public ServiceController(IServiceService serviceService, IOptions<ExportOptions> exportOptions)
         {
@@ -31,14 +30,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             _exportOptions = exportOptions;
         }
 
-        /// <summary>
-        /// Lấy danh sách tất cả dịch vụ với phân trang và tìm kiếm
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
-        /// <param name="categoryId">Lọc theo danh mục dịch vụ</param>
-        /// <returns>Danh sách dịch vụ</returns>
         [HttpGet]
         public async Task<IActionResult> GetAllServices(
             [FromQuery] int pageNumber = 1,
@@ -48,7 +39,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -69,9 +59,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Export services as XLSX (ADMIN only)
-        /// </summary>
         [HttpGet("export")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> ExportServices()
@@ -125,13 +112,11 @@ namespace EVServiceCenter.WebAPI.Controllers
             int lastRow = r - 1;
             int lastCol = headers.Length;
 
-            // Formats
             ws.Range(2, 4, lastRow, 4).Style.NumberFormat.Format = "#,##0.00";
             ws.Range(2, 6, lastRow, 6).Style.DateFormat.Format = dateFormat;
             ws.Range(2, 5, lastRow, 5).Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
             ws.Range(1, 1, lastRow, lastCol).Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
 
-            // Table and borders
             var tableRange = ws.Range(1, 1, lastRow, lastCol);
             var table = tableRange.CreateTable();
             table.Theme = ClosedXML.Excel.XLTableTheme.TableStyleMedium9;
@@ -146,16 +131,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             return ms.ToArray();
         }
 
-        /// <summary>
-        /// Lấy danh sách các dịch vụ đang hoạt động (Services.IsActive = 1 AND ServiceCategories.IsActive = 1) - Public
-        /// </summary>
-        /// <param name="pageNumber">Số trang (mặc định: 1)</param>
-        /// <param name="pageSize">Kích thước trang (mặc định: 10)</param>
-        /// <param name="searchTerm">Từ khóa tìm kiếm</param>
-        /// <param name="categoryId">Lọc theo danh mục dịch vụ</param>
-        /// <returns>Danh sách dịch vụ đang hoạt động</returns>
         [HttpGet("active")]
-        [AllowAnonymous] // ✅ Cho phép người chưa đăng nhập xem
+        [AllowAnonymous]
         public async Task<IActionResult> GetActiveServices(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 10,
@@ -164,7 +141,6 @@ namespace EVServiceCenter.WebAPI.Controllers
         {
             try
             {
-                // Validate pagination parameters
                 if (pageNumber < 1) pageNumber = 1;
                 if (pageSize < 1 || pageSize > 100) pageSize = 10;
 
@@ -185,11 +161,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy danh sách dịch vụ theo danh mục cho khách hàng chọn (Public API)
-        /// </summary>
-        /// <param name="categoryId">ID danh mục dịch vụ</param>
-        /// <returns>Danh sách dịch vụ trong danh mục</returns>
         [HttpGet("by-category/{categoryId}")]
         [AllowAnonymous]
         public async Task<IActionResult> GetServicesByCategory(int categoryId)
@@ -216,11 +187,6 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy thông tin dịch vụ theo ID
-        /// </summary>
-        /// <param name="id">ID dịch vụ</param>
-        /// <returns>Thông tin dịch vụ</returns>
         [HttpGet("{id}")]
         public async Task<IActionResult> GetServiceById(int id)
         {
@@ -250,13 +216,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo dịch vụ mới
-        /// </summary>
-        /// <param name="request">Thông tin dịch vụ mới</param>
-        /// <returns>Thông tin dịch vụ đã tạo</returns>
         [HttpPost]
-        [Authorize(Policy = "StaffOrAdmin")] // Chỉ Staff và Admin mới được tạo dịch vụ
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> CreateService([FromBody] CreateServiceRequest request)
         {
             try
@@ -296,14 +257,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật thông tin dịch vụ
-        /// </summary>
-        /// <param name="id">ID dịch vụ cần cập nhật</param>
-        /// <param name="request">Thông tin cập nhật</param>
-        /// <returns>Thông tin dịch vụ đã cập nhật</returns>
         [HttpPut("{id}")]
-        [Authorize(Policy = "StaffOrAdmin")] // Chỉ Staff và Admin mới được cập nhật dịch vụ
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> UpdateService(int id, [FromBody] UpdateServiceRequest request)
         {
             try
@@ -346,13 +301,8 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Kích hoạt/Vô hiệu hóa dịch vụ
-        /// </summary>
-        /// <param name="id">ID dịch vụ</param>
-        /// <returns>Kết quả thay đổi trạng thái</returns>
         [HttpPatch("{id}/toggle-active")]
-        [Authorize(Policy = "StaffOrAdmin")] // Chỉ Staff và Admin mới được thay đổi trạng thái
+        [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> ToggleActiveService(int id)
         {
             try
@@ -382,42 +332,5 @@ namespace EVServiceCenter.WebAPI.Controllers
                 });
             }
         }
-
-        // ========== SERVICE PARTS MANAGEMENT (Removed) ==========
-
-        /// <summary>
-        /// Lấy danh sách phụ tùng của dịch vụ
-        /// </summary>
-        /// <param name="serviceId">ID dịch vụ</param>
-        /// <returns>Danh sách phụ tùng</returns>
-        // Endpoints for managing parts per service have been removed.
-
-        /// <summary>
-        /// Thay thế toàn bộ phụ tùng của dịch vụ
-        /// </summary>
-        /// <param name="serviceId">ID dịch vụ</param>
-        /// <param name="request">Danh sách phụ tùng mới</param>
-        /// <returns>Kết quả thay thế</returns>
-        // ReplaceServiceParts removed
-
-        /// <summary>
-        /// Thêm phụ tùng vào dịch vụ
-        /// </summary>
-        /// <param name="serviceId">ID dịch vụ</param>
-        /// <param name="request">Thông tin phụ tùng</param>
-        /// <returns>Kết quả thêm</returns>
-        // AddServicePart removed
-
-        /// <summary>
-        /// Xóa phụ tùng khỏi dịch vụ
-        /// </summary>
-        /// <param name="serviceId">ID dịch vụ</param>
-        /// <param name="partId">ID phụ tùng</param>
-        /// <returns>Kết quả xóa</returns>
-        // DeleteServicePart removed
-
-        // ========== REQUEST MODELS ==========
-
-        // Request models removed
     }
 }

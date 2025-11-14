@@ -278,14 +278,18 @@ namespace EVServiceCenter.WebAPI.Controllers
         /// </summary>
         [HttpGet("{customerId}/bookings")]
         [Authorize(Roles = "ADMIN,STAFF,TECHNICIAN,CUSTOMER")]
-        public async Task<IActionResult> GetCustomerBookings(int customerId)
+        public async Task<IActionResult> GetCustomerBookings(int customerId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
             try
             {
                 if (customerId <= 0)
                     return BadRequest(new { success = false, message = "CustomerId không hợp lệ" });
 
-                var data = await _customerService.GetCustomerBookingsAsync(customerId);
+                // Validate pagination
+                pageNumber = Math.Max(1, pageNumber);
+                pageSize = Math.Min(Math.Max(1, pageSize), 50);
+
+                var data = await _customerService.GetCustomerBookingsAsync(customerId, pageNumber, pageSize);
                 return Ok(new { success = true, message = "Lấy lịch sử booking thành công", data });
             }
             catch (Exception ex)

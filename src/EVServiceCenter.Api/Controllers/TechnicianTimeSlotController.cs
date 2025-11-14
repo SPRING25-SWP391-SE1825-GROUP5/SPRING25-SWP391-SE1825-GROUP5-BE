@@ -30,17 +30,12 @@ namespace EVServiceCenter.Api.Controllers
             _technicianAvailabilityService = technicianAvailabilityService;
         }
 
-        /// <summary>
-        /// Lấy tất cả technician time slots
-        /// </summary>
-        /// <returns>Danh sách technician time slots</returns>
         [HttpGet]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetAllTechnicianTimeSlots()
         {
             try
             {
-                // Get all technician time slots by getting all technicians and their time slots
                 var technicians = await _technicianRepository.GetAllTechniciansAsync();
                 var allTimeSlots = new List<TechnicianTimeSlotResponse>();
 
@@ -82,16 +77,13 @@ namespace EVServiceCenter.Api.Controllers
                 message = result.Message,
                 totalDays = result.TotalDays,
                 totalSlotsCreated = result.TotalSlotsCreated,
+                totalSlotsSkipped = result.TotalSlotsSkipped,
                 weekendDaysSkipped = result.WeekendDaysSkipped,
-                weekendDatesSkipped = result.WeekendDatesSkipped
+                weekendDatesSkipped = result.WeekendDatesSkipped,
+                duplicateSlotsInfo = result.DuplicateSlotsInfo
             });
         }
 
-        /// <summary>
-        /// Lấy technician time slot theo ID
-        /// </summary>
-        /// <param name="id">ID của technician time slot</param>
-        /// <returns>Technician time slot</returns>
         [HttpGet("{id}")]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetTechnicianTimeSlotById(int id)
@@ -126,11 +118,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy technician time slots theo technician ID
-        /// </summary>
-        /// <param name="technicianId">ID của technician</param>
-        /// <returns>Danh sách technician time slots</returns>
         [HttpGet("technician/{technicianId}")]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetTechnicianTimeSlotsByTechnicianId(int technicianId)
@@ -157,16 +144,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy technician time slots theo center ID (public)
-        /// Optional: lọc theo startDate/endDate và phân trang để phục vụ khách hàng.
-        /// </summary>
-        /// <param name="centerId">ID của center</param>
-        /// <param name="startDate">Ngày bắt đầu (yyyy-MM-dd)</param>
-        /// <param name="endDate">Ngày kết thúc (yyyy-MM-dd)</param>
-        /// <param name="page">Trang (>=1)</param>
-        /// <param name="pageSize">Kích thước trang (1-100)</param>
-        /// <returns>Danh sách technician time slots</returns>
         [HttpGet("center/{centerId}")]
         [AllowAnonymous]
         public async Task<IActionResult> GetTechnicianTimeSlotsByCenterId(
@@ -178,14 +155,12 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
-                // Get technicians in the center first
                 var technicians = await _technicianRepository.GetTechniciansByCenterIdAsync(centerId);
                 var allTimeSlots = new List<TechnicianTimeSlotResponse>();
 
                 foreach (var technician in technicians)
                 {
                     var timeSlots = await _technicianTimeSlotService.GetTechnicianTimeSlotsByTechnicianIdAsync(technician.TechnicianId);
-                    // Lọc theo khoảng ngày nếu có
                     if (startDate.HasValue || endDate.HasValue)
                     {
                         var s = startDate?.Date ?? DateTime.MinValue.Date;
@@ -196,7 +171,6 @@ namespace EVServiceCenter.Api.Controllers
                     }
                     allTimeSlots.AddRange(timeSlots);
                 }
-                // Phân trang nhẹ nhàng để giảm payload
                 if (page < 1) page = 1;
                 if (pageSize < 1) pageSize = 1; else if (pageSize > 100) pageSize = 100;
                 var total = allTimeSlots.Count;
@@ -226,19 +200,12 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy technician time slots theo technician và center
-        /// </summary>
-        /// <param name="technicianId">ID của technician</param>
-        /// <param name="centerId">ID của center</param>
-        /// <returns>Danh sách technician time slots</returns>
         [HttpGet("technician/{technicianId}/center/{centerId}")]
         [AllowAnonymous]
         public async Task<IActionResult> GetTechnicianTimeSlotsByTechnicianAndCenter(int technicianId, int centerId)
         {
             try
             {
-                // Verify technician belongs to center first
                 var technician = await _technicianRepository.GetTechnicianByIdAsync(technicianId);
                 if (technician == null || technician.CenterId != centerId)
                 {
@@ -269,11 +236,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy technician time slots theo ngày trong tuần
-        /// </summary>
-        /// <param name="dayOfWeek">Ngày trong tuần (1-6)</param>
-        /// <returns>Danh sách technician time slots</returns>
         [HttpGet("day/{dayOfWeek}")]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> GetTechnicianTimeSlotsByDayOfWeek(byte dayOfWeek)
@@ -289,14 +251,12 @@ namespace EVServiceCenter.Api.Controllers
                     });
                 }
 
-                // Get all technicians and filter by day of week
                 var technicians = await _technicianRepository.GetAllTechniciansAsync();
                 var allTimeSlots = new List<TechnicianTimeSlotResponse>();
 
                 foreach (var technician in technicians)
                 {
                     var timeSlots = await _technicianTimeSlotService.GetTechnicianTimeSlotsByTechnicianIdAsync(technician.TechnicianId);
-                    // Filter by day of week (assuming WorkDate is DateTime)
                     var filteredSlots = timeSlots.Where(ts => ((int)ts.WorkDate.DayOfWeek + 6) % 7 + 1 == dayOfWeek).ToList();
                     allTimeSlots.AddRange(filteredSlots);
                 }
@@ -320,11 +280,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo technician time slot mới
-        /// </summary>
-        /// <param name="request">Thông tin tạo technician time slot</param>
-        /// <returns>Kết quả tạo technician time slot</returns>
         [HttpPost]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> CreateTechnicianTimeSlot([FromBody] CreateTechnicianTimeSlotRequest request)
@@ -377,11 +332,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo lịch tuần cho technician
-        /// </summary>
-        /// <param name="request">Thông tin tạo lịch tuần</param>
-        /// <returns>Kết quả tạo lịch tuần</returns>
         [HttpPost("weekly")]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> CreateWeeklyTechnicianTimeSlot([FromBody] CreateWeeklyTechnicianTimeSlotRequest request)
@@ -436,11 +386,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo lịch cho tất cả technician trong 1 ngày
-        /// </summary>
-        /// <param name="request">Thông tin tạo lịch</param>
-        /// <returns>Kết quả tạo lịch</returns>
         [HttpPost("all-technicians")]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> CreateAllTechniciansTimeSlot([FromBody] CreateAllTechniciansTimeSlotRequest request)
@@ -496,11 +441,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo lịch tuần cho tất cả technician
-        /// </summary>
-        /// <param name="request">Thông tin tạo lịch tuần</param>
-        /// <returns>Kết quả tạo lịch tuần</returns>
         [HttpPost("all-technicians-weekly")]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> CreateAllTechniciansWeeklyTimeSlot([FromBody] CreateAllTechniciansWeeklyTimeSlotRequest request)
@@ -556,12 +496,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật technician time slot
-        /// </summary>
-        /// <param name="id">ID của technician time slot</param>
-        /// <param name="request">Thông tin cập nhật</param>
-        /// <returns>Kết quả cập nhật</returns>
         [HttpPut("{id}")]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> UpdateTechnicianTimeSlot(int id, [FromBody] UpdateTechnicianTimeSlotRequest request)
@@ -602,11 +536,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Xóa technician time slot
-        /// </summary>
-        /// <param name="id">ID của technician time slot</param>
-        /// <returns>Kết quả xóa</returns>
         [HttpDelete("{id}")]
         [Authorize(Policy = "StaffOrAdmin")]
         public async Task<IActionResult> DeleteTechnicianTimeSlot(int id)
@@ -687,15 +616,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy availability của tất cả technician trong center
-        /// </summary>
-        /// <param name="centerId">ID của trung tâm</param>
-        /// <param name="startDate">Ngày bắt đầu (optional)</param>
-        /// <param name="endDate">Ngày kết thúc (optional)</param>
-        /// <param name="page">Trang hiện tại (default: 1)</param>
-        /// <param name="pageSize">Số bản ghi mỗi trang (default: 30)</param>
-        /// <returns>Danh sách availability của tất cả technician</returns>
         [HttpGet("centers/{centerId}/availability")]
         [AllowAnonymous]
         public async Task<IActionResult> GetCenterTechniciansAvailability(
@@ -754,16 +674,6 @@ namespace EVServiceCenter.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy availability của 1 technician cụ thể trong center
-        /// </summary>
-        /// <param name="centerId">ID của trung tâm</param>
-        /// <param name="technicianId">ID của technician</param>
-        /// <param name="startDate">Ngày bắt đầu (optional)</param>
-        /// <param name="endDate">Ngày kết thúc (optional)</param>
-        /// <param name="page">Trang hiện tại (default: 1)</param>
-        /// <param name="pageSize">Số bản ghi mỗi trang (default: 30)</param>
-        /// <returns>Danh sách availability của technician</returns>
         [HttpGet("centers/{centerId}/technicians/{technicianId}/availability")]
         [AllowAnonymous]
         public async Task<IActionResult> GetTechnicianAvailability(

@@ -32,6 +32,54 @@ namespace EVServiceCenter.Api.Controllers
             _templateRenderer = templateRenderer;
         }
 
+        private object MapReminderToDto(Domain.Entities.MaintenanceReminder r)
+        {
+            return new
+            {
+                reminderId = r.ReminderId,
+                vehicleId = r.VehicleId,
+                serviceId = r.ServiceId,
+                dueDate = r.DueDate.HasValue ? r.DueDate.Value.ToString("yyyy-MM-dd") : (string?)null,
+                dueMileage = r.DueMileage,
+                status = r.Status.ToString(),
+                type = r.Type.ToString(),
+                cadenceDays = r.CadenceDays,
+                isCompleted = r.IsCompleted,
+                createdAt = r.CreatedAt,
+                updatedAt = r.UpdatedAt,
+                completedAt = r.CompletedAt,
+                lastSentAt = r.LastSentAt,
+                vehicle = r.Vehicle != null ? new
+                {
+                    vehicleId = r.Vehicle.VehicleId,
+                    licensePlate = r.Vehicle.LicensePlate,
+                    currentMileage = r.Vehicle.CurrentMileage,
+                    lastServiceDate = r.Vehicle.LastServiceDate,
+                    vehicleModel = r.Vehicle.VehicleModel != null ? new
+                    {
+                        modelId = r.Vehicle.VehicleModel.ModelId,
+                        modelName = r.Vehicle.VehicleModel.ModelName
+                    } : null,
+                    customer = r.Vehicle.Customer != null ? new
+                    {
+                        customerId = r.Vehicle.Customer.CustomerId,
+                        user = r.Vehicle.Customer.User != null ? new
+                        {
+                            userId = r.Vehicle.Customer.User.UserId,
+                            fullName = r.Vehicle.Customer.User.FullName,
+                            email = r.Vehicle.Customer.User.Email,
+                            phoneNumber = r.Vehicle.Customer.User.PhoneNumber
+                        } : null
+                    } : null
+                } : null,
+                service = r.Service != null ? new
+                {
+                    serviceId = r.Service.ServiceId,
+                    serviceName = r.Service.ServiceName
+                } : null
+            };
+        }
+
 
         [HttpPost("vehicles/{vehicleId:int}/set")]
         [Authorize]
@@ -64,7 +112,6 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, vehicleId, added = created.Count, data = created.Select(x => new { x.ReminderId, x.ServiceId, x.DueDate, x.DueMileage }) });
         }
 
-        // Get alert reminders (upcoming/past-due) for a specific vehicle
         [HttpGet("vehicles/{vehicleId:int}/alerts")]
         [Authorize]
         public async Task<IActionResult> GetVehicleAlerts(int vehicleId)
@@ -72,22 +119,32 @@ namespace EVServiceCenter.Api.Controllers
             if (vehicleId <= 0) return BadRequest(new { success = false, message = "vehicleId không hợp lệ" });
             var now = DateTime.UtcNow.Date;
             var until = now.AddDays(_options.UpcomingDays);
-            // Lấy tất cả reminders PENDING của vehicle, rồi lọc theo DueDate đến hạn trong cửa sổ cảnh báo
             var pending = await _repo.QueryAsync(null, vehicleId, "PENDING", null, null);
             var alerts = pending
                 .Where(r => r.DueDate.HasValue && r.DueDate.Value.ToDateTime(TimeOnly.MinValue) <= until)
                 .OrderBy(r => r.DueDate)
                 .ToList();
 
-            return Ok(new { success = true, config = new { _options.UpcomingDays }, vehicleId, count = alerts.Count, data = alerts });
+            var data = alerts.Select(r => MapReminderToDto(r)).ToList();
+            return Ok(new { success = true, config = new { _options.UpcomingDays }, vehicleId, count = alerts.Count, data = data });
         }
 
         [HttpGet]
         [Authorize]
         public async Task<IActionResult> List([FromQuery] int? customerId = null, [FromQuery] int? vehicleId = null, [FromQuery] string? status = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
         {
-            var items = await _repo.QueryAsync(customerId, vehicleId, status ?? string.Empty, from, to);
-            return Ok(new { success = true, data = items });
+            try
+            {
+                var items = await _repo.QueryAsync(customerId, vehicleId, status ?? string.Empty, from, to);
+
+                var data = items.Select(r => MapReminderToDto(r)).ToList();
+
+                return Ok(new { success = true, data = data });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi lấy danh sách reminders: {ex.Message}" });
+            }
         }
 
         public class CreateReminderRequest { public int VehicleId { get; set; } public int? ServiceId { get; set; } public DateTime? DueDate { get; set; } public int? DueMileage { get; set; } public int? CadenceDays { get; set; } public EVServiceCenter.Domain.Enums.ReminderType? Type { get; set; } }
@@ -109,17 +166,35 @@ namespace EVServiceCenter.Api.Controllers
                 CadenceDays = req.CadenceDays,
                 UpdatedAt = DateTime.UtcNow
             };
-            var created = await _repo.CreateAsync(entity);
-            return CreatedAtAction(nameof(GetById), new { id = created.ReminderId }, new { success = true, data = created });
+            try
+            {
+                var created = await _repo.CreateAsync(entity);
+                var data = MapReminderToDto(created);
+                return CreatedAtAction(nameof(GetById), new { id = created.ReminderId }, new { success = true, data = data });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi tạo reminder: {ex.Message}" });
+            }
         }
 
         [HttpGet("{id:int}")]
         [Authorize]
         public async Task<IActionResult> GetById(int id)
         {
-            var r = await _repo.GetByIdAsync(id);
-            if (r == null) return NotFound(new { success = false, message = "Không tìm thấy reminder" });
-            return Ok(new { success = true, data = r });
+            try
+            {
+                var r = await _repo.GetByIdAsync(id);
+                if (r == null) return NotFound(new { success = false, message = "Không tìm thấy reminder" });
+
+                var data = MapReminderToDto(r);
+
+                return Ok(new { success = true, data = data });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi lấy reminder: {ex.Message}" });
+            }
         }
 
         public class UpdateReminderRequest { public DateTime? DueDate { get; set; } public int? DueMileage { get; set; } }
@@ -127,25 +202,45 @@ namespace EVServiceCenter.Api.Controllers
         [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateReminderRequest req)
         {
-            var r = await _repo.GetByIdAsync(id);
-            if (r == null) return NotFound(new { success = false, message = "Không tìm thấy reminder" });
-            if (req.DueDate.HasValue) r.DueDate = DateOnly.FromDateTime(req.DueDate.Value);
-            if (req.DueMileage.HasValue) r.DueMileage = req.DueMileage;
-            await _repo.UpdateAsync(r);
-            return Ok(new { success = true, data = r });
+            try
+            {
+                var r = await _repo.GetByIdAsync(id);
+                if (r == null) return NotFound(new { success = false, message = "Không tìm thấy reminder" });
+                if (req.DueDate.HasValue) r.DueDate = DateOnly.FromDateTime(req.DueDate.Value);
+                if (req.DueMileage.HasValue) r.DueMileage = req.DueMileage;
+                await _repo.UpdateAsync(r);
+                var data = MapReminderToDto(r);
+                return Ok(new { success = true, data = data });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi cập nhật reminder: {ex.Message}" });
+            }
         }
 
         [HttpPatch("{id:int}/complete")]
         [Authorize]
         public async Task<IActionResult> Complete(int id)
         {
-            var r = await _repo.GetByIdAsync(id);
-            if (r == null) return NotFound(new { success = false, message = "Không tìm thấy reminder" });
-            if (r.IsCompleted) return Ok(new { success = true, data = r });
-            r.IsCompleted = true;
-            r.CompletedAt = DateTime.UtcNow;
-            await _repo.UpdateAsync(r);
-            return Ok(new { success = true, data = r });
+            try
+            {
+                var r = await _repo.GetByIdAsync(id);
+                if (r == null) return NotFound(new { success = false, message = "Không tìm thấy reminder" });
+                if (r.IsCompleted)
+                {
+                    var data = MapReminderToDto(r);
+                    return Ok(new { success = true, data = data });
+                }
+                r.IsCompleted = true;
+                r.CompletedAt = DateTime.UtcNow;
+                await _repo.UpdateAsync(r);
+                var updatedData = MapReminderToDto(r);
+                return Ok(new { success = true, data = updatedData });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi đánh dấu hoàn thành reminder: {ex.Message}" });
+            }
         }
 
         public class SnoozeRequest { public int Days { get; set; } = 7; }
@@ -153,26 +248,43 @@ namespace EVServiceCenter.Api.Controllers
         [Authorize]
         public async Task<IActionResult> Snooze(int id, [FromBody] SnoozeRequest req)
         {
-            var r = await _repo.GetByIdAsync(id);
-            if (r == null) return NotFound(new { success = false, message = "Không tìm thấy reminder" });
-            if (!r.DueDate.HasValue) return BadRequest(new { success = false, message = "Reminder chưa có DueDate" });
-            var days = (req?.Days ?? 0) > 0 ? (req?.Days ?? 0) : _options.UpcomingDays;
-            r.DueDate = r.DueDate.Value.AddDays(days);
-            await _repo.UpdateAsync(r);
-            return Ok(new { success = true, data = r });
+            try
+            {
+                var r = await _repo.GetByIdAsync(id);
+                if (r == null) return NotFound(new { success = false, message = "Không tìm thấy reminder" });
+                if (!r.DueDate.HasValue) return BadRequest(new { success = false, message = "Reminder chưa có DueDate" });
+                var days = (req?.Days ?? 0) > 0 ? (req?.Days ?? 0) : _options.UpcomingDays;
+                r.DueDate = r.DueDate.Value.AddDays(days);
+                await _repo.UpdateAsync(r);
+                var data = MapReminderToDto(r);
+                return Ok(new { success = true, data = data });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi hoãn reminder: {ex.Message}" });
+            }
         }
 
         [HttpGet("upcoming")]
         [Authorize]
         public async Task<IActionResult> Upcoming([FromQuery] int? customerId = null)
         {
-            var now = DateTime.UtcNow.Date;
-            var until = now.AddDays(_options.UpcomingDays);
-            var list = await _repo.QueryAsync(customerId, null, "PENDING", now, until);
-            return Ok(new { success = true, config = new { _options.UpcomingDays }, data = list });
+            try
+            {
+                var now = DateTime.UtcNow.Date;
+                var until = now.AddDays(_options.UpcomingDays);
+                var list = await _repo.QueryAsync(customerId, null, "PENDING", now, until);
+
+                var data = list.Select(r => MapReminderToDto(r)).ToList();
+
+                return Ok(new { success = true, config = new { _options.UpcomingDays }, data = data });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = $"Lỗi khi lấy reminders sắp đến hạn: {ex.Message}" });
+            }
         }
 
-        // Appointment reminders for bookings within configured window
         public class AppointmentDispatchRequest { public int? CenterId { get; set; } public DateTime? Date { get; set; } public int? WindowHours { get; set; } }
         [HttpPost("appointments/dispatch")]
         [Authorize(Roles = "ADMIN,STAFF")]
@@ -252,7 +364,6 @@ namespace EVServiceCenter.Api.Controllers
         }
 
 
-        // Dispatch reminders by list or auto by config UpcomingDays
         public class DispatchRequest { public int[] ReminderIds { get; set; } = Array.Empty<int>(); public bool Auto { get; set; } = false; public int? UpcomingDays { get; set; } }
         [HttpPost("dispatch")]
         [Authorize(Roles = "ADMIN,STAFF")]
@@ -299,7 +410,6 @@ namespace EVServiceCenter.Api.Controllers
             return Ok(new { success = true, sent });
         }
 
-        // Admin endpoints
         [HttpGet("admin")]
         [Authorize(Roles = "ADMIN,STAFF")]
         public async Task<IActionResult> ListForAdmin(
@@ -315,7 +425,6 @@ namespace EVServiceCenter.Api.Controllers
             [FromQuery] string sortBy = "createdAt",
             [FromQuery] string sortOrder = "desc")
         {
-            // Check ModelState for binding errors
             if (!ModelState.IsValid)
             {
                 var errors = ModelState
@@ -342,7 +451,6 @@ namespace EVServiceCenter.Api.Controllers
 
                 var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
-                // Project to DTOs to avoid circular reference issues
                 var data = items.Select(r => new
                 {
                     reminderId = r.ReminderId,
@@ -412,7 +520,6 @@ namespace EVServiceCenter.Api.Controllers
         {
             try
             {
-                // Get all reminders for statistics
                 var allReminders = await _repo.QueryAsync(null, null, null, null, null);
 
                 var stats = new
@@ -468,5 +575,3 @@ namespace EVServiceCenter.Api.Controllers
         }
     }
 }
-
-

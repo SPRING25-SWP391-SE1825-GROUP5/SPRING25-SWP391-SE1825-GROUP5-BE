@@ -8,7 +8,6 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Models;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Caching.Distributed;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace EVServiceCenter.Application.Service;
@@ -18,20 +17,17 @@ public class CartService : ICartService
     private readonly IDistributedCache _cache;
     private readonly IPartRepository _partRepository;
     private readonly ICustomerRepository _customerRepository;
-    private readonly ILogger<CartService> _logger;
     private readonly CartOptions _options;
 
     public CartService(
         IDistributedCache cache,
         IPartRepository partRepository,
         ICustomerRepository customerRepository,
-        ILogger<CartService> logger,
         IOptions<CartOptions> options)
     {
         _cache = cache;
         _partRepository = partRepository;
         _customerRepository = customerRepository;
-        _logger = logger;
         _options = options.Value;
     }
 
@@ -67,25 +63,19 @@ public class CartService : ICartService
         {
             try
             {
-                _logger.LogDebug("Getting cart from cache: {CacheKey}", cacheKey);
                 var cartJson = await _cache.GetStringAsync(cacheKey);
                 if (string.IsNullOrEmpty(cartJson))
                 {
-                    _logger.LogDebug("Cart not found in cache: {CacheKey}", cacheKey);
                     return null;
                 }
 
                 var cart = JsonSerializer.Deserialize<Cart>(cartJson);
-                _logger.LogInformation("Cart retrieved from cache for customer {CustomerId}, items: {ItemCount}", customerId, cart?.Items.Count ?? 0);
                 return cart;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogWarning(ex, "Error getting cart from cache for customer {CustomerId}, attempt {Attempt}/{MaxAttempts}", customerId, attempt, _options.RetryAttempts);
-
                 if (attempt == _options.RetryAttempts)
                 {
-                    _logger.LogError(ex, "Failed to get cart from cache for customer {CustomerId} after {Attempts} attempts", customerId, _options.RetryAttempts);
                     return null;
                 }
 
@@ -115,7 +105,6 @@ public class CartService : ICartService
 
         var cart = await GetOrCreateCartAsync(customerId);
 
-        // Cập nhật fulfillmentCenterId nếu có (chỉ set lần đầu hoặc override)
         if (fulfillmentCenterId.HasValue)
         {
             cart.FulfillmentCenterId = fulfillmentCenterId.Value;
@@ -229,18 +218,13 @@ public class CartService : ICartService
         {
             try
             {
-                _logger.LogDebug("Saving cart to cache: {CacheKey}, items: {ItemCount}, ttl: {TtlDays} days", cacheKey, cart.Items.Count, _options.TtlDays);
                 await _cache.SetStringAsync(cacheKey, cartJson, cacheOptions);
-                _logger.LogInformation("Cart saved to cache for customer {CustomerId}, items: {ItemCount}", cart.CustomerId, cart.Items.Count);
                 return;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error saving cart to cache for customer {CustomerId}, attempt {Attempt}/{MaxAttempts}", cart.CustomerId, attempt, _options.RetryAttempts);
-
                 if (attempt == _options.RetryAttempts)
                 {
-                    _logger.LogError(ex, "Failed to save cart to cache for customer {CustomerId} after {Attempts} attempts", cart.CustomerId, _options.RetryAttempts);
                     throw new InvalidOperationException($"Không thể lưu cart vào cache: {ex.Message}", ex);
                 }
 

@@ -8,7 +8,6 @@ using EVServiceCenter.Application.Models.Responses;
 using EVServiceCenter.Domain.Entities;
 using EVServiceCenter.Domain.Interfaces;
 using EVServiceCenter.Domain.IRepositories;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using EVServiceCenter.Application.Configurations;
 
@@ -25,7 +24,6 @@ namespace EVServiceCenter.Application.Service
         private readonly ICenterRepository _centerRepository;
         private readonly IChatHubService _chatHubService;
         private readonly ChatSettings _chatSettings;
-        private readonly ILogger<ConversationService> _logger;
 
         public ConversationService(
             IConversationRepository conversationRepository,
@@ -36,8 +34,7 @@ namespace EVServiceCenter.Application.Service
             IStaffRepository staffRepository,
             ICenterRepository centerRepository,
             IChatHubService chatHubService,
-            IOptions<ChatSettings> chatSettings,
-            ILogger<ConversationService> logger)
+            IOptions<ChatSettings> chatSettings)
         {
             _conversationRepository = conversationRepository;
             _messageRepository = messageRepository;
@@ -48,24 +45,14 @@ namespace EVServiceCenter.Application.Service
             _centerRepository = centerRepository;
             _chatHubService = chatHubService;
             _chatSettings = chatSettings.Value;
-            _logger = logger;
         }
 
         public async Task<ConversationResponse> CreateConversationAsync(CreateConversationRequest request)
         {
             try
             {
-                // Log incoming request for debugging
-                _logger.LogInformation(
-                    "CreateConversationAsync called with {MemberCount} members. Members: {Members}",
-                    request.Members.Count,
-                    string.Join(", ", request.Members.Select(m =>
-                        $"Role={m.RoleInConversation}, UserId={m.UserId?.ToString() ?? "(null)"}, GuestSessionId='{m.GuestSessionId ?? "(null)"}'")));
-
-                // Normalize and validate members first
                 foreach (var memberRequest in request.Members)
                 {
-                    // Normalize GuestSessionId: trim and convert empty string to null
                     if (!string.IsNullOrWhiteSpace(memberRequest.GuestSessionId))
                     {
                         memberRequest.GuestSessionId = memberRequest.GuestSessionId.Trim();
@@ -76,18 +63,14 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Validate that we have at least one valid member before processing
                 bool hasValidMember = request.Members.Any(m =>
                     m.UserId.HasValue || !string.IsNullOrWhiteSpace(m.GuestSessionId));
 
                 if (!hasValidMember)
                 {
-                    _logger.LogError(
-                        "Cannot create conversation: No valid members found (all members have both UserId and GuestSessionId as null/empty)");
                     throw new ArgumentException("Conversation must have at least one member with either UserId or GuestSessionId");
                 }
 
-                // Find customer from members
                 int? customerUserId = null;
                 string? customerGuestSessionId = null;
 
@@ -101,7 +84,6 @@ namespace EVServiceCenter.Application.Service
                     }
                 }
 
-                // Always create new conversation (allow multiple conversations per customer)
                 var conversation = new Conversation
                 {
                     Subject = request.Subject,
@@ -110,63 +92,39 @@ namespace EVServiceCenter.Application.Service
                 };
 
                 var createdConversation = await _conversationRepository.CreateConversationAsync(conversation);
-                _logger.LogInformation("Created new conversation {ConversationId}", createdConversation.ConversationId);
 
-                // Add members to conversation
                 foreach (var memberRequest in request.Members)
                 {
-                    // Skip placeholder staff entries (role is staff but no concrete user)
                     if (_chatSettings.Roles.StaffRoles.Contains(memberRequest.RoleInConversation)
                         && !memberRequest.UserId.HasValue)
                     {
-                        _logger.LogInformation(
-                            "Skipping placeholder staff member with role {Role} (no UserId)",
-                            memberRequest.RoleInConversation);
                         continue;
                     }
 
-                    // Normalize GuestSessionId again (in case it wasn't normalized earlier)
                     string? normalizedGuestSessionId = string.IsNullOrWhiteSpace(memberRequest.GuestSessionId)
                         ? null
                         : memberRequest.GuestSessionId.Trim();
 
-                    // Skip members with both UserId and GuestSessionId as null/empty (violates CK_ConversationMembers_ActorXor constraint)
                     bool hasUserId = memberRequest.UserId.HasValue;
                     bool hasGuestSessionId = !string.IsNullOrWhiteSpace(normalizedGuestSessionId);
 
                     if (!hasUserId && !hasGuestSessionId)
                     {
-                        _logger.LogWarning(
-                            "Skipping member with role {Role} because both UserId and GuestSessionId are null/empty. UserId: {UserId}, GuestSessionId: '{GuestSessionId}'",
-                            memberRequest.RoleInConversation,
-                            memberRequest.UserId,
-                            memberRequest.GuestSessionId ?? "(null)");
                         continue;
                     }
-
-                    _logger.LogInformation(
-                        "Adding member to conversation {ConversationId}: Role={Role}, UserId={UserId}, GuestSessionId='{GuestSessionId}'",
-                        createdConversation.ConversationId,
-                        memberRequest.RoleInConversation,
-                        memberRequest.UserId?.ToString() ?? "(null)",
-                        normalizedGuestSessionId ?? "(null)");
 
                     var member = new ConversationMember
                     {
                         ConversationId = createdConversation.ConversationId,
                         UserId = memberRequest.UserId,
-                        GuestSessionId = normalizedGuestSessionId, // Use normalized value (null instead of empty string)
+                        GuestSessionId = normalizedGuestSessionId,
                         RoleInConversation = memberRequest.RoleInConversation,
                         LastReadAt = null
                     };
 
                     await _conversationMemberRepository.CreateConversationMemberAsync(member);
-                    _logger.LogInformation(
-                        "Successfully added member {MemberId} to conversation {ConversationId}",
-                        member.MemberId, createdConversation.ConversationId);
                 }
 
-                // Auto-assign staff if customer exists and there is no REAL staff member in request
                 bool hasStaffMember = request.Members.Any(m =>
                     _chatSettings.Roles.StaffRoles.Contains(m.RoleInConversation)
                     && m.UserId.HasValue);
@@ -175,37 +133,22 @@ namespace EVServiceCenter.Application.Service
                 {
                     Staff? assignedStaff = null;
 
-                    // Nếu có PreferredStaffId, sử dụng staff đó
                     if (request.PreferredStaffId.HasValue)
                     {
                         assignedStaff = await _staffRepository.GetStaffByIdAsync(request.PreferredStaffId.Value);
 
-                        // Validate staff exists, is active, and is not MANAGER (only STAFF role)
                         if (assignedStaff != null && assignedStaff.IsActive &&
                             assignedStaff.User != null && assignedStaff.User.Role == "STAFF")
                         {
-                            // Staff hợp lệ, sử dụng
-                            _logger.LogInformation(
-                                "Using preferred staff {StaffId} (User {UserId}) for conversation {ConversationId}",
-                                assignedStaff.StaffId, assignedStaff.UserId, createdConversation.ConversationId);
                         }
                         else
                         {
-                            // Staff không hợp lệ (không tồn tại, không active, hoặc là MANAGER), fallback to auto-assign
-                            _logger.LogWarning(
-                                "Preferred staff {StaffId} is not valid (exists: {Exists}, active: {Active}, role: {Role}), falling back to auto-assign",
-                                request.PreferredStaffId.Value,
-                                assignedStaff != null,
-                                assignedStaff?.IsActive ?? false,
-                                assignedStaff?.User?.Role ?? "null");
                             assignedStaff = null;
                         }
                     }
 
-                    // Nếu không có PreferredStaffId hoặc PreferredStaffId không hợp lệ, auto-assign
                     if (assignedStaff == null)
                     {
-                        // Get customer location (priority: request location, fallback: booking center location)
                         var (customerLat, customerLng) = await GetCustomerLocationAsync(
                             customerUserId.Value,
                             request.CustomerLatitude,
@@ -223,7 +166,6 @@ namespace EVServiceCenter.Application.Service
                         createdConversation.AssignedStaffId = assignedStaff.StaffId;
                         await _conversationRepository.UpdateConversationAsync(createdConversation);
 
-                        // Add staff as member
                         var staffMember = new ConversationMember
                         {
                             ConversationId = createdConversation.ConversationId,
@@ -233,20 +175,14 @@ namespace EVServiceCenter.Application.Service
                         };
                         await _conversationMemberRepository.CreateConversationMemberAsync(staffMember);
 
-                        // Notify staff via SignalR
                         await _chatHubService.NotifyNewConversationAsync(assignedStaff.UserId, createdConversation.ConversationId);
-
-                        _logger.LogInformation(
-                            "Assigned staff {StaffId} (User {UserId}) to conversation {ConversationId}",
-                            assignedStaff.StaffId, assignedStaff.UserId, createdConversation.ConversationId);
                     }
                 }
 
                 return await MapToConversationResponseAsync(createdConversation);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error creating conversation");
                 throw;
             }
         }
@@ -263,9 +199,8 @@ namespace EVServiceCenter.Application.Service
 
                 return await MapToConversationResponseAsync(conversation);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting conversation by ID: {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -286,9 +221,8 @@ namespace EVServiceCenter.Application.Service
                 await _conversationRepository.UpdateConversationAsync(conversation);
                 return await MapToConversationResponseAsync(conversation);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error updating conversation: {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -300,19 +234,15 @@ namespace EVServiceCenter.Application.Service
                 var conversation = await _conversationRepository.GetConversationByIdAsync(conversationId);
                 if (conversation == null)
                 {
-                    _logger.LogWarning("Conversation {ConversationId} not found for deletion", conversationId);
                     return false;
                 }
 
-                // Delete conversation (repository will handle cascade delete of members and messages)
                 await _conversationRepository.DeleteConversationAsync(conversationId);
 
-                _logger.LogInformation("Successfully deleted conversation {ConversationId}", conversationId);
                 return true;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error deleting conversation: {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -321,7 +251,6 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Try to find existing conversation
                 var existingConversation = await _conversationRepository.GetConversationByMembersAsync(
                     request.Member1.UserId,
                     request.Member2.UserId,
@@ -333,7 +262,6 @@ namespace EVServiceCenter.Application.Service
                     return await MapToConversationResponseAsync(existingConversation);
                 }
 
-                // Create new conversation
                 var createRequest = new CreateConversationRequest
                 {
                     Subject = request.Subject,
@@ -357,9 +285,8 @@ namespace EVServiceCenter.Application.Service
 
                 return await CreateConversationAsync(createRequest);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting or creating conversation");
                 throw;
             }
         }
@@ -379,9 +306,8 @@ namespace EVServiceCenter.Application.Service
                 }
                 return mappedConversations;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting conversations by user ID: {UserId}", userId);
                 throw;
             }
         }
@@ -401,9 +327,8 @@ namespace EVServiceCenter.Application.Service
                 }
                 return mappedConversations;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting conversations by guest session ID: {GuestSessionId}", guestSessionId);
                 throw;
             }
         }
@@ -421,9 +346,8 @@ namespace EVServiceCenter.Application.Service
                 }
                 return mappedConversations;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting all conversations");
                 throw;
             }
         }
@@ -432,8 +356,6 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Note: This will be implemented when we add ConversationMemberRepository
-                // For now, return a placeholder response
                 await Task.CompletedTask;
                 return new ConversationMemberResponse
                 {
@@ -443,9 +365,8 @@ namespace EVServiceCenter.Application.Service
                     RoleInConversation = request.RoleInConversation
                 };
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error adding member to conversation: {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -456,9 +377,8 @@ namespace EVServiceCenter.Application.Service
             {
                 return await _conversationMemberRepository.RemoveMemberFromConversationAsync(conversationId, userId, guestSessionId);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error removing member from conversation: {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -477,9 +397,8 @@ namespace EVServiceCenter.Application.Service
 
                 return responses;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting conversation members: {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -488,13 +407,11 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Note: This will be implemented when we add ConversationMemberRepository
                 await Task.CompletedTask;
                 return true;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error updating member role: {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -505,9 +422,8 @@ namespace EVServiceCenter.Application.Service
             {
                 return await _conversationRepository.ConversationExistsAsync(conversationId);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error checking if conversation exists: {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -518,9 +434,8 @@ namespace EVServiceCenter.Application.Service
             {
                 return await _conversationRepository.CountConversationsAsync(searchTerm);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error counting conversations");
                 throw;
             }
         }
@@ -538,24 +453,18 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException($"Conversation with ID {conversationId} not found");
                 }
 
-                // Broadcast read status update to all conversation members via SignalR
                 try
                 {
                     await _chatHubService.NotifyMessageReadAsync(conversationId, userId, guestSessionId, lastReadAt);
-                    _logger.LogInformation("Broadcasted read status update for conversation {ConversationId}, UserId: {UserId}, GuestSessionId: {GuestSessionId}, LastReadAt: {LastReadAt}",
-                        conversationId, userId, guestSessionId, lastReadAt);
                 }
-                catch (Exception ex)
+                catch
                 {
-                    _logger.LogError(ex, "Error broadcasting read status update for conversation {ConversationId}", conversationId);
-                    // Don't throw - read status update should still succeed even if broadcast fails
                 }
 
                 return await MapToConversationResponseAsync(conversation);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error updating last read time: {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -627,15 +536,10 @@ namespace EVServiceCenter.Application.Service
                 };
                 await _messageRepository.CreateMessageAsync(systemMessage);
 
-                _logger.LogInformation(
-                    "Reassigned conversation {ConversationId} from staff {OldStaffId} to staff {NewStaffId} (center {CenterId})",
-                    conversationId, oldStaff?.StaffId, activeStaff.StaffId, newCenterId);
-
                 return await MapToConversationResponseAsync(conversation);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error reassigning center for conversation {ConversationId}", conversationId);
                 throw;
             }
         }
@@ -658,9 +562,8 @@ namespace EVServiceCenter.Application.Service
 
                 return responses;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting conversations by staff ID: {StaffId}", staffId);
                 throw;
             }
         }
@@ -683,9 +586,8 @@ namespace EVServiceCenter.Application.Service
 
                 return responses;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting unassigned conversations");
                 throw;
             }
         }
@@ -694,13 +596,11 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Lấy danh sách staff của center
                 var staffList = await _staffRepository.GetStaffByCenterIdAsync(centerId);
 
-                // Chỉ lấy staff có role STAFF (không lấy MANAGER), và phải active
                 var staffOnly = staffList
                     .Where(s => s.User != null &&
-                               s.User.Role == "STAFF" && // Chỉ lấy STAFF, không lấy MANAGER
+                               s.User.Role == "STAFF" &&
                                s.IsActive)
                     .Select(s => new
                     {
@@ -718,9 +618,8 @@ namespace EVServiceCenter.Application.Service
 
                 return staffOnly;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting staff by center {CenterId}", centerId);
                 throw;
             }
         }
@@ -738,7 +637,6 @@ namespace EVServiceCenter.Application.Service
                 AssignedStaffId = conversation.AssignedStaffId
             };
 
-            // Map assigned staff info
             if (conversation.AssignedStaff != null)
             {
                 response.AssignedStaffName = conversation.AssignedStaff.User?.FullName;
@@ -747,13 +645,11 @@ namespace EVServiceCenter.Application.Service
                 response.AssignedCenterName = conversation.AssignedStaff.Center?.CenterName;
             }
 
-            // Map last message
             if (conversation.LastMessage != null)
             {
                 response.LastMessage = await MapToMessageResponseAsync(conversation.LastMessage);
             }
 
-            // Map members
             if (conversation.ConversationMembers.Any())
             {
                 var members = new List<ConversationMemberResponse>();
@@ -764,7 +660,6 @@ namespace EVServiceCenter.Application.Service
                 response.Members = members;
             }
 
-            // Map messages (limit to recent messages for performance)
             if (conversation.Messages.Any())
             {
                 var recentMessages = conversation.Messages
@@ -795,25 +690,20 @@ namespace EVServiceCenter.Application.Service
                 LastReadAt = member.LastReadAt
             };
 
-            // Get user information if available
             if (member.UserId.HasValue)
             {
-                // Try to get user info from navigation property first
                 if (member.User != null)
                 {
                     response.UserName = member.User.FullName;
                     response.UserEmail = member.User.Email;
-                    // Add avatar field when available
                 }
                 else
                 {
-                    // Fallback: load user from database
                     var user = await _authRepository.GetUserByIdAsync(member.UserId.Value);
                     if (user != null)
                     {
                         response.UserName = user.FullName;
                         response.UserEmail = user.Email;
-                        // Add avatar field when available
                     }
                 }
             }
@@ -836,17 +726,14 @@ namespace EVServiceCenter.Application.Service
                 IsGuest = !string.IsNullOrEmpty(message.SenderGuestSessionId)
             };
 
-            // Build attachments array from AttachmentUrl (same logic as MessageService)
             var attachments = new List<AttachmentResponse>();
             if (!string.IsNullOrEmpty(message.AttachmentUrl))
             {
                 try
                 {
-                    // Try to parse as JSON array first
                     var urls = System.Text.Json.JsonSerializer.Deserialize<List<string>>(message.AttachmentUrl);
                     if (urls != null && urls.Count > 0)
                     {
-                        // Multiple URLs (JSON array)
                         foreach (var url in urls)
                         {
                             if (!string.IsNullOrEmpty(url))
@@ -866,7 +753,6 @@ namespace EVServiceCenter.Application.Service
                 }
                 catch
                 {
-                    // Not a JSON array, treat as single URL string
                     attachments.Add(new AttachmentResponse
                     {
                         Id = $"att-{message.MessageId}",
@@ -880,19 +766,16 @@ namespace EVServiceCenter.Application.Service
             }
             response.Attachments = attachments.Count > 0 ? attachments : null;
 
-            // Get sender information
             if (message.SenderUserId.HasValue && message.SenderUser != null)
             {
                 response.SenderName = message.SenderUser.FullName;
                 response.SenderEmail = message.SenderUser.Email;
-                // Add avatar field when available
             }
             else if (!string.IsNullOrEmpty(message.SenderGuestSessionId))
             {
                 response.SenderName = "Guest User";
             }
 
-            // Map reply to message
             if (message.ReplyToMessage != null)
             {
                 response.ReplyToMessage = await MapToMessageResponseAsync(message.ReplyToMessage);
@@ -907,7 +790,6 @@ namespace EVServiceCenter.Application.Service
             {
                 int? targetCenterId = null;
 
-                // Strategy 0: If customer location is provided, find nearest center using Haversine
                 if (customerLat.HasValue && customerLng.HasValue)
                 {
                     var allCenters = await _centerRepository.GetActiveCentersAsync();
@@ -922,7 +804,6 @@ namespace EVServiceCenter.Application.Service
 
                     if (centersWithGeo.Any())
                     {
-                        // Calculate distance to each center and find nearest
                         var centerDistances = centersWithGeo
                             .Select(c => new {
                                 c.CenterId,
@@ -933,20 +814,9 @@ namespace EVServiceCenter.Application.Service
 
                         var nearestCenter = centerDistances.First();
                         targetCenterId = nearestCenter.CenterId;
-
-                        _logger.LogInformation(
-                            "Found nearest center {CenterId} at distance {DistanceKm:F2} km for customer {CustomerId} at ({Lat}, {Lng})",
-                            nearestCenter.CenterId, nearestCenter.DistanceKm, customerUserId, customerLat.Value, customerLng.Value);
-                    }
-                    else
-                    {
-                        _logger.LogWarning(
-                            "No centers with geo coordinates found, falling back to other strategies for customer {CustomerId}",
-                            customerUserId);
                     }
                 }
 
-                // Strategy 1: Check customer's recent booking (if no location-based center found)
                 if (!targetCenterId.HasValue)
                 {
                 var customerBookings = await _bookingRepository.GetByCustomerIdAsync(customerUserId);
@@ -958,22 +828,14 @@ namespace EVServiceCenter.Application.Service
                 if (recentBooking != null && recentBooking.CenterId > 0)
                 {
                     targetCenterId = recentBooking.CenterId;
-                    _logger.LogInformation(
-                        "Found recent booking for customer {CustomerId} at center {CenterId}",
-                        customerUserId, targetCenterId);
-                    }
+                }
                 }
 
-                // Strategy 2: Use preferred center if provided (overrides booking if set)
                 if (preferredCenterId.HasValue && preferredCenterId.Value > 0)
                 {
                     targetCenterId = preferredCenterId.Value;
-                    _logger.LogInformation(
-                        "Using preferred center {CenterId} for customer {CustomerId}",
-                        preferredCenterId.Value, customerUserId);
                 }
 
-                // Strategy 3: Round-robin by workload (if no center found)
                 if (!targetCenterId.HasValue)
                 {
                     var allStaff = await _staffRepository.GetAllStaffAsync();
@@ -981,11 +843,9 @@ namespace EVServiceCenter.Application.Service
 
                     if (!activeStaff.Any())
                     {
-                        _logger.LogWarning("No active staff found for assignment");
                         return null;
                     }
 
-                    // Calculate workload for each staff
                     var staffWorkloads = new List<(Staff Staff, int ConversationCount)>();
                     foreach (var staff in activeStaff)
                     {
@@ -993,20 +853,14 @@ namespace EVServiceCenter.Application.Service
                         staffWorkloads.Add((staff, workload));
                     }
 
-                    // Select staff with least workload
                     var selected = staffWorkloads
                         .OrderBy(s => s.ConversationCount)
                         .ThenBy(s => s.Staff.StaffId)
                         .First();
 
-                    _logger.LogInformation(
-                        "Assigned staff {StaffId} (Center {CenterId}) with workload {Workload} to customer {CustomerId}",
-                        selected.Staff.StaffId, selected.Staff.CenterId, selected.ConversationCount, customerUserId);
-
                     return selected.Staff;
                 }
 
-                // Strategy 4: Find staff from target center
                 if (targetCenterId.HasValue)
                 {
                     var centerStaff = await _staffRepository.GetStaffByCenterIdAsync(targetCenterId.Value);
@@ -1014,7 +868,6 @@ namespace EVServiceCenter.Application.Service
 
                     if (activeStaff.Any())
                     {
-                        // If multiple staff in center, use round-robin
                         var staffWorkloads = new List<(Staff Staff, int ConversationCount)>();
                         foreach (var staff in activeStaff)
                         {
@@ -1027,30 +880,19 @@ namespace EVServiceCenter.Application.Service
                             .ThenBy(s => s.Staff.StaffId)
                             .First();
 
-                        _logger.LogInformation(
-                            "Assigned staff {StaffId} from center {CenterId} with workload {Workload} to customer {CustomerId}",
-                            selected.Staff.StaffId, targetCenterId.Value, selected.ConversationCount, customerUserId);
-
                         return selected.Staff;
                     }
                     else
                     {
-                        _logger.LogWarning(
-                            "No active staff found in center {CenterId} for customer {CustomerId}",
-                            targetCenterId.Value, customerUserId);
-
-                        // Fallback to any active staff (excluding managers)
                         var allStaff = await _staffRepository.GetAllStaffAsync();
-                        var anyActiveStaff = FilterNonManagerStaff(allStaff).Where(s => s.IsActive).FirstOrDefault();
-                        return anyActiveStaff;
+                        return FilterNonManagerStaff(allStaff).Where(s => s.IsActive).FirstOrDefault();
                     }
                 }
 
                 return null;
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error assigning staff to conversation for customer {CustomerId}", customerUserId);
                 return null;
             }
         }
@@ -1064,16 +906,11 @@ namespace EVServiceCenter.Application.Service
         {
             try
             {
-                // Priority 1: Use location from request if provided
                 if (requestLat.HasValue && requestLng.HasValue)
                 {
-                    _logger.LogInformation(
-                        "Using customer location from request: ({Lat}, {Lng}) for customer {CustomerId}",
-                        requestLat.Value, requestLng.Value, customerUserId);
                     return ((double)requestLat.Value, (double)requestLng.Value);
                 }
 
-                // Priority 2: Fallback to booking center location
                 var customerBookings = await _bookingRepository.GetByCustomerIdAsync(customerUserId);
                 var recentBooking = customerBookings
                     .Where(b => b.CenterId > 0)
@@ -1085,21 +922,14 @@ namespace EVServiceCenter.Application.Service
                     var center = await _centerRepository.GetCenterByIdAsync(recentBooking.CenterId);
                     if (center != null && center.Latitude.HasValue && center.Longitude.HasValue)
                     {
-                        _logger.LogInformation(
-                            "Using center location from recent booking: Center {CenterId} ({Lat}, {Lng}) for customer {CustomerId}",
-                            center.CenterId, center.Latitude.Value, center.Longitude.Value, customerUserId);
                         return ((double)center.Latitude.Value, (double)center.Longitude.Value);
                     }
                 }
 
-                _logger.LogInformation(
-                    "No location found for customer {CustomerId} (no request location and no booking with center location)",
-                    customerUserId);
                 return (null, null);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error getting customer location for customer {CustomerId}", customerUserId);
                 return (null, null);
             }
         }

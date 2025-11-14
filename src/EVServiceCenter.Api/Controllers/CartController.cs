@@ -51,9 +51,6 @@ public class CartController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Cập nhật fulfillment center cho giỏ hàng
-    /// </summary>
     [HttpPut("customer/{customerId:int}/fulfillment-center")]
     public async Task<IActionResult> UpdateFulfillmentCenter(int customerId, [FromBody] UpdateCartFulfillmentCenterRequest request)
     {
@@ -77,7 +74,6 @@ public class CartController : ControllerBase
     {
         public int PartId { get; set; }
         public int Quantity { get; set; }
-        // Optional: Chi nhánh sẽ fulfill order này (có thể chọn khi thêm item)
         public int? FulfillmentCenterId { get; set; }
     }
 

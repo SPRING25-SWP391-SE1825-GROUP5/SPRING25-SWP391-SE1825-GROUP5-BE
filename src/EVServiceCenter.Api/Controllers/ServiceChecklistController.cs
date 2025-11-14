@@ -245,7 +245,6 @@ public class ServiceChecklistController : ControllerBase
             reasons.Add("Dịch vụ bảo dưỡng tổng quát phù hợp với mọi số km");
         }
 
-        // Date-based reasons (chỉ dùng MaxDate vì database không có IntervalDays)
         if (lastMaintenanceDate.HasValue && template.MaxDate.HasValue)
         {
             var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
@@ -285,7 +284,6 @@ public class ServiceChecklistController : ControllerBase
     {
         var warnings = new List<string>();
 
-        // Warning cho MaxOverdueDays - chỉ dùng MaxDate, không dùng IntervalDays
         if (lastMaintenanceDate.HasValue && template.MaxDate.HasValue && template.MaxOverdueDays.HasValue)
         {
             var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
@@ -306,7 +304,6 @@ public class ServiceChecklistController : ControllerBase
             }
         }
 
-        // Warning cho MaxDate
         if (lastMaintenanceDate.HasValue && template.MaxDate.HasValue)
         {
             var daysSinceLastMaintenance = (DateTime.UtcNow - lastMaintenanceDate.Value).Days;
@@ -319,7 +316,6 @@ public class ServiceChecklistController : ControllerBase
             }
         }
 
-        // Warning cho MinKm
         if (template.MinKm.HasValue && currentKm < template.MinKm.Value)
         {
             var diff = template.MinKm.Value - currentKm;

@@ -40,5 +40,6 @@ namespace EVServiceCenter.Domain.Interfaces
         Task<bool> PayOSOrderCodeExistsAsync(int payOSOrderCode);
         Task UpdatePayOSOrderCodeAsync(int bookingId, int payOSOrderCode);
         Task<List<Booking>> GetBookingsByStatusAsync(string status);
+        Task<List<Booking>> GetBookingsForAutoCompleteAsync(DateTime workDateUtc);
     }
 }

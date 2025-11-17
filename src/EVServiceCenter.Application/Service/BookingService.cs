@@ -1123,7 +1123,7 @@ namespace EVServiceCenter.Application.Service
             {
                 { BookingStatusConstants.Pending, new List<string> { BookingStatusConstants.Confirmed, BookingStatusConstants.Cancelled } },
                 { BookingStatusConstants.Confirmed, new List<string> { BookingStatusConstants.CheckedIn, BookingStatusConstants.Cancelled } },
-                { BookingStatusConstants.CheckedIn, new List<string> { BookingStatusConstants.InProgress, BookingStatusConstants.Cancelled } },
+                { BookingStatusConstants.CheckedIn, new List<string> { BookingStatusConstants.InProgress, BookingStatusConstants.Completed, BookingStatusConstants.Cancelled } },
                 { BookingStatusConstants.InProgress, new List<string> { BookingStatusConstants.Completed } },
                 { BookingStatusConstants.Completed, new List<string> { BookingStatusConstants.Paid } },
                 { BookingStatusConstants.Paid, new List<string>() },

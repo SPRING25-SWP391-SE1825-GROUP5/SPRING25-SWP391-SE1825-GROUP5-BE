@@ -434,6 +434,7 @@ builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<INotificationHub, EVServiceCenter.Api.Services.NotificationHubService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
+builder.Services.AddHostedService<BookingInProgressAutoCompleteService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 builder.Services.AddHostedService<SlotAvailabilityUpdateService>();
 builder.Services.AddHostedService<PromotionExpiredUpdateService>();

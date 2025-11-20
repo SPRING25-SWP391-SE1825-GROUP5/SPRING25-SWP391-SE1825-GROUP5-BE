@@ -574,11 +574,19 @@ namespace EVServiceCenter.WebAPI.Controllers
                         ? workDate.Value.ToString("yyyy-MM-dd")
                         : booking.BookingDate.ToString("yyyy-MM-dd");
 
-                    // Tạo QR code cho check-in (chứa bookingId)
-                    // QR code sẽ chứa bookingId để staff scan và check-in
-                    var qrCodeData = booking.BookingId.ToString();
-                    // Sử dụng QR code API online để tạo QR code image
-                    var qrCodeImageUrl = $"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={Uri.EscapeDataString(qrCodeData)}";
+                    // Tạo QR code cho check-in (chứa thông tin JSON giống frontend)
+                    var qrCodeDataObject = new
+                    {
+                        bookingId = booking.BookingId,
+                        timestamp = DateTime.UtcNow.ToString("O"),
+                        type = "CHECK_IN",
+                        expiry = DateTime.UtcNow.AddHours(24).ToString("O")
+                    };
+
+                    var qrCodeData = System.Text.Json.JsonSerializer.Serialize(qrCodeDataObject);
+                    // Sử dụng QR code API online để tạo QR code image (lấy từ config)
+                    var qrCodeApiUrl = _configuration["App:QrCodeApiUrl"] ?? "https://api.qrserver.com/v1/create-qr-code/";
+                    var qrCodeImageUrl = $"{qrCodeApiUrl}?size=300x300&data={Uri.EscapeDataString(qrCodeData)}";
 
                     var html = await _templateRenderer.RenderAsync("BookingCreated", new System.Collections.Generic.Dictionary<string, string>
                     {

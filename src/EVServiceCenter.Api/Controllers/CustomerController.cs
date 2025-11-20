@@ -69,6 +69,96 @@ namespace EVServiceCenter.WebAPI.Controllers
             }
         }
 
+        /// <summary>
+        /// Search customers by name, email, or phone (partial match)
+        /// </summary>
+        /// <param name="query">Search query</param>
+        /// <param name="pageNumber">Page number</param>
+        /// <param name="pageSize">Page size</param>
+        /// <returns>List of matching customers</returns>
+        [HttpGet("search")]
+        [Authorize(Roles = "ADMIN,STAFF")]
+        public async Task<IActionResult> SearchCustomers(
+            [FromQuery] string query,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                // Validation
+                if (string.IsNullOrWhiteSpace(query))
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Query không được rỗng"
+                    });
+                }
+
+                if (query.Length < 2)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Query phải có ít nhất 2 ký tự"
+                    });
+                }
+
+                var normalizedQuery = query.Trim().ToLower();
+
+                // Get all customers with user info
+                var allCustomers = await _customerRepository.GetAllCustomersAsync();
+                
+                // Filter by partial match
+                var matchingCustomers = allCustomers
+                    .Where(c => c.User != null && (
+                        (c.User.FullName != null && c.User.FullName.ToLower().Contains(normalizedQuery)) ||
+                        (c.User.Email != null && c.User.Email.ToLower().Contains(normalizedQuery)) ||
+                        (c.User.PhoneNumber != null && c.User.PhoneNumber.Contains(query.Trim()))
+                    ))
+                    .OrderBy(c => c.User!.FullName)
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(c => new
+                    {
+                        customerId = c.CustomerId,
+                        userId = c.UserId,
+                        userFullName = c.User!.FullName,
+                        userEmail = c.User!.Email,
+                        userPhoneNumber = c.User!.PhoneNumber,
+                        isGuest = c.IsGuest,
+                        vehicleCount = c.Vehicles?.Count ?? 0
+                    })
+                    .ToList();
+
+                var totalCount = allCustomers
+                    .Count(c => c.User != null && (
+                        (c.User.FullName != null && c.User.FullName.ToLower().Contains(normalizedQuery)) ||
+                        (c.User.Email != null && c.User.Email.ToLower().Contains(normalizedQuery)) ||
+                        (c.User.PhoneNumber != null && c.User.PhoneNumber.Contains(query.Trim()))
+                    ));
+
+                return Ok(new
+                {
+                    success = true,
+                    data = matchingCustomers,
+                    total = totalCount,
+                    message = matchingCustomers.Any()
+                        ? $"Tìm thấy {totalCount} khách hàng"
+                        : "Không tìm thấy khách hàng"
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error searching customers: {ex.Message}");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Có lỗi xảy ra khi tìm kiếm khách hàng: " + ex.Message
+                });
+            }
+        }
+
         [HttpGet("{id}/vehicles")]
         public async Task<IActionResult> GetCustomerVehicles(
             int id,

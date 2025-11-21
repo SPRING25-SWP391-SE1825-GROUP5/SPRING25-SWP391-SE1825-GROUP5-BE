@@ -38,6 +38,7 @@ namespace EVServiceCenter.Application.Service
         private readonly IPartRepository _partRepository;
         private readonly IOrderRepository _orderRepository;
         private readonly IInventoryRepository _inventoryRepository;
+        private readonly IPromotionRepository _promotionRepository;
 
 
         public BookingService(
@@ -60,7 +61,8 @@ namespace EVServiceCenter.Application.Service
             IWorkOrderPartRepository workOrderPartRepository,
             IPartRepository partRepository,
             IOrderRepository orderRepository,
-            IInventoryRepository inventoryRepository)
+            IInventoryRepository inventoryRepository,
+            IPromotionRepository promotionRepository)
         {
             _bookingRepository = bookingRepository;
             _centerRepository = centerRepository;
@@ -82,6 +84,7 @@ namespace EVServiceCenter.Application.Service
             _partRepository = partRepository;
             _orderRepository = orderRepository;
             _inventoryRepository = inventoryRepository;
+            _promotionRepository = promotionRepository;
         }
 
         public async Task<AvailabilityResponse> GetAvailabilityAsync(int centerId, DateOnly date, List<int>? serviceIds = null)
@@ -717,6 +720,13 @@ namespace EVServiceCenter.Application.Service
                         // Clear applied credit
                         booking.AppliedCreditId = null;
                     }
+                }
+
+                // Mark applied promotions as USED when booking is COMPLETED
+                // Ngăn khách hàng sử dụng lại mã khuyến mãi sau khi booking hoàn thành
+                if (string.Equals(normalizedStatus, BookingStatusConstants.Completed, StringComparison.OrdinalIgnoreCase))
+                {
+                    await MarkPromotionAsUsedAsync(booking.BookingId);
                 }
 
                 // Lock technician timeslot when booking is confirmed
@@ -2208,6 +2218,46 @@ namespace EVServiceCenter.Application.Service
             _logger.LogInformation(
                 "Đã trả lại {Quantity} units của part {PartId} vào center {CenterId}. CurrentStock: {CurrentStock}, ReservedQty: {ReservedQty}",
                 quantity, orderItem.PartId, centerId, invPart.CurrentStock, invPart.ReservedQty);
+        }
+
+        /// <summary>
+        /// Đánh dấu promotion đã áp dụng vào booking này là USED (đã sử dụng)
+        /// Mục đích: Ngăn khách hàng sử dụng lại mã khuyến mãi sau khi booking hoàn thành
+        /// </summary>
+        private async Task MarkPromotionAsUsedAsync(int bookingId)
+        {
+            try
+            {
+                // Lấy tất cả promotions đã APPLIED vào booking này
+                var appliedPromotions = await _promotionRepository.GetUserPromotionsByBookingAsync(bookingId);
+                
+                // Chỉ xử lý những promotion có status = "APPLIED"
+                var promotionsToMark = appliedPromotions.Where(p => 
+                    string.Equals(p.Status, "APPLIED", StringComparison.OrdinalIgnoreCase)
+                ).ToList();
+
+                if (promotionsToMark.Any())
+                {
+                    foreach (var promo in promotionsToMark)
+                    {
+                        // Đổi status từ APPLIED → USED
+                        promo.Status = "USED";
+                        promo.UsedAt = DateTime.UtcNow; // Cập nhật thời gian sử dụng thực tế
+                        
+                        await _promotionRepository.UpdateUserPromotionAsync(promo);
+                        
+                        _logger.LogInformation(
+                            "Đã đánh dấu promotion {PromotionCode} (UserPromotionId: {UserPromotionId}) là USED cho booking {BookingId}",
+                            promo.Promotion?.Code, promo.UserPromotionId, bookingId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi nhưng không throw để không ảnh hưởng đến flow chính
+                _logger.LogError(ex, 
+                    "Lỗi khi đánh dấu promotion là USED cho booking {BookingId}", bookingId);
+            }
         }
     }
 }

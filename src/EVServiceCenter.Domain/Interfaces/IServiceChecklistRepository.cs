@@ -16,6 +16,7 @@ public interface IServiceChecklistRepository
     Task<int> CreateTemplateAsync(ServiceChecklistTemplate template, IEnumerable<ServiceChecklistTemplateItem> items);
     Task UpdateTemplateAsync(ServiceChecklistTemplate template);
     Task UpsertItemsAsync(int templateId, IEnumerable<ServiceChecklistTemplateItem> items);
+    Task DeleteItemsBatchAsync(int templateId, IEnumerable<int> categoryIds);
     Task SetActiveAsync(int templateId, bool isActive);
     Task DeleteTemplateAsync(int templateId);
 

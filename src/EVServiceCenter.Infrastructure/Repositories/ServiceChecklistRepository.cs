@@ -113,6 +113,24 @@ public class ServiceChecklistRepository : IServiceChecklistRepository
         await _db.SaveChangesAsync();
     }
 
+    public async Task DeleteItemsBatchAsync(int templateId, IEnumerable<int> categoryIds)
+    {
+        var categoryIdList = categoryIds.ToList();
+        if (!categoryIdList.Any())
+            return;
+
+        // Xóa tất cả items có TemplateID và CategoryId khớp
+        var itemsToDelete = await _db.ServiceChecklistTemplateItems
+            .Where(i => i.TemplateID == templateId && i.CategoryId.HasValue && categoryIdList.Contains(i.CategoryId.Value))
+            .ToListAsync();
+
+        if (itemsToDelete.Any())
+        {
+            _db.ServiceChecklistTemplateItems.RemoveRange(itemsToDelete);
+            await _db.SaveChangesAsync();
+        }
+    }
+
     public async Task SetActiveAsync(int templateId, bool isActive)
     {
         var tmpl = await _db.ServiceChecklistTemplates.FirstOrDefaultAsync(t => t.TemplateID == templateId);

@@ -1,14 +1,31 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Net.Mail;
-using System.Net;
+using System.IO;
 using System.Threading.Tasks;
 using EVServiceCenter.Application.Interfaces;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using System.Net.Mail;
+using System.Net;
+using System.Text;
+using System.Linq;
 
 namespace EVServiceCenter.Application.Service
 {
+    public class InvoicePartItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public int Quantity { get; set; }
+        public decimal Amount { get; set; }
+    }
+
+    public class InvoicePromotionItem
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public decimal DiscountAmount { get; set; }
+    }
+
     public class EmailService : IEmailService
     {
         private readonly IConfiguration _config;
@@ -192,7 +209,7 @@ namespace EVServiceCenter.Application.Service
                         {"baseUrl", _baseUrl},
                         {"supportPhone", _supportPhone},
                         {"year", DateTime.UtcNow.Year.ToString()},
-                        {"logoUrl", _baseUrl.TrimEnd('/') + "/email/logo.webp"}
+                        {"logoUrl", _baseUrl.TrimEnd('/') + (_config["Assets:LogoUrl"] ?? "/email/logo.webp")}
                     }
                 );
                 
@@ -219,7 +236,8 @@ namespace EVServiceCenter.Application.Service
                             {"fullName", fullName},
                             {"baseUrl", _baseUrl},
                             {"supportPhone", _supportPhone},
-                            {"year", DateTime.UtcNow.Year.ToString()}
+                            {"year", DateTime.UtcNow.Year.ToString()},
+                            {"logoUrl", _baseUrl.TrimEnd('/') + (_config["Assets:LogoUrl"] ?? "/email/10.webp")}
                         }
                     );
                     
@@ -304,14 +322,207 @@ namespace EVServiceCenter.Application.Service
                     {"baseUrl", _baseUrl},
                     {"supportPhone", _supportPhone},
                     {"year", DateTime.UtcNow.Year.ToString()},
-                    {"logoUrl", _baseUrl.TrimEnd('/') + "/email/logo.webp"}
+                    {"logoUrl", _baseUrl.TrimEnd('/') + (_config["Assets:LogoUrl"] ?? "/email/logo.webp")}
                 };
+
+                // Note: Parts and promotions data would need to be passed as parameters if needed
 
                 return await _templateRenderer.RenderAsync("invoice", placeholders);
             }
             catch (Exception ex)
             {
                 throw new Exception($"Không thể render template email hóa đơn: {ex.Message}", ex);
+            }
+        }
+
+        // ===== BOOKING EMAIL TEMPLATES =====
+        
+        public async Task SendBookingConfirmationEmailAsync(string toEmail, string customerName, string bookingCode, string bookingDate, string serviceName, string centerName)
+        {
+            try
+            {
+                var subject = $"Xác nhận đặt lịch bảo dưỡng - {bookingCode}";
+                var body = await _templateRenderer.RenderAsync(
+                    "booking-confirmation",
+                    new Dictionary<string, string>
+                    {
+                        {"customerName", customerName},
+                        {"bookingCode", bookingCode},
+                        {"bookingDate", bookingDate},
+                        {"serviceName", serviceName},
+                        {"centerName", centerName},
+                        {"baseUrl", _baseUrl},
+                        {"supportPhone", _supportPhone},
+                        {"year", DateTime.UtcNow.Year.ToString()}
+                    }
+                );
+                await SendEmailAsync(toEmail, subject, body);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Không thể gửi email xác nhận đặt lịch: {ex.Message}", ex);
+            }
+        }
+
+        public async Task SendBookingReminderEmailAsync(string toEmail, string customerName, string bookingCode, string bookingDateTime, string centerName)
+        {
+            try
+            {
+                var subject = $"Nhắc nhở: Lịch bảo dưỡng vào ngày mai - {bookingCode}";
+                var body = await _templateRenderer.RenderAsync(
+                    "booking-reminder",
+                    new Dictionary<string, string>
+                    {
+                        {"customerName", customerName},
+                        {"bookingCode", bookingCode},
+                        {"bookingDateTime", bookingDateTime},
+                        {"centerName", centerName},
+                        {"baseUrl", _baseUrl},
+                        {"supportPhone", _supportPhone},
+                        {"year", DateTime.UtcNow.Year.ToString()}
+                    }
+                );
+                await SendEmailAsync(toEmail, subject, body);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Không thể gửi email nhắc nhở: {ex.Message}", ex);
+            }
+        }
+
+        public async Task SendBookingCancellationEmailAsync(string toEmail, string customerName, string bookingCode, string reason)
+        {
+            try
+            {
+                var subject = $"Thông báo hủy lịch bảo dưỡng - {bookingCode}";
+                var body = await _templateRenderer.RenderAsync(
+                    "booking-cancellation",
+                    new Dictionary<string, string>
+                    {
+                        {"customerName", customerName},
+                        {"bookingCode", bookingCode},
+                        {"reason", reason},
+                        {"baseUrl", _baseUrl},
+                        {"supportPhone", _supportPhone},
+                        {"year", DateTime.UtcNow.Year.ToString()}
+                    }
+                );
+                await SendEmailAsync(toEmail, subject, body);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Không thể gửi email hủy lịch: {ex.Message}", ex);
+            }
+        }
+
+        public async Task SendBookingCompletedEmailAsync(string toEmail, string customerName, string bookingCode, string serviceName, string totalAmount)
+        {
+            try
+            {
+                var subject = $"Hoàn thành dịch vụ bảo dưỡng - {bookingCode}";
+                var body = await _templateRenderer.RenderAsync(
+                    "booking-completed",
+                    new Dictionary<string, string>
+                    {
+                        {"customerName", customerName},
+                        {"bookingCode", bookingCode},
+                        {"serviceName", serviceName},
+                        {"totalAmount", totalAmount},
+                        {"baseUrl", _baseUrl},
+                        {"supportPhone", _supportPhone},
+                        {"year", DateTime.UtcNow.Year.ToString()}
+                    }
+                );
+                await SendEmailAsync(toEmail, subject, body);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Không thể gửi email hoàn thành dịch vụ: {ex.Message}", ex);
+            }
+        }
+
+        // ===== PAYMENT EMAIL TEMPLATES =====
+        
+        public async Task SendPaymentConfirmationEmailAsync(string toEmail, string customerName, string invoiceId, string amount, string paymentMethod)
+        {
+            try
+            {
+                var subject = $"Xác nhận thanh toán - Hóa đơn {invoiceId}";
+                var body = await _templateRenderer.RenderAsync(
+                    "payment-confirmation",
+                    new Dictionary<string, string>
+                    {
+                        {"customerName", customerName},
+                        {"invoiceId", invoiceId},
+                        {"amount", amount},
+                        {"paymentMethod", paymentMethod},
+                        {"paymentDate", DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm")},
+                        {"baseUrl", _baseUrl},
+                        {"supportPhone", _supportPhone},
+                        {"year", DateTime.UtcNow.Year.ToString()}
+                    }
+                );
+                await SendEmailAsync(toEmail, subject, body);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Không thể gửi email xác nhận thanh toán: {ex.Message}", ex);
+            }
+        }
+
+        // ===== MAINTENANCE EMAIL TEMPLATES =====
+        
+        public async Task SendMaintenanceReminderEmailAsync(string toEmail, string customerName, string vehicleInfo, string recommendedDate)
+        {
+            try
+            {
+                var subject = "Nhắc nhở bảo dưỡng định kỳ - EV Service Center";
+                var body = await _templateRenderer.RenderAsync(
+                    "maintenance-reminder",
+                    new Dictionary<string, string>
+                    {
+                        {"customerName", customerName},
+                        {"vehicleInfo", vehicleInfo},
+                        {"recommendedDate", recommendedDate},
+                        {"baseUrl", _baseUrl},
+                        {"supportPhone", _supportPhone},
+                        {"year", DateTime.UtcNow.Year.ToString()}
+                    }
+                );
+                await SendEmailAsync(toEmail, subject, body);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Không thể gửi email nhắc nhở bảo dưỡng: {ex.Message}", ex);
+            }
+        }
+
+        // ===== PROMOTION EMAIL TEMPLATES =====
+        
+        public async Task SendPromotionEmailAsync(string toEmail, string customerName, string promotionTitle, string promotionDescription, string discountAmount, string validUntil)
+        {
+            try
+            {
+                var subject = $"🎉 Ưu đãi đặc biệt: {promotionTitle}";
+                var body = await _templateRenderer.RenderAsync(
+                    "promotion",
+                    new Dictionary<string, string>
+                    {
+                        {"customerName", customerName},
+                        {"promotionTitle", promotionTitle},
+                        {"promotionDescription", promotionDescription},
+                        {"discountAmount", discountAmount},
+                        {"validUntil", validUntil},
+                        {"baseUrl", _baseUrl},
+                        {"supportPhone", _supportPhone},
+                        {"year", DateTime.UtcNow.Year.ToString()}
+                    }
+                );
+                await SendEmailAsync(toEmail, subject, body);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Không thể gửi email khuyến mãi: {ex.Message}", ex);
             }
         }
         }

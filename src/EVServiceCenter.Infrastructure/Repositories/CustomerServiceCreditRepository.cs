@@ -27,6 +27,18 @@ public class CustomerServiceCreditRepository : ICustomerServiceCreditRepository
             .FirstOrDefaultAsync(csc => csc.CreditId == creditId);
     }
 
+    public async Task<List<CustomerServiceCredit>> GetByIdsAsync(List<int> creditIds)
+    {
+        if (!creditIds.Any()) return new List<CustomerServiceCredit>();
+        
+        return await _context.CustomerServiceCredits
+            .Include(csc => csc.Customer)
+            .Include(csc => csc.ServicePackage)
+            .Include(csc => csc.Service)
+            .Where(csc => creditIds.Contains(csc.CreditId))
+            .ToListAsync();
+    }
+
     public async Task<IEnumerable<CustomerServiceCredit>> GetByCustomerIdAsync(int customerId)
     {
         return await _context.CustomerServiceCredits

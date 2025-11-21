@@ -507,5 +507,18 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .OrderByDescending(b => b.UpdatedAt)
                 .ToListAsync();
         }
+
+        public async Task<List<Booking>> GetBookingsForAutoCompleteAsync(DateTime workDateUtc)
+        {
+            var date = workDateUtc.Date;
+
+            return await _context.Bookings
+                .Include(b => b.TechnicianTimeSlot!)
+                    .ThenInclude(tts => tts.Slot!)
+                .Where(b => b.TechnicianTimeSlot != null
+                            && b.TechnicianTimeSlot.WorkDate.Date == date
+                            && (b.Status == "CHECKED_IN" || b.Status == "IN_PROGRESS"))
+                .ToListAsync();
+        }
     }
 }

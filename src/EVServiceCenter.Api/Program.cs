@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // EVServiceCenter API - Entry Point
 // ============================================================================
 // Main configuration file for the EVServiceCenter API application
@@ -434,6 +434,7 @@ builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<INotificationHub, EVServiceCenter.Api.Services.NotificationHubService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<BookingPendingCancellationService>();
+builder.Services.AddHostedService<BookingInProgressAutoCompleteService>();
 builder.Services.AddHostedService<PromotionAppliedCleanupService>();
 builder.Services.AddHostedService<SlotAvailabilityUpdateService>();
 builder.Services.AddHostedService<PromotionExpiredUpdateService>();
@@ -559,6 +560,7 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("ADMIN"));
     options.AddPolicy("StaffOrAdmin", policy => policy.RequireRole("ADMIN", "STAFF", "TECHNICIAN"));
+    options.AddPolicy("StaffOrAdminOrManager", policy => policy.RequireRole("ADMIN", "STAFF", "TECHNICIAN", "MANAGER"));
     options.AddPolicy("TechnicianOrAdmin", policy => policy.RequireRole("ADMIN", "TECHNICIAN"));
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });

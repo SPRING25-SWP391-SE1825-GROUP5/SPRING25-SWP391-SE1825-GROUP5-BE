@@ -444,7 +444,10 @@ namespace EVServiceCenter.WebAPI.Controllers
             var items = await _promotionRepo.GetUserPromotionsByCustomerAsync(customerId);
 
             var today = DateOnly.FromDateTime(DateTime.Today);
-            var result = items.Select(x => {
+            var result = items
+                // Loại bỏ promotions đã USED (1 mã chỉ dùng 1 lần, không thể sử dụng lại)
+                .Where(x => !string.Equals(x.Status, "USED", StringComparison.OrdinalIgnoreCase))
+                .Select(x => {
                 var promo = x.Promotion;
                 if (promo == null) return null;
 

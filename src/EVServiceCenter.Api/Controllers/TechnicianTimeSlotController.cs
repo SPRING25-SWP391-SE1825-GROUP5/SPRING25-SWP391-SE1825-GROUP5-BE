@@ -65,7 +65,7 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         [HttpPost("technician/{technicianId}/full-week-all-slots")]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Policy = "StaffOrAdminOrManager")]
         public async Task<IActionResult> CreateFullWeekAllSlots(int technicianId, [FromBody] CreateTechnicianFullWeekAllSlotsRequest req)
         {
             if (req == null) return BadRequest(new { success = false, message = "Body rỗng" });
@@ -281,7 +281,7 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         [HttpPost]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Policy = "StaffOrAdminOrManager")]
         public async Task<IActionResult> CreateTechnicianTimeSlot([FromBody] CreateTechnicianTimeSlotRequest request)
         {
             try
@@ -333,7 +333,7 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         [HttpPost("weekly")]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Policy = "StaffOrAdminOrManager")]
         public async Task<IActionResult> CreateWeeklyTechnicianTimeSlot([FromBody] CreateWeeklyTechnicianTimeSlotRequest request)
         {
             try
@@ -387,7 +387,7 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         [HttpPost("all-technicians")]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Policy = "StaffOrAdminOrManager")]
         public async Task<IActionResult> CreateAllTechniciansTimeSlot([FromBody] CreateAllTechniciansTimeSlotRequest request)
         {
             try
@@ -442,7 +442,7 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         [HttpPost("all-technicians-weekly")]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Policy = "StaffOrAdminOrManager")]
         public async Task<IActionResult> CreateAllTechniciansWeeklyTimeSlot([FromBody] CreateAllTechniciansWeeklyTimeSlotRequest request)
         {
             try
@@ -497,7 +497,7 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Policy = "StaffOrAdminOrManager")]
         public async Task<IActionResult> UpdateTechnicianTimeSlot(int id, [FromBody] UpdateTechnicianTimeSlotRequest request)
         {
             try
@@ -537,7 +537,7 @@ namespace EVServiceCenter.Api.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Policy = "StaffOrAdmin")]
+        [Authorize(Policy = "StaffOrAdminOrManager")]
         public async Task<IActionResult> DeleteTechnicianTimeSlot(int id)
         {
             try

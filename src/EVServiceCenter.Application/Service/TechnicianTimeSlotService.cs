@@ -83,10 +83,18 @@ namespace EVServiceCenter.Application.Service
                 response.Success = false;
 
                 // Check for duplicate key constraint violation
-                if (ex.Message.Contains("UNIQUE") || ex.Message.Contains("duplicate") || ex.Message.Contains("UQ_"))
+                if (ex.Message.Contains("UNIQUE") || ex.Message.Contains("duplicate") || ex.Message.Contains("UQ_") || 
+                    ex.InnerException?.Message.Contains("duplicate") == true)
                 {
                     var workDate = request.WorkDate.ToString("dd/MM/yyyy");
-                    response.Message = $"Lịch cho kỹ thuật viên đã tồn tại vào ngày {workDate} với khung giờ này. Vui lòng chọn ngày khác hoặc khung giờ khác.";
+                    var slotTime = request.SlotId == 1 ? "sáng (8:00-12:00)" : "chiều (14:00-18:00)";
+                    response.Message = $"❌ Lịch đã tồn tại!\n\n" +
+                                      $"Kỹ thuật viên này đã có lịch làm việc vào:\n" +
+                                      $"📅 Ngày: {workDate}\n" +
+                                      $"⏰ Khung giờ: {slotTime}\n\n" +
+                                      $"💡 Gợi ý: Bạn có thể:\n" +
+                                      $"   • Chọn ngày khác\n" +
+                                      $"   • Xem lại lịch đã tạo bằng cách click vào tên kỹ thuật viên";
                 }
                 else
                 {
@@ -137,8 +145,8 @@ namespace EVServiceCenter.Application.Service
                 var currentDate = request.StartDate;
                 while (currentDate <= request.EndDate)
                 {
-                    // Skip weekend (Saturday = 6, Sunday = 0)
-                    if (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday)
+                    // Skip Sunday only (Sunday = 0)
+                    if (currentDate.DayOfWeek == DayOfWeek.Sunday)
                     {
                         weekendDaysSkipped++;
                         weekendDatesSkipped.Add(currentDate.ToString("dd/MM/yyyy"));
@@ -220,7 +228,7 @@ namespace EVServiceCenter.Application.Service
 
                     if (weekendDaysSkipped > 0)
                     {
-                        message += $". Đã tự động bỏ qua {weekendDaysSkipped} ngày cuối tuần (Thứ 7 và Chủ nhật): {string.Join(", ", weekendDatesSkipped)}";
+                        message += $". Đã tự động bỏ qua {weekendDaysSkipped} ngày Chủ nhật: {string.Join(", ", weekendDatesSkipped)}";
                     }
 
                     if (skippedDates.Count > 0)
@@ -238,8 +246,8 @@ namespace EVServiceCenter.Application.Service
 
                     if (weekendDaysSkipped == totalDaysInRange)
                     {
-                        // Tất cả ngày trong khoảng đều là cuối tuần
-                        response.Message = $"Không thể tạo lịch nào. Tất cả {totalDaysInRange} ngày trong khoảng đều là cuối tuần (Thứ 7 và Chủ nhật) và đã được tự động bỏ qua: {string.Join(", ", weekendDatesSkipped)}. Vui lòng chọn khoảng ngày khác bao gồm các ngày trong tuần.";
+                        // Tất cả ngày trong khoảng đều là Chủ nhật
+                        response.Message = $"Không thể tạo lịch nào. Tất cả {totalDaysInRange} ngày trong khoảng đều là Chủ nhật và đã được tự động bỏ qua: {string.Join(", ", weekendDatesSkipped)}. Vui lòng chọn khoảng ngày khác bao gồm các ngày làm việc (Thứ 2 - Thứ 7).";
                     }
                     else if (skippedDates.Count == (totalDaysInRange - weekendDaysSkipped))
                     {
@@ -248,7 +256,7 @@ namespace EVServiceCenter.Application.Service
                         response.Message = $"Không thể tạo lịch nào. Tất cả {workingDaysCount} ngày làm việc trong khoảng đã có lịch cho slot này: {string.Join(", ", skippedDates)}.";
                         if (weekendDaysSkipped > 0)
                         {
-                            response.Message += $" Đã tự động bỏ qua {weekendDaysSkipped} ngày cuối tuần: {string.Join(", ", weekendDatesSkipped)}.";
+                            response.Message += $" Đã tự động bỏ qua {weekendDaysSkipped} ngày Chủ nhật: {string.Join(", ", weekendDatesSkipped)}.";
                         }
                     }
                     else
@@ -257,7 +265,7 @@ namespace EVServiceCenter.Application.Service
                         response.Message = "Không thể tạo lịch nào. ";
                         if (weekendDaysSkipped > 0)
                         {
-                            response.Message += $"Đã tự động bỏ qua {weekendDaysSkipped} ngày cuối tuần: {string.Join(", ", weekendDatesSkipped)}. ";
+                            response.Message += $"Đã tự động bỏ qua {weekendDaysSkipped} ngày Chủ nhật: {string.Join(", ", weekendDatesSkipped)}. ";
                         }
                         if (skippedDates.Count > 0)
                         {
@@ -428,8 +436,8 @@ namespace EVServiceCenter.Application.Service
 
                     while (currentDate <= request.EndDate)
                     {
-                        // Skip weekend (Saturday = 6, Sunday = 0)
-                        if (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday)
+                        // Skip Sunday only (Sunday = 0)
+                        if (currentDate.DayOfWeek == DayOfWeek.Sunday)
                         {
                             weekendDaysSkippedForTechnician++;
                             currentDate = currentDate.AddDays(1);
@@ -464,10 +472,10 @@ namespace EVServiceCenter.Application.Service
                         currentDate = currentDate.AddDays(1);
                     }
 
-                    // Add weekend info to summary if weekend was skipped
+                    // Add Sunday info to summary if Sunday was skipped
                     if (weekendDaysSkippedForTechnician > 0)
                     {
-                        technicianSummary.DayNames.Insert(0, $"[Đã bỏ qua {weekendDaysSkippedForTechnician} ngày cuối tuần]");
+                        technicianSummary.DayNames.Insert(0, $"[Đã bỏ qua {weekendDaysSkippedForTechnician} ngày Chủ nhật]");
                     }
 
                     technicianTimeSlots.Add(technicianSummary);
@@ -476,21 +484,21 @@ namespace EVServiceCenter.Application.Service
                 response.Success = true;
                 var message = $"Tạo lịch tuần cho tất cả technician thành công. Đã tạo {totalCreated} lịch trình cho {technicians.Count()} technician";
 
-                // Check if any weekend days were skipped (same for all technicians in same date range)
+                // Check if any Sunday was skipped (same for all technicians in same date range)
                 var testDate = request.StartDate;
-                var totalWeekendDaysInRange = 0;
+                var totalSundaysInRange = 0;
                 while (testDate <= request.EndDate)
                 {
-                    if (testDate.DayOfWeek == DayOfWeek.Saturday || testDate.DayOfWeek == DayOfWeek.Sunday)
+                    if (testDate.DayOfWeek == DayOfWeek.Sunday)
                     {
-                        totalWeekendDaysInRange++;
+                        totalSundaysInRange++;
                     }
                     testDate = testDate.AddDays(1);
                 }
 
-                if (totalWeekendDaysInRange > 0)
+                if (totalSundaysInRange > 0)
                 {
-                    message += $". Đã tự động bỏ qua {totalWeekendDaysInRange} ngày cuối tuần (Thứ 7 và Chủ nhật) cho mỗi technician";
+                    message += $". Đã tự động bỏ qua {totalSundaysInRange} ngày Chủ nhật cho mỗi technician";
                 }
 
                 response.Message = message;
@@ -715,8 +723,8 @@ namespace EVServiceCenter.Application.Service
 
                 while (currentDate <= request.EndDate.Date)
                 {
-                    // Skip weekend (Saturday = 6, Sunday = 0)
-                    if (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday)
+                    // Skip Sunday only (Sunday = 0)
+                    if (currentDate.DayOfWeek == DayOfWeek.Sunday)
                     {
                         weekendDaysSkipped++;
                         weekendDatesSkipped.Add(currentDate.ToString("dd/MM/yyyy"));
@@ -796,7 +804,7 @@ namespace EVServiceCenter.Application.Service
                 }
                 if (weekendDaysSkipped > 0)
                 {
-                    message += $". Đã tự động bỏ qua {weekendDaysSkipped} ngày cuối tuần (Thứ 7 và Chủ nhật): {string.Join(", ", weekendDatesSkipped)}";
+                    message += $". Đã tự động bỏ qua {weekendDaysSkipped} ngày Chủ nhật: {string.Join(", ", weekendDatesSkipped)}";
                 }
                 response.Message = message;
                 return response;

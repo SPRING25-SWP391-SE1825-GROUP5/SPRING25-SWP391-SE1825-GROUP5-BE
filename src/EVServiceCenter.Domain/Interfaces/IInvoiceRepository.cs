@@ -8,6 +8,7 @@ namespace EVServiceCenter.Domain.Interfaces
     public interface IInvoiceRepository
     {
         Task<Invoice?> GetByBookingIdAsync(int bookingId);
+        Task<List<Invoice>> GetByBookingIdsAsync(List<int> bookingIds);
         // GetByWorkOrderIdAsync removed - WorkOrder functionality merged into Booking
         Task<Invoice?> GetByOrderIdAsync(int orderId);
         Task<Invoice> CreateMinimalAsync(Invoice invoice);

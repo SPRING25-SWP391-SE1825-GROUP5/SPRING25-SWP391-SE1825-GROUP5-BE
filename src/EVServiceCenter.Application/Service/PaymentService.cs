@@ -679,60 +679,108 @@ public class PaymentService
 			}
 		}
 
+		// Gửi email trong background để không làm chậm redirect
 		try
 		{
 			var customerEmail = booking.Customer?.User?.Email;
 			if (!string.IsNullOrEmpty(customerEmail))
 			{
-				var subject = $"Hóa đơn thanh toán - Booking #{booking.BookingId}";
-				var body = await _emailService.RenderInvoiceEmailTemplateAsync(
-					booking.Customer?.User?.FullName ?? "Khách hàng",
-					$"INV-{booking.BookingId:D6}",
-					booking.BookingId.ToString(),
-					DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm"),
-					customerEmail,
-					booking.Service?.ServiceName ?? "N/A",
-					(booking.Service?.BasePrice ?? 0m).ToString("N0"),
-					payment.Amount.ToString("N0"),
-					booking.AppliedCreditId.HasValue,
-					booking.AppliedCreditId.HasValue ? (payment.Amount * 0.1m).ToString("N0") : "0"
-				);
-
-				var invoicePdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
-
-				byte[]? maintenancePdfContent = null;
-				try
+				// Sử dụng Task.Run để chạy email processing trong background
+				_ = Task.Run(async () =>
 				{
-					maintenancePdfContent = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(booking.BookingId);
-				}
-				catch (Exception)
-				{
-				}
-
-				if (maintenancePdfContent != null)
-				{
-					var attachments = new List<(string fileName, byte[] content, string mimeType)>
+					try
 					{
-						($"Invoice_Booking_{booking.BookingId}.pdf", invoicePdfContent, "application/pdf"),
-						($"MaintenanceReport_Booking_{booking.BookingId}.pdf", maintenancePdfContent, "application/pdf")
-					};
+						// Lấy thông tin phụ tùng phát sinh
+						var workOrderParts = await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId);
+						var parts = workOrderParts
+							.Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied)
+							.Select(p => new EVServiceCenter.Application.Service.InvoicePartItem
+							{
+								Name = p.Part?.PartName ?? $"Phụ tùng #{p.PartId}",
+								Quantity = p.QuantityUsed,
+								Amount = p.QuantityUsed * (p.Part?.Price ?? 0)
+							}).ToList();
 
-					await _emailService.SendEmailWithMultipleAttachmentsAsync(customerEmail, subject, body, attachments);
-				}
-				else
-				{
-					await _emailService.SendEmailWithAttachmentAsync(
-						customerEmail,
-						subject,
-						body,
-						$"Invoice_Booking_{booking.BookingId}.pdf",
-						invoicePdfContent,
-						"application/pdf");
-				}
+						// Tính lại packageDiscountAmount trong scope này
+						var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+						decimal packageDiscountAmount = 0m;
+						if (booking.AppliedCreditId.HasValue)
+						{
+							var appliedCredit = await _customerServiceCreditRepository.GetByIdAsync(booking.AppliedCreditId.Value);
+							if (appliedCredit?.ServicePackage != null)
+							{
+								packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+							}
+						}
+
+						// Lấy thông tin promotion đã áp dụng
+						var userPromotions = await _promotionRepository.GetUserPromotionsByBookingAsync(booking.BookingId);
+						var promotions = userPromotions?
+							.Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+							.Select(up => new EVServiceCenter.Application.Service.InvoicePromotionItem
+							{
+								Code = up.Promotion?.Code ?? "N/A",
+								Description = up.Promotion?.Description ?? "Khuyến mãi",
+								DiscountAmount = up.DiscountAmount
+							}).ToList() ?? new List<EVServiceCenter.Application.Service.InvoicePromotionItem>();
+
+						var subject = $"Hóa đơn thanh toán - Booking #{booking.BookingId}";
+						var body = await _emailService.RenderInvoiceEmailTemplateAsync(
+							booking.Customer?.User?.FullName ?? "Khách hàng",
+							$"INV-{booking.BookingId:D6}",
+							booking.BookingId.ToString(),
+							DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm"),
+							customerEmail,
+							booking.Service?.ServiceName ?? "N/A",
+							(booking.Service?.BasePrice ?? 0m).ToString("N0"),
+							payment.Amount.ToString("N0"),
+							booking.AppliedCreditId.HasValue,
+							packageDiscountAmount.ToString("N0")
+						);
+
+						var invoicePdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
+
+						byte[]? maintenancePdfContent = null;
+						try
+						{
+							maintenancePdfContent = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(booking.BookingId);
+						}
+						catch (Exception)
+						{
+						}
+
+						if (maintenancePdfContent != null)
+						{
+							var attachments = new List<(string fileName, byte[] content, string mimeType)>
+							{
+								($"Invoice_Booking_{booking.BookingId}.pdf", invoicePdfContent, "application/pdf"),
+								($"MaintenanceReport_Booking_{booking.BookingId}.pdf", maintenancePdfContent, "application/pdf")
+							};
+
+							await _emailService.SendEmailWithMultipleAttachmentsAsync(customerEmail, subject, body, attachments);
+						}
+						else
+						{
+							await _emailService.SendEmailWithAttachmentAsync(
+								customerEmail,
+								subject,
+								body,
+								$"Invoice_Booking_{booking.BookingId}.pdf",
+								invoicePdfContent,
+								"application/pdf");
+						}
+					}
+					catch (Exception ex)
+					{
+						// Log error nhưng không throw để không crash background task
+						System.Console.WriteLine($"Background email error for booking {booking.BookingId}: {ex.Message}");
+					}
+				});
 			}
 		}
 		catch (Exception)
 		{
+			// Ignore email errors để không ảnh hưởng đến payment confirmation
 		}
 
         if (booking.Customer?.User?.UserId != null)

@@ -8,6 +8,7 @@ namespace EVServiceCenter.Domain.Interfaces
     public interface IWorkOrderPartRepository
     {
         Task<List<WorkOrderPart>> GetByBookingIdAsync(int bookingId);
+        Task<List<WorkOrderPart>> GetByBookingIdsAsync(List<int> bookingIds);
         Task<List<WorkOrderPart>> GetByCenterAndDateRangeAsync(int centerId, DateTime startDate, DateTime endDate);
         Task<WorkOrderPart?> GetByIdAsync(int workOrderPartId);
         Task<WorkOrderPart> AddAsync(WorkOrderPart item);

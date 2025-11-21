@@ -215,6 +215,17 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<List<UserPromotion>> GetUserPromotionsByBookingIdsAsync(List<int> bookingIds)
+        {
+            if (!bookingIds.Any()) return new List<UserPromotion>();
+            
+            return await _context.UserPromotions
+                .Include(up => up.Promotion)
+                .Where(up => up.BookingId.HasValue && bookingIds.Contains(up.BookingId.Value))
+                .OrderByDescending(up => up.UsedAt)
+                .ToListAsync();
+        }
+
         public async Task<bool> DeleteUserPromotionByBookingAndCodeAsync(int bookingId, string promotionCode)
         {
             var up = await _context.UserPromotions

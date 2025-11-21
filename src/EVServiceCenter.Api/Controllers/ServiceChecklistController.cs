@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using EVServiceCenter.Domain.Interfaces;
@@ -138,6 +140,70 @@ public class ServiceChecklistController : ControllerBase
         catch (Exception ex)
         {
             return StatusCode(500, new { success = false, message = "Lỗi khi cập nhật items", error = ex.Message });
+        }
+    }
+
+    [HttpPost("{templateId}/parts/batch")]
+    public async Task<IActionResult> AddPartsBatch(int templateId, [FromBody] AddPartsBatchRequest request)
+    {
+        try
+        {
+            if (request?.PartIds == null || !request.PartIds.Any())
+                return BadRequest(new { success = false, message = "Danh sách partIds không được để trống" });
+
+            // Lấy danh sách items hiện tại của template
+            var existingItems = await _repo.GetItemsByTemplateAsync(templateId);
+            var existingCategoryIds = existingItems
+                .Where(i => i.CategoryId.HasValue && i.CategoryId != null)
+                .Select(i => i.CategoryId!.Value)
+                .ToHashSet();
+
+            // Check parts nào đã tồn tại
+            var duplicateIds = request.PartIds.Where(id => existingCategoryIds.Contains(id)).ToList();
+            
+            if (duplicateIds.Any())
+            {
+                return BadRequest(new { 
+                    success = false, 
+                    message = $"Các mục này đã tồn tại trong template: {string.Join(", ", duplicateIds)}",
+                    duplicateIds = duplicateIds
+                });
+            }
+
+            // Tạo items từ partIds (chỉ thêm những cái chưa có)
+            var newItems = request.PartIds.Select(partId => new ServiceChecklistTemplateItem
+            {
+                TemplateID = templateId,
+                CategoryId = partId
+            });
+
+            await _repo.UpsertItemsAsync(templateId, newItems);
+            return Ok(new { 
+                success = true, 
+                message = $"Đã thêm {request.PartIds.Count} mục vào template thành công",
+                templateId = templateId
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi thêm nhiều part vào template", error = ex.Message });
+        }
+    }
+
+    [HttpDelete("{templateId}/parts/batch")]
+    public async Task<IActionResult> DeletePartsBatch(int templateId, [FromBody] DeletePartsBatchRequest request)
+    {
+        try
+        {
+            if (request?.CategoryIds == null || !request.CategoryIds.Any())
+                return BadRequest(new { success = false, message = "Danh sách categoryIds không được để trống" });
+
+            await _repo.DeleteItemsBatchAsync(templateId, request.CategoryIds);
+            return Ok(new { success = true, message = $"Đã xóa {request.CategoryIds.Count} part(s) khỏi template thành công" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "Lỗi khi xóa nhiều part khỏi template", error = ex.Message });
         }
     }
 
@@ -330,6 +396,20 @@ public class CreateTemplateRequest
 {
     public ServiceChecklistTemplate Template { get; set; } = null!;
     public IEnumerable<ServiceChecklistTemplateItem> Items { get; set; } = null!;
+}
+
+public class AddPartsBatchRequest
+{
+    [Required(ErrorMessage = "PartIds is required")]
+    [JsonPropertyName("partIds")]
+    public List<int> PartIds { get; set; } = null!;
+}
+
+public class DeletePartsBatchRequest
+{
+    [Required(ErrorMessage = "CategoryIds is required")]
+    [JsonPropertyName("categoryIds")]
+    public List<int>? CategoryIds { get; set; }
 }
 
 public class SetActiveRequest

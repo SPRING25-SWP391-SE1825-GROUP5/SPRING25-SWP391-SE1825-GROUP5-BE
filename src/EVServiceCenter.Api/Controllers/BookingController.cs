@@ -574,11 +574,19 @@ namespace EVServiceCenter.WebAPI.Controllers
                         ? workDate.Value.ToString("yyyy-MM-dd")
                         : booking.BookingDate.ToString("yyyy-MM-dd");
 
-                    // Tạo QR code cho check-in (chứa bookingId)
-                    // QR code sẽ chứa bookingId để staff scan và check-in
-                    var qrCodeData = booking.BookingId.ToString();
-                    // Sử dụng QR code API online để tạo QR code image
-                    var qrCodeImageUrl = $"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={Uri.EscapeDataString(qrCodeData)}";
+                    // Tạo QR code cho check-in (chứa thông tin JSON giống frontend)
+                    var qrCodeDataObject = new
+                    {
+                        bookingId = booking.BookingId,
+                        timestamp = DateTime.UtcNow.ToString("O"),
+                        type = "CHECK_IN",
+                        expiry = DateTime.UtcNow.AddHours(24).ToString("O")
+                    };
+
+                    var qrCodeData = System.Text.Json.JsonSerializer.Serialize(qrCodeDataObject);
+                    // Sử dụng QR code API online để tạo QR code image (lấy từ config)
+                    var qrCodeApiUrl = _configuration["App:QrCodeApiUrl"] ?? "https://api.qrserver.com/v1/create-qr-code/";
+                    var qrCodeImageUrl = $"{qrCodeApiUrl}?size=300x300&data={Uri.EscapeDataString(qrCodeData)}";
 
                     var html = await _templateRenderer.RenderAsync("BookingCreated", new System.Collections.Generic.Dictionary<string, string>
                     {
@@ -629,10 +637,66 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var booking = await _bookingService.GetBookingByIdAsync(id);
 
+                // Lấy maintenance checklist nếu có
+                object? maintenanceChecklist = null;
+                var checklist = await _maintenanceChecklistRepository.GetByBookingIdAsync(id);
+                if (checklist != null)
+                {
+                    var results = await _maintenanceChecklistResultRepository.GetByChecklistIdAsync(checklist.ChecklistId);
+                    var items = results.Select(r => new
+                    {
+                        resultId = r.ResultId,
+                        partId = r.CategoryId,
+                        partName = r.Category?.CategoryName ?? "N/A",
+                        description = r.Description ?? "",
+                        result = r.Result ?? "PENDING",
+                        status = r.Status
+                    }).ToList();
+                    
+                    maintenanceChecklist = new
+                    {
+                        checklistId = checklist.ChecklistId,
+                        status = checklist.Status,
+                        createdAt = checklist.CreatedAt,
+                        items = items
+                    };
+                }
+
                 return Ok(new {
                     success = true,
                     message = "Lấy thông tin đặt lịch thành công",
-                    data = booking
+                    data = new
+                    {
+                        booking.BookingId,
+                        booking.CustomerId,
+                        booking.CustomerName,
+                        booking.VehicleId,
+                        booking.VehicleInfo,
+                        booking.CenterId,
+                        booking.CenterName,
+                        booking.BookingDate,
+                        booking.TechnicianSlotId,
+                        booking.SlotId,
+                        booking.SlotTime,
+                        booking.Status,
+                        booking.SpecialRequests,
+                        booking.TechnicianId,
+                        booking.TechnicianName,
+                        booking.CurrentMileage,
+                        booking.LicensePlate,
+                        booking.CreatedAt,
+                        booking.UpdatedAt,
+                        booking.AppliedCreditId,
+                        booking.PackageCode,
+                        booking.PackageName,
+                        booking.PackageDiscountPercent,
+                        booking.PackageDiscountAmount,
+                        booking.OriginalServicePrice,
+                        booking.TotalAmount,
+                        booking.PaymentType,
+                        booking.Services,
+                        maintenanceChecklist
+                    }
                 });
             }
             catch (ArgumentException ex)

@@ -103,7 +103,7 @@ namespace EVServiceCenter.WebAPI.Controllers
         }
 
         [HttpGet("employees")]
-        [Authorize(Roles = "ADMIN,MANAGER")]
+        [Authorize(Roles = "ADMIN,MANAGER,STAFF")]
         public async Task<IActionResult> GetCenterEmployees(
             [FromQuery] int? centerId = null,
             [FromQuery] bool unassigned = false,

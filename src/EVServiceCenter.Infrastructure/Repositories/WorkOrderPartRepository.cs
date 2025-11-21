@@ -22,6 +22,16 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<List<WorkOrderPart>> GetByBookingIdsAsync(List<int> bookingIds)
+        {
+            if (!bookingIds.Any()) return new List<WorkOrderPart>();
+            
+            return await _db.WorkOrderParts
+                .Include(x => x.Part)
+                .Where(x => bookingIds.Contains(x.BookingId))
+                .ToListAsync();
+        }
+
         public async Task<List<WorkOrderPart>> GetByCenterAndDateRangeAsync(int centerId, DateTime startDate, DateTime endDate)
         {
             return await _db.WorkOrderParts

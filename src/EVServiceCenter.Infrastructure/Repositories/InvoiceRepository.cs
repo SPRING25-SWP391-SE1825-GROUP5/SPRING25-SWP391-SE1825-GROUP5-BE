@@ -23,6 +23,18 @@ namespace EVServiceCenter.Infrastructure.Repositories
                 .FirstOrDefaultAsync(i => i.BookingId == bookingId);
         }
 
+        public async Task<List<Invoice>> GetByBookingIdsAsync(List<int> bookingIds)
+        {
+            if (!bookingIds.Any()) return new List<Invoice>();
+            
+            return await _db.Invoices
+                .Include(i => i.Payments)
+                .Include(i => i.Booking)
+                    .ThenInclude(b => b.Service)
+                .Where(i => i.BookingId.HasValue && bookingIds.Contains(i.BookingId.Value))
+                .ToListAsync();
+        }
+
         // GetByWorkOrderIdAsync removed - WorkOrder functionality merged into Booking
 
         public async Task<Invoice?> GetByOrderIdAsync(int orderId)

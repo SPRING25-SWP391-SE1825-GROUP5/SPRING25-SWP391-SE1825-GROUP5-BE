@@ -63,10 +63,35 @@
                     <span class="service-name">{{serviceName}}</span>
                     <span class="service-price">{{servicePrice}} VNĐ</span>
                 </div>
-                {{#if hasDiscount}}
+                
+                {{#if hasPackageDiscount}}
                 <div class="service-item">
-                    <span class="service-name" style="color: #dc3545;">Giảm giá</span>
-                    <span class="service-price" style="color: #dc3545;">-{{discountAmount}} VNĐ</span>
+                    <span class="service-name" style="color: #28a745;">Giảm giá gói dịch vụ</span>
+                    <span class="service-price" style="color: #28a745;">-{{packageDiscountAmount}} VNĐ</span>
+                </div>
+                {{/if}}
+                
+                {{#if hasParts}}
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e9ecef;">
+                    <h4 style="margin: 0 0 12px 0; color: #007bff; font-size: 16px;">Phụ tùng phát sinh</h4>
+                    {{#each parts}}
+                    <div class="service-item">
+                        <span class="service-name">{{this.name}} (SL: {{this.quantity}})</span>
+                        <span class="service-price">{{this.amount}} VNĐ</span>
+                    </div>
+                    {{/each}}
+                </div>
+                {{/if}}
+                
+                {{#if hasPromotions}}
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e9ecef;">
+                    <h4 style="margin: 0 0 12px 0; color: #28a745; font-size: 16px;">Mã khuyến mãi đã áp dụng</h4>
+                    {{#each promotions}}
+                    <div class="service-item" style="background: #f0fdf4; padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                        <span class="service-name" style="color: #065f46;">{{this.code}} - {{this.description}}</span>
+                        <span class="service-price" style="color: #059669;">-{{this.discountAmount}} VNĐ</span>
+                    </div>
+                    {{/each}}
                 </div>
                 {{/if}}
             </div>

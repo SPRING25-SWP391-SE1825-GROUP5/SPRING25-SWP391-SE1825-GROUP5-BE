@@ -8,6 +8,7 @@ namespace EVServiceCenter.Domain.Interfaces;
 public interface ICustomerServiceCreditRepository
 {
     Task<CustomerServiceCredit?> GetByIdAsync(int creditId);
+    Task<List<CustomerServiceCredit>> GetByIdsAsync(List<int> creditIds);
     Task<IEnumerable<CustomerServiceCredit>> GetByCustomerIdAsync(int customerId);
     Task<IEnumerable<CustomerServiceCredit>> GetActiveCreditsByCustomerIdAsync(int customerId);
     Task<IEnumerable<CustomerServiceCredit>> GetByServiceIdAsync(int serviceId);

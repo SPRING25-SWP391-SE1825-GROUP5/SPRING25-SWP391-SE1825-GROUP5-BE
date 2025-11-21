@@ -301,51 +301,44 @@ namespace EVServiceCenter.Application.Service
                 var totalItems = await _bookingRepository.CountBookingsByCustomerIdAsync(customerId, null, null, null);
                 var totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
 
-                // Optimize: Batch load all workOrderParts, invoices, and promotions in parallel
+                // Early return if no bookings found
+                if (!bookings.Any())
+                {
+                    response.Pagination = new EVServiceCenter.Application.Models.PaginationInfo
+                    {
+                        Page = pageNumber,
+                        PageSize = pageSize,
+                        TotalRecords = totalItems,
+                        TotalPages = totalPages
+                    };
+                    return response;
+                }
+
+                // OPTIMIZED: Batch load all related data in parallel with single queries
                 var bookingIds = bookings.Select(b => b.BookingId).ToList();
 
-                // Batch load workOrderParts for all bookings
-                var allWorkOrderParts = new List<Domain.Entities.WorkOrderPart>();
-                foreach (var bookingId in bookingIds)
-                {
-                    var parts = await _workOrderPartRepository.GetByBookingIdAsync(bookingId);
-                    allWorkOrderParts.AddRange(parts);
-                }
-                var workOrderPartsByBooking = allWorkOrderParts.GroupBy(p => p.BookingId).ToDictionary(g => g.Key, g => g.ToList());
+                // Execute batch queries sequentially to avoid DbContext threading issues
+                
+                // Task 1: Batch load ALL workOrderParts for all bookings in single query
+                var allWorkOrderParts = await _workOrderPartRepository.GetByBookingIdsAsync(bookingIds);
 
-                // Batch load invoices for all bookings
-                var invoicesByBooking = new Dictionary<int, Domain.Entities.Invoice>();
-                foreach (var bookingId in bookingIds)
-                {
-                    var invoice = await _invoiceRepository.GetByBookingIdAsync(bookingId);
-                    if (invoice != null)
-                    {
-                        invoicesByBooking[bookingId] = invoice;
-                    }
-                }
+                // Task 2: Batch load ALL invoices for all bookings in single query  
+                var allInvoices = await _invoiceRepository.GetByBookingIdsAsync(bookingIds);
 
-                // Batch load appliedCredits for bookings that need them
+                // Task 3: Batch load appliedCredits
                 var appliedCreditIds = bookings.Where(b => b.AppliedCreditId.HasValue).Select(b => b.AppliedCreditId!.Value).Distinct().ToList();
-                var appliedCreditsById = new Dictionary<int, Domain.Entities.CustomerServiceCredit>();
-                foreach (var creditId in appliedCreditIds)
-                {
-                    var credit = await _customerServiceCreditRepository.GetByIdAsync(creditId);
-                    if (credit != null)
-                    {
-                        appliedCreditsById[creditId] = credit;
-                    }
-                }
+                var allAppliedCredits = appliedCreditIds.Any() 
+                    ? await _customerServiceCreditRepository.GetByIdsAsync(appliedCreditIds)
+                    : new List<Domain.Entities.CustomerServiceCredit>();
 
-                // Batch load promotions for all bookings
-                var promotionsByBooking = new Dictionary<int, List<Domain.Entities.UserPromotion>>();
-                foreach (var bookingId in bookingIds)
-                {
-                    var promotions = await _promotionRepository.GetUserPromotionsByBookingAsync(bookingId);
-                    if (promotions != null && promotions.Any())
-                    {
-                        promotionsByBooking[bookingId] = promotions;
-                    }
-                }
+                // Task 4: Batch load ALL promotions for all bookings in single query
+                var allPromotions = await _promotionRepository.GetUserPromotionsByBookingIdsAsync(bookingIds);
+
+                // Get results and group by booking
+                var workOrderPartsByBooking = allWorkOrderParts.GroupBy(p => p.BookingId).ToDictionary(g => g.Key, g => g.ToList());
+                var invoicesByBooking = allInvoices.ToDictionary(i => i.BookingId ?? 0, i => i);
+                var appliedCreditsById = allAppliedCredits.ToDictionary(c => c.CreditId, c => c);
+                var promotionsByBooking = allPromotions.GroupBy(p => p.BookingId ?? 0).ToDictionary(g => g.Key, g => g.ToList());
 
                 // Process each booking using pre-loaded data
                 foreach (var booking in bookings)
@@ -383,25 +376,58 @@ namespace EVServiceCenter.Application.Service
                         }
 
                         // Tính promotion discount từ UserPromotions
-                        if (promotionsByBooking.TryGetValue(booking.BookingId, out var userPromotions))
+                        if (promotionsByBooking.TryGetValue(booking.BookingId, out var bookingPromotions))
                         {
-                            promotionDiscountAmount = userPromotions
+                            promotionDiscountAmount = bookingPromotions
                                 .Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
                                 .Sum(up => up.DiscountAmount);
                         }
                     }
 
-                    // Tính giá dịch vụ sau khi trừ package discount
-                    var finalServicePrice = servicePrice - packageDiscountAmount;
+                    // Tính tổng giá cuối cùng:
+                    // Tổng = Giá dịch vụ + Tiền phụ tùng - Package discount - Promotion discount
+                    var subtotal = servicePrice + partsAmount;
+                    var totalDiscounts = packageDiscountAmount + promotionDiscountAmount;
+                    var totalAmount = Math.Max(0, subtotal - totalDiscounts); // Không cho phép âm
 
-                    // Khuyến mãi chỉ áp dụng cho phần dịch vụ, không áp dụng cho parts
-                    if (promotionDiscountAmount > finalServicePrice)
+
+                    // Tạo thông tin phụ tùng đã sử dụng
+                    var partsUsedList = workOrderParts
+                        .Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied)
+                        .Select(p => new BookingPartItem
+                        {
+                            PartId = p.PartId,
+                            PartName = p.Part?.PartName ?? $"Phụ tùng #{p.PartId}",
+                            QuantityUsed = p.QuantityUsed,
+                            UnitPrice = p.Part?.Price ?? 0m,
+                            TotalPrice = p.QuantityUsed * (p.Part?.Price ?? 0m),
+                            Status = p.Status ?? "N/A"
+                        }).ToList();
+
+                    // Tạo thông tin promotion đã áp dụng
+                    var promotionsAppliedList = new List<BookingPromotionItem>();
+                    if (promotionsByBooking.TryGetValue(booking.BookingId, out var userPromotions))
                     {
-                        promotionDiscountAmount = finalServicePrice;
+                        promotionsAppliedList = userPromotions
+                            .Where(up => string.Equals(up.Status, "APPLIED", StringComparison.OrdinalIgnoreCase))
+                            .Select(up => new BookingPromotionItem
+                            {
+                                Code = up.Promotion?.Code ?? "N/A",
+                                Description = up.Promotion?.Description ?? "Khuyến mãi",
+                                DiscountAmount = up.DiscountAmount,
+                                Status = up.Status
+                            }).ToList();
                     }
 
-                    // Tính tổng: FinalServicePrice + PartsAmount - PromotionDiscountAmount
-                    var totalAmount = finalServicePrice + partsAmount - promotionDiscountAmount;
+                    // Tạo breakdown chi tiết
+                    var costBreakdown = new BookingCostBreakdown
+                    {
+                        ServicePrice = servicePrice,
+                        PartsAmount = partsAmount,
+                        PackageDiscountAmount = packageDiscountAmount,
+                        PromotionDiscountAmount = promotionDiscountAmount,
+                        TotalAmount = totalAmount
+                    };
 
                     response.Bookings.Add(new CustomerBookingItem
                     {
@@ -418,7 +444,10 @@ namespace EVServiceCenter.Application.Service
                         ActualCost = totalAmount > 0 ? totalAmount : null,
                         EstimatedCost = servicePrice > 0 ? servicePrice : null,
                         BookingCode = $"BK{booking.BookingId:D6}", // Generate booking code from BookingId
-                        TechnicianName = booking.TechnicianTimeSlot?.Technician?.User?.FullName
+                        TechnicianName = booking.TechnicianTimeSlot?.Technician?.User?.FullName,
+                        CostBreakdown = costBreakdown,
+                        PartsUsed = partsUsedList.Any() ? partsUsedList : null,
+                        PromotionsApplied = promotionsAppliedList.Any() ? promotionsAppliedList : null
                     });
                 }
 
@@ -433,8 +462,11 @@ namespace EVServiceCenter.Application.Service
 
                 return response;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                // Log exception for debugging
+                Console.WriteLine($"ERROR in GetCustomerBookingsAsync for customer {customerId}: {ex.Message}");
+                
                 return new CustomerBookingsResponse
                 {
                     CustomerId = customerId,

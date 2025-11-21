@@ -637,10 +637,66 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 var booking = await _bookingService.GetBookingByIdAsync(id);
 
+                // Lấy maintenance checklist nếu có
+                object? maintenanceChecklist = null;
+                var checklist = await _maintenanceChecklistRepository.GetByBookingIdAsync(id);
+                if (checklist != null)
+                {
+                    var results = await _maintenanceChecklistResultRepository.GetByChecklistIdAsync(checklist.ChecklistId);
+                    var items = results.Select(r => new
+                    {
+                        resultId = r.ResultId,
+                        partId = r.CategoryId,
+                        partName = r.Category?.CategoryName ?? "N/A",
+                        description = r.Description ?? "",
+                        result = r.Result ?? "PENDING",
+                        status = r.Status
+                    }).ToList();
+                    
+                    maintenanceChecklist = new
+                    {
+                        checklistId = checklist.ChecklistId,
+                        status = checklist.Status,
+                        createdAt = checklist.CreatedAt,
+                        items = items
+                    };
+                }
+
                 return Ok(new {
                     success = true,
                     message = "Lấy thông tin đặt lịch thành công",
-                    data = booking
+                    data = new
+                    {
+                        booking.BookingId,
+                        booking.CustomerId,
+                        booking.CustomerName,
+                        booking.VehicleId,
+                        booking.VehicleInfo,
+                        booking.CenterId,
+                        booking.CenterName,
+                        booking.BookingDate,
+                        booking.TechnicianSlotId,
+                        booking.SlotId,
+                        booking.SlotTime,
+                        booking.Status,
+                        booking.SpecialRequests,
+                        booking.TechnicianId,
+                        booking.TechnicianName,
+                        booking.CurrentMileage,
+                        booking.LicensePlate,
+                        booking.CreatedAt,
+                        booking.UpdatedAt,
+                        booking.AppliedCreditId,
+                        booking.PackageCode,
+                        booking.PackageName,
+                        booking.PackageDiscountPercent,
+                        booking.PackageDiscountAmount,
+                        booking.OriginalServicePrice,
+                        booking.TotalAmount,
+                        booking.PaymentType,
+                        booking.Services,
+                        maintenanceChecklist
+                    }
                 });
             }
             catch (ArgumentException ex)

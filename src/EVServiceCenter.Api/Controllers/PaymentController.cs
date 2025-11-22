@@ -255,8 +255,9 @@ public class PaymentController : ControllerBase
 					{
 						confirmed = await _paymentService.ConfirmOrderPaymentAsync(actualOrderId);
 					}
-					catch (Exception)
+					catch (Exception ex)
 					{
+						_logger.LogError(ex, $"[PaymentController] Lỗi khi confirm order payment cho orderId={actualOrderId}: {ex.Message}");
 					}
 				}
 
@@ -1162,6 +1163,146 @@ public class PaymentController : ControllerBase
 		catch (Exception ex)
 		{
 			return StatusCode(500, new { success = false, message = $"Lỗi khi lấy chi tiết payment: {ex.Message}" });
+		}
+	}
+
+	// Test endpoint: Resend invoice email
+	[HttpPost("test/resend-invoice-email/{bookingId}")]
+	public async Task<IActionResult> ResendInvoiceEmail(int bookingId)
+	{
+		try
+		{
+			var booking = await _bookingRepo.GetBookingByIdAsync(bookingId);
+			if (booking == null)
+				return NotFound(new { success = false, message = "Booking không tồn tại" });
+
+			var customerEmail = booking.Customer?.User?.Email;
+			if (string.IsNullOrEmpty(customerEmail))
+				return BadRequest(new { success = false, message = "Booking không có email khách hàng" });
+
+			_logger.LogInformation($"[TEST] Manual resend invoice email for booking {bookingId} to {customerEmail}");
+
+			// Trigger email send (copy logic từ PaymentService)
+			await Task.Run(async () =>
+			{
+				try
+				{
+					_logger.LogInformation($"[TEST] Starting email task for booking {bookingId}");
+					
+					// Load parts
+					var workOrderParts = await _workOrderPartRepo.GetByBookingIdAsync(bookingId);
+					var parts = workOrderParts
+						.Where(p => p.Status == "CONSUMED" && !p.IsCustomerSupplied)
+						.ToList();
+
+					// Calculate discount
+					decimal packageDiscountAmount = 0m;
+					decimal serviceBasePrice = booking.Service?.BasePrice ?? 0m;
+					if (booking.AppliedCreditId.HasValue)
+					{
+						var appliedCredit = await _customerServiceCreditRepo.GetByIdAsync(booking.AppliedCreditId.Value);
+						if (appliedCredit?.ServicePackage != null)
+						{
+							packageDiscountAmount = serviceBasePrice * ((appliedCredit.ServicePackage.DiscountPercent ?? 0) / 100);
+						}
+					}
+
+					// Load promotions
+					var userPromotions = await _promotionRepo.GetUserPromotionsByBookingAsync(bookingId);
+					
+					// Get payment amount
+					var invoice = await _invoiceRepo.GetByBookingIdAsync(bookingId);
+					var payment = invoice?.Payments?.FirstOrDefault(p => p.Status == "COMPLETED");
+					var paymentAmount = payment?.Amount ?? 0;
+
+					// Render email
+					var subject = $"Hóa đơn thanh toán - Booking #{bookingId}";
+					var body = await _emailService.RenderInvoiceEmailTemplateAsync(
+						booking.Customer?.User?.FullName ?? "Khách hàng",
+						$"INV-{bookingId:D6}",
+						bookingId.ToString(),
+						DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm"),
+						customerEmail,
+						booking.Service?.ServiceName ?? "N/A",
+						serviceBasePrice.ToString("N0"),
+						paymentAmount.ToString("N0"),
+						booking.AppliedCreditId.HasValue,
+						packageDiscountAmount.ToString("N0")
+					);
+
+					// Generate PDFs
+					byte[]? invoicePdf = null;
+					byte[]? maintenancePdf = null;
+
+					try
+					{
+						_logger.LogInformation($"[TEST] Generating invoice PDF for booking {bookingId}");
+						invoicePdf = await _pdfInvoiceService.GenerateInvoicePdfAsync(bookingId);
+						_logger.LogInformation($"[TEST] Invoice PDF: {invoicePdf?.Length ?? 0} bytes");
+					}
+					catch (Exception ex)
+					{
+						_logger.LogError(ex, $"[TEST] Failed to generate invoice PDF");
+					}
+
+					try
+					{
+						_logger.LogInformation($"[TEST] Generating maintenance PDF for booking {bookingId}");
+						maintenancePdf = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(bookingId);
+						_logger.LogInformation($"[TEST] Maintenance PDF: {maintenancePdf?.Length ?? 0} bytes");
+					}
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, $"[TEST] Failed to generate maintenance PDF");
+					}
+
+					// Send email
+					if (invoicePdf != null && maintenancePdf != null)
+					{
+						_logger.LogInformation($"[TEST] Sending email with 2 attachments");
+						var attachments = new List<(string fileName, byte[] content, string mimeType)>
+						{
+							($"Invoice_Booking_{bookingId}.pdf", invoicePdf, "application/pdf"),
+							($"MaintenanceReport_Booking_{bookingId}.pdf", maintenancePdf, "application/pdf")
+						};
+						await _emailService.SendEmailWithMultipleAttachmentsAsync(customerEmail, subject, body, attachments);
+					}
+					else if (invoicePdf != null)
+					{
+						_logger.LogInformation($"[TEST] Sending email with invoice PDF only");
+						await _emailService.SendEmailWithAttachmentAsync(
+							customerEmail,
+							subject,
+							body,
+							$"Invoice_Booking_{bookingId}.pdf",
+							invoicePdf,
+							"application/pdf");
+					}
+					else
+					{
+						_logger.LogWarning($"[TEST] Sending email without attachments");
+						await _emailService.SendEmailAsync(customerEmail, subject, body);
+					}
+
+					_logger.LogInformation($"[TEST] Email sent successfully to {customerEmail}");
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, $"[TEST] Email task error: {ex.Message}");
+				}
+			});
+
+			return Ok(new 
+			{ 
+				success = true, 
+				message = $"Email đã được gửi cho booking #{bookingId}",
+				email = customerEmail
+			});
+		}
+		catch (Exception ex)
+		{
+			_logger.LogError(ex, $"[TEST] Error in resend endpoint");
+			return StatusCode(500, new { success = false, message = ex.Message });
 		}
 	}
 

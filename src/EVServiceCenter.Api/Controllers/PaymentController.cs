@@ -6,6 +6,7 @@ using System.Transactions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using EVServiceCenter.Application.Service;
 using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Domain.Interfaces;
@@ -33,6 +34,7 @@ public class PaymentController : ControllerBase
     private readonly IPdfInvoiceService _pdfInvoiceService;
     private readonly INotificationService _notificationService;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<PaymentController> _logger;
     public PaymentController(PaymentService paymentService,
         IPayOSService payOSService,
         IBookingRepository bookingRepo,
@@ -46,7 +48,8 @@ public class PaymentController : ControllerBase
         IEmailService emailService,
         IPdfInvoiceService pdfInvoiceService,
         INotificationService notificationService,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<PaymentController> logger)
 	{
 		_paymentService = paymentService;
         _payOSService = payOSService;
@@ -62,6 +65,7 @@ public class PaymentController : ControllerBase
         _pdfInvoiceService = pdfInvoiceService;
         _notificationService = notificationService;
         _configuration = configuration;
+        _logger = logger;
 	}
 
 	[HttpPost("booking/{bookingId:int}/link")]
@@ -516,6 +520,8 @@ public class PaymentController : ControllerBase
         try
         {
             var customerEmail = booking.Customer?.User?.Email;
+            _logger.LogInformation($"[Payment] Attempting to send invoice email for booking {booking.BookingId} to: {customerEmail}");
+            
             if (!string.IsNullOrEmpty(customerEmail))
             {
                 // Lấy thông tin phụ tùng phát sinh
@@ -598,11 +604,18 @@ public class PaymentController : ControllerBase
                         invoicePdfContent,
                         "application/pdf");
                 }
+                
+                _logger.LogInformation($"[Payment] Invoice email sent successfully to {customerEmail} for booking {booking.BookingId}");
+            }
+            else
+            {
+                _logger.LogWarning($"[Payment] Customer email is null or empty for booking {booking.BookingId}");
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Ignore email errors
+            // Log lỗi nhưng không fail request thanh toán
+            _logger.LogError(ex, $"[Payment] Failed to send invoice email for booking {booking.BookingId}. Error: {ex.Message}");
         }
 
         // Gửi notification (giống PayOS)

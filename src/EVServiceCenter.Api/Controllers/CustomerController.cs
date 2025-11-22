@@ -377,7 +377,7 @@ namespace EVServiceCenter.WebAPI.Controllers
 
                 // Validate pagination
                 pageNumber = Math.Max(1, pageNumber);
-                pageSize = Math.Min(Math.Max(1, pageSize), 50);
+                pageSize = Math.Min(Math.Max(1, pageSize), 1000);
 
                 var data = await _customerService.GetCustomerBookingsAsync(customerId, pageNumber, pageSize);
                 return Ok(new { success = true, message = "Lấy lịch sử booking thành công", data });

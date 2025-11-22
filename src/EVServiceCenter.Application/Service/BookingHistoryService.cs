@@ -32,7 +32,7 @@ namespace EVServiceCenter.Application.Service
 
             // Validate pagination parameters
             page = Math.Max(1, page);
-            pageSize = Math.Min(Math.Max(1, pageSize), 50);
+            pageSize = Math.Min(Math.Max(1, pageSize), 1000);
 
             // Get bookings with pagination
             var bookings = await _bookingRepository.GetBookingsByCustomerIdAsync(

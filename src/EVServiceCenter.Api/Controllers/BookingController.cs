@@ -940,9 +940,9 @@ namespace EVServiceCenter.WebAPI.Controllers
                     return BadRequest(new { success = false, message = "Page must be greater than 0." });
                 }
 
-                if (pageSize < 1 || pageSize > 50)
+                if (pageSize < 1 || pageSize > 1000)
                 {
-                    return BadRequest(new { success = false, message = "Page size must be between 1 and 50." });
+                    return BadRequest(new { success = false, message = "Page size must be between 1 and 1000." });
                 }
 
                 var bookings = await _bookingRepository.GetBookingsByCenterIdAsync(

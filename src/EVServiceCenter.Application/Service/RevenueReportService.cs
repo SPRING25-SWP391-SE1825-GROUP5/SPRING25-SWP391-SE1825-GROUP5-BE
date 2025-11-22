@@ -202,23 +202,29 @@ namespace EVServiceCenter.Application.Service
                     throw new ArgumentException("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc", nameof(fromDate));
                 }
 
-                var completedBookingPayments = await _paymentRepository.GetCompletedPaymentsByCenterAndDateRangeAsync(centerId, start, end);
+                // Lấy tất cả payments COMPLETED và PAID trong khoảng thời gian
+                // Sau đó filter theo centerId để đảm bảo không bỏ sót payment nào
+                var statuses = new[] { "COMPLETED", "PAID" };
+                var allPayments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(statuses, start, end);
 
-                var statuses = new[] { "PAID" };
-                var allPaidPayments = await _paymentRepository.GetPaymentsByStatusesAndDateRangeAsync(statuses, start, end);
-                var paidBookingPayments = allPaidPayments
-                    .Where(p => p.Invoice != null 
-                             && p.Invoice.BookingId != null 
-                             && p.Invoice.Booking != null 
-                             && p.Invoice.Booking.CenterId == centerId)
-                    .ToList();
-
-                var orderPayments = await _paymentRepository.GetCompletedPaymentsByFulfillmentCenterAndDateRangeAsync(centerId, start, end);
-
-                var payments = completedBookingPayments
-                    .Concat(paidBookingPayments)
-                    .Concat(orderPayments)
-                    .DistinctBy(p => p.PaymentId)
+                // Filter payments theo centerId: từ Booking hoặc Order
+                var payments = allPayments
+                    .Where(p => p.PaidAt != null 
+                             && p.PaidAt >= start 
+                             && p.PaidAt <= end
+                             && p.Invoice != null
+                             && (
+                                 // Payment từ booking
+                                 (p.Invoice.BookingId != null 
+                                  && p.Invoice.Booking != null 
+                                  && p.Invoice.Booking.CenterId == centerId)
+                                 ||
+                                 // Payment từ order
+                                 (p.Invoice.OrderId != null 
+                                  && p.Invoice.Order != null 
+                                  && p.Invoice.Order.FulfillmentCenterId == centerId)
+                             ))
+                    .DistinctBy(p => p.PaymentId) // Loại bỏ trùng lặp nếu có
                     .ToList();
 
                 var allPeriods = GenerateAllPeriodsInRange(start, end, normalizedGranularity);

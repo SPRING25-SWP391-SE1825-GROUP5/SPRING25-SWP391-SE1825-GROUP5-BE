@@ -79,6 +79,16 @@ namespace EVServiceCenter.Domain.Interfaces
         /// Admin: Lấy payment với đầy đủ thông tin (Invoice, Customer, Booking, Order)
         /// </summary>
         Task<Payment?> GetByIdWithDetailsAsync(int paymentId);
+
+        /// <summary>
+        /// Lấy tất cả payments đã thanh toán (PAID hoặc COMPLETED) từ center theo khoảng thời gian
+        /// Bao gồm cả payments từ Booking và Order (e-commerce)
+        /// </summary>
+        /// <param name="centerId">ID trung tâm</param>
+        /// <param name="fromDate">Ngày bắt đầu (filter theo PaidAt)</param>
+        /// <param name="toDate">Ngày kết thúc (filter theo PaidAt)</param>
+        /// <returns>Danh sách payments đã thanh toán với Invoice, Booking, Order đã include</returns>
+        Task<List<Payment>> GetPaidPaymentsByCenterAndDateRangeAsync(int centerId, DateTime fromDate, DateTime toDate);
     }
 }
 

@@ -283,6 +283,48 @@ namespace EVServiceCenter.Infrastructure.Repositories
                     .ThenInclude(i => i.Payments)
                 .FirstOrDefaultAsync(p => p.PaymentId == paymentId);
         }
+
+        /// <summary>
+        /// Lấy tất cả payments đã thanh toán (PAID hoặc COMPLETED) từ center theo khoảng thời gian
+        /// Bao gồm cả payments từ Booking và Order (e-commerce)
+        /// </summary>
+        public async Task<List<Payment>> GetPaidPaymentsByCenterAndDateRangeAsync(int centerId, DateTime fromDate, DateTime toDate)
+        {
+            // Lấy payments từ Booking (service center)
+            var bookingPayments = await _db.Payments
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Booking)
+                .Where(p => (p.Status == "PAID" || p.Status == "COMPLETED")
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
+                         && p.PaidAt <= toDate
+                         && p.Invoice != null
+                         && p.Invoice.BookingId != null
+                         && p.Invoice.Booking != null
+                         && p.Invoice.Booking.CenterId == centerId)
+                .ToListAsync();
+
+            // Lấy payments từ Order (e-commerce)
+            var orderPayments = await _db.Payments
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i.Order)
+                .Where(p => (p.Status == "PAID" || p.Status == "COMPLETED")
+                         && p.PaidAt != null
+                         && p.PaidAt >= fromDate
+                         && p.PaidAt <= toDate
+                         && p.Invoice != null
+                         && p.Invoice.OrderId != null
+                         && p.Invoice.Order != null
+                         && p.Invoice.Order.FulfillmentCenterId == centerId)
+                .ToListAsync();
+
+            // Merge và sort theo PaidAt
+            var allPayments = bookingPayments.Concat(orderPayments)
+                .OrderByDescending(p => p.PaidAt ?? p.CreatedAt)
+                .ToList();
+
+            return allPayments;
+        }
     }
 }
 

@@ -231,5 +231,60 @@ namespace EVServiceCenter.Api.Controllers
                 return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy thống kê giờ cao điểm", error = ex.Message });
             }
         }
+
+        /// <summary>
+        /// Lấy danh sách các giao dịch đã thực hiện tại chi nhánh
+        /// </summary>
+        [HttpGet("centers/{centerId}/payments")]
+        [Authorize(Roles = "MANAGER")]
+        public async Task<IActionResult> GetPaymentsByCenter(
+            int centerId,
+            [FromQuery] DateTime? from = null,
+            [FromQuery] DateTime? to = null)
+        {
+            try
+            {
+                // Normalize dates: fromDate bắt đầu từ 00:00:00, toDate kết thúc ở 23:59:59.999
+                var fromDate = from.HasValue 
+                    ? from.Value.Date 
+                    : DateTime.UtcNow.AddDays(-30).Date;
+                var toDate = to.HasValue 
+                    ? to.Value.Date.AddDays(1).AddTicks(-1) // Cuối ngày: 23:59:59.999
+                    : DateTime.UtcNow;
+
+                if (fromDate > toDate)
+                {
+                    return BadRequest(new { success = false, message = "Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc" });
+                }
+
+                var payments = await _paymentRepo.GetPaidPaymentsByCenterAndDateRangeAsync(centerId, fromDate, toDate);
+
+                var data = payments.Select(p => new
+                {
+                    paymentId = p.PaymentId,
+                    invoiceId = p.InvoiceId,
+                    bookingId = p.Invoice?.BookingId,
+                    orderId = p.Invoice?.OrderId,
+                    amount = p.Amount,
+                    paidAt = p.PaidAt,
+                    paymentMethod = p.PaymentMethod,
+                    status = p.Status
+                }).ToList();
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Lấy danh sách giao dịch thành công",
+                    data = data,
+                    total = data.Count,
+                    fromDate = fromDate,
+                    toDate = toDate
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi hệ thống khi lấy danh sách giao dịch", error = ex.Message });
+            }
+        }
     }
 }

@@ -11,6 +11,7 @@ using EVServiceCenter.Application.Interfaces;
 using EVServiceCenter.Application.Constants;
 using EVServiceCenter.Domain.Interfaces;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Globalization;
 using System.Transactions;
@@ -37,10 +38,11 @@ public class PaymentService
     private readonly IPdfInvoiceService _pdfInvoiceService;
     private readonly IInventoryRepository _inventoryRepository;
     private readonly ICenterRepository _centerRepository;
+    private readonly ILogger<PaymentService> _logger;
 
     private readonly EVServiceCenter.Application.Interfaces.IHoldStore _holdStore;
 
-    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, IPromotionRepository promotionRepository, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService, INotificationService notificationService, IInventoryRepository inventoryRepository, ICenterRepository centerRepository)
+    public PaymentService(HttpClient httpClient, IOptions<PayOsOptions> options, IBookingRepository bookingRepository, IOrderRepository orderRepository, IInvoiceRepository invoiceRepository, IPaymentRepository paymentRepository, ITechnicianRepository technicianRepository, IEmailService emailService, IWorkOrderPartRepository workOrderPartRepository, IMaintenanceChecklistRepository checklistRepository, IMaintenanceChecklistResultRepository checklistResultRepository, EVServiceCenter.Application.Interfaces.IHoldStore holdStore, IPromotionService promotionService, IPromotionRepository promotionRepository, ICustomerServiceCreditRepository customerServiceCreditRepository, IPdfInvoiceService pdfInvoiceService, INotificationService notificationService, IInventoryRepository inventoryRepository, ICenterRepository centerRepository, ILogger<PaymentService> logger)
 	{
 		_httpClient = httpClient;
 		_options = options.Value;
@@ -61,6 +63,7 @@ public class PaymentService
         _notificationService = notificationService;
         _inventoryRepository = inventoryRepository;
         _centerRepository = centerRepository;
+        _logger = logger;
         }
 
 	public async Task<string?> CreateBookingPaymentLinkAsync(int bookingId, bool isRetry = false)
@@ -683,6 +686,8 @@ public class PaymentService
 		try
 		{
 			var customerEmail = booking.Customer?.User?.Email;
+			_logger.LogInformation($"[PaymentService] Attempting to send invoice email for booking {booking.BookingId} to: {customerEmail}");
+			
 			if (!string.IsNullOrEmpty(customerEmail))
 			{
 				// Sử dụng Task.Run để chạy email processing trong background
@@ -690,6 +695,8 @@ public class PaymentService
 				{
 					try
 					{
+						_logger.LogInformation($"[PaymentService] Starting background email task for booking {booking.BookingId}");
+						
 						// Lấy thông tin phụ tùng phát sinh
 						var workOrderParts = await _workOrderPartRepository.GetByBookingIdAsync(booking.BookingId);
 						var parts = workOrderParts
@@ -700,6 +707,7 @@ public class PaymentService
 								Quantity = p.QuantityUsed,
 								Amount = p.QuantityUsed * (p.Part?.Price ?? 0)
 							}).ToList();
+						_logger.LogInformation($"[PaymentService] Loaded {parts.Count} parts for booking {booking.BookingId}");
 
 						// Tính lại packageDiscountAmount trong scope này
 						var serviceBasePrice = booking.Service?.BasePrice ?? 0m;
@@ -723,64 +731,114 @@ public class PaymentService
 								Description = up.Promotion?.Description ?? "Khuyến mãi",
 								DiscountAmount = up.DiscountAmount
 							}).ToList() ?? new List<EVServiceCenter.Application.Service.InvoicePromotionItem>();
+						_logger.LogInformation($"[PaymentService] Loaded {promotions.Count} promotions for booking {booking.BookingId}");
 
+						// Render email template
 						var subject = $"Hóa đơn thanh toán - Booking #{booking.BookingId}";
-						var body = await _emailService.RenderInvoiceEmailTemplateAsync(
-							booking.Customer?.User?.FullName ?? "Khách hàng",
-							$"INV-{booking.BookingId:D6}",
-							booking.BookingId.ToString(),
-							DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm"),
-							customerEmail,
-							booking.Service?.ServiceName ?? "N/A",
-							(booking.Service?.BasePrice ?? 0m).ToString("N0"),
-							payment.Amount.ToString("N0"),
-							booking.AppliedCreditId.HasValue,
-							packageDiscountAmount.ToString("N0")
-						);
+						string body;
+						try
+						{
+							_logger.LogInformation($"[PaymentService] Rendering email template for booking {booking.BookingId}");
+							body = await _emailService.RenderInvoiceEmailTemplateAsync(
+								booking.Customer?.User?.FullName ?? "Khách hàng",
+								$"INV-{booking.BookingId:D6}",
+								booking.BookingId.ToString(),
+								DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm"),
+								customerEmail,
+								booking.Service?.ServiceName ?? "N/A",
+								(booking.Service?.BasePrice ?? 0m).ToString("N0"),
+								payment.Amount.ToString("N0"),
+								booking.AppliedCreditId.HasValue,
+								packageDiscountAmount.ToString("N0")
+							);
+							_logger.LogInformation($"[PaymentService] Email template rendered successfully for booking {booking.BookingId}");
+						}
+						catch (Exception ex)
+						{
+							_logger.LogError(ex, $"[PaymentService] Failed to render email template for booking {booking.BookingId}");
+							throw;
+						}
 
-						var invoicePdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
+						// Generate Invoice PDF
+						byte[]? invoicePdfContent = null;
+						try
+						{
+							_logger.LogInformation($"[PaymentService] Generating invoice PDF for booking {booking.BookingId}");
+							invoicePdfContent = await _pdfInvoiceService.GenerateInvoicePdfAsync(booking.BookingId);
+							_logger.LogInformation($"[PaymentService] Invoice PDF generated: {invoicePdfContent?.Length ?? 0} bytes");
+						}
+						catch (Exception ex)
+						{
+							_logger.LogError(ex, $"[PaymentService] Failed to generate invoice PDF for booking {booking.BookingId}. Will send email without attachment.");
+						}
 
+						// Generate Maintenance Report PDF
 						byte[]? maintenancePdfContent = null;
 						try
 						{
+							_logger.LogInformation($"[PaymentService] Generating maintenance report PDF for booking {booking.BookingId}");
 							maintenancePdfContent = await _pdfInvoiceService.GenerateMaintenanceReportPdfAsync(booking.BookingId);
+							_logger.LogInformation($"[PaymentService] Maintenance PDF generated: {maintenancePdfContent?.Length ?? 0} bytes");
 						}
-						catch (Exception)
+						catch (Exception ex)
 						{
+							_logger.LogWarning(ex, $"[PaymentService] Failed to generate maintenance report PDF for booking {booking.BookingId}. Will send without it.");
 						}
 
-						if (maintenancePdfContent != null)
+						// Send email
+						try
 						{
-							var attachments = new List<(string fileName, byte[] content, string mimeType)>
+							if (invoicePdfContent != null && maintenancePdfContent != null)
 							{
-								($"Invoice_Booking_{booking.BookingId}.pdf", invoicePdfContent, "application/pdf"),
-								($"MaintenanceReport_Booking_{booking.BookingId}.pdf", maintenancePdfContent, "application/pdf")
-							};
-
-							await _emailService.SendEmailWithMultipleAttachmentsAsync(customerEmail, subject, body, attachments);
+								_logger.LogInformation($"[PaymentService] Sending email with 2 attachments for booking {booking.BookingId}");
+								var attachments = new List<(string fileName, byte[] content, string mimeType)>
+								{
+									($"Invoice_Booking_{booking.BookingId}.pdf", invoicePdfContent, "application/pdf"),
+									($"MaintenanceReport_Booking_{booking.BookingId}.pdf", maintenancePdfContent, "application/pdf")
+								};
+								await _emailService.SendEmailWithMultipleAttachmentsAsync(customerEmail, subject, body, attachments);
+							}
+							else if (invoicePdfContent != null)
+							{
+								_logger.LogInformation($"[PaymentService] Sending email with invoice PDF only for booking {booking.BookingId}");
+								await _emailService.SendEmailWithAttachmentAsync(
+									customerEmail,
+									subject,
+									body,
+									$"Invoice_Booking_{booking.BookingId}.pdf",
+									invoicePdfContent,
+									"application/pdf");
+							}
+							else
+							{
+								_logger.LogWarning($"[PaymentService] Sending email without attachments for booking {booking.BookingId} (PDF generation failed)");
+								await _emailService.SendEmailAsync(customerEmail, subject, body);
+							}
+							
+							_logger.LogInformation($"[PaymentService] Invoice email sent successfully to {customerEmail} for booking {booking.BookingId}");
 						}
-						else
+						catch (Exception ex)
 						{
-							await _emailService.SendEmailWithAttachmentAsync(
-								customerEmail,
-								subject,
-								body,
-								$"Invoice_Booking_{booking.BookingId}.pdf",
-								invoicePdfContent,
-								"application/pdf");
+							_logger.LogError(ex, $"[PaymentService] Failed to send email for booking {booking.BookingId}. SMTP Error: {ex.Message}");
+							throw;
 						}
 					}
 					catch (Exception ex)
 					{
 						// Log error nhưng không throw để không crash background task
-						System.Console.WriteLine($"Background email error for booking {booking.BookingId}: {ex.Message}");
+						_logger.LogError(ex, $"[PaymentService] Background email error for booking {booking.BookingId}: {ex.Message}\nStack: {ex.StackTrace}");
 					}
 				});
 			}
+			else
+			{
+				_logger.LogWarning($"[PaymentService] Customer email is null or empty for booking {booking.BookingId}");
+			}
 		}
-		catch (Exception)
+		catch (Exception ex)
 		{
-			// Ignore email errors để không ảnh hưởng đến payment confirmation
+			// Log nhưng không throw để không ảnh hưởng đến payment confirmation
+			_logger.LogError(ex, $"[PaymentService] Error initiating background email task for booking {booking.BookingId}");
 		}
 
         if (booking.Customer?.User?.UserId != null)

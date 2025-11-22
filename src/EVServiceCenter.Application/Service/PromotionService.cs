@@ -369,9 +369,10 @@ namespace EVServiceCenter.Application.Service
                 else if (promotion.DiscountType == "FIXED")
                 {
                     discountAmount = promotion.DiscountValue;
+                    // Không cho phép discount lớn hơn order amount
                     if (discountAmount > request.OrderAmount)
                     {
-                        discountAmount = request.OrderAmount;
+                        return CreateInvalidResponse($"Mã khuyến mãi giảm {promotion.DiscountValue:N0} VNĐ không thể áp dụng cho đơn hàng {request.OrderAmount:N0} VNĐ.", request.OrderAmount);
                     }
                 }
 
